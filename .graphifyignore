@@ -1,0 +1,7 @@
+# Vendored/minified library — not project architecture
+chrome extension/lib/vue.global.prod.js
+
+# Chat-log debugging artifacts (not source)
+*.log.html
+*.log.json
+deepseek-08310105.html

@@ -1,0 +1,24 @@
+# AI 工具调用镜像 · 自定义工具（由标准 skill 安装）
+# 本文件由插件自动维护；建议通过设置页修改，手工编辑请严格保持缩进。
+tools:
+  - name: "json_validate"
+    description: "校验并格式化 JSON 文本：返回美化后的 JSON；非法 JSON 返回错误。用于核对 AI 生成的 JSON 片段。"
+    skill_name: "json_tool"
+    skill_dir: "skills\\json_tool"
+    script: "scripts/json_validate.py"
+    interpreter: "python"
+    arg_style: "flag"
+    enabled: false
+    parameters:
+      - name: "text"
+        type: "string"
+        required: true
+        description: "待校验的 JSON 文本"
+      - name: "indent"
+        type: "number"
+        required: false
+        description: "缩进空格数，默认 2"
+      - name: "sort_keys"
+        type: "boolean"
+        required: false
+        description: "是否按 key 排序"

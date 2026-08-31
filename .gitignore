@@ -1,0 +1,22 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== 生成产物（graphify 知识图谱，可重新生成） =====
+graphify-out/
+
+# ===== 编辑器 / 系统 =====
+.DS_Store
+.idea/
+.vscode/
+
+# ===== 项目本地数据（不入库） =====
+.codebuddy/
+
+# ===== 密钥 / 环境 =====
+.env
+*.local.yaml

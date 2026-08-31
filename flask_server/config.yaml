@@ -1,0 +1,28 @@
+# AI 工具调用镜像 · 本地配置
+# 此文件是「配置的唯一来源」。插件从后端读取，不保存在浏览器中，避免丢失。
+# 修改后：工具上下线即时生效；端口修改需重启 Flask 服务。
+
+flask:
+  host: 127.0.0.1
+  port: 5000
+
+# 新站点默认使用的站点规则预设（glm / deepseek）
+default_profile: glm
+
+# 按域名覆盖站点规则（可选；不配置则按 hostname 自动猜测）
+site_profiles:
+  "chatglm.cn": glm
+  "chatglm.com": glm
+  "deepseek.com": deepseek
+
+# 后端工具上 / 下线：下线后不出现在 System Prompt，也无法调用
+tools:
+  list_dir:       { enabled: true }
+  search_file:    { enabled: true }
+  search_content: { enabled: true }
+  read_file:      { enabled: true }
+  read_lints:     { enabled: true }
+  replace_in_file: { enabled: true }
+  write_to_file:   { enabled: true }
+  delete_file:    { enabled: true }
+  get_tool_params: { enabled: true }
