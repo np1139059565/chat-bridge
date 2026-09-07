@@ -20,3 +20,14 @@ graphify-out/
 # ===== 密钥 / 环境 =====
 .env
 *.local.yaml
+
+# ===== 测试产物 =====
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+tests/e2e/artifacts/
+tests/e2e/snapshots/**/actual.png
+flask_server/*.log
+node_modules/
+package-lock.json
