@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Mock GLM Chat</title>
+  <style>
+    body { font-family: sans-serif; margin: 0; }
+    .detail.chatScrollContainer.conversation-list {
+      max-width: 800px; margin: 20px auto; padding: 16px;
+    }
+    .conversation-item {
+      border: 1px solid #e0e0e0; border-radius: 8px;
+      margin-bottom: 16px; padding: 12px;
+    }
+    .conversation.question { background: #f0f7ff; }
+    .answer { background: #fafafa; margin-top: 8px; padding: 8px; }
+    .user-name { font-weight: bold; color: #1a73e8; }
+    .assistant-name { font-weight: bold; color: #34a853; }
+    .question-txt { margin-top: 4px; }
+    .answer-content { margin-top: 4px; }
+    .answer-content-wrap { margin-top: 4px; }
+    .advance-thinking { color: #999; font-style: italic; }
+    .advance-thinking-area { margin: 4px 0; }
+    div.language[lang] { background: #1e1e1e; color: #d4d4d4; border-radius: 6px; padding: 8px; overflow-x: auto; }
+    div.language[lang] pre { margin: 0; }
+    div.language[lang] code { font-family: monospace; font-size: 13px; white-space: pre-wrap; }
+    .top-outer { display: none; }
+    aside.aside-container { display: none; }
+  </style>
+</head>
+<body>
+  <div class="detail chatScrollContainer conversation-list" id="chat-container">
+    <div class="conversation-item">
+      <div class="conversation question" id="row-question-1">
+        <div class="user-name">用户</div>
+        <div class="question-txt"><p>请列出当前目录下的文件</p></div>
+      </div>
+      <div class="answer" id="row-answer-1">
+        <div class="assistant-name">AI</div>
+        <div class="answer-content">
+          <div class="answer-content-wrap">
+            <p>我来帮你列出目录。</p>
+            <div class="language language-tool" lang="tool">
+              <pre class="hljs"><code>{
+  "project": "bridge-tool",
+  "tool": "list_dir",
+  "parameters": {
+    "target_directory": "."
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="conversation-item">
+      <div class="conversation question" id="row-question-2">
+        <div class="user-name">用户</div>
+        <div class="question-txt"><p>读取 README 文件</p></div>
+      </div>
+      <div class="answer" id="row-answer-2">
+        <div class="assistant-name">AI</div>
+        <div class="answer-content">
+          <div class="answer-content-wrap">
+            <p>好的。</p>
+            <div class="language language-tool" lang="tool">
+              <pre class="hljs"><code>{
+  "project": "bridge-tool",
+  "tool": "read_file",
+  "parameters": {
+    "filePath": "../README.md"
+  }
+}</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

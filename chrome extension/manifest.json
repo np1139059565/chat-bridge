@@ -8,8 +8,7 @@
     "activeTab",
     "scripting",
     "tabs",
-    "clipboardWrite",
-    "fileSystem"
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>",

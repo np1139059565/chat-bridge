@@ -1,0 +1,13 @@
+[run]
+source = flask_server
+omit =
+    flask_server/_smoke_ct.py
+    flask_server/_verify_fixes.py
+    flask_server/server.py:__main__
+
+[report]
+fail_under = 80
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError

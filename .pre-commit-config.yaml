@@ -1,0 +1,16 @@
+repos:
+  - repo: local
+    hooks:
+      - id: pytest-unit
+        name: Python 单元/API 测试
+        entry: python -m pytest tests/ -x --ignore=tests/e2e --cov=flask_server --cov-fail-under=80
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: stylelint
+        name: CSS 静态检查
+        entry: npx stylelint "chrome extension/dialog/style.css"
+        language: system
+        pass_filenames: false
+        always_run: true
