@@ -1,0 +1,32 @@
+{
+  "provider": "debug_chrome",
+  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先读取 skills/debug_chrome/SKILL.md，再按其规定处理；同一会话内只需读取一次；完成后按 SKILL.md 规定的结构回复。",
+  "tools": [
+    {
+      "name": "get_element_style",
+      "description": "按选择器采集元素样式与 DOM 信息",
+      "executor": "external",
+      "parameters": [
+        { "name": "selector", "type": "string", "required": true, "description": "CSS 选择器" }
+      ]
+    },
+    {
+      "name": "get_page_snapshot",
+      "description": "采集页面快照",
+      "executor": "external",
+      "parameters": [
+        { "name": "snapshot_type", "type": "string", "required": true, "description": "dom 或 screenshot" }
+      ]
+    },
+    {
+      "name": "push_message",
+      "description": "向调试扩展抽屉推送一条文字信息",
+      "executor": "external",
+      "silent": true,
+      "parameters": [
+        { "name": "text", "type": "string", "required": true, "description": "推送内容" },
+        { "name": "title", "type": "string", "required": false, "description": "可选标题" }
+      ]
+    }
+  ]
+}

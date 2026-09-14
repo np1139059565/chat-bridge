@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "AI 工具调用镜像插件",
+  "version": "1.0.0",
+  "description": "悬浮对话框与网页 AI 对话页形成双向镜像通道，自动提取 tool 代码块并调用本地 Flask 工具服务执行。",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs",
+    "clipboardWrite",
+    "fileSystem"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://127.0.0.1:5000/*",
+    "http://localhost:5000/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["dialog/dialog.html", "lib/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "AI 工具调用镜像（点击显示/隐藏）"
+  }
+}

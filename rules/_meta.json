@@ -1,0 +1,5 @@
+{
+  "self-healing": "on-demand",
+  "Negative-constraint-leakage-problem": "always",
+  "user-rule": "always"
+}

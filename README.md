@@ -82,39 +82,6 @@ python server.py
   辅助理解代码关系，产物已加入 `.gitignore`。
 - **冒烟测试**：`python flask_server/_smoke_ct.py`。
 
-## 测试
-
-完整测试方案见 `TESTING_PLAN.md`。
-
-### 快速运行
-
-```bash
-# 安装测试依赖
-pip install -r requirements-dev.txt
-npm install
-python -m playwright install chromium
-
-# Python 单元/API 测试（含覆盖率）
-python -m pytest tests/ -x --ignore=tests/e2e --cov=flask_server --cov-fail-under=80
-
-# e2e 测试（需先启动 Flask 服务或由夹具自动拉起）
-CB_TEST_PORT=5100 python -m pytest tests/e2e/ -v
-
-# CSS 静态检查
-npx stylelint "chrome extension/dialog/style.css"
-```
-
-### 提交拦截
-
-本地安装 pre-commit 后，每次提交自动运行 Python 测试与 CSS 检查：
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-CI 流水线配置见 `.github/workflows/tests.yml`，push 与 pull request 时自动运行全部测试。
-
 ## 许可证
 
 [MIT](LICENSE)

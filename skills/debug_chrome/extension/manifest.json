@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "AI Style Debug Assistant",
+  "version": "1.1.0",
+  "description": "AI-driven web page style debugging and deployment assistant.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5000/*",
+    "http://localhost:5000/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": [
+        "content/00_namespace.js",
+        "content/01_config.js",
+        "content/02_drawer.js",
+        "content/03_heartbeat.js",
+        "content/04_element-selector.js",
+        "content/05_tool-handlers.js",
+        "content/06_messages.js",
+        "content/07_index.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "drawer.html",
+        "drawer.css",
+        "drawer/00_config.js",
+        "drawer/01_api.js",
+        "drawer/02_ui-helpers.js",
+        "drawer/03_ui-chat.js",
+        "drawer/04_ui-settings.js",
+        "drawer/05_main.js",
+        "vendor/vue.global.prod.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "AI Style Debug"
+  }
+}
