@@ -21,6 +21,12 @@ from flask import Flask, request, jsonify, Response
 
 import tools_impl
 import custom_tools as ct
+import rules as rules_mod
+import card_bus
+import external_tools
+import prompt_sections
+from routes_cards import bp as cards_bp
+from routes_ext import bp as ext_bp
 
 try:
     import yaml
@@ -28,6 +34,10 @@ except ImportError:
     yaml = None
 
 app = Flask(__name__)
+
+# 注册公共卡片路由与外部工具提供方通道
+app.register_blueprint(cards_bp)
+app.register_blueprint(ext_bp)
 
 APP_DIR = Path(__file__).resolve().parent
 if str(APP_DIR) not in sys.path:
@@ -49,17 +59,25 @@ def _init_config():
     raw = _load_yaml_config()
     cfg = {
         "flask": raw.get("flask", {}) or {},
+        "limits": raw.get("limits", {}) or {},
         "default_profile": raw.get("default_profile", "glm"),
         "site_profiles": raw.get("site_profiles", {}) or {},
         "tools": raw.get("tools", {}) or {},
     }
     cfg["flask"].setdefault("host", "127.0.0.1")
     cfg["flask"].setdefault("port", 5000)
+    # 工具结果 JSON 体积上限，未配置时取默认 10 万字符
+    cfg["limits"].setdefault("max_json_chars", 100000)
     for name in TOOLS:
         if name in FIX_TOOLS:
             continue  # 自愈工具始终在线，不受开关影响
         entry = cfg["tools"].get(name) or {}
-        cfg["tools"][name] = {"enabled": bool(entry.get("enabled", True))}
+        new_entry = {"enabled": bool(entry.get("enabled", True))}
+        if name == "run_command":
+            default_langs = getattr(impl, "RUN_COMMAND_SUPPORTED_LANGUAGES", ["cmd", "powershell", "shell", "git", "python"])
+            langs = entry.get("languages") or default_langs
+            new_entry["languages"] = [str(x).strip().lower() for x in langs if str(x).strip()]
+        cfg["tools"][name] = new_entry
     return cfg
 
 
@@ -157,9 +175,16 @@ def save_config_to_yaml():
             if section == "tools":
                 tm = re.match(r"^\s*([A-Za-z0-9_-]+)\s*:\s*\{\s*enabled\s*:\s*(true|false)", ln)
                 if tm and tm.group(1) in CONFIG["tools"]:
-                    en = bool(CONFIG["tools"][tm.group(1)].get("enabled", True))
+                    name = tm.group(1)
+                    en = bool(CONFIG["tools"][name].get("enabled", True))
                     out.append(re.match(r"^(\s*[A-Za-z0-9_-]+\s*:\s*\{\s*enabled\s*:\s*)", ln).group(1)
                                + ("true" if en else "false") + " }")
+                    continue
+                # run_command 的 languages 列表：匹配“  languages: [...]”后紧跟的若干行“- xxx”
+                if ln.lstrip().startswith("languages:") and "run_command" in CONFIG["tools"]:
+                    langs = CONFIG["tools"]["run_command"].get("languages", [])
+                    out.append("    languages: [" + ", ".join(langs) + "]")
+                    # 跳过后续原 - xxx 行（由一个标记处理）
                     continue
             out.append(ln)
         CONFIG_PATH.write_text("\n".join(out) + "\n", encoding="utf-8")
@@ -167,6 +192,19 @@ def save_config_to_yaml():
     except Exception as e:
         print("[config] 写回 config.yaml 失败：", e)
         return False
+
+
+def refresh_external_providers():
+    """把【已上线】的 executor=external 工具按 provider 注册到提供方注册表。
+
+    同步移除已不存在或不含已上线工具的提供方，避免下线后仍保留旧定义。
+    """
+    try:
+        groups = ct.external_providers()
+    except Exception as e:
+        print("[ext] 读取外部工具失败：", e)
+        return
+    external_tools.hub.replace_providers(groups)
 
 
 def is_tool_enabled(name):
@@ -365,6 +403,15 @@ _reload_impl()
 # 配置在所有工具就绪后再初始化（需要 TOOLS / FIX_TOOLS）
 CONFIG = _init_config()
 
+# 首次启动（规则目录为空）时写入默认 self-healing 规则，供 AI 遇错时按需读取
+try:
+    rules_mod.seed_defaults()
+except Exception as e:
+    print("[rules] 初始化默认规则失败：", e)
+
+# 加载外部工具提供方（executor=external 的工具按 provider 注册）
+refresh_external_providers()
+
 
 # ---------- 错误响应辅助：统一「已下线」「工具执行异常」两种返回 ----------
 def _disabled_resp(name):
@@ -401,6 +448,8 @@ def cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = "*"
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
     resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
+    # 禁用缓存：工具上下线、技能说明等状态变化需即时反映到前端
+    resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -408,9 +457,22 @@ def cors(resp):
 def tools():
     # 只返回「已上线」的工具；下线工具不出现在 System Prompt，也无法调用。
     # 自愈工具（read_tool_source / hot_reload_fix）永远在线；自定义工具（来自 skill）合并进来。
-    builtin = [{"name": k, **v} for k, v in TOOLS.items() if is_tool_enabled(k)]
+    # executor=external 的工具由其提供方在线时并入。
+    builtin = []
+    for k, v in TOOLS.items():
+        if not is_tool_enabled(k):
+            continue
+        item = {"name": k, **v}
+        if k == "run_command":
+            item["languages"] = CONFIG.get("tools", {}).get("run_command", {}).get("languages", [])
+        builtin.append(item)
+    refresh_external_providers()
     custom = ct.all_meta()
-    return jsonify({"tools": builtin + custom})
+    external = external_tools.hub.provider_tools()
+    # 外部工具若已由 custom 列出（自定义工具视图），避免重复
+    seen = {t.get("name") for t in custom}
+    external = [t for t in external if t.get("name") not in seen]
+    return jsonify({"tools": builtin + custom + external})
 
 
 @app.route("/tool", methods=["POST", "OPTIONS"])
@@ -437,6 +499,30 @@ def tool():
     if ctool:
         if not ct.is_enabled(name):
             return _disabled_resp(name)
+        # 2a) executor=external：转发给提供方，阻塞等待其回传结果
+        if (ctool.get("executor") or "script") == "external":
+            provider = (ctool.get("provider") or "").strip()
+            if not provider or not external_tools.hub.is_online(provider):
+                return jsonify(
+                    success=False, tool=name,
+                    error="提供方离线，无法执行外部工具: %s" % name,
+                    errorType="ProviderOffline", origin="environment",
+                    originLabel=ORIGIN_LABEL.get("environment", "environment"),
+                    hint="该工具由其提供方（扩展）执行，需提供方上线轮询后重试。",
+                ), 200
+            silent = bool(ctool.get("silent"))
+            ok, data = external_tools.hub.dispatch(provider, name, params, silent=silent)
+            if not ok:
+                return jsonify(
+                    success=False, tool=name,
+                    error="外部工具转发失败: %s" % data,
+                    errorType="ForwardError", origin="environment",
+                    originLabel=ORIGIN_LABEL.get("environment", "environment"),
+                    hint="提供方未在超时内回传结果，请确认扩展在线后重试。",
+                ), 200
+            # silent 工具：入队即结束，其结果不回传网页 AI
+            return jsonify(success=True, tool=name, result=data, silent=silent)
+        # 2b) executor=script：本地子进程执行
         try:
             result = ct.run(ctool, params)
             return jsonify(success=True, tool=name, result=result)
@@ -452,6 +538,14 @@ def tool():
         available=list(sorted(set(list(DISPATCH.keys()) + [t["name"] for t in ct.all_meta_full()]))),
         hint=HINTS["unknown_tool"],
     ), 404
+
+
+@app.route("/prompt_sections", methods=["GET", "OPTIONS"])
+def prompt_section_list():
+    """技能说明段落：返回已上线技能的统一说明，供镜像插件注入 System Prompt。"""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    return jsonify({"success": True, "sections": prompt_sections.sections()})
 
 
 @app.route("/hot_fix", methods=["POST", "OPTIONS"])
@@ -510,6 +604,23 @@ def config():
                     enabled = bool(tv.get("enabled", True))
                     CONFIG["tools"].setdefault(name, {})["enabled"] = enabled
                     changed.append("tools." + name + "=" + str(enabled))
+                    if name == "run_command" and isinstance(tv.get("languages"), list):
+                        langs = [str(x).strip().lower() for x in tv["languages"] if str(x).strip()]
+                        CONFIG["tools"]["run_command"]["languages"] = langs
+                        changed.append("tools.run_command.languages=" + ",".join(langs))
+        # 工具结果 JSON 体积上限：正整数，即时生效（tools_impl 每次调用现读 config.yaml）
+        if isinstance(data.get("limits"), dict):
+            v = data["limits"].get("max_json_chars")
+            if v is not None:
+                try:
+                    v = int(v)
+                except (TypeError, ValueError):
+                    return jsonify(success=False, error="limits.max_json_chars 必须是正整数"), 400
+                if v <= 0:
+                    return jsonify(success=False, error="limits.max_json_chars 必须大于 0"), 400
+                if v != CONFIG["limits"].get("max_json_chars"):
+                    CONFIG["limits"]["max_json_chars"] = v
+                    changed.append("limits.max_json_chars=" + str(v))
         saved = save_config_to_yaml()
         # 端口 / host 改动需要重启进程才能重新绑定，单靠写配置无法让正在运行的服务生效
         require_restart = any(c.startswith("flask.") for c in changed)
@@ -518,6 +629,7 @@ def config():
     port = CONFIG["flask"]["port"]
     return jsonify({
         "flask": {"host": host, "port": port, "url": "http://%s:%s" % (host, port)},
+        "limits": CONFIG.get("limits", {}),
         "default_profile": CONFIG.get("default_profile", "glm"),
         "site_profiles": CONFIG.get("site_profiles", {}),
         "tools": CONFIG.get("tools", {}),
@@ -555,6 +667,7 @@ def custom_tools_install():
     names = data.get("names")
     try:
         installed = ct.install(d, set(names) if names else None)
+        refresh_external_providers()
         return jsonify({"ok": True, "installed": installed})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 400
@@ -566,16 +679,73 @@ def custom_tools_manage(name):
         return ("", 204)
     if request.method == "DELETE":
         ok = ct.remove(name)
+        refresh_external_providers()
         return jsonify({"ok": bool(ok), "removed": name})
     data = request.get_json(force=True, silent=True) or {}
     t = ct.update(name, data)
     if not t:
         return jsonify({"ok": False, "error": "未找到工具：" + name}), 404
+    # 上线 / 下线变化会改变提供方工具集合
+    refresh_external_providers()
     return jsonify({"ok": True, "tool": t, "tool_name": name})
+
+
+# ---------- 规则（Rules）文件管理：设置页增 / 删 / 改 ----------
+@app.route("/rules", methods=["GET", "POST", "OPTIONS"])
+def rules_list():
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if request.method == "POST":
+        data = request.get_json(force=True, silent=True) or {}
+        name = data.get("name")
+        content = data.get("content", "")
+        try:
+            saved = rules_mod.write_rule(name, content, priority=data.get("priority"))
+            return jsonify({"ok": True, "name": saved})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+    return jsonify({
+        "rules": rules_mod.list_rules(),
+        "rulesDir": str(rules_mod.RULES_DIR),
+        "priorities": rules_mod.PRIORITIES,
+        "priorityLabels": rules_mod.PRIORITY_LABELS,
+    })
+
+
+@app.route("/rules/<name>", methods=["GET", "PUT", "DELETE", "OPTIONS"])
+def rules_manage(name):
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if request.method == "DELETE":
+        ok = rules_mod.delete_rule(name)
+        return jsonify({"ok": bool(ok), "removed": name})
+    if request.method == "PUT":
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            # 仅改优先级：未提供 content 时只更新 priority
+            if "content" in data:
+                saved = rules_mod.write_rule(name, data.get("content", ""), priority=data.get("priority"))
+            else:
+                if data.get("priority") is not None:
+                    rules_mod.set_priority(name, data.get("priority"))
+                saved = name
+            return jsonify({"ok": True, "name": saved})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e)}), 400
+    # GET：读取单条规则内容
+    if not rules_mod.valid_name(name):
+        return jsonify({"ok": False, "error": "规则名非法"}), 400
+    try:
+        content = rules_mod.read_rule(name)
+    except FileNotFoundError:
+        return jsonify({"ok": False, "error": "规则不存在：" + name}), 404
+    return jsonify({"ok": True, "name": name, "content": content, "priority": rules_mod.get_priority(name)})
 
 
 if __name__ == "__main__":
     # 关闭 reloader：热重载由 hot_reload_fix 精确控制，避免与调试重载器打架
     # 端口来自 config.yaml（flask.port），修改后需重启服务
     flask_cfg = CONFIG.get("flask", {})
-    app.run(host=flask_cfg.get("host", "127.0.0.1"), port=flask_cfg.get("port", 5000), debug=False)
+    # threaded=True：卡片与外部工具均为同步阻塞，需并发承载
+    app.run(host=flask_cfg.get("host", "127.0.0.1"), port=flask_cfg.get("port", 5000),
+            debug=False, threaded=True)

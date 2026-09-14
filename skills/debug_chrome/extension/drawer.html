@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="drawer.css" />
+</head>
+
+<!-- 挂载容器必须为空：Vue 运行时模板编译会触发 new Function，
+     违反 MV3 扩展页 CSP（script-src 'self'，无 unsafe-eval）导致 mount 抛 EvalError。
+     UI 全部由 drawer.js 的 h() 渲染函数构建。 -->
+<div id="ai-debug-app"></div>
+<script src="vendor/vue.global.prod.js"></script>
+<script src="drawer/00_config.js"></script>
+<script src="drawer/01_api.js"></script>
+<script src="drawer/02_ui-helpers.js"></script>
+<script src="drawer/03_ui-chat.js"></script>
+<script src="drawer/04_ui-settings.js"></script>
+<script src="drawer/05_main.js"></script>

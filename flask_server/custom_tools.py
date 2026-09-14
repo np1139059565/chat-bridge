@@ -213,9 +213,12 @@ def _dump_yaml(tools):
     ]
     for t in tools:
         out.append("  - name: " + _q(t.get("name", "")))
-        for key in ("description", "skill_name", "skill_dir", "script", "interpreter", "arg_style"):
+        for key in ("description", "skill_name", "skill_prompt", "skill_dir", "script", "interpreter", "arg_style", "executor", "provider"):
             if t.get(key) not in (None, ""):
                 out.append("    %s: %s" % (key, _q(t[key])))
+        # silent 为布尔标记，仅在为真时写出
+        if t.get("silent"):
+            out.append("    silent: true")
         out.append("    enabled: %s" % ("true" if t.get("enabled") else "false"))
         fa = t.get("fixed_args") or []
         if fa:
@@ -298,6 +301,13 @@ def parse_skill(skill_dir):
         spec = json.loads(tf.read_text(encoding="utf-8"))
     except Exception as e:
         raise ValueError("tool.json 解析失败：" + str(e))
+    # 顶层 provider：声明该 skill 的工具由哪个外部提供方执行（可空）
+    # 顶层 prompt：技能统一说明，供 System Prompt 注入（可空）
+    provider = ""
+    skill_prompt = ""
+    if isinstance(spec, dict):
+        provider = (spec.get("provider") or "").strip()
+        skill_prompt = (spec.get("prompt") or "").strip()
     if isinstance(spec, dict) and "tools" in spec:
         raw_list = spec["tools"]
     elif isinstance(spec, list):
@@ -323,18 +333,25 @@ def parse_skill(skill_dir):
         desc = (raw.get("description") or "").strip()
         if not desc:
             raise ValueError("工具 %s 缺少 description" % name)
+        executor = (raw.get("executor") or "script").strip()
         script = (raw.get("script") or "").strip()
-        if not script:
-            raise ValueError("工具 %s 缺少 script" % name)
-        sp = Path(script)
-        if sp.is_absolute():
-            if not sp.exists():
-                raise FileNotFoundError("工具 %s 的 script 不存在：" % name + str(sp))
-            script_path = sp
+        sp = Path(script) if script else Path()
+        script_path = None
+        # executor=external 的工具不在本地执行，无需脚本文件
+        if executor == "external":
+            if not (raw.get("provider") or provider):
+                raise ValueError("工具 %s 为 external，但缺少 provider" % name)
         else:
-            script_path = d / script
-            if not script_path.exists():
-                raise FileNotFoundError("工具 %s 的 script 不存在：" % name + str(script_path))
+            if not script:
+                raise ValueError("工具 %s 缺少 script" % name)
+            if sp.is_absolute():
+                if not sp.exists():
+                    raise FileNotFoundError("工具 %s 的 script 不存在：" % name + str(sp))
+                script_path = sp
+            else:
+                script_path = d / script
+                if not script_path.exists():
+                    raise FileNotFoundError("工具 %s 的 script 不存在：" % name + str(script_path))
         params = []
         for p in (raw.get("parameters") or []):
             pname = (p.get("name") if isinstance(p, dict) else None) or ""
@@ -348,16 +365,26 @@ def parse_skill(skill_dir):
                 "required": bool(p.get("required")),
                 "description": (p.get("description") or ""),
             })
+        stored_script = ""
+        if script_path is not None:
+            stored_script = str(script_path.resolve()) if sp.is_absolute() else script
         tools.append({
             "name": name,
             "description": desc,
             "skill_name": d.name,
+            "skill_prompt": skill_prompt,
             "skill_dir": _to_project_rel(d),
-            "script": str(script_path.resolve()) if sp.is_absolute() else script,
-            "interpreter": raw.get("interpreter") or _infer_interpreter(script),
+            "script": stored_script,
+            "interpreter": raw.get("interpreter") or (_infer_interpreter(script) if script else ""),
             "arg_style": raw.get("arg_style") or "flag",
             "fixed_args": raw.get("fixed_args") or [],
             "parameters": params,
+            # executor=external 的工具不在本地执行，转发给 provider
+            "executor": executor,
+            "provider": (raw.get("provider") or provider),
+            # silent：一次性副作用工具（如推送消息），其调用结果不回传网页 AI，
+            # 也不在扩展侧生成卡片；仅完成动作本身。
+            "silent": bool(raw.get("silent")),
             "enabled": False,
         })
     return tools
@@ -479,16 +506,67 @@ def run(tool, params):
 
 
 # ---------- 给前端 / server 用的只读视图 ----------
+def external_providers():
+    """汇总【已上线】的 executor=external 工具，按 provider 分组，用于注册到提供方注册表。
+
+    未上线的外部工具不注册，因此即使提供方在线也不会并入 /tools。
+    """
+    groups = {}
+    for t in load_tools().values():
+        if (t.get("executor") or "script") != "external":
+            continue
+        if not t.get("enabled"):
+            continue
+        provider = (t.get("provider") or "").strip()
+        if not provider:
+            continue
+        entry = {
+            "name": t.get("name"),
+            "description": t.get("description", ""),
+            "parameters": t.get("parameters") or [],
+        }
+        if t.get("silent"):
+            entry["silent"] = True
+        groups.setdefault(provider, []).append(entry)
+    return groups
+
+
+def prompt_sections():
+    """收集各技能的统一说明（tool.json 的 prompt 字段）。
+
+    生效条件：该技能下有至少一个工具处于上线状态。
+    返回 [ { skill, text } ]，技能名取 skill_name。
+    """
+    sections = {}
+    for t in load_tools().values():
+        if not t.get("enabled"):
+            continue
+        text = (t.get("skill_prompt") or "").strip()
+        if not text:
+            continue
+        skill = t.get("skill_name") or ""
+        sections[skill] = text
+    return [{"skill": k, "text": v} for k, v in sections.items()]
+
+
 def public_meta(tool):
-    return {
+    meta = {
         "name": tool.get("name"),
         "description": tool.get("description", ""),
         "parameters": tool.get("parameters") or [],
     }
+    # silent：一次性副作用工具，其结果不回传网页 AI
+    if tool.get("silent"):
+        meta["silent"] = True
+    return meta
 
 
 def all_meta():
-    """已上线的自定义工具（用于 /tools 合并进 System Prompt）。"""
+    """已上线的自定义工具（用于 /tools 合并进 System Prompt）。
+
+    上线即在此返回，与执行端是否在线无关：executor=external 的工具若提供方离线，
+    调用时返回离线错误，但不从工具列表撤出。
+    """
     return [public_meta(t) for t in load_tools().values() if t.get("enabled")]
 
 
