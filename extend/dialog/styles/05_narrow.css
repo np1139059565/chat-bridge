@@ -1,0 +1,26 @@
+/* ============================================================
+ * AI 工具调用镜像插件 —— 窄屏适配
+ * ------------------------------------------------------------
+ * 断点取值说明：媒体查询依据的是 iframe 自身的视口宽度，不是宿主窗口宽度。
+ * 面板常态宽度固定 420px（见 content/00_state.js 的 PANEL_W），只有宿主窗口窄于
+ * 480px 时才切换成 100% 宽。因此断点必须小于 420px，否则常态宽度也会命中
+ * 窄屏规则；取 419px，表示「面板比常态更窄」时才收紧。
+ * ============================================================ */
+@media (max-width: 419px) {
+  /* 收窄左右留白，把宽度让给内容。
+     不包含 .settings：它是绝对定位铺满面板的容器，加内边距会让
+     其子元素 .settings-bar（蓝色标题栏）左右缩进、两侧露出底色条。 */
+  .m-header, .m-body { padding-left: var(--cb-sp-3); padding-right: var(--cb-sp-3); }
+
+  /* 表格是窄屏撑破卡片的头号来源：改为定宽布局 + 单元格强制断词 */
+  .mb-table, .params { table-layout: fixed; }
+  .mb-table th, .mb-table td,
+  .params th, .params td { word-break: break-word; overflow-wrap: anywhere; }
+
+  /* 深色代码块在窄屏降低高度上限，避免一屏被单块占满 */
+  .code-body, .usage, .stack { max-height: 200px; }
+
+  /* 按钮允许收缩并平分行宽，挤不下时自然换行而不是被压扁 */
+  .row { gap: var(--cb-sp-1); }
+  .row button { flex: 1 1 auto; min-width: 0; }
+}

@@ -1,0 +1,114 @@
+/* ============================================================
+ * 调试扩展抽屉样式 · 02_messages.css
+ * ------------------------------------------------------------
+ * 本文件由原 drawer.css 按分节拆分而来，内容保持一致。
+ * 归属分节：消息流、元素卡片（点选结果）
+ * 全部取值来自 00_tokens.css 的设计令牌（--db-*）。
+ * ============================================================ */
+
+/* ========== 消息流 ========== */
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--db-sp-4);
+}
+
+.msg {
+  margin-bottom: 10px;
+  padding: var(--db-sp-3);
+  border-radius: var(--db-r-md);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: var(--db-fs-md);
+}
+
+.msg.user {
+  background: var(--db-primary-soft);
+}
+
+.msg.assistant {
+  background: var(--db-ok-bg);
+}
+
+.msg.system {
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
+  font-size: var(--db-fs-sm);
+}
+
+.msg .meta {
+  font-size: var(--db-fs-xs);
+  color: var(--db-text-muted);
+  margin-bottom: var(--db-sp-1);
+}
+
+.msg .text {
+  line-height: 1.4;
+}
+
+/* 消息状态徽标：浅底深字 + 细边框，11px 小字也满足对比度要求 */
+.msg-status {
+  display: inline-block;
+  font-size: var(--db-fs-xs);
+  line-height: 1;
+  padding: 3px var(--db-sp-3);
+  border-radius: var(--db-r-pill);
+  margin-bottom: var(--db-sp-1);
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+
+.msg-status.waiting {
+  background: var(--db-warn-bg);
+  color: var(--db-warn);
+  border-color: var(--db-warn-border);
+}
+
+.msg-status.processing {
+  background: var(--db-primary-soft);
+  color: var(--db-primary-hover);
+  border-color: #91d5ff;
+}
+
+.msg-status.completed {
+  background: var(--db-ok-bg);
+  color: var(--db-ok);
+  border-color: var(--db-ok-border);
+}
+
+/* ========== 元素卡片（点选结果） ========== */
+.element-card {
+  border: 1px solid var(--db-border-strong);
+  border-radius: var(--db-r-sm);
+  padding: var(--db-sp-3);
+  margin-bottom: var(--db-sp-3);
+  background: var(--db-bg-subtle);
+  font-size: var(--db-fs-sm);
+}
+
+.element-card img {
+  max-width: 100%;
+  margin-top: var(--db-sp-2);
+  border: 1px solid var(--db-border);
+}
+
+.element-card .warn {
+  color: var(--db-warn);
+  margin-top: 2px;
+}
+
+.element-card pre {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: var(--db-sp-1) 0 0;
+  font-size: var(--db-fs-xs);
+  max-height: 120px;
+  overflow: auto;
+  background: var(--db-bg-page);
+  padding: var(--db-sp-1);
+}
+
+.element-card .dom-code {
+  font-size: 10px;
+  max-height: 200px;
+}

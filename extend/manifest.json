@@ -22,7 +22,15 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": [
+        "lib/dom-utils.js",
+        "content/00_state.js",
+        "content/01_panel.js",
+        "content/02_blocks.js",
+        "content/03_bridge.js",
+        "content/04_observer.js",
+        "content/05_index.js"
+      ],
       "run_at": "document_idle"
     }
   ],

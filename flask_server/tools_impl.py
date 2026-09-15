@@ -7,262 +7,38 @@
 约定：
 - 参数不合法（缺失 / 类型错 / 取值非法）请抛 ToolParamError；
   其他异常一律视为「工具内部代码缺陷」，AI 会据此决定改参数还是改代码。
+
+本文件保留「可整体热重载的单元」语义：TOOLS 元数据、t_xxx 实现与 DISPATCH 都在此处。
+不随调用变化的通用辅助（参数校验、路径解析、体积控制）已下沉到 tool_helpers，
+并在此处重导出，保证 impl.ToolParamError 等既有引用不变。
 """
 import os
 import re
-import json
 import fnmatch
 import sys
 import shlex
-import tempfile
 import subprocess
 from pathlib import Path
 
+from tool_meta import TOOLS
+from tool_helpers import (
+    ToolParamError,  # 重导出：服务侧通过 runtime.impl.ToolParamError 判定参数错误
+    PROJECT_ROOT,
+    SKILLS_ROOT,
+    abspath as _abspath,
+    require_abspath as _require_abspath,
+    resolve_skill_file as _resolve_skill_file,
+    normalize_aliases as _normalize_aliases,
+    require as _require,
+    enforce_size_limit,
+)
 
-class ToolParamError(Exception):
-    """参数错误：调用方传入的参数不合法，调整参数即可重试。
 
-    与「工具内部代码缺陷」区分开，便于 AI 判断该改参数还是该修代码。
-    """
-
-
-# ---------- 工具目录（与插件内置目录保持一致） ----------
-TOOLS = {
-    "list_dir": {
-        "description": "列出指定目录下的文件和子目录（不含点文件）",
-        "parameters": [
-            {"name": "target_directory", "type": "string", "required": True, "description": "要列出的目录路径（相对或绝对）"},
-            {"name": "ignore_globs", "type": "array", "required": False, "description": "要忽略的通配符模式列表"},
-        ],
-    },
-    "search_file": {
-        "description": "按文件名通配符模式递归搜索文件，支持忽略特定模式",
-        "parameters": [
-            {"name": "target_directory", "type": "string", "required": True, "description": "搜索根目录"},
-            {"name": "pattern", "type": "string", "required": True, "description": "文件名通配符，如 *.js"},
-            {"name": "recursive", "type": "boolean", "required": False, "description": "是否递归子目录，默认 true"},
-            {"name": "caseSensitive", "type": "boolean", "required": False, "description": "是否区分大小写"},
-            {"name": "ignore_globs", "type": "array", "required": False, "description": "忽略模式列表"},
-        ],
-    },
-    "search_content": {
-        "description": "基于正则在文件内容中搜索匹配（支持上下文、类型过滤）",
-        "parameters": [
-            {"name": "pattern", "type": "string", "required": True, "description": "正则表达式"},
-            {"name": "path", "type": "string", "required": False, "description": "搜索路径，默认当前目录"},
-            {"name": "glob", "type": "string", "required": False, "description": "文件名过滤，如 *.py"},
-            {"name": "contextAround", "type": "integer", "required": False, "description": "上下文字节数/行数"},
-            {"name": "caseSensitive", "type": "boolean", "required": False, "description": "是否区分大小写"},
-        ],
-    },
-    "read_file": {
-        "description": "读取本地文件内容（仅接受绝对路径），支持指定偏移与行数",
-        "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件绝对路径"},
-            {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
-            {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
-        ],
-    },
-    "read_skill": {
-        "description": "读取某个 skill 目录下的文档（相对该 skill 目录的路径，如 SKILL.md）",
-        "parameters": [
-            {"name": "skill", "type": "string", "required": True, "description": "skill 名称（skills/ 下的目录名，如 debug_chrome）"},
-            {"name": "file", "type": "string", "required": True, "description": "skill 目录内的相对路径，如 SKILL.md"},
-            {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
-            {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
-        ],
-    },
-    "read_lints": {
-        "description": "读取工作区或指定文件的 linter 诊断信息（错误/警告）",
-        "parameters": [
-            {"name": "paths", "type": "array", "required": False, "description": "文件或目录路径"},
-            {"name": "severity", "type": "array", "required": False, "description": "过滤严重级别"},
-        ],
-    },
-    "replace_in_file": {
-        "description": "在已有文件中进行精确字符串替换（用于最小化改动）",
-        "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件路径"},
-            {"name": "old_str", "type": "string", "required": True, "description": "待替换原文（须唯一）"},
-            {"name": "new_str", "type": "string", "required": True, "description": "替换后的文本"},
-        ],
-    },
-    "write_to_file": {
-        "description": "创建或覆盖写入完整文件内容",
-        "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件路径"},
-            {"name": "content", "type": "string", "required": True, "description": "完整文件内容"},
-        ],
-    },
-    "delete_file": {
-        "description": "删除指定路径的文件",
-        "parameters": [
-            {"name": "target_file", "type": "string", "required": True, "description": "要删除的文件路径"},
-        ],
-    },
-    "get_tool_params": {
-        "description": "根据工具 id 查询其参数、说明与用法",
-        "parameters": [
-            {"name": "tool_id", "type": "string", "required": True, "description": "工具名称/id"},
-        ],
-    },
-    "list_rules": {
-        "description": "列出本机可用的规则文件（规则名 + 摘要），供 AI 判断该读取哪条规则",
-        "parameters": [],
-    },
-    "read_rule": {
-        "description": "按规则名读取某条规则的完整内容（如 self-healing 异常自愈规则）",
-        "parameters": [
-            {"name": "name", "type": "string", "required": True, "description": "规则名（不含扩展名），先用 list_rules 获取"},
-        ],
-    },
-    "run_command": {
-        "description": "执行本地命令（按指定脚本语言选择解释器；支持的语言由后端配置决定）",
-        "parameters": [
-            {"name": "language", "type": "string", "required": True, "description": "脚本语言类型，如 python / shell / cmd / powershell / git 等（以 get_tool_params 返回的支持列表为准）"},
-            {"name": "command", "type": "string", "required": True, "description": "要执行的命令或代码块内容"},
-            {"name": "cwd", "type": "string", "required": False, "description": "工作目录，默认使用当前工程目录"},
-            {"name": "timeout", "type": "integer", "required": False, "description": "超时秒数，默认 60 秒"},
-        ],
-    },
-}
-
+# 工具目录：元数据定义在 tool_meta.py，此处直接引用，保持「声明」与「实现」分离
 
 # ---------- 各工具实现 ----------
-# 工程根目录（flask_server 的上一级）：通用文件工具的相对路径以此为基准解析。
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# skills 根目录：read_skill 以此为基准定位各 skill。
-SKILLS_ROOT = PROJECT_ROOT / "skills"
-
-
-def _abspath(p):
-    """把入参解析为绝对路径（通用工具用）：绝对路径原样，相对路径以工程根为基准。"""
-    p = Path(p)
-    if p.is_absolute():
-        return p.resolve()
-    return (PROJECT_ROOT / p).resolve()
-
-
-def _require_abspath(p):
-    """要求入参必须是绝对路径（read_file 专用）。
-
-    read_file 不再做「相对路径隐式以工程根为基准」的特殊处理，避免耦合。
-    提示只陈述「需要绝对路径」这一事实，不臆测调用方的意图。
-    """
-    p = Path(p)
-    if not p.is_absolute():
-        raise ToolParamError("需要绝对路径，收到的是相对路径：%s" % p)
-    return p.resolve()
-
-
-def _resolve_skill_file(skill, rel):
-    """把 (skill 名, skill 内相对路径) 解析为绝对路径，并做越界校验。
-
-    - skill 名仅允许单层目录名，防止用 ../ 越出 skills 目录。
-    - rel 必须是 skill 目录内的相对路径，解析后仍须落在该 skill 目录内。
-    """
-    skill = str(skill or "").strip()
-    rel = str(rel or "").strip()
-    if not skill or "/" in skill or "\\" in skill or skill in (".", ".."):
-        raise ToolParamError("skill 名非法：%s（应为 skills/ 下的单层目录名，如 debug_chrome）" % skill)
-    if not rel:
-        raise ToolParamError("缺少必填参数 file（skill 目录内的相对路径，如 SKILL.md）")
-    base = (SKILLS_ROOT / skill).resolve()
-    if not base.is_dir():
-        available = sorted([d.name for d in SKILLS_ROOT.iterdir() if d.is_dir()]) if SKILLS_ROOT.is_dir() else []
-        raise ToolParamError("skill 不存在：%s（可用：%s）" % (skill, ", ".join(available) or "无"))
-    target = (base / rel).resolve()
-    # 越界校验：解析后的路径必须仍在 skill 目录内
-    if base != target and base not in target.parents:
-        raise ToolParamError("file 越出 skill 目录：%s" % rel)
-    return target
-
-
-# 参数别名：调用方可能用 path / file 等写法指代 filePath，统一归一到规范名，
-# 避免因别名导致「缺参」报错。
-_PARAM_ALIASES = {
-    "path": "filePath",
-    "file": "filePath",
-    "file_path": "filePath",
-    "filepath": "filePath",
-    "target_file": "filePath",
-}
-
-
-def _normalize_aliases(p):
-    """把别名参数归一到规范参数名（仅补缺失项，不覆盖已有值）。"""
-    if not isinstance(p, dict):
-        return p
-    for alias, real in _PARAM_ALIASES.items():
-        if alias in p and real not in p:
-            p[real] = p.get(alias)
-    return p
-
-
-def _require(p, *names):
-    """校验必填参数；缺失 / 空串时抛 ToolParamError，并明确告知正确参数名，
-    避免 AI 臆造别名（如把 target_directory 写成 path）后工具静默用默认值、返回成功却结果错误，
-    导致自愈流程因「没抛异常」而永远不触发。"""
-    for n in names:
-        v = p.get(n)
-        if v is None or (isinstance(v, str) and v.strip() == ""):
-            raise ToolParamError(
-                "缺少必填参数 %s。注意：本工具参数名就是 %s（请先用 get_tool_params 核对准确参数名，"
-                "不要臆造 path / file 等别名）" % (n, n)
-            )
-    return True
-
-
-# ---------- 结果 JSON 体积上限 ----------
-# 各工具返回的 JSON 序列化后不得超过该字符数（默认 10 万，可在 config.yaml 的
-# limits.max_json_chars 覆盖）。超限时不截断，而是返回参数错误并提示 AI 缩小范围，
-# 避免把不完整的结果喂给 AI 导致误判。
-DEFAULT_MAX_JSON_CHARS = 100000
-
-
-def _max_json_chars():
-    """读取 config.yaml 中 limits.max_json_chars；未配置时返回默认值。"""
-    cfg_path = Path(__file__).resolve().parent / "config.yaml"
-    try:
-        import yaml
-        with cfg_path.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-        v = (data.get("limits") or {}).get("max_json_chars")
-        if v is not None:
-            v = int(v)
-            if v > 0:
-                return v
-    except Exception:
-        pass
-    return DEFAULT_MAX_JSON_CHARS
-
-
-def _dump_len(obj):
-    """对象序列化为 JSON 后的字符数（无法序列化时按极大值处理）。"""
-    try:
-        return len(json.dumps(obj, ensure_ascii=False))
-    except Exception:
-        return 10 ** 12
-
-
-def enforce_size_limit(result, guidance, max_chars=None):
-    """校验工具结果的 JSON 体积；超限时返回错误，提示 AI 缩小范围后重试。
-
-    - 不截断：宁可报错，也不把不完整的结果喂给 AI，避免其据此做出错误判断。
-    - guidance：针对该工具的收敛建议（如缩小搜索范围 / 分段读取）。
-    - 未超限时原样返回 result；超限时抛 ToolParamError（服务端归类为 parameter，
-      提示 AI 这是调用范围问题，应调整参数而非修改工具代码）。
-    """
-    limit = max_chars if max_chars is not None else _max_json_chars()
-    size = _dump_len(result)
-    if size <= limit:
-        return result
-    raise ToolParamError(
-        "结果体积约 %d 字符，超过上限 %d 字符。%s" % (size, limit, guidance)
-    )
-
-
 def t_list_dir(p):
+    """列出目录下的文件与子目录，跳过点文件与忽略模式。"""
     _require(p, "target_directory")
     d = _abspath(p.get("target_directory"))
     ig = p.get("ignore_globs") or []
@@ -278,6 +54,7 @@ def t_list_dir(p):
 
 
 def t_search_file(p):
+    """按文件名通配符递归（或单层）搜索文件。"""
     _require(p, "target_directory", "pattern")
     root = _abspath(p.get("target_directory"))
     pattern = p.get("pattern", "*")
@@ -293,7 +70,36 @@ def t_search_file(p):
     return {"matches": matches, "count": len(matches)}
 
 
+# 单次 search_content 的结果条数上限：超出后停止继续收集，交给体积上限进一步把关
+_SEARCH_MATCH_LIMIT = 200
+
+
+def _collect_file_matches(f, regex, glob, current_total):
+    """在单个文件内按正则收集匹配行。
+
+    @param current_total 本次搜索已收集的匹配总数（含此前文件）
+    @return 该文件新增的匹配列表；文件不可读或不符合 glob 时为空
+
+    截断语义与原实现一致：一旦总数达到上限，本文件内层循环即停止，
+    但外层仍会继续遍历后续文件（每文件最多再贡献一条）。
+    """
+    if glob and not fnmatch.fnmatch(f.name, glob):
+        return []
+    try:
+        text = f.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return []
+    hits = []
+    for i, line in enumerate(text.splitlines(), 1):
+        if regex.search(line):
+            hits.append({"file": str(f), "line": i, "text": line})
+            if current_total + len(hits) >= _SEARCH_MATCH_LIMIT:
+                break
+    return hits
+
+
 def t_search_content(p):
+    """按正则搜索文件内容，返回匹配行；结果超限时改为报错并提示缩小范围。"""
     _require(p, "pattern")
     pattern = p.get("pattern", "")
     path = p.get("path", ".")
@@ -306,18 +112,7 @@ def t_search_content(p):
     for f in files:
         if not f.is_file():
             continue
-        if glob and not fnmatch.fnmatch(f.name, glob):
-            continue
-        try:
-            text = f.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
-            continue
-        for i, line in enumerate(text.splitlines(), 1):
-            if regex.search(line):
-                matches.append({"file": str(f), "line": i, "text": line})
-                if len(matches) >= 200:
-                    break
-    # 结果超限不截断，改为报错并提示 AI 缩小搜索范围
+        matches += _collect_file_matches(f, regex, glob, len(matches))
     return enforce_size_limit(
         {"count": len(matches), "matches": matches},
         "请缩小搜索范围后重试：用更精确的 pattern、加 glob 限定文件类型，或把 path 指向更具体的子目录。",
@@ -340,9 +135,9 @@ def _read_text_segment(fp, offset, limit):
 
 
 def t_read_file(p):
+    """读取文件内容（仅接受绝对路径），支持 offset / limit 分段。"""
     _normalize_aliases(p)
     _require(p, "filePath")
-    # read_file 只接受绝对路径：不再有「相对路径以工程根为基准」的特殊处理。
     fp = _require_abspath(p.get("filePath"))
     res = _read_text_segment(fp, p.get("offset", 1), p.get("limit"))
     read_lines = res.pop("_read_lines")
@@ -377,7 +172,7 @@ def t_read_skill(p):
 
 
 def t_read_lints(p):
-    # 本地服务未集成 linter，返回空诊断即可
+    """读取 linter 诊断：本地服务未集成 linter，返回空诊断。"""
     return enforce_size_limit(
         {"diagnostics": [], "note": "本地服务未集成 linter，返回空诊断。"},
         "请缩小 paths / severity 范围后重试。",
@@ -385,6 +180,7 @@ def t_read_lints(p):
 
 
 def t_replace_in_file(p):
+    """在文件中做精确字符串替换，要求 old_str 唯一。"""
     _normalize_aliases(p)
     _require(p, "filePath", "old_str")
     fp = _abspath(p.get("filePath"))
@@ -404,6 +200,7 @@ def t_replace_in_file(p):
 
 
 def t_write_to_file(p):
+    """创建或覆盖写入完整文件内容（父目录不存在时自动创建）。"""
     _normalize_aliases(p)
     _require(p, "filePath", "content")
     fp = _abspath(p.get("filePath"))
@@ -414,6 +211,7 @@ def t_write_to_file(p):
 
 
 def t_delete_file(p):
+    """删除指定文件。"""
     _normalize_aliases(p)
     _require(p, "target_file")
     fp = _abspath(p.get("target_file"))
@@ -422,11 +220,13 @@ def t_delete_file(p):
 
 
 def t_list_rules(p):
+    """列出可用规则文件。"""
     import rules
     return {"rules": rules.list_rules(), "rulesDir": str(rules.RULES_DIR)}
 
 
 def t_read_rule(p):
+    """按规则名读取规则全文。"""
     import rules
     _require(p, "name")
     name = str(p.get("name")).strip()
@@ -441,6 +241,7 @@ def t_read_rule(p):
 
 
 def t_get_tool_params(p):
+    """按工具 id 返回其参数定义；run_command 额外附带可选语言列表。"""
     tid = p.get("tool_id") or p.get("tool")
     if tid not in TOOLS:
         return {"error": "未知工具 id", "available": list(TOOLS.keys())}
@@ -452,10 +253,23 @@ def t_get_tool_params(p):
     return resp
 
 
-# run_command 默认支持的语言：后端可通过 config.yaml 的 tools.run_command.languages 覆盖。
-# 映射值为调用解释器时的首段命令；命令正文以参数/参数文件/标准输入方式传入。
+# ---------- run_command 的语言配置 ----------
+# 默认支持的语言：后端可通过 config.yaml 的 tools.run_command.languages 覆盖。
+# 注意「默认列表」与「解释器映射」是两个独立概念：
+#   - 前者决定 AI 能否用某语言（可在设置页勾选）；
+#   - 后者决定该语言实际怎么被调用，二者需同时具备才能执行。
 RUN_COMMAND_SUPPORTED_LANGUAGES = ["cmd", "powershell", "shell", "git", "python"]
+
+# 默认超时（秒）：单次命令执行超过该时长即返回超时结果，避免长时间挂起。
 RUN_COMMAND_TIMEOUT = 60
+
+# 语言 → 解释器命令前缀。
+# 映射值为调用解释器时的首段命令；命令正文以参数形式追加在末尾（git 例外，见 _build_run_command）。
+#   - cmd        ：以 /c 执行整段命令字符串
+#   - powershell ：-Command 后接整段脚本，禁用 profile 与交互以保证可重复
+#   - shell      ：bash -lc，登录式 shell 以便加载常用环境变量
+#   - git        ：命令正文需按子命令风格分词（如 git status --short）
+#   - python     ：当前解释器 -c，保证与后端运行环境一致
 RUN_COMMAND_LANGUAGE_COMMANDS = {
     "cmd": ["cmd", "/d", "/s", "/c"],
     "powershell": ["powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command"],
@@ -464,6 +278,7 @@ RUN_COMMAND_LANGUAGE_COMMANDS = {
     "python": [sys.executable, "-c"],
 }
 
+# 语言别名：把 bash / sh / pwsh 等写法归一到规范语言名
 LANG_ALIASES = {
     "bash": "shell", "sh": "shell", "shell": "shell",
     "pwsh": "powershell", "powershell": "powershell", "ps1": "powershell",
@@ -473,28 +288,31 @@ LANG_ALIASES = {
 }
 
 
+def _normalize_langs(langs):
+    """把语言列表规范化为小写、去空的字符串列表；非法输入返回 None。"""
+    if not isinstance(langs, list) or not langs:
+        return None
+    return [str(x).strip().lower() for x in langs if str(x).strip()]
+
+
+def _read_langs_from_yaml():
+    """从 config.yaml 读取 tools.run_command.languages；失败或未配置时返回 None。"""
+    # 配置文件读取统一走 yaml_utils.load_config_dict，避免多处重复实现
+    import yaml_utils
+    data = yaml_utils.load_config_dict()
+    return _normalize_langs(((data.get("tools") or {}).get("run_command") or {}).get("languages"))
+
+
 def _load_run_command_languages():
     """读取 config.yaml 中 tools.run_command.languages；失败或未配置时返回默认列表。"""
-    cfg_path = Path(__file__).resolve().parent / "config.yaml"
-    try:
-        import yaml
-        with cfg_path.open("r", encoding="utf-8") as fh:
-            data = yaml.safe_load(fh) or {}
-        langs = ((data.get("tools") or {}).get("run_command") or {}).get("languages")
-        if isinstance(langs, list) and langs:
-            return [str(x).strip().lower() for x in langs if str(x).strip()]
-    except Exception:
-        pass
+    langs = _read_langs_from_yaml()
+    if langs:
+        return langs
     return list(RUN_COMMAND_SUPPORTED_LANGUAGES)
 
 
-def t_run_command(p):
-    _require(p, "language", "command")
-    raw_lang = str(p.get("language") or "").strip().lower()
-    command = p.get("command", "")
-    if not str(command).strip():
-        raise ToolParamError("command 不能为空")
-
+def _resolve_run_lang(raw_lang):
+    """把语言别名归一为规范名，并校验其在当前支持列表内。"""
     lang = LANG_ALIASES.get(raw_lang, raw_lang)
     supported = _load_run_command_languages()
     if lang not in supported:
@@ -502,35 +320,53 @@ def t_run_command(p):
             "不支持的语言 %s；当前 run_command 支持：%s。若要使用请先在设置卡片中勾选该语言。"
             % (raw_lang, ", ".join(supported))
         )
+    return lang
 
+
+def _resolve_run_cwd(cwd):
+    """解析工作目录：未指定时用当前进程目录；指定时必须存在。"""
+    if not cwd:
+        return Path.cwd()
+    cwd_path = _abspath(cwd)
+    if not cwd_path.is_dir():
+        raise ToolParamError("工作目录不存在：%s" % cwd_path)
+    return cwd_path
+
+
+def _build_run_command(lang, cmd_prefix, command):
+    """拼装命令列表：git 按子命令风格分词，其余语言整段作为单个参数。"""
+    if lang != "git":
+        return list(cmd_prefix) + [str(command)]
+    try:
+        command_parts = shlex.split(str(command), posix=False)
+    except ValueError as e:
+        raise ToolParamError("git 命令解析失败：%s" % e)
+    if not command_parts:
+        raise ToolParamError("git 命令不能为空")
+    return list(cmd_prefix) + command_parts
+
+
+def _prepare_run(p):
+    """校验并准备执行参数，返回 (lang, cwd_path, cmd, timeout)。"""
+    _require(p, "language", "command")
+    raw_lang = str(p.get("language") or "").strip().lower()
+    command = p.get("command", "")
+    if not str(command).strip():
+        raise ToolParamError("command 不能为空")
+    lang = _resolve_run_lang(raw_lang)
     cmd_prefix = RUN_COMMAND_LANGUAGE_COMMANDS.get(lang)
     if not cmd_prefix:
         raise ToolParamError("语言 %s 暂未配置解释器映射" % lang)
-
-    cwd = p.get("cwd") or ""
-    if cwd:
-        cwd_path = _abspath(cwd)
-        if not cwd_path.is_dir():
-            raise ToolParamError("工作目录不存在：%s" % cwd_path)
-    else:
-        cwd_path = Path.cwd()
-
-    # git 命令是“子命令风格”，需要把命令字符串按 shell 分词后拼接；
-    # 其余语言都遵循“解释器 + 标志 + 完整命令字符串”的形式，不拆分正文。
-    if lang == "git":
-        try:
-            command_parts = shlex.split(str(command), posix=False)
-        except ValueError as e:
-            raise ToolParamError("git 命令解析失败：%s" % e)
-        if not command_parts:
-            raise ToolParamError("git 命令不能为空")
-        cmd = list(cmd_prefix) + command_parts
-    else:
-        cmd = list(cmd_prefix) + [str(command)]
-
+    cwd_path = _resolve_run_cwd(p.get("cwd") or "")
+    cmd = _build_run_command(lang, cmd_prefix, command)
     timeout = int(p.get("timeout") or RUN_COMMAND_TIMEOUT)
+    return lang, cwd_path, cmd, timeout
+
+
+def _spawn_run(cmd, cwd_path, timeout):
+    """启动子进程执行命令；解释器缺失转为环境类错误，超时返回 None。"""
     try:
-        proc = subprocess.run(
+        return subprocess.run(
             cmd,
             cwd=str(cwd_path),
             stdout=subprocess.PIPE,
@@ -545,6 +381,27 @@ def t_run_command(p):
     except FileNotFoundError as e:
         raise FileNotFoundError("无法启动命令（解释器或程序缺失）：%s" % e)
     except subprocess.TimeoutExpired:
+        return None
+
+
+def _run_result(lang, cwd_path, proc):
+    """把子进程结果规整为统一返回结构。"""
+    return {
+        "ok": proc.returncode == 0,
+        "language": lang,
+        "exitCode": proc.returncode,
+        "stdout": (proc.stdout or "").strip(),
+        "stderr": (proc.stderr or "").strip(),
+        "cwd": str(cwd_path),
+    }
+
+
+def t_run_command(p):
+    """按指定语言执行命令，返回退出码与输出；超时返回 ok=False。"""
+    lang, cwd_path, cmd, timeout = _prepare_run(p)
+    proc = _spawn_run(cmd, cwd_path, timeout)
+    if proc is None:
+        # 超时：返回结构化的失败结果，交由上层原样回传
         return {
             "ok": False,
             "language": lang,
@@ -553,19 +410,10 @@ def t_run_command(p):
             "stderr": "命令执行超时（%s 秒）" % timeout,
             "cwd": str(cwd_path),
         }
-
-    stdout = proc.stdout or ""
-    stderr = proc.stderr or ""
-    return {
-        "ok": proc.returncode == 0,
-        "language": lang,
-        "exitCode": proc.returncode,
-        "stdout": stdout.strip(),
-        "stderr": stderr.strip(),
-        "cwd": str(cwd_path),
-    }
+    return _run_result(lang, cwd_path, proc)
 
 
+# 工具名 → 实现函数的派发表（自愈工具由服务侧在 _reload_impl 时并入）
 DISPATCH = {
     "list_dir": t_list_dir,
     "search_file": t_search_file,

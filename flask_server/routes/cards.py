@@ -6,6 +6,30 @@ from card_bus import bus, DEFAULT_TIMEOUT_MS
 bp = Blueprint("cards", __name__)
 
 
+def _parse_timeout(data):
+    """解析超时时间：非法或缺省时回退默认值（毫秒）。"""
+    timeout_ms = data.get("timeout_ms") or DEFAULT_TIMEOUT_MS
+    try:
+        return int(timeout_ms)
+    except (TypeError, ValueError):
+        return DEFAULT_TIMEOUT_MS
+
+
+def _parse_card_fields(data):
+    """解析建卡字段；content 非法时返回错误响应，否则返回字段字典。"""
+    content = data.get("content")
+    # content 必须是字符串：卡片正文即投递给镜像插件的内容
+    if not content or not isinstance(content, str):
+        return jsonify({"success": False, "error": "INVALID_CARD", "message": "content(str) required"}), 400
+    return {
+        "source": data.get("source") or "external",
+        "card_type": data.get("type") or "",
+        "title": data.get("title") or "",
+        "content": content,
+        "payload": data.get("payload") or {},
+    }
+
+
 @bp.route("/api/cards", methods=["POST", "OPTIONS"])
 def create_card():
     """创建一张卡片并阻塞等待结果。
@@ -17,25 +41,13 @@ def create_card():
     if request.method == "OPTIONS":
         return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
-    content = data.get("content")
-    if not content or not isinstance(content, str):
-        return jsonify({"success": False, "error": "INVALID_CARD", "message": "content(str) required"}), 400
+    fields = _parse_card_fields(data)
+    # 字段解析失败：直接返回 400 响应
+    if isinstance(fields, tuple):
+        return fields
 
-    timeout_ms = data.get("timeout_ms") or DEFAULT_TIMEOUT_MS
-    try:
-        timeout_ms = int(timeout_ms)
-    except (TypeError, ValueError):
-        timeout_ms = DEFAULT_TIMEOUT_MS
-
-    card = bus.create(
-        source=data.get("source") or "external",
-        card_type=data.get("type") or "",
-        title=data.get("title") or "",
-        content=content,
-        payload=data.get("payload") or {},
-        timeout_ms=timeout_ms,
-    )
-
+    timeout_ms = _parse_timeout(data)
+    card = bus.create(timeout_ms=timeout_ms, **fields)
     ok, result = bus.wait(card.id, timeout_ms)
     if ok:
         return jsonify({"success": True, "id": card.id, "result": result})

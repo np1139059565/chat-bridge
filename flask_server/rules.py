@@ -44,24 +44,29 @@ DEFAULT_SELF_HEALING_RULE = """# 异常与自愈（self-healing）
 
 
 def ensure_dir():
+    """确保规则目录存在，返回该目录路径。"""
     RULES_DIR.mkdir(parents=True, exist_ok=True)
     return RULES_DIR
 
 
 def _path(name):
+    """由规则名得到对应的 .md 文件路径（不做存在性校验）。"""
     return RULES_DIR / (str(name) + ".md")
 
 
 def valid_name(name):
+    """校验规则名是否合法（仅字母、数字、下划线、连字符）。"""
     return bool(NAME_RE.match(str(name or "")))
 
 
 def valid_priority(p):
+    """校验优先级取值是否在允许集合内。"""
     return str(p or "") in PRIORITIES
 
 
 # ---------- 优先级元数据 ----------
 def _load_meta():
+    """读取 _meta.json；文件缺失或格式非法时返回空字典。"""
     if not META_PATH.exists():
         return {}
     try:
@@ -72,6 +77,7 @@ def _load_meta():
 
 
 def _save_meta(meta):
+    """写回 _meta.json；失败时打印原因并返回 False。"""
     ensure_dir()
     try:
         META_PATH.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -82,12 +88,14 @@ def _save_meta(meta):
 
 
 def get_priority(name):
+    """取某条规则的读取优先级；未设置或非法时回退默认值 on-demand。"""
     meta = _load_meta()
     p = meta.get(str(name))
     return p if valid_priority(p) else DEFAULT_PRIORITY
 
 
 def set_priority(name, priority):
+    """设置某条规则的读取优先级；名称或优先级非法时抛 ValueError。"""
     name = str(name or "").strip()
     if not valid_name(name):
         raise ValueError("规则名非法（仅允许字母、数字、下划线、连字符）：%s" % name)
@@ -119,6 +127,7 @@ def list_rules():
 
 
 def read_rule(name):
+    """读取某条规则的完整内容；文件不存在时抛 FileNotFoundError。"""
     f = _path(name)
     if not f.exists():
         raise FileNotFoundError("规则不存在：%s" % name)
@@ -126,6 +135,7 @@ def read_rule(name):
 
 
 def write_rule(name, content, priority=None):
+    """写入（新建或覆盖）某条规则，可选同时更新其优先级；返回规范化后的规则名。"""
     name = str(name or "").strip()
     if not valid_name(name):
         raise ValueError("规则名非法（仅允许字母、数字、下划线、连字符）：%s" % name)
@@ -137,6 +147,7 @@ def write_rule(name, content, priority=None):
 
 
 def delete_rule(name):
+    """删除某条规则及其优先级记录；规则文件确实被删除时返回 True。"""
     f = _path(name)
     removed = False
     if f.exists():

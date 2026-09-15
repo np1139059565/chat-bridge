@@ -1,0 +1,150 @@
+/* ============================================================
+ * 调试扩展抽屉样式 · 03_tools.css
+ * ------------------------------------------------------------
+ * 本文件由原 drawer.css 按分节拆分而来，内容保持一致。
+ * 归属分节：工具调用卡片、已选元素列表、输入区、工具栏（选择元素 / 清空已选）
+ * 全部取值来自 00_tokens.css 的设计令牌（--db-*）。
+ * ============================================================ */
+
+/* ========== 工具调用卡片 ========== */
+.tool-card {
+  border: 1px solid var(--db-border-strong);
+  border-radius: var(--db-r-sm);
+  padding: var(--db-sp-3);
+  margin: var(--db-sp-3) var(--db-sp-4);
+  background: #f7f9fc;
+  font-size: var(--db-fs-sm);
+}
+
+.tool-card .card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--db-sp-2);
+}
+
+.tool-card .toolname {
+  font-weight: 600;
+  color: #2d6cdf;
+}
+
+/* 工具状态徽标：浅底深字 + 细边框，与消息状态徽标同一套观感 */
+.tool-card .badge {
+  padding: 2px var(--db-sp-3);
+  border-radius: var(--db-r-pill);
+  font-size: var(--db-fs-xs);
+  border: 1px solid transparent;
+}
+
+.tool-card .badge.running {
+  background: var(--db-warn-bg);
+  color: var(--db-warn);
+  border-color: var(--db-warn-border);
+}
+
+.tool-card .badge.done {
+  background: var(--db-ok-bg);
+  color: var(--db-ok);
+  border-color: var(--db-ok-border);
+}
+
+.tool-card .badge.error {
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
+  border-color: var(--db-danger-border);
+}
+
+/* 参数与结果都是 JSON 文本，统一等宽字体便于对齐阅读 */
+.tool-card .params-json,
+.tool-card .result {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: var(--db-sp-1) 0 0;
+  font-size: var(--db-fs-xs);
+  max-height: 200px;
+  overflow: auto;
+  background: var(--db-bg-page);
+  padding: var(--db-sp-1);
+  border-radius: var(--db-r-sm);
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+/* ========== 已选元素列表 ========== */
+.selected-list {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: var(--db-sp-3) var(--db-sp-4);
+  border-top: 1px solid var(--db-border);
+  background: var(--db-bg-subtle);
+}
+
+.selected-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--db-sp-1) 0;
+  font-size: var(--db-fs-sm);
+  border-bottom: 1px solid var(--db-border-soft);
+}
+
+.selected-item:last-child {
+  border-bottom: none;
+}
+
+/* ========== 输入区 ========== */
+.input-area {
+  display: flex;
+  padding: var(--db-sp-4);
+  border-top: 1px solid var(--db-border);
+  gap: var(--db-sp-3);
+}
+
+.input-area textarea {
+  flex: 1;
+  height: 52px;
+  resize: none;
+  padding: var(--db-sp-2);
+  border: 1px solid var(--db-border-strong);
+  border-radius: var(--db-r-sm);
+  font-family: inherit;
+  font-size: var(--db-fs-md);
+}
+
+.input-area button {
+  padding: 0 var(--db-sp-4);
+  border: none;
+  border-radius: var(--db-r-sm);
+  background: var(--db-primary);
+  color: var(--db-on-primary);
+  cursor: pointer;
+}
+
+.input-area button:hover:not(:disabled) {
+  background: var(--db-primary-hover);
+}
+
+.input-area button:disabled {
+  background: var(--db-text-faint);
+  cursor: not-allowed;
+}
+
+/* ========== 工具栏（选择元素 / 清空已选） ========== */
+.tools {
+  display: flex;
+  gap: var(--db-sp-3);
+  padding: 0 var(--db-sp-4) var(--db-sp-4);
+}
+
+.tools button {
+  padding: var(--db-sp-2) var(--db-sp-4);
+  border: 1px solid var(--db-border-strong);
+  border-radius: var(--db-r-sm);
+  background: var(--db-bg-page);
+  cursor: pointer;
+}
+
+.tools button.active {
+  background: var(--db-primary);
+  color: var(--db-on-primary);
+  border-color: var(--db-primary);
+}

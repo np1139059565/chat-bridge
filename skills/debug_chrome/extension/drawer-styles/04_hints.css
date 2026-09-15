@@ -1,0 +1,29 @@
+/* ============================================================
+ * 调试扩展抽屉样式 · 04_hints.css
+ * ------------------------------------------------------------
+ * 本文件由原 drawer.css 按分节拆分而来，内容保持一致。
+ * 归属分节：提示与轻提示
+ * 全部取值来自 00_tokens.css 的设计令牌（--db-*）。
+ * ============================================================ */
+
+/* ========== 提示与轻提示 ========== */
+.hint {
+  font-size: var(--db-fs-sm);
+  color: var(--db-text-muted);
+  padding: var(--db-sp-3) var(--db-sp-4);
+}
+
+.toast-tip {
+  position: absolute;
+  top: 50px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.75);
+  color: var(--db-on-primary);
+  padding: var(--db-sp-2) 14px;
+  border-radius: var(--db-r-sm);
+  font-size: var(--db-fs-sm);
+  z-index: var(--db-z);
+  pointer-events: none;
+  white-space: nowrap;
+}

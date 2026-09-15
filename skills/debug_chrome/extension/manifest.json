@@ -21,6 +21,7 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "shared/url-utils.js",
         "content/00_namespace.js",
         "content/01_config.js",
         "content/02_drawer.js",
@@ -37,7 +38,14 @@
     {
       "resources": [
         "drawer.html",
-        "drawer.css",
+        "shared/url-utils.js",
+        "drawer-styles/00_tokens.css",
+        "drawer-styles/01_base.css",
+        "drawer-styles/02_messages.css",
+        "drawer-styles/03_tools.css",
+        "drawer-styles/04_hints.css",
+        "drawer-styles/05_settings.css",
+        "drawer-styles/06_focus.css",
         "drawer/00_config.js",
         "drawer/01_api.js",
         "drawer/02_ui-helpers.js",

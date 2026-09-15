@@ -1,0 +1,67 @@
+/* ============================================================
+ * AI 工具调用镜像插件 —— 骨架层
+ * ------------------------------------------------------------
+ * 全局盒模型、页面基础排版、应用外层容器、顶栏与焦点样式。
+ * 取值全部来自 00_tokens.css 的设计令牌。
+ * ============================================================ */
+
+/* ========== 骨架 ========== */
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; height: 100%; }
+
+body {
+  font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+  font-size: var(--cb-fs-md);
+  color: var(--cb-text);
+  background: var(--cb-bg-page);
+}
+
+#app { height: 100%; display: flex; flex-direction: column; }
+
+.mirror-app { display: flex; flex-direction: column; height: 100%; position: relative; }
+
+/* ========== 顶栏 ========== */
+.m-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--cb-sp-4) var(--cb-sp-5);
+  background: var(--cb-primary); color: var(--cb-on-primary);
+  flex: 0 0 auto;
+}
+.m-header .title {
+  display: flex; align-items: center; gap: var(--cb-sp-3);
+  font-weight: 600; font-size: var(--cb-fs-lg);
+}
+/* 站点徽标：明确当前数据属于哪个网站 */
+.site-badge {
+  font-size: var(--cb-fs-micro); font-weight: 400;
+  padding: 2px var(--cb-sp-2); border-radius: var(--cb-r-lg);
+  background: var(--cb-on-primary-badge); max-width: 150px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 顶栏按钮组：撑满高度并让内部按钮横向排列 */
+.m-header .actions { display: flex; align-items: center; gap: var(--cb-sp-2); }
+.m-header .actions button {
+  background: var(--cb-on-primary-soft); color: var(--cb-on-primary);
+  border: 0; border-radius: var(--cb-r-md);
+  width: 28px; height: 28px; cursor: pointer; font-size: var(--cb-fs-lg);
+}
+.m-header .actions button:hover { background: var(--cb-on-primary-soft-hover); }
+
+/* 键盘焦点样式：所有按钮都清掉了边框，只靠浏览器默认 outline 提示偏弱。
+   :focus-visible 只在键盘导航时出现，不影响鼠标点击的观感。 */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--cb-primary);
+  outline-offset: 1px;
+}
+
+/* ========== 轻提示 ========== */
+.toast {
+  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+  background: var(--cb-bg-toast); color: var(--cb-on-primary);
+  padding: var(--cb-sp-3) 14px; border-radius: var(--cb-r-lg);
+  font-size: var(--cb-fs-sm); z-index: var(--cb-z-toast); pointer-events: none;
+}
