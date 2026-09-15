@@ -798,6 +798,12 @@
           if (!saved) return;
           const cur = conv.cardMap[id];
           if (cur) {
+            // 已跳过状态优先恢复：跳过的卡片不应因页面重绘而变回可自动执行
+            if (saved.skipped) {
+              cur.skipped = true;
+              cur.countdown = 0;
+              cur.phase = '';
+            }
             // 页面重绘只会重建出 pending 卡片，把已执行的结果回填
             if (saved.executed && !cur.executed) {
               cur.status = saved.status || cur.status;
@@ -1096,7 +1102,7 @@ ${this.promptSectionText()}`;
               createdAt: Date.now()
             };
             // 开启自动回传时，新建的工具卡片自动倒计时触发执行（无需点击）
-            if (this.autoSendEnabled && !!call) this.scheduleExecute(conv.cardMap[b.id]);
+            if (this.autoSendEnabled && !!call && !conv.cardMap[b.id].skipped) this.scheduleExecute(conv.cardMap[b.id]);
             log('新建卡片', b.id, call ? '工具:' + call.tool : '代码:' + (b.lang || '无'));
           });
         });
@@ -1277,7 +1283,7 @@ ${this.promptSectionText()}`;
         if (on) {
           Object.keys(cardMap).forEach((id) => {
             const c = cardMap[id];
-            if (c && c.isTool && !c.executed && !c._cdTimer) this.scheduleExecute(c);
+            if (c && c.isTool && !c.executed && !c.skipped && !c._cdTimer) this.scheduleExecute(c);
           });
           // 未发送的外部卡片一并进入倒计时
           this.externalCards.forEach((c) => {
@@ -1308,6 +1314,15 @@ ${this.promptSectionText()}`;
       execButtonLabel(card) {
         if (this.autoSendEnabled && card.phase === 'exec' && card.countdown > 0) return '执行 ' + card.countdown + 's';
         return card.executed ? '重新执行' : '执行';
+      },
+      // 跳过卡片：取消其倒计时与自动回传，标记为已跳过，不再自动执行
+      skipCard(card) {
+        if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
+        card.countdown = 0;
+        card.phase = '';
+        card.skipped = true;
+        if (this._persist) this._persist();
+        this.toast('已跳过该卡片');
       },
       // 倒计时后自动执行（与自动发送共享 autoSendDelay）
       scheduleExecute(card) {
@@ -1380,6 +1395,9 @@ ${this.promptSectionText()}`;
               onClick: () => this.onExecuteClick(card),
               disabled: card.status === 'running'
             }, this.execButtonLabel(card)),
+            // 跳过：取消该卡片的倒计时与自动回传，用户可自行决定不执行
+            (!card.skipped && !card.executed) ? h('button', { class: 'secondary', onClick: () => this.skipCard(card) }, '跳过') : null,
+            card.skipped ? h('span', { class: 'hint' }, '已跳过') : null,
             (card.result != null || card.error) ? h('button', { onClick: () => this.copy(this.resultText(card)) }, '复制结果') : null
           ]));
           if (card.status === 'done') kids.push(h('pre', { class: 'result' }, this.fmt(card.result)));
@@ -1702,13 +1720,20 @@ ${this.promptSectionText()}`;
           // 4) 通用配置：连接地址 / 端口 / 自动回传延迟
           h('div', { class: 'sp-block' }, [
             h('div', { class: 'card-head' }, [h('span', '通用配置')]),
-            // 自动延迟配置
-            h('label', ['自动回传延迟(秒)', h('input', {
-              type: 'number', min: '1', step: '1',
-              value: this.autoSendDelay / 1000,
-              onInput: (e) => { const v = parseInt(e.target.value, 10); this.autoSendDelay = (v > 0 ? v : 3) * 1000; }
-            })]),
-            h('div', { class: 'hint' }, '勾选卡片上的「自动」后：点击执行会先倒计时自动执行，执行完再倒计时自动发送到网页 AI（两者共用此时长）'),
+            // 自动延迟配置 + 全局自动开关（右侧按钮直接切换）
+            h('label', ['自动回传延迟(秒)', h('div', { class: 'inline-row' }, [
+              h('input', {
+                type: 'number', min: '1', step: '1',
+                value: this.autoSendDelay / 1000,
+                onInput: (e) => { const v = parseInt(e.target.value, 10); this.autoSendDelay = (v > 0 ? v : 3) * 1000; }
+              }),
+              h('button', {
+                class: 'switch ' + (this.autoSendEnabled ? 'on' : 'off'),
+                title: '切换全局自动：开启后卡片自动倒计时执行并回传',
+                onClick: () => this.setAutoSendEnabled(!this.autoSendEnabled)
+              }, this.autoSendEnabled ? '自动：开' : '自动：关')
+            ])]),
+            h('div', { class: 'hint' }, '开启自动后：卡片会倒计时自动执行，执行完再倒计时自动发送到网页 AI（两者共用此时长）；卡片上可单独跳过。'),
             (!this.flaskOk) ? h('div', { class: 'flask-warn' }, '⚠ 无法连接 Flask 服务（' + this.flaskError + '），当前使用内置工具目录。') : null,
             h('br'),
             // Flask 连接地址：由后端 config.yaml 下发，仅会话内使用，不持久化到浏览器

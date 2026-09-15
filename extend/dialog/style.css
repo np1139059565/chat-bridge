@@ -395,6 +395,17 @@ body {
 }
 .row button:hover { background: var(--cb-primary-hover); }
 .row button:disabled { background: var(--cb-primary-disabled); cursor: not-allowed; }
+/* 次级按钮：用于「跳过」等非主操作，视觉弱于主按钮 */
+.row button.secondary {
+  background: var(--cb-bg-fill); color: var(--cb-text-body);
+  border: 1px solid var(--cb-border-strong);
+}
+.row button.secondary:hover { background: var(--cb-bg-fill-hover); }
+
+/* 设置页内联一行：输入框 + 开关按钮并排 */
+.settings .inline-row { display: flex; align-items: center; gap: var(--cb-sp-2); }
+.settings .inline-row input { flex: 0 0 90px; margin-top: 0; }
+.settings .inline-row .switch { padding: var(--cb-sp-2) var(--cb-sp-4); white-space: nowrap; }
 
 /* ---- 网页对话镜像：结构化布局，对齐原网页的「头像 + 昵称 + 内容」结构 ---- */
 .mirror { display: flex; flex-direction: column; gap: var(--cb-sp-5); }
