@@ -1,0 +1,124 @@
+/* ============================================================
+ * AI 工具调用镜像插件 —— 代码卡片与状态块样式
+ * ------------------------------------------------------------
+ * 覆盖代码卡片（工具调用可执行 / 普通代码可复制）、工具目录、
+ * 状态徽标、结果与失败诊断。取值全部来自 00_tokens.css 的设计令牌。
+ * ============================================================ */
+
+/* ========== 代码卡片：工具调用可执行 / 普通代码可复制 ========== */
+.code-card {
+  border: 1px solid var(--cb-border); border-radius: var(--cb-r-lg);
+  background: var(--cb-bg-card); margin: 0 0 var(--cb-sp-3); overflow: hidden;
+}
+.code-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--cb-sp-2);
+  padding: var(--cb-sp-2) var(--cb-sp-3);
+  background: var(--cb-bg-subtle); border-bottom: 1px solid var(--cb-border-soft);
+}
+.code-head .toolname { font-weight: 600; font-size: var(--cb-fs-sm); color: var(--cb-primary); }
+.code-head .lang { font-size: var(--cb-fs-xs); color: var(--cb-text-sub); font-family: ui-monospace, Consolas, monospace; }
+.code-body {
+  margin: 0; padding: var(--cb-sp-3);
+  background: var(--cb-bg-code); color: var(--cb-code-text);
+  font-size: var(--cb-fs-xs); line-height: 1.5; white-space: pre;
+  overflow: auto; max-height: 260px; overscroll-behavior: contain;
+}
+/* 代码卡片内的按钮行贴边，取消 .row 的上外边距 */
+.code-card .row { margin-top: 0; padding: var(--cb-sp-2) var(--cb-sp-3); }
+/* 卡片头部右侧控件组：状态徽标 + 自动回传开关 + 倒计时 */
+.head-controls { display: flex; align-items: center; gap: var(--cb-sp-3); }
+.auto-send {
+  display: inline-flex; align-items: center; gap: var(--cb-sp-1);
+  font-size: var(--cb-fs-xs); color: var(--cb-text-sub);
+  cursor: pointer; user-select: none;
+}
+.auto-send input { margin: 0; cursor: pointer; }
+.countdown {
+  font-size: var(--cb-fs-xs); color: var(--cb-warn-text);
+  font-weight: 600; font-variant-numeric: tabular-nums;
+}
+
+/* ========== 工具目录 ========== */
+.tree { list-style: none; margin: 0; padding: 0; }
+.tree > li { border-bottom: 1px solid var(--cb-border-soft); padding: var(--cb-sp-1) 0; }
+.tree-node { cursor: pointer; display: flex; align-items: baseline; gap: var(--cb-sp-2); padding: var(--cb-sp-1) 2px; }
+.tree-node:hover { background: var(--cb-bg-hover); }
+.caret { color: var(--cb-primary); width: var(--cb-sp-5); display: inline-block; }
+.tree-node .desc {
+  color: var(--cb-text-muted); font-size: var(--cb-fs-xs);
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 工具名与来源徽标不收缩；描述信息过长时由 .desc 自身省略，避免挤掉右侧按钮 */
+.tree-node > b { flex: 0 0 auto; }
+.tree-node .badge { flex: 0 0 auto; }
+.tree-detail {
+  padding: var(--cb-sp-2) var(--cb-sp-3) var(--cb-sp-3) 22px;
+  background: var(--cb-bg-sunken); border-radius: var(--cb-r-lg); margin: var(--cb-sp-1) 0;
+}
+.tree-detail p { margin: 0 0 var(--cb-sp-2); color: var(--cb-text-sub); }
+.params { width: 100%; border-collapse: collapse; font-size: var(--cb-fs-xs); }
+.params th, .params td { border: 1px solid var(--cb-border-soft); padding: var(--cb-sp-1) var(--cb-sp-2); text-align: left; }
+.params th { background: var(--cb-bg-fill); }
+.params code { background: var(--cb-bg-fill); padding: 1px var(--cb-sp-1); border-radius: var(--cb-r-sm); }
+.usage {
+  white-space: pre-wrap; background: var(--cb-bg-code); color: var(--cb-code-text);
+  border-radius: var(--cb-r-lg); padding: var(--cb-sp-3); margin: var(--cb-sp-2) 0 0;
+  font-size: var(--cb-fs-xs); overflow: auto; overscroll-behavior: contain;
+}
+.lang-checks { margin: var(--cb-sp-2) 0; }
+.lang-checks .desc { color: var(--cb-text-sub); margin-bottom: var(--cb-sp-1); }
+.lang-checks .check-row { display: flex; flex-wrap: wrap; gap: var(--cb-sp-2); }
+.lang-checks .check-item {
+  display: inline-flex; align-items: center; gap: 4px; font-size: var(--cb-fs-xs);
+  color: var(--cb-text); cursor: pointer;
+}
+.lang-checks .check-item input { accent-color: var(--cb-primary, #3b82f6); }
+
+/* ========== 状态块：徽标 / 结果 / 失败诊断 ========== */
+.badge {
+  font-size: var(--cb-fs-xs); padding: 2px var(--cb-sp-3);
+  border-radius: var(--cb-r-pill); color: var(--cb-on-primary);
+}
+/* 状态徽标：底色为浅色系 + 深色文字，保证 11px 小字也满足对比度要求 */
+.badge.pending { background: var(--cb-bg-fill); color: var(--cb-text-sub); }
+.badge.running { background: var(--cb-warn-bg); color: var(--cb-warn-text); border: 1px solid var(--cb-warn-border); }
+.badge.done { background: var(--cb-ok-bg); color: var(--cb-ok); border: 1px solid var(--cb-ok-border); }
+.badge.error { background: var(--cb-danger-bg); color: var(--cb-danger-text); border: 1px solid var(--cb-danger-border); }
+
+/* 参数预览 / 结果 / 错误：内容都是 JSON 文本，统一用等宽字体，
+   与 .usage、.stack 保持一致，便于对齐阅读 */
+.params-json {
+  white-space: pre-wrap; background: var(--cb-bg-subtle);
+  border: 1px solid var(--cb-border-soft); border-radius: var(--cb-r-md);
+  padding: var(--cb-sp-2); font-size: var(--cb-fs-xs);
+  max-height: 160px; overflow: auto; overscroll-behavior: contain;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.result {
+  white-space: pre-wrap; background: var(--cb-ok-bg); border: 1px solid var(--cb-ok-border);
+  border-radius: var(--cb-r-md); padding: var(--cb-sp-2); font-size: var(--cb-fs-xs);
+  margin-top: var(--cb-sp-2); max-height: 240px; overflow: auto; overscroll-behavior: contain;
+  font-family: ui-monospace, Consolas, monospace;
+}
+.error {
+  white-space: pre-wrap; background: var(--cb-danger-bg); border: 1px solid var(--cb-danger-border);
+  border-radius: var(--cb-r-md); padding: var(--cb-sp-2); font-size: var(--cb-fs-xs);
+  margin-top: var(--cb-sp-2); color: var(--cb-danger-text);
+  font-family: ui-monospace, Consolas, monospace;
+}
+/* 失败诊断：错误分类 + 完整堆栈（AI 自愈关键信息） */
+.origin-line {
+  margin-top: var(--cb-sp-2); padding: var(--cb-sp-1) var(--cb-sp-3);
+  background: var(--cb-warn-bg); border: 1px solid var(--cb-warn-border);
+  border-radius: var(--cb-r-md); font-size: var(--cb-fs-xs); color: var(--cb-warn-text);
+}
+.stack {
+  white-space: pre-wrap; background: var(--cb-bg-code); color: var(--cb-code-text-error);
+  border-radius: var(--cb-r-md); padding: var(--cb-sp-3);
+  font-size: var(--cb-fs-xs); line-height: 1.5; margin-top: var(--cb-sp-2);
+  max-height: 280px; overflow: auto; overscroll-behavior: contain;
+  font-family: ui-monospace, Consolas, monospace;
+}
+/* 后端连接异常告警 */
+.flask-warn { color: var(--cb-danger-text); font-size: var(--cb-fs-xs); margin-top: var(--cb-sp-1); }

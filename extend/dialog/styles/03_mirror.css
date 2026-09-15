@@ -1,0 +1,122 @@
+/* ============================================================
+ * AI 工具调用镜像插件 —— 对话镜像样式
+ * ------------------------------------------------------------
+ * 覆盖镜像卡片容器、消息条目、各类内容块（段落 / 标题 / 列表 / 引用 /
+ * 表格 / 思考）以及操作行。取值全部来自 00_tokens.css 的设计令牌。
+ * ============================================================ */
+
+/* ========== 对话镜像 ========== */
+.m-body {
+  flex: 1 1 auto; overflow-y: auto;
+  padding: var(--cb-sp-4) var(--cb-sp-5);
+  overscroll-behavior: contain;
+}
+.card {
+  background: var(--cb-bg-card); border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-xl); padding: var(--cb-sp-4); margin-bottom: var(--cb-sp-4);
+}
+/* 卡片标题栏：镜像卡片、设置页区块、工具上下线小标题共用 */
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  font-weight: 600; margin-bottom: var(--cb-sp-3); color: var(--cb-primary);
+}
+.card-head button {
+  background: var(--cb-bg-fill); border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md); padding: 3px var(--cb-sp-4);
+  cursor: pointer; font-size: var(--cb-fs-sm); color: var(--cb-text-body);
+}
+.card-head button:hover { background: var(--cb-bg-fill-hover); }
+.head-actions { display: flex; gap: var(--cb-sp-2); }
+.empty { color: var(--cb-text-faint); font-size: var(--cb-fs-sm); padding: var(--cb-sp-2) 2px; }
+.conv-title {
+  font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin-bottom: var(--cb-sp-2);
+  word-break: break-all; border-left: 2px solid var(--cb-border-strong); padding-left: var(--cb-sp-2);
+}
+
+/* System Prompt 预览：供复制粘贴到网页 AI 对话框 */
+.sysprompt {
+  white-space: pre-wrap; word-break: break-word;
+  background: var(--cb-bg-subtle); border: 1px dashed var(--cb-border-strong);
+  border-radius: var(--cb-r-lg); padding: var(--cb-sp-3);
+  max-height: var(--cb-sysprompt-maxh); overflow: auto; overscroll-behavior: contain;
+  font-size: var(--cb-fs-sm); line-height: 1.5; color: var(--cb-text-body);
+}
+
+/* 操作行：卡片内的按钮组。代码卡片内会覆写外边距，见 .code-card .row */
+.row { display: flex; gap: var(--cb-sp-2); margin-top: var(--cb-sp-3); flex-wrap: wrap; }
+.row button {
+  background: var(--cb-primary); color: var(--cb-on-primary);
+  border: 0; border-radius: var(--cb-r-md);
+  padding: 5px var(--cb-sp-5); cursor: pointer; font-size: var(--cb-fs-sm);
+}
+.row button:hover { background: var(--cb-primary-hover); }
+.row button:disabled { background: var(--cb-primary-disabled); cursor: not-allowed; }
+/* 次级按钮：用于「跳过」等非主操作，视觉弱于主按钮 */
+.row button.secondary {
+  background: var(--cb-bg-fill); color: var(--cb-text-body);
+  border: 1px solid var(--cb-border-strong);
+}
+.row button.secondary:hover { background: var(--cb-bg-fill-hover); }
+
+/* ---- 网页对话镜像：结构化布局，对齐原网页的「头像 + 昵称 + 内容」结构 ---- */
+.mirror { display: flex; flex-direction: column; gap: var(--cb-sp-5); }
+.msg { display: flex; gap: var(--cb-sp-3); align-items: flex-start; }
+.msg .avatar {
+  flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--cb-fs-xs); color: var(--cb-on-primary); user-select: none;
+}
+.msg.user .avatar { background: var(--cb-avatar-user); }
+.msg.assistant .avatar { background: var(--cb-ok); }
+/* min-width: 0 让长代码块 / 表格能在气泡内收缩，而不是撑破卡片 */
+.msg .bubble { flex: 1 1 auto; min-width: 0; }
+.msg .who { font-size: var(--cb-fs-xs); color: var(--cb-text-muted); margin: 0 0 var(--cb-sp-1); }
+
+/* 用户消息折叠头：与「思考过程」一致，默认折叠，点此展开 / 收起 */
+.msg .user-head {
+  display: flex; align-items: baseline; gap: var(--cb-sp-2);
+  cursor: pointer; user-select: none; font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted); margin: 0 0 var(--cb-sp-1);
+}
+.msg .user-head:hover { color: var(--cb-primary); }
+.msg .user-head .caret { width: auto; flex: 0 0 auto; }
+.msg .user-head .who-inline { flex: 0 0 auto; }
+.msg .user-head .user-preview {
+  flex: 1 1 auto; min-width: 0; color: var(--cb-text-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.blocks > * { margin: 0 0 var(--cb-sp-2); }
+.mb-p {
+  margin: 0 0 var(--cb-sp-2); font-size: var(--cb-fs-sm); line-height: 1.65;
+  color: var(--cb-text-body); white-space: pre-wrap; word-break: break-word;
+}
+.mb-h { margin: var(--cb-sp-3) 0 var(--cb-sp-2); font-weight: 600; font-size: var(--cb-fs-md); color: var(--cb-text); }
+.mb-list {
+  margin: 0 0 var(--cb-sp-2); padding-left: 18px;
+  font-size: var(--cb-fs-sm); line-height: 1.65; color: var(--cb-text-body);
+}
+.mb-quote {
+  margin: 0 0 var(--cb-sp-2); padding: var(--cb-sp-2) var(--cb-sp-3);
+  border-left: 3px solid var(--cb-border-strong);
+  background: var(--cb-bg-subtle); color: var(--cb-text-sub);
+  font-size: var(--cb-fs-sm); white-space: pre-wrap;
+}
+.mb-table { width: 100%; border-collapse: collapse; font-size: var(--cb-fs-xs); margin: 0 0 var(--cb-sp-2); }
+.mb-table th, .mb-table td {
+  border: 1px solid var(--cb-border-soft); padding: 3px var(--cb-sp-2);
+  text-align: left; word-break: break-word;
+}
+.mb-table th { background: var(--cb-bg-fill); }
+
+/* 思考过程：默认折叠，弱化显示 */
+.mb-think { margin: 0 0 var(--cb-sp-2); }
+.mb-think-head { cursor: pointer; font-size: var(--cb-fs-xs); color: var(--cb-text-muted); user-select: none; }
+.mb-think-head:hover { color: var(--cb-primary); }
+.mb-think-body {
+  margin-top: var(--cb-sp-1); padding: var(--cb-sp-2) var(--cb-sp-3);
+  background: var(--cb-bg-subtle); border: 1px dashed var(--cb-border-strong);
+  border-radius: var(--cb-r-md); color: var(--cb-text-sub);
+  font-size: var(--cb-fs-sm); line-height: 1.6; white-space: pre-wrap;
+  max-height: 160px; overflow: auto; overscroll-behavior: contain;
+}

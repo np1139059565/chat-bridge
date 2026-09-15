@@ -1,0 +1,19 @@
+/* ============================================================
+ * 调试扩展抽屉样式 · 06_focus.css
+ * ------------------------------------------------------------
+ * 本文件由原 drawer.css 按分节拆分而来，内容保持一致。
+ * 归属分节：键盘焦点样式
+ * 全部取值来自 00_tokens.css 的设计令牌（--db-*）。
+ * ============================================================ */
+
+/* ========== 键盘焦点样式 ========== */
+/* 所有按钮都清掉了边框，只靠浏览器默认 outline 提示偏弱。
+   :focus-visible 只在键盘导航时出现，不影响鼠标点击的观感。 */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--db-primary);
+  outline-offset: 1px;
+}

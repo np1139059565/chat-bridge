@@ -86,19 +86,10 @@
     return data;
   };
 
-  // 归一 URL：去掉查询串与锚点，仅保留「协议 + 主机 + 路径」。
-  // 映射以「页面路径」为单位，参数变化不影响匹配。
-  // chrome-extension:// 等协议的 origin 为 "null"，需用 protocol + host 重建。
+  // 归一 URL：实现由共享模块提供（shared/url-utils.js），此处仅做命名空间转发，
+  // 保证 A.normalizeUrl 既有调用点与对外接口保持不变。
   A.normalizeUrl = function (url) {
-    try {
-      const u = new URL(url, location.href);
-      let path = u.pathname;
-      if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
-      const base = (u.origin && u.origin !== 'null') ? u.origin : (u.protocol + '//' + u.host);
-      return base + path;
-    } catch (e) {
-      return '';
-    }
+    return window.AIUrlUtils.normalizeUrl(url);
   };
 
   // 收集文档（含 Shadow DOM）内所有 iframe 元素。

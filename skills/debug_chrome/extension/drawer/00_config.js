@@ -49,21 +49,9 @@ window.AIDrawer = (function () {
     return c;
   }
 
-  // 归一 URL：去查询串与锚点，仅保留「协议 + 主机 + 路径」。
-  // 注意：chrome-extension:// 等非 http(s) 协议的 origin 为 "null"，
-  // 必须改用 protocol + host 重建，否则插件自身页面的 URL 会变成 "null/..."。
-  function normalizeUrl(url) {
-    if (!url) return '';
-    try {
-      const u = new URL(url, location.href);
-      let path = u.pathname;
-      if (path.length > 1 && path.endsWith('/')) path = path.slice(0, -1);
-      const base = (u.origin && u.origin !== 'null') ? u.origin : (u.protocol + '//' + u.host);
-      return base + path;
-    } catch (e) {
-      return '';
-    }
-  }
+  // 归一 URL：实现由共享模块提供（shared/url-utils.js），此处仅做本地别名，
+  // 保证本文件内的调用点与对外的 D.normalizeUrl 接口保持不变。
+  const normalizeUrl = window.AIUrlUtils.normalizeUrl;
 
   // 按 URL 前缀匹配本地工程路径：取最长匹配项。
   // 比对前先归一，参数 / 锚点不影响匹配。

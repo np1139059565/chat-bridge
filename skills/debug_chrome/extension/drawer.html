@@ -2,7 +2,13 @@
 
 <head>
   <meta charset="utf-8" />
-  <link rel="stylesheet" href="drawer.css" />
+  <link rel="stylesheet" href="drawer-styles/00_tokens.css" />
+  <link rel="stylesheet" href="drawer-styles/01_base.css" />
+  <link rel="stylesheet" href="drawer-styles/02_messages.css" />
+  <link rel="stylesheet" href="drawer-styles/03_tools.css" />
+  <link rel="stylesheet" href="drawer-styles/04_hints.css" />
+  <link rel="stylesheet" href="drawer-styles/05_settings.css" />
+  <link rel="stylesheet" href="drawer-styles/06_focus.css" />
 </head>
 
 <!-- 挂载容器必须为空：Vue 运行时模板编译会触发 new Function，
@@ -10,6 +16,7 @@
      UI 全部由 drawer.js 的 h() 渲染函数构建。 -->
 <div id="ai-debug-app"></div>
 <script src="vendor/vue.global.prod.js"></script>
+<script src="shared/url-utils.js"></script>
 <script src="drawer/00_config.js"></script>
 <script src="drawer/01_api.js"></script>
 <script src="drawer/02_ui-helpers.js"></script>

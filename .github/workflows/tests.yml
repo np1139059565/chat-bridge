@@ -75,4 +75,17 @@ jobs:
       - name: 安装 JS 依赖
         run: npm install
       - name: 运行 stylelint
-        run: npx stylelint "chrome extension/dialog/style.css"
+        run: npx stylelint "extend/dialog/styles/*.css"
+
+  quality-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 代码质量扫描（行数 / 圈复杂度 / 重复块）
+        # 当前仍有存量超标项（见 docs/refactor-plan.md 批次 3），
+        # 先以「不阻断构建」的方式接入，待批次 3 完成后再去掉 continue-on-error。
+        continue-on-error: true
+        run: python scripts/check_quality.py

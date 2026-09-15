@@ -1,0 +1,84 @@
+/* ============================================================
+ * 调试扩展抽屉样式 · 01_base.css
+ * ------------------------------------------------------------
+ * 本文件由原 drawer.css 按分节拆分而来，内容保持一致。
+ * 归属分节：骨架、顶栏
+ * 全部取值来自 00_tokens.css 的设计令牌（--db-*）。
+ * ============================================================ */
+
+/* ========== 骨架 ========== */
+* { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: var(--db-bg-page);
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transform: translateX(100%);
+  transition: transform 0.2s;
+  z-index: var(--db-z);
+}
+
+.drawer.open {
+  transform: translateX(0);
+}
+
+/* ========== 顶栏 ========== */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--db-sp-4);
+  border-bottom: 1px solid var(--db-border);
+  font-weight: bold;
+}
+
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--db-sp-2);
+  font-size: var(--db-fs-sm);
+  color: var(--db-text-body);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ccc;
+}
+
+.dot.connected {
+  background: #52c41a;
+}
+
+.dot.disconnected {
+  background: #ff4d4f;
+}
+
+/* 顶栏图标按钮：无底色，靠色相变化提示可点 */
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--db-text-body);
+  cursor: pointer;
+  font-size: var(--db-fs-md);
+  padding: 2px var(--db-sp-2);
+}
+
+.icon-btn:hover {
+  color: var(--db-primary);
+}

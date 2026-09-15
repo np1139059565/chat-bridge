@@ -2,6 +2,15 @@
 
 对外只暴露一个同步语义：调用方登记一张卡片后一直等待，
 直到结果按卡片 id 回填，或等待达到上限后超时。
+
+典型调用链（外部系统 → 网页 AI）：
+1. 外部系统 POST /api/cards，本模块 create() 登记卡片并阻塞在 wait()；
+2. 镜像插件 GET /api/cards/pending 轮询，本模块 claim_pending() 交出卡片并标记已投递；
+3. 镜像插件把卡片内容发送给网页 AI，并在完成后 POST /api/cards/<id>/reply；
+4. 本模块 resolve() 回填结果并唤醒第 1 步的等待方；超时则 wait() 返回 TIMEOUT。
+
+线程安全：所有对 _cards / _events / _results 的读写都在 _lock 保护下进行；
+阻塞等待使用 threading.Event，因此等待期间不持锁，不会阻塞其它请求。
 """
 import threading
 import time
@@ -20,7 +29,17 @@ DEFAULT_TIMEOUT_MS = 120000
 
 
 class Card:
-    """单张卡片的数据载体。"""
+    """单张卡片的数据载体。
+
+    字段说明：
+    - id         ：全局唯一标识（uuid4），用于轮询去重与结果回填配对
+    - source     ：来源标识（默认 external），供前端区分展示
+    - type       ：信封类型（如 debug-chrome-req），决定接收方如何解读 content
+    - content    ：投递给网页 AI 的正文
+    - payload    ：附加结构化数据，随卡片一并投递
+    - status     ：pending（待投递/待回填）/ done / error / timeout
+    - delivered  ：是否已被镜像插件取走（避免重复投递）
+    """
 
     def __init__(self, source, card_type, title, content, payload, timeout_ms):
         self.id = str(uuid.uuid4())
@@ -37,6 +56,7 @@ class Card:
         self.delivered = False   # 是否已投递给镜像插件
 
     def to_dict(self):
+        """转为可 JSON 序列化的字典（供 API 返回给前端）。"""
         return {
             "id": self.id,
             "source": self.source,
@@ -53,7 +73,13 @@ class Card:
 
 
 class CardBus:
-    """卡片总线：线程安全地登记、投递、回填、超时。"""
+    """卡片总线：线程安全地登记、投递、回填、超时。
+
+    内部结构：
+    - _cards   ：id → Card，卡片数据
+    - _events  ：id → threading.Event，用于唤醒阻塞中的 wait()
+    - _results ：id → 回填结果，在唤醒后由 wait() 取走并删除
+    """
 
     def __init__(self):
         self._lock = threading.Lock()
@@ -70,6 +96,7 @@ class CardBus:
         return card
 
     def set_status(self, card_id, status):
+        """更新卡片状态；卡片不存在时静默忽略。"""
         with self._lock:
             card = self._cards.get(card_id)
             if card:
@@ -118,10 +145,11 @@ class CardBus:
         return True, result
 
     def get(self, card_id):
+        """查询单张卡片的状态快照；不存在返回 None。"""
         with self._lock:
             card = self._cards.get(card_id)
             return card.to_dict() if card else None
 
 
-# 全局单例
+# 全局单例：路由与业务模块统一通过 bus 访问，保证卡片状态全局一致
 bus = CardBus()

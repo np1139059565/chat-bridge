@@ -1,0 +1,33 @@
+# pre-commit 钩子配置
+#
+# 设计取舍：全部使用本地钩子（repo: local），不依赖任何远程仓库。
+# 原因：本工程未提供 requirements-dev.txt / package.json，无法保证 CI 或
+# 新克隆的机器能联网拉取远程钩子；本地钩子只依赖本机已有的 python 与 node，
+# 缺失时自动跳过，不会把环境问题误报成代码问题。
+#
+# 钩子清单：
+#   1. syntax     —— 校验本次改动文件的语法（py / js / json / yaml）
+#   2. hygiene    —— 拦截临时备份文件与超过 450 行的源码（与拆分约定一致）
+#
+# 安装（每台机器执行一次）：
+#   pre-commit install
+# 手动全量运行：
+#   pre-commit run --all-files
+
+repos:
+  - repo: local
+    hooks:
+      - id: syntax
+        name: 语法校验（py / js / json / yaml）
+        description: 对本次提交涉及的文件做基础语法校验
+        entry: python scripts/hooks/check_syntax.py
+        language: system
+        pass_filenames: true
+        types_or: [python, javascript, json, yaml]
+
+      - id: hygiene
+        name: 仓库卫生（临时文件 / 超大文件）
+        description: 拦截 *.bak 等临时残留，以及超过 450 行的源码文件
+        entry: python scripts/hooks/check_hygiene.py
+        language: system
+        pass_filenames: true

@@ -1,0 +1,230 @@
+/* ============================================================
+ * AI 工具调用镜像插件 —— 设置面板样式
+ * ------------------------------------------------------------
+ * 覆盖设置页容器、历史卡片管理、工具上下线列表、自定义工具安装区、
+ * 规则模块。取值全部来自 00_tokens.css 的设计令牌。
+ * ============================================================ */
+
+/* ========== 设置面板 ========== */
+/* 设置页作为覆盖整个抽屉的 flex 纵向容器（含顶栏），避免下方对话列表从后面露出来。
+   标题栏(.settings-bar)为不滚动的固定头部，内容区(.settings-body)单独滚动。 */
+.settings {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  /* 与主界面同一页面底色，设置页与镜像页切换时背景不跳色 */
+  background: var(--cb-bg-page);
+}
+/* 设置页顶部条：固定头部（不滚动），标题 + 关闭按钮。
+   底色 / 内边距 / 标题字号全部对齐顶栏 .m-header，两层头部同一观感。 */
+.settings-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--cb-primary); color: var(--cb-on-primary);
+  padding: var(--cb-sp-4) var(--cb-sp-5);
+}
+/* 设置页标题：与顶栏标题同字号、同字重、同前景色 */
+.settings-bar > span {
+  font-weight: 600; font-size: var(--cb-fs-lg); color: var(--cb-on-primary);
+}
+/* 设置页内容区：唯一会滚动的区域，标题栏始终固定在顶部 */
+.settings-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: var(--cb-sp-4) var(--cb-sp-5);
+  /* 内容区还嵌着可滚动的预览块，阻断滚动链避免滚到底后带着外层一起滚 */
+  overscroll-behavior: contain;
+}
+/* 设置页关闭按钮：与顶栏按钮组同尺寸、同底色、同悬浮态 */
+.settings-bar .close {
+  background: var(--cb-on-primary-soft); color: var(--cb-on-primary);
+  border: 0; border-radius: var(--cb-r-md);
+  width: 28px; height: 28px; cursor: pointer; font-size: var(--cb-fs-lg);
+  /* 设置页整体按钮规则带 padding，此处清空并改用 flex 居中，
+     否则 ✕ 字形会被内边距挤到左上角而显得不居中 */
+  padding: 0;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
+}
+.settings-bar .close:hover { background: var(--cb-on-primary-soft-hover); }
+/* 当前站点提示 */
+.site-note {
+  font-size: var(--cb-fs-xs); color: var(--cb-text-sub);
+  background: var(--cb-bg-card); border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-md); padding: var(--cb-sp-2) var(--cb-sp-3);
+  margin-bottom: var(--cb-sp-3); word-break: break-all;
+}
+/* 设置面板内的 System Prompt / 工具目录区块 */
+.sp-block {
+  background: var(--cb-bg-card); border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-xl); padding: var(--cb-sp-4); margin-top: var(--cb-sp-4);
+}
+.sp-block .tree { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+.settings label { display: block; margin-bottom: var(--cb-sp-3); font-size: var(--cb-fs-sm); color: var(--cb-text-sub); }
+.settings input {
+  display: block; width: 100%; margin-top: 3px; padding: var(--cb-sp-2) var(--cb-sp-3);
+  border: 1px solid var(--cb-border-strong); border-radius: var(--cb-r-md); font-size: var(--cb-fs-sm);
+}
+/* 作用域限定为设置页内容区：标题栏 .settings-bar 内的按钮
+   （如关闭按钮 ✕）有自己的尺寸规则，不能被这里的通用按钮样式覆盖 */
+.settings-body button {
+  background: var(--cb-primary); color: var(--cb-on-primary);
+  border: 0; border-radius: var(--cb-r-md);
+  padding: var(--cb-sp-2) var(--cb-sp-5); cursor: pointer; font-size: var(--cb-fs-sm);
+}
+.settings .hint { margin-left: var(--cb-sp-3); color: var(--cb-text-muted); font-size: var(--cb-fs-xs); }
+
+/* 设置页内联一行：输入框 + 开关按钮并排 */
+.settings .inline-row { display: flex; align-items: center; gap: var(--cb-sp-2); }
+.settings .inline-row input { flex: 0 0 90px; margin-top: 0; }
+.settings .inline-row .switch { padding: var(--cb-sp-2) var(--cb-sp-4); white-space: nowrap; }
+
+/* 历史卡片管理列表：严格按创建时间倒序，可单删 / 清空 */
+.history-list {
+  display: flex; flex-direction: column; gap: var(--cb-sp-1);
+  max-height: 260px; overflow-y: auto; overscroll-behavior: contain;
+  padding: var(--cb-sp-1) 0;
+}
+.history-item {
+  display: flex; align-items: center; gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-card); border: 1px solid var(--cb-border-soft);
+  font-size: var(--cb-fs-xs);
+}
+.h-time {
+  color: var(--cb-text-muted);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+.h-label {
+  color: var(--cb-text-body);
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.history-item .h-del {
+  flex: 0 0 auto;
+  background: var(--cb-bg-fill); border: 1px solid var(--cb-danger-border);
+  border-radius: var(--cb-r-md); padding: 2px var(--cb-sp-3);
+  cursor: pointer; font-size: var(--cb-fs-xs); color: var(--cb-danger-text);
+}
+.history-item .h-del:hover { background: var(--cb-danger-bg); }
+
+/* 只读展示值：后端连接地址、当前站点规则。做成只读输入框的样子，
+   与普通输入框区分开（不可编辑、不抢焦点） */
+.ro {
+  margin-top: 3px; padding: var(--cb-sp-2) var(--cb-sp-3);
+  border: 1px dashed var(--cb-border-strong); border-radius: var(--cb-r-md);
+  background: var(--cb-bg-subtle); color: var(--cb-text-sub);
+  font-size: var(--cb-fs-xs); word-break: break-all;
+}
+
+/* 后端工具上 / 下线列表 */
+.tool-list {
+  display: flex; flex-direction: column; gap: var(--cb-sp-1);
+  padding: var(--cb-sp-1) 0;
+}
+/* 单个工具行：工具名与开关两端对齐 */
+.tool-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-card); border: 1px solid var(--cb-border-soft);
+}
+.tool-row .tn {
+  font-family: ui-monospace, Consolas, monospace; font-size: var(--cb-fs-sm);
+  color: var(--cb-text-body); min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+/* 上 / 下线开关：与同面板主按钮同尺寸，仅配色区分状态 */
+.switch {
+  flex: 0 0 auto; border: 0; border-radius: var(--cb-r-md);
+  padding: var(--cb-sp-1) var(--cb-sp-3); cursor: pointer;
+  font-size: var(--cb-fs-xs); color: var(--cb-on-primary);
+}
+/* 上下线开关：浅底深字，11px 小字也满足对比度要求；
+   状态靠色相区分，不靠亮度差 */
+.switch.on { background: var(--cb-ok-bg); color: var(--cb-ok); border: 1px solid var(--cb-ok-border); }
+.switch.off { background: var(--cb-bg-fill); color: var(--cb-text-sub); border: 1px solid var(--cb-border-strong); }
+
+/* 工具行：第一行放名称 + 描述（描述过长省略），第二行放按钮组（开关 / 编辑 / 删除） */
+.tool-row { flex-wrap: wrap; align-items: center; }
+/* 名称 + 描述占满第一行，强制把按钮挤到第二行 */
+.tool-row > .tree-node { flex: 1 1 100%; min-width: 0; }
+.tool-row > .tree-detail { flex-basis: 100%; }
+/* 按钮组统一贴右放在第二行 */
+.tool-btns { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: var(--cb-sp-2); }
+/* 工具行右侧的操作按钮（编辑 / 删除） */
+.tool-actions { display: flex; gap: var(--cb-sp-2); flex: 0 0 auto; }
+.tool-actions button {
+  background: var(--cb-bg-fill); border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md); padding: 3px var(--cb-sp-4);
+  cursor: pointer; font-size: var(--cb-fs-xs); color: var(--cb-text-body);
+}
+.tool-actions button:hover { background: var(--cb-bg-fill-hover); }
+.tool-actions button.danger { color: var(--cb-danger-text); border-color: var(--cb-danger-border); }
+.tool-actions button.danger:hover { background: var(--cb-danger-bg); }
+/* 自定义工具来源徽标 */
+.badge.custom { background: var(--cb-border-strong); color: var(--cb-text-body); font-weight: 400; }
+
+/* 外部卡片来源徽标：与工具卡片同结构，以颜色区分 */
+.badge.external { background: var(--cb-primary); color: var(--cb-on-primary); font-weight: 400; }
+.external-card { border-left: 3px solid var(--cb-primary); }
+
+/* 自定义工具安装区 */
+.custom-install { margin-top: var(--cb-sp-4); }
+.custom-install > .card-head { margin-top: var(--cb-sp-3); }
+.custom-install .scan-results { margin-top: var(--cb-sp-3); display: flex; flex-direction: column; gap: var(--cb-sp-3); }
+.custom-install .scan-skill {
+  border: 1px solid var(--cb-border-soft); border-radius: var(--cb-r-lg);
+  padding: var(--cb-sp-3); background: var(--cb-bg-subtle);
+}
+.custom-install .scan-skill > div:first-child { font-weight: 600; color: var(--cb-text-body); margin-bottom: var(--cb-sp-2); }
+.custom-install .scan-tool {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) 0; font-size: var(--cb-fs-xs); color: var(--cb-text-sub);
+}
+.custom-install .scan-tool button {
+  background: var(--cb-primary); color: var(--cb-on-primary);
+  border: 0; border-radius: var(--cb-r-md); padding: 2px var(--cb-sp-4);
+  cursor: pointer; font-size: var(--cb-fs-xs); flex: 0 0 auto;
+}
+.custom-install .scan-tool button:disabled { background: var(--cb-primary-disabled); cursor: default; }
+/* 安装区：目录输入框与「选择目录」按钮同行 */
+.dir-row { display: flex; gap: var(--cb-sp-2); }
+.dir-row input { flex: 1 1 auto; min-width: 0; }
+/* 自定义工具内联编辑（参数 / 说明 / 解释器 JSON） */
+.custom-edit { flex-basis: 100%; margin-top: var(--cb-sp-2); }
+.custom-edit textarea {
+  display: block; width: 100%; min-height: 130px; resize: vertical;
+  padding: var(--cb-sp-2) var(--cb-sp-3); border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md); font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-sm); color: var(--cb-text-body); background: var(--cb-bg-card);
+}
+
+/* 规则模块：新建输入行 / 规则条目 / 内容预览 */
+.rule-list { display: flex; flex-direction: column; gap: var(--cb-sp-2); margin-top: var(--cb-sp-2); }
+.rule-new { display: flex; gap: var(--cb-sp-2); }
+.rule-new input {
+  flex: 1 1 auto; min-width: 0; padding: 4px var(--cb-sp-3);
+  border: 1px solid var(--cb-border-strong); border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-sm); color: var(--cb-text-body); background: var(--cb-bg-card);
+}
+.rule-item {
+  display: flex; flex-wrap: wrap; align-items: center;
+  border: 1px solid var(--cb-border); border-radius: var(--cb-r-lg); padding: var(--cb-sp-2) var(--cb-sp-3);
+}
+.rule-item > .tree-node { flex: 1 1 auto; min-width: 0; }
+.rule-item > .tree-detail { flex-basis: 100%; }
+.rule-priority {
+  display: inline-flex; align-items: center; gap: var(--cb-sp-2);
+  font-size: var(--cb-fs-xs); color: var(--cb-text-muted, var(--cb-text-body));
+}
+.rule-priority select {
+  padding: 2px var(--cb-sp-2); border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md); font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body); background: var(--cb-bg-card);
+}
+.rule-view {
+  white-space: pre-wrap; word-break: break-word; margin: var(--cb-sp-2) 0 0;
+  padding: var(--cb-sp-3); background: var(--cb-bg-fill); border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-xs); color: var(--cb-text-body);
+}
