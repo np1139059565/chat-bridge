@@ -23,9 +23,9 @@ tools:
         required: false
         description: "是否按 key 排序"
   - name: "get_element_style"
-    description: "按选择器采集元素样式与 DOM 信息"
+    description: "按选择器采集元素样式与 DOM 信息。若目标元素位于 iframe 内，必须传 page_url 指定该 iframe 的地址（可从调试卡片给出的「本地源码」对应 URL 或可用页面列表获取）。"
     skill_name: "debug_chrome"
-    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先读取 skills/debug_chrome/SKILL.md，再按其规定处理；同一会话内只需读取一次；完成后按 SKILL.md 规定的结构回复。"
+    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务（发送即结束，无需回传结果信封）。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论；遇到需要用户插手的错误（如 FRAME_TIMEOUT、ProviderOffline、元素不可见）应立即停下并用 push_message 邀请用户协助，不要反复重试。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
@@ -36,10 +36,14 @@ tools:
         type: "string"
         required: true
         description: "CSS 选择器"
+      - name: "page_url"
+        type: "string"
+        required: false
+        description: "目标元素所在页面的 URL（顶层页面可省略；iframe 内元素必须提供，否则查不到）"
   - name: "get_page_snapshot"
-    description: "采集页面快照"
+    description: "采集页面快照。若目标页面是 iframe，必须传 page_url 指定其地址。"
     skill_name: "debug_chrome"
-    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先读取 skills/debug_chrome/SKILL.md，再按其规定处理；同一会话内只需读取一次；完成后按 SKILL.md 规定的结构回复。"
+    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务（发送即结束，无需回传结果信封）。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论；遇到需要用户插手的错误（如 FRAME_TIMEOUT、ProviderOffline、元素不可见）应立即停下并用 push_message 邀请用户协助，不要反复重试。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
@@ -50,14 +54,19 @@ tools:
         type: "string"
         required: true
         description: "dom 或 screenshot"
+      - name: "page_url"
+        type: "string"
+        required: false
+        description: "目标页面 URL（顶层页面可省略；iframe 必须提供）"
   - name: "push_message"
     description: "向调试扩展抽屉推送一条文字信息"
     skill_name: "debug_chrome"
-    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先读取 skills/debug_chrome/SKILL.md，再按其规定处理；同一会话内只需读取一次；完成后按 SKILL.md 规定的结构回复。"
+    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务（发送即结束，无需回传结果信封）。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论；遇到需要用户插手的错误（如 FRAME_TIMEOUT、ProviderOffline、元素不可见）应立即停下并用 push_message 邀请用户协助，不要反复重试。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
+    silent: true
     enabled: true
     parameters:
       - name: "text"

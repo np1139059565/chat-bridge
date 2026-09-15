@@ -97,7 +97,11 @@ window.AIDrawer = (function () {
   }
 
   // iframe 点选补丁：粘贴到 iframe 控制台后，该 iframe 内的元素可被点选。
-  // 补丁在 iframe 内监听父页面的选择模式开关，捕获点击后把元素信息回传父页面。
+  // 补丁在 iframe 内监听父页面的选择模式开关：
+  //   - 鼠标中键（滚轮键）点击：选择元素并回传父页面
+  //   - 右键单击：退出选择模式，并通知父页面同步状态
+  // 用中键而非左键：中键极少承载页面业务，不碰左键单击、也不碰右键菜单，
+  // 因此无需拦截任何常规鼠标手势，完全不影响 iframe 内页面交互。
   const IFRAME_PATCH = [
     '(function(){',
     '  if (window.__AI_DEBUG_IFRAME_PATCH__) { console.log("[AI-Debug] 补丁已安装"); return; }',
@@ -129,8 +133,10 @@ window.AIDrawer = (function () {
     '  }',
     '  document.addEventListener("mouseover", function(e){ if (mode) highlight(e.target); }, true);',
     '  document.addEventListener("mouseout", function(){ if (box) box.style.display = "none"; }, true);',
-    '  document.addEventListener("click", function(e){',
+    '  document.addEventListener("mousedown", function(e){ if (mode && e.button === 1) e.preventDefault(); }, true);',
+    '  document.addEventListener("auxclick", function(e){',
     '    if (!mode) return;',
+    '    if (e.button !== 1) return;',
     '    e.preventDefault(); e.stopPropagation();',
     '    var el = e.target;',
     '    post({ type: "element-selected", element: {',
@@ -143,10 +149,42 @@ window.AIDrawer = (function () {
     '    }});',
     '    console.log("[AI-Debug] 已回传元素：" + genSelector(el));',
     '  }, true);',
+    '  document.addEventListener("contextmenu", function(e){',
+    '    if (!mode) return;',
+    '    e.preventDefault(); e.stopPropagation();',
+    '    mode = false;',
+    '    if (box) box.style.display = "none";',
+    '    post({ type: "select-cancelled" });',
+    '    console.log("[AI-Debug] 已退出选择模式");',
+    '  }, true);',
+    '  function buildData(el){',
+    '    return {',
+    '      selector: genSelector(el),',
+    '      selector_confidence: unique(genSelector(el)) ? "high" : "low",',
+    '      tag_name: el.tagName.toLowerCase(),',
+    '      inline_style: el.getAttribute("style") || "",',
+    '      dom_html: (el.outerHTML || "").slice(0, 2000),',
+    '      page_url: location.href',
+    '    };',
+    '  }',
+    '  function replyQuery(reqId, result){',
+    '    post({ type: "query-result", reqId: reqId, result: result });',
+    '  }',
     '  window.addEventListener("message", function(e){',
     '    var d = e.data;',
     '    if (!d || d.source !== "ai-debug-parent") return;',
     '    if (d.type === "toggle-select"){ mode = !!d.selecting; if (!mode && box) box.style.display = "none"; }',
+    '    else if (d.type === "query-element"){',
+    '      try {',
+    '        var ms = d.selector ? document.querySelectorAll(d.selector) : null;',
+    '        if (!ms || ms.length === 0) { replyQuery(d.reqId, { success:false, error:"ELEMENT_NOT_FOUND", selector:d.selector, page_url: location.href }); }',
+    '        else if (ms.length > 1) { replyQuery(d.reqId, { success:false, error:"ELEMENT_NOT_UNIQUE", selector:d.selector, count: ms.length }); }',
+    '        else { var el = ms[0]; var data = buildData(el); if (d.wantStyle) { var cs = getComputedStyle(el); data.computed_style = {}; if (d.includeAll || !d.properties || !d.properties.length) { for (var i=0;i<cs.length;i++){ data.computed_style[cs[i]] = cs.getPropertyValue(cs[i]); } } else { d.properties.forEach(function(k){ var v = cs.getPropertyValue(k); if (v) data.computed_style[k] = v; }); } } replyQuery(d.reqId, { success:true, data:data }); }',
+    '      } catch(err){ replyQuery(d.reqId, { success:false, error:"QUERY_FAILED", message: String(err) }); }',
+    '    }',
+    '    else if (d.type === "query-dom"){',
+    '      replyQuery(d.reqId, { success:true, data:{ dom: (document.documentElement.outerHTML || "").slice(0, 20000) } });',
+    '    }',
     '  });',
     '  post({ type: "patch-ready" });',
     '  console.log("[AI-Debug] iframe 点选补丁已安装");',

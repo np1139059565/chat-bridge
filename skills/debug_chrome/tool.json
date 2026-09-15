@@ -1,21 +1,25 @@
 {
   "provider": "debug_chrome",
-  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先读取 skills/debug_chrome/SKILL.md，再按其规定处理；同一会话内只需读取一次；完成后按 SKILL.md 规定的结构回复。",
+  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务（发送即结束，无需回传结果信封）。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。",
   "tools": [
     {
       "name": "get_element_style",
-      "description": "按选择器采集元素样式与 DOM 信息",
+      "description": "按选择器采集元素样式与 DOM 信息。默认返回常用 CSS 属性；可用 properties 指定属性、include_all=true 取全量。若目标元素位于 iframe 内，必须传 page_url 指定该 iframe 的地址（可从调试卡片给出的「本地源码」对应 URL 或可用页面列表获取）。",
       "executor": "external",
       "parameters": [
-        { "name": "selector", "type": "string", "required": true, "description": "CSS 选择器" }
+        { "name": "selector", "type": "string", "required": true, "description": "CSS 选择器" },
+        { "name": "page_url", "type": "string", "required": false, "description": "目标元素所在页面的 URL（顶层页面可省略；iframe 内元素必须提供，否则查不到）" },
+        { "name": "properties", "type": "array", "required": false, "description": "只采集这些 CSS 属性（如 [\"color\",\"font-size\"]）；省略则返回常用属性集" },
+        { "name": "include_all", "type": "boolean", "required": false, "description": "是否返回全量计算样式（默认 false，返回常用属性）" }
       ]
     },
     {
       "name": "get_page_snapshot",
-      "description": "采集页面快照",
+      "description": "采集页面快照。若目标页面是 iframe，必须传 page_url 指定其地址。",
       "executor": "external",
       "parameters": [
-        { "name": "snapshot_type", "type": "string", "required": true, "description": "dom 或 screenshot" }
+        { "name": "snapshot_type", "type": "string", "required": true, "description": "dom 或 screenshot" },
+        { "name": "page_url", "type": "string", "required": false, "description": "目标页面 URL（顶层页面可省略；iframe 必须提供）" }
       ]
     },
     {

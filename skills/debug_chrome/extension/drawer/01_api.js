@@ -1,7 +1,8 @@
 // 抽屉业务逻辑：与工具服务交互
 //
 // 发送链路：把用户需求与已选元素封装为外部卡片，POST /api/cards 挂起等待，
-// 工具服务渲染卡片、自动发网页 AI、按 id 捕获结果后返回，抽屉展示为回复。
+// 工具服务渲染卡片、自动发网页 AI；采用「发送即结束」，投递后立即返回确认。
+// 任务进展由网页 AI 通过 push_message 主动推送到抽屉。
 (function () {
   const D = window.AIDrawer;
 
@@ -63,15 +64,10 @@
           body: JSON.stringify(body),
         });
         const data = await res.json();
-        if (data.success) {
-          D.dedupPush(ctx.messages, [{
-            id: D.generateId(),
-            role: 'assistant',
-            text: typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2),
-            timestamp: Date.now(),
-          }]);
-        } else {
-          ctx.showToast('卡片未完成：' + (data.error || '未知错误'));
+        if (!data.success) {
+          // 外部卡片采用「发送即结束」：成功时不追加任何提示消息，
+          // 真正的进展由网页 AI 用 push_message 主动推送到本抽屉。
+          ctx.showToast('卡片发送失败：' + (data.error || '未知错误'));
         }
       } catch (e) {
         ctx.showToast('发送失败：无法连接到工具服务');

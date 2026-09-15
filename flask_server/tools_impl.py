@@ -56,9 +56,18 @@ TOOLS = {
         ],
     },
     "read_file": {
-        "description": "读取本地文件内容，支持指定偏移与行数",
+        "description": "读取本地文件内容（仅接受绝对路径），支持指定偏移与行数",
         "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件路径"},
+            {"name": "filePath", "type": "string", "required": True, "description": "文件绝对路径"},
+            {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
+            {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
+        ],
+    },
+    "read_skill": {
+        "description": "读取某个 skill 目录下的文档（相对该 skill 目录的路径，如 SKILL.md）",
+        "parameters": [
+            {"name": "skill", "type": "string", "required": True, "description": "skill 名称（skills/ 下的目录名，如 debug_chrome）"},
+            {"name": "file", "type": "string", "required": True, "description": "skill 目录内的相对路径，如 SKILL.md"},
             {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
             {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
         ],
@@ -120,16 +129,53 @@ TOOLS = {
 
 
 # ---------- 各工具实现 ----------
-# 工程根目录（flask_server 的上一级）：相对路径以此为基准解析，
-# 使 AI 可用 skills/xxx、extend/xxx 这类相对工程根的写法读取文件。
+# 工程根目录（flask_server 的上一级）：通用文件工具的相对路径以此为基准解析。
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# skills 根目录：read_skill 以此为基准定位各 skill。
+SKILLS_ROOT = PROJECT_ROOT / "skills"
 
 
 def _abspath(p):
+    """把入参解析为绝对路径（通用工具用）：绝对路径原样，相对路径以工程根为基准。"""
     p = Path(p)
     if p.is_absolute():
-        return p
+        return p.resolve()
     return (PROJECT_ROOT / p).resolve()
+
+
+def _require_abspath(p):
+    """要求入参必须是绝对路径（read_file 专用）。
+
+    read_file 不再做「相对路径隐式以工程根为基准」的特殊处理，避免耦合。
+    提示只陈述「需要绝对路径」这一事实，不臆测调用方的意图。
+    """
+    p = Path(p)
+    if not p.is_absolute():
+        raise ToolParamError("需要绝对路径，收到的是相对路径：%s" % p)
+    return p.resolve()
+
+
+def _resolve_skill_file(skill, rel):
+    """把 (skill 名, skill 内相对路径) 解析为绝对路径，并做越界校验。
+
+    - skill 名仅允许单层目录名，防止用 ../ 越出 skills 目录。
+    - rel 必须是 skill 目录内的相对路径，解析后仍须落在该 skill 目录内。
+    """
+    skill = str(skill or "").strip()
+    rel = str(rel or "").strip()
+    if not skill or "/" in skill or "\\" in skill or skill in (".", ".."):
+        raise ToolParamError("skill 名非法：%s（应为 skills/ 下的单层目录名，如 debug_chrome）" % skill)
+    if not rel:
+        raise ToolParamError("缺少必填参数 file（skill 目录内的相对路径，如 SKILL.md）")
+    base = (SKILLS_ROOT / skill).resolve()
+    if not base.is_dir():
+        available = sorted([d.name for d in SKILLS_ROOT.iterdir() if d.is_dir()]) if SKILLS_ROOT.is_dir() else []
+        raise ToolParamError("skill 不存在：%s（可用：%s）" % (skill, ", ".join(available) or "无"))
+    target = (base / rel).resolve()
+    # 越界校验：解析后的路径必须仍在 skill 目录内
+    if base != target and base not in target.parents:
+        raise ToolParamError("file 越出 skill 目录：%s" % rel)
+    return target
 
 
 # 参数别名：调用方可能用 path / file 等写法指代 filePath，统一归一到规范名，
@@ -278,21 +324,55 @@ def t_search_content(p):
     )
 
 
-def t_read_file(p):
-    _normalize_aliases(p)
-    _require(p, "filePath")
-    fp = _abspath(p.get("filePath"))
-    offset = int(p.get("offset", 1) or 1)
-    limit = p.get("limit")
+def _read_text_segment(fp, offset, limit):
+    """按行读取文件片段（fp 为绝对路径），返回内容与行数。"""
+    offset = int(offset or 1)
     with open(fp, "r", encoding="utf-8", errors="replace") as fh:
         lines = fh.readlines()
     start = max(0, offset - 1)
     end = len(lines) if limit is None else start + int(limit)
-    # 结果超限不截断，改为报错并提示 AI 减少读取行数
+    return {
+        "path": str(fp),
+        "content": "".join(lines[start:end]),
+        "total_lines": len(lines),
+        "_read_lines": max(0, end - start),
+    }
+
+
+def t_read_file(p):
+    _normalize_aliases(p)
+    _require(p, "filePath")
+    # read_file 只接受绝对路径：不再有「相对路径以工程根为基准」的特殊处理。
+    fp = _require_abspath(p.get("filePath"))
+    res = _read_text_segment(fp, p.get("offset", 1), p.get("limit"))
+    read_lines = res.pop("_read_lines")
+    total = res["total_lines"]
     return enforce_size_limit(
-        {"path": str(fp), "content": "".join(lines[start:end]), "total_lines": len(lines)},
+        res,
         "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
-        "本次读取约 %d 行（文件共 %d 行），请改读更少的行。" % (max(0, end - start), len(lines)),
+        "本次读取约 %d 行（文件共 %d 行），请改读更少的行。" % (read_lines, total),
+    )
+
+
+def t_read_skill(p):
+    """读取某个 skill 目录下的文档：按 skill 名 + skill 内相对路径定位。
+
+    这是「按名字读取 skill 文档」的专用通道，替代以往用 read_file 传
+    「skills/xxx/SKILL.md」相对路径的耦合做法。
+    """
+    _require(p, "skill", "file")
+    fp = _resolve_skill_file(p.get("skill"), p.get("file"))
+    if not fp.is_file():
+        raise ToolParamError("文件不存在：%s（skill=%s）" % (p.get("file"), p.get("skill")))
+    res = _read_text_segment(fp, p.get("offset", 1), p.get("limit"))
+    read_lines = res.pop("_read_lines")
+    total = res["total_lines"]
+    res["skill"] = str(p.get("skill")).strip()
+    res["file"] = str(p.get("file")).strip()
+    return enforce_size_limit(
+        res,
+        "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
+        "本次读取约 %d 行（文件共 %d 行），请改读更少的行。" % (read_lines, total),
     )
 
 
@@ -491,6 +571,7 @@ DISPATCH = {
     "search_file": t_search_file,
     "search_content": t_search_content,
     "read_file": t_read_file,
+    "read_skill": t_read_skill,
     "read_lints": t_read_lints,
     "replace_in_file": t_replace_in_file,
     "write_to_file": t_write_to_file,

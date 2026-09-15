@@ -8,10 +8,9 @@ import time
 import uuid
 
 # 卡片状态常量
+# 说明：外部卡片采用「发送即结束」，只有 pending（待投递）与 done（已投递）两个常态；
+# error / timeout 保留以兼容异常路径。counting / sending / waiting_reply 属历史遗留，已移除。
 STATUS_PENDING = "pending"
-STATUS_COUNTING = "counting"
-STATUS_SENDING = "sending"
-STATUS_WAITING_REPLY = "waiting_reply"
 STATUS_DONE = "done"
 STATUS_ERROR = "error"
 STATUS_TIMEOUT = "timeout"
@@ -83,7 +82,7 @@ class CardBus:
             for card in self._cards.values():
                 if not card.delivered:
                     card.delivered = True
-                    card.status = STATUS_COUNTING
+                    # 投递后状态仍为 pending：真正「完成」由镜像插件回填确认时置为 done
                     out.append(card.to_dict())
         out.sort(key=lambda c: c["created_at"])
         return out

@@ -18,8 +18,15 @@
     };
   }
 
+  // 字符串哈希：为「消息指纹」生成稳定键，用于记录每条消息的首次出现时间。
+  function hashStr(s) {
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
+    return h.toString(36);
+  }
+
   // 尚未建立会话记录时的空壳，供 computed 安全读取（避免 computed 内产生副作用）
-  const EMPTY_CONV = { title: '', pageUrl: '', messages: [], cardMap: {}, updatedAt: 0 };
+  const EMPTY_CONV = { title: '', pageUrl: '', messages: [], cardMap: {}, externalCards: [], updatedAt: 0 };
 
   // 与 Flask 服务保持一致的本地兜底工具目录（Flask 不可达时使用）
   const FALLBACK_TOOLS = [
@@ -48,8 +55,16 @@
       ]
     },
     {
-      name: 'read_file', description: '读取本地文件内容，支持指定偏移与行数', parameters: [
-        { name: 'filePath', type: 'string', required: true, description: '文件路径' },
+      name: 'read_file', description: '读取本地文件内容（仅接受绝对路径），支持指定偏移与行数', parameters: [
+        { name: 'filePath', type: 'string', required: true, description: '文件绝对路径' },
+        { name: 'offset', type: 'integer', required: false, description: '起始行（从 1 开始）' },
+        { name: 'limit', type: 'integer', required: false, description: '读取行数' }
+      ]
+    },
+    {
+      name: 'read_skill', description: '读取某个 skill 目录下的文档（相对该 skill 目录的路径，如 SKILL.md）', parameters: [
+        { name: 'skill', type: 'string', required: true, description: 'skill 名称（skills/ 下的目录名，如 debug_chrome）' },
+        { name: 'file', type: 'string', required: true, description: 'skill 目录内的相对路径，如 SKILL.md' },
         { name: 'offset', type: 'integer', required: false, description: '起始行（从 1 开始）' },
         { name: 'limit', type: 'integer', required: false, description: '读取行数' }
       ]
@@ -124,12 +139,12 @@
         expanded: reactive({}),
         thinkOpen: reactive({}),
         userOpen: reactive({}),   // 用户消息折叠态：默认折叠（与「思考过程」一致）
-        resOpen: reactive({}),    // 结果信封（debug-chrome-res）折叠态：默认折叠（与用户消息一致）
         // 卡片「完整堆栈」展开状态（按卡片 id）
         stackOpen: reactive({}),
         settingsOpen: false,
         panelSide: 'right',   // 悬浮抽屉挂靠侧：right / left（由 content.js 下发）
-        externalCards: [],     // 外部卡片：由后端 /api/cards/pending 投递，按时序渲染
+        // 外部卡片已改为按会话存放（见 computed externalCards / curConv.externalCards），
+        // 不再放在 data 顶层，避免跨会话串台与刷新丢失。
         _extTimer: null,       // 外部卡片轮询定时器
         promptSections: [],    // 技能说明段落：来自后端 /prompt_sections
         // 自定义工具（来自标准 skill 的 tool.json）：列表 / 展开态 / 内联编辑态
@@ -172,6 +187,9 @@
       messages() { return this.curConv.messages; },
       cardMap() { return this.curConv.cardMap; },
       pageUrl() { return this.curConv.pageUrl; },
+      // 外部卡片随会话隔离：切换会话 / 站点时各自保留，与工具卡片行为一致。
+      // 写入方式与 cardMap 相同（直接 push/splice 当前会话的数组），不整体替换引用。
+      externalCards() { return this.curConv.externalCards || []; },
       // 历史卡片管理列表：把工具/代码卡片与外部卡片统一按时序（创建时间倒序）合并。
       // 外部卡片同样属于本会话发生过的卡片，必须一并按时序记录，
       // 否则「历史卡片管理」会遗漏外部卡片，时序也不完整。
@@ -266,6 +284,10 @@
               countdown: 0,
               result: null,
               error: null,
+              executed: false,
+              // 统一时间戳：与文字消息同字段、同量纲（毫秒）。
+              // 渲染时所有条目一律按 _ts 排序，无任何类型特殊处理。
+              _ts: (c.created_at || Date.now()),
               createdAt: c.created_at || Date.now()
             };
             this.externalCards.push(card);
@@ -276,11 +298,12 @@
           });
         } catch (e) { /* 后端未就绪时静默重试 */ }
       },
-      // 倒计时后把卡片内容发送到网页 AI（与工具卡片共用 autoSendDelay 与倒计时机制）
+      // 倒计时后把卡片内容发送到网页 AI（与工具卡片共用 autoSendDelay 与倒计时机制）。
+      // 与工具卡片一致：倒计时期间 status 保持 pending、只改 phase/countdown，
+      // 这样中途关闭「自动」时卡片能自然退回待发送态，不会卡死（历史缺陷）。
       scheduleExternalSend(card) {
         if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
         const secs = Math.max(1, Math.round((this.autoSendDelay || 3000) / 1000));
-        card.status = 'counting';
         card.phase = 'send';
         card.countdown = secs;
         const tick = () => {
@@ -296,37 +319,45 @@
         };
         card._cdTimer = setTimeout(tick, 1000);
       },
-      // 立即发送外部卡片到网页 AI
-      sendExternalCard(card) {
-        card.status = 'waiting_reply';
-        // 按输入信封封装：{ type, id, request }
-        const envelope = { type: card.type || 'debug-chrome-req', id: card.id, request: card.content };
+      // 立即发送外部卡片到网页 AI。
+      // 发送即结束：不再等待网页 AI 回传结果信封，避免卡片长期悬挂。
+      // 后续进展由网页 AI 通过 push_message 工具主动推送给用户（见 debug_chrome 的 SKILL.md）。
+      async sendExternalCard(card) {
+        if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
+        card.countdown = 0;
+        card.phase = '';
+        // 输入信封：{ type, request }。
+        // 不再携带 id —— 外部卡片已取消「等待回复」，无需与网页 AI 的返回结果配对。
+        // （卡片自身的唯一标识仍用于轮询去重与唤醒后端挂起请求，见 ackExternalCard。）
+        const envelope = { type: card.type || 'debug-chrome-req', request: card.content };
         const text = JSON.stringify(envelope, null, 2);
         window.parent.postMessage({ type: 'auto_send', text }, '*');
+        // 执行完成即结束：立即置为完成态并记为已执行过（供刷新/切会话后恢复）
+        card.status = 'done';
+        card.executed = true;
+        card.result = {
+          delivered: true,
+          note: '已发送到网页 AI。任务执行与进展由网页 AI 通过 push_message 工具主动推送到调试抽屉。'
+        };
+        if (this._persist) this._persist();
+        // 唤醒后端挂起的创建请求，让抽屉的 POST /api/cards 立即返回（不再空等超时）
+        await this.ackExternalCard(card.id, card.result);
         this.toast('外部卡片已发送到网页 AI');
       },
       // 手动发送（自动开关未开启时使用）
       onExternalSendClick(card) {
-        if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-        card.countdown = 0;
-        card.phase = '';
         this.sendExternalCard(card);
       },
-      // 按 id 回填外部卡片结果，并通知后端唤醒挂起的创建请求
-      async resolveExternalCard(cardId, result) {
-        const card = this.externalCards.find((x) => x.id === cardId);
-        if (!card) return false;
-        card.status = 'done';
-        card.result = result;
+      // 通知后端唤醒挂起的创建请求：外部卡片不再等待 AI 回复，仅回一个「已投递」确认
+      async ackExternalCard(cardId, result) {
         try {
           const base = this.config.flaskUrl.replace(/\/+$/, '');
           await fetch(base + '/api/cards/' + encodeURIComponent(cardId) + '/reply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result })
+            body: JSON.stringify({ result: result })
           });
         } catch (e) { /* 回填失败仅记录 */ }
-        this.toast('外部卡片已回填结果');
         return true;
       },
       // ---------- 规则文件（rules/*.md）：设置页增删改，AI 通过 list_rules / read_rule 按需读取 ----------
@@ -748,10 +779,57 @@
         const key = id || '__default__';
         if (!this.conversations[key]) {
           this.conversations[key] = {
-            title: '', pageUrl: '', messages: [], cardMap: {}, updatedAt: 0
+            title: '', pageUrl: '', messages: [], cardMap: {}, externalCards: [],
+            msgTs: {}, _lastTs: 0, updatedAt: 0
           };
         }
-        return this.conversations[key];
+        const conv = this.conversations[key];
+        // 兼容旧存档：补齐统一时序所需字段
+        if (!Array.isArray(conv.externalCards)) conv.externalCards = [];
+        if (!conv.msgTs || typeof conv.msgTs !== 'object') conv.msgTs = {};
+        if (typeof conv._lastTs !== 'number') conv._lastTs = 0;
+        return conv;
+      },
+      // 消息内容指纹：role + 名称 + 各块内容的稳定摘要。
+      // 注意：它只代表「内容」，相同内容的两条消息指纹相同，
+      // 因此不能直接当序号键，必须叠加「第几次出现」才是唯一键（见 seqKeyOf 调用处）。
+      messageFingerprint(m) {
+        if (!m) return 'm';
+        const parts = [m.role || '', m.name || ''];
+        (m.blocks || []).forEach((b) => {
+          if (!b) return;
+          if (b.type === 'code') parts.push('c:' + (b.lang || '') + ':' + String(b.code || '').slice(0, 200));
+          else if (b.type === 'list') parts.push('l:' + (b.items || []).join('|').slice(0, 200));
+          else if (b.type === 'table') parts.push('t:' + JSON.stringify(b.rows || []).slice(0, 200));
+          else parts.push('x:' + String(b.text || '').slice(0, 200));
+        });
+        return 'm' + hashStr(parts.join('\u0001'));
+      },
+      // 单调时间戳：与外部卡片的 createdAt 同源（Date.now()，毫秒）。
+      // 保证严格递增，避免同一毫秒内多条条目时间戳相同导致顺序抖动。
+      monotonicTs(conv) {
+        if (!conv) return Date.now();
+        const now = Date.now();
+        const last = conv._lastTs || 0;
+        const ts = now > last ? now : last + 1;
+        conv._lastTs = ts;
+        return ts;
+      },
+      // 为一批消息打时间戳：按顺序遍历，同一内容第 n 次出现用「指纹#n」作键，
+      // 首次出现时打一个时间戳并记住，之后沿用（网页重绘不打乱顺序）。
+      // 时间戳与外部卡片同源同量纲，二者渲染时统一排序。
+      assignMsgTs(conv) {
+        if (!conv) return;
+        if (!conv.msgTs || typeof conv.msgTs !== 'object') conv.msgTs = {};
+        if (typeof conv._lastTs !== 'number') conv._lastTs = 0;
+        const seen = {};
+        (conv.messages || []).forEach((m) => {
+          const fp = this.messageFingerprint(m);
+          seen[fp] = (seen[fp] || 0) + 1;
+          const k = fp + '#' + seen[fp];
+          if (conv.msgTs[k] == null) conv.msgTs[k] = this.monotonicTs(conv);
+          m._ts = conv.msgTs[k];
+        });
       },
       // 网页端切换会话时调用：切换活动记录并恢复该会话已保存的卡片状态
       applyConversation(convId, title, url) {
@@ -774,12 +852,33 @@
           const saved = res && res[key];
           if (!saved || this.activeConv !== convId) return;
           const conv = this.ensureConv(convId);
+          // 统一时序：序号随会话恢复。必须在恢复消息之前合入，
+          // 否则恢复出的消息会被重新分配新序号、顺序错乱。
+          if (saved.msgTs && typeof saved.msgTs === 'object') {
+            Object.keys(saved.msgTs).forEach((k) => {
+              if (conv.msgTs[k] == null) conv.msgTs[k] = saved.msgTs[k];
+            });
+          }
+          if (typeof saved._lastTs === 'number' && saved._lastTs > (conv._lastTs || 0)) {
+            conv._lastTs = saved._lastTs;
+          }
           // 消息：仅在本地尚无内容时用快照恢复，避免旧快照覆盖刚从网页抓到的新内容
           if (!conv.messages.length && (saved.messages || []).length) {
             conv.messages = saved.messages;
             conv.title = saved.title || conv.title;
             conv.pageUrl = saved.pageUrl || conv.pageUrl;
+            // 恢复出的消息若已有历史时间戳则沿用；缺失的按当前顺序补时间戳
+            this.assignMsgTs(conv);
             log('已恢复会话消息', convId, '消息数=' + conv.messages.length);
+          }
+          // 外部卡片：随会话快照恢复。存档优先（含执行态），本地已有则不覆盖，
+          // 与 cardMap 的恢复策略保持一致（异步回调晚于同步灌入，故按存档补齐）。
+          const savedExt = saved.externalCards;
+          if (Array.isArray(savedExt) && savedExt.length) {
+            const known = new Set((conv.externalCards || []).map((c) => c.id));
+            savedExt.forEach((c) => {
+              if (c && c.id && !known.has(c.id)) (conv.externalCards || (conv.externalCards = [])).push(c);
+            });
           }
           // 卡片执行状态：必须无条件合并，绝不能也加「消息为空」的条件。
           // 因为 chrome.storage 是异步的，而 ingestMessages 是同步执行的：
@@ -836,6 +935,9 @@
           pageUrl: conv.pageUrl,
           messages: conv.messages,
           cardMap: conv.cardMap,
+          externalCards: conv.externalCards || [],   // 外部卡片随会话持久化
+          msgTs: conv.msgTs || {},                   // 统一时序：消息指纹 → 时间戳
+          _lastTs: conv._lastTs || 0,                // 统一时序：当前最大时间戳
           updatedAt: Date.now()
         };
         chrome.storage.local.set({ [this.convKey(convId)]: payload });
@@ -848,13 +950,14 @@
         if (this._persist) this._persist();
         this.toast('已删除卡片');
       },
-      // 删除外部卡片：取消其倒计时并从外部卡片列表中移除
+      // 删除外部卡片：取消其倒计时并从外部卡片列表中移除，并落盘
       removeExternalCard(id) {
         const idx = (this.externalCards || []).findIndex((c) => c.id === id);
         if (idx < 0) return;
         const card = this.externalCards[idx];
         if (card && card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
         this.externalCards.splice(idx, 1);
+        if (this._persist) this._persist();
         this.toast('已删除外部卡片');
       },
       // 历史卡片管理列表中的删除入口：按来源分派到对应的删除方法
@@ -871,10 +974,12 @@
           if (card && card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
           delete this.cardMap[id];
         });
-        (this.externalCards || []).forEach((c) => {
+        const ext = this.curConv.externalCards || [];
+        ext.forEach((c) => {
           if (c && c._cdTimer) { clearTimeout(c._cdTimer); c._cdTimer = null; }
         });
-        this.externalCards = [];
+        // 就地清空当前会话的外部卡片数组，保持 computed 引用不变
+        ext.length = 0;
         if (this._persist) this._persist();
         this.toast('已清空历史卡片');
       },
@@ -1012,65 +1117,13 @@ ${this.promptSectionText()}`;
         } catch (e) { /* 不是工具调用，按普通代码块渲染 */ }
         return null;
       },
-      // 从文本中提取所有顶层 JSON 对象（网页 AI 可能把 bridge-chat-res 放在
-      // 代码块里，也可能直接作为普通段落文本返回，故两种都要扫）。
-      extractJsonObjects(text) {
-        const out = [];
-        const s = String(text || '');
-        let i = 0;
-        while (i < s.length) {
-          const start = s.indexOf('{', i);
-          if (start === -1) break;
-          let depth = 0, inStr = false, esc = false, end = -1;
-          for (let j = start; j < s.length; j++) {
-            const ch = s[j];
-            if (inStr) {
-              if (esc) esc = false;
-              else if (ch === '\\') esc = true;
-              else if (ch === '"') inStr = false;
-              continue;
-            }
-            if (ch === '"') inStr = true;
-            else if (ch === '{') depth++;
-            else if (ch === '}') { depth--; if (depth === 0) { end = j; break; } }
-          }
-          if (end === -1) break;
-          const chunk = s.slice(start, end + 1);
-          try { out.push(JSON.parse(chunk)); } catch (e) { /* 非 JSON，跳过 */ }
-          i = end + 1;
-        }
-        return out;
-      },
-      // 由输入信封类型推导输出信封类型：-req → -res
-      replyTypeOf(cardType) {
-        const t = cardType || 'debug-chrome-req';
-        return t.endsWith('-req') ? (t.slice(0, -4) + '-res') : t;
-      },
-      // 从镜像到的助手消息里检索输出信封，按 id 归属外部卡片
-      scanBridgeResults(messages) {
-        if (!this.externalCards.length) return;
-        (messages || []).forEach((m) => {
-          if (m.role !== 'assistant') return;
-          (m.blocks || []).forEach((b) => {
-            // 代码块取 code，其它类型取 text；两种都可能承载输出信封
-            const raw = b.type === 'code' ? b.code : (b.text || '');
-            if (!raw) return;
-            this.extractJsonObjects(raw).forEach((obj) => {
-              if (!obj || !obj.id) return;
-              const card = this.externalCards.find((x) => x.id === obj.id);
-              if (!card || card.status === 'done') return;
-              // 校验输出信封类型，防止误配
-              if (obj.type !== this.replyTypeOf(card.type)) return;
-              this.resolveExternalCard(obj.id, obj.result);
-            });
-          });
-        });
-      },
       ingestMessages(messages) {
         const conv = this.curConv;
         log('ingestMessages 收到', (messages || []).length, '条消息（会话=' + this.activeConv + '）');
-        this.scanBridgeResults(messages);
         conv.messages = messages || [];
+        // 给每条消息打统一时间戳：首次出现时取当前时间，之后沿用（网页重绘不打乱顺序）。
+        // 消息与外部卡片共用同一时间源，渲染时统一排序、不做任何类型区分。
+        this.assignMsgTs(conv);
         conv.messages.forEach((m) => {
           (m.blocks || []).forEach((b) => {
             if (b.type !== 'code' || !b.id) return;
@@ -1469,24 +1522,7 @@ ${this.promptSectionText()}`;
         return '';
       };
 
-      // 判断一条助手消息是否为结果信封（debug-chrome-res）：
-      // 用于让这类消息与用户消息一样默认折叠。
-      const isResultMessage = (m) => {
-        if (m.role !== 'assistant') return false;
-        const blocks = m.blocks || [];
-        for (let i = 0; i < blocks.length; i++) {
-          const b = blocks[i];
-          const raw = b && (b.type === 'code' ? b.code : b.text);
-          if (!raw) continue;
-          const objs = this.extractJsonObjects(raw);
-          for (let j = 0; j < objs.length; j++) {
-            if (objs[j] && objs[j].type === 'debug-chrome-res') return true;
-          }
-        }
-        return false;
-      };
-
-      // 折叠行渲染：用户消息与结果信封共用
+      // 折叠行渲染：用户消息默认折叠，点标题行展开 / 收起
       const collapsibleItem = (m, mKey, cls, avatar, store) => {
         const open = !!store[mKey];
         return h('div', { class: 'msg ' + cls, key: mKey }, [
@@ -1507,8 +1543,6 @@ ${this.promptSectionText()}`;
         const isUser = m.role === 'user';
         // 用户消息：默认折叠，点标题行展开 / 收起
         if (isUser) return collapsibleItem(m, mKey, 'user', '我', this.userOpen);
-        // 结果信封消息：与用户消息一致，默认折叠
-        if (isResultMessage(m)) return collapsibleItem(m, mKey, 'assistant result-msg', 'AI', this.resOpen);
         return h('div', { class: 'msg assistant', key: mKey }, [
           h('div', { class: 'avatar' }, 'AI'),
           h('div', { class: 'bubble' }, [
@@ -1795,34 +1829,53 @@ ${this.promptSectionText()}`;
         ]),
       ]) : null;
 
-      // 外部卡片：与工具卡片视觉一致，以徽标区分来源；倒计时与自动发送受全局开关控制
+      // 外部卡片：与普通工具卡片保持同一套视觉与状态机，仅以徽标区分来源。
+      // 与工具卡片的差异仅剩两点：正文是请求内容、按钮是「发送/重新发送」。
       const externalCardView = (c) => {
         const kids = [
           h('div', { class: 'code-head' }, [
             h('span', { class: 'toolname' }, '外部卡片 · ' + (c.title || '')),
             h('span', { class: 'head-controls' }, [
+              h('span', { class: 'badge ' + (c.status || 'pending') }, this.statusText(c.status)),
               h('span', { class: 'badge external' }, 'external'),
+              h('label', { class: 'auto-send' }, [
+                h('input', {
+                  type: 'checkbox',
+                  checked: this.autoSendEnabled,
+                  onChange: (e) => this.setAutoSendEnabled(e.target.checked)
+                }),
+                '自动'
+              ]),
               c.countdown > 0 ? h('span', { class: 'countdown' }, '发送 ' + c.countdown + 's') : null
             ])
           ]),
           h('pre', { class: 'params-json' }, c.content)
         ];
-        if (c.status === 'pending') {
-          kids.push(h('div', { class: 'row' }, [
-            h('button', { onClick: () => this.onExternalSendClick(c) }, '发送到网页 AI')
-          ]));
-        }
-        if (c.status === 'waiting_reply') {
-          kids.push(h('div', { class: 'origin-line' }, '等待网页 AI 按约定 id 返回结果…'));
-        }
+        kids.push(h('div', { class: 'row' }, [
+          h('button', {
+            onClick: () => this.onExternalSendClick(c),
+            disabled: c.status === 'running'
+          }, c.executed ? '重新发送' : '发送到网页 AI'),
+          (c.status === 'done') ? h('button', { onClick: () => this.copy(this.fmt(c.result)) }, '复制结果') : null
+        ]));
         if (c.status === 'done') kids.push(h('pre', { class: 'result' }, this.fmt(c.result)));
+        if (c.status === 'error') kids.push(h('pre', { class: 'error' }, c.error || this.fmt(c.result)));
         return h('div', { class: 'code-card external-card', key: c.id }, kids);
       };
 
-      // 外部卡片与对话消息合并到同一镜像流：均按「最新在前」排列
-      const externalSorted = this.externalCards.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      const mirrorItems = externalSorted.map((c) => externalCardView(c))
-        .concat(this.reversedMessages.map((m, i) => messageItem(m, i, this.messages.length - 1 - i)));
+      // 统一时序：所有条目（文字消息、外部卡片）放进同一个数组，一律按 _ts 排序。
+      // 消息与卡片都带同一个 _ts 字段、同为毫秒时间戳，因此排序规则完全相同，
+      // 没有任何类型区分、没有任何先后推送设定。工具卡片是消息内的代码块，随其消息一并渲染。
+      // 渲染方向为「最新在前」（倒序），与镜像对话一致。
+      const entries = [];
+      this.messages.forEach((m, i) => {
+        entries.push({ ts: (m._ts != null ? m._ts : 0), node: () => messageItem(m, i, i) });
+      });
+      this.externalCards.forEach((c) => {
+        entries.push({ ts: (c._ts != null ? c._ts : (c.createdAt || 0)), node: () => externalCardView(c) });
+      });
+      entries.sort((a, b) => b.ts - a.ts);
+      const mirrorItems = entries.map((e) => e.node());
 
       // 4) 主界面只保留网页对话镜像（外部卡片与工具卡片一并呈现）
       const mirrorBlock = h('section', { class: 'card' }, [
