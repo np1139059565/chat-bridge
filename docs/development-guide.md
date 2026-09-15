@@ -38,12 +38,13 @@ python flask_server/_smoke_ct.py
 
 | 要改什么 | 去哪里 |
 |---|---|
-| 新增/修改内置工具 | `flask_server/tools_impl.py`（改完可热重载） |
+| 新增/修改内置工具 | `flask_server/tools_impl.py`（改完可热重载）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
 | 工具上线开关、端口、体积上限 | `flask_server/config.yaml` 或 `POST /config` |
-| 卡片总线行为 | `flask_server/card_bus.py` + `routes_cards.py` |
-| 外部工具转发 | `flask_server/external_tools.py` + `routes_ext.py` |
-| 网页对话抓取、站点规则 | `extend/content.js`（PROFILES 表） |
-| 抽屉 UI、卡片渲染 | `extend/dialog/app.js`（Vue 渲染函数）+ `style.css` |
+| 卡片总线行为 | `flask_server/card_bus.py` + `routes/cards.py` |
+| 外部工具转发 | `flask_server/external_tools.py` + `routes/ext.py` |
+| 运行期全局状态（工具表 / 配置） | `flask_server/runtime.py` |
+| 网页对话抓取、站点规则 | `extend/content/00_state.js`（PROFILES 表）+ `extend/content/02_blocks.js` |
+| 抽屉 UI、卡片渲染 | `extend/dialog/parts/`（Vue 渲染函数）+ `extend/dialog/styles/` |
 | 调试扩展行为 | `skills/debug_chrome/extension/**` |
 | 技能说明注入 | `skills/debug_chrome/tool.json` 的 `prompt` 字段 |
 | 规则 | `rules/*.md`（设置页可编辑） |
@@ -56,15 +57,15 @@ python flask_server/_smoke_ct.py
 
 - 参数不合法抛 `ToolParamError`（归类为 `parameter`）。
 - 其它异常视为 `tool_internal`，AI 会据此触发自愈。
-- 必填参数用 `_require(p, "参数名")` 校验，报错信息里点明正确参数名。
-- 结果体积受 `limits.max_json_chars` 限制，超限**报错**而不是截断（避免喂不完整结果）。
+- 必填参数用 `tool_helpers.require(p, "参数名")` 校验，报错信息里点明正确参数名。
+- 结果体积受 `limits.max_json_chars` 限制（`tool_helpers.enforce_size_limit`），超限**报错**而不是截断（避免喂不完整结果）。
 - `read_file` 只接受**绝对路径**，不做「相对工程根」的隐式解析（避免耦合）。
 - 读取 skill 目录内的文档统一走 `read_skill`（参数 `skill` + `file` 相对路径），
   不要用 `read_file` 拼 `skills/xxx/SKILL.md`。新增 skill 文档读取需求时也应遵循此约定。
 
 ### 3.2 错误分类不可破坏
 
-`server.classify_error` 用 `param_error_cls()` 动态取当前模块的 `ToolParamError`，以兼容热重载。**不要**在 server 顶层 `from tools_impl import ToolParamError`——热重载后会失配，参数错误被误判为代码缺陷。
+`error_utils.classify_error` 用 `param_error_cls()` 动态取当前模块（`runtime.impl`）的 `ToolParamError`，以兼容热重载。**不要**在模块顶层 `from tools_impl import ToolParamError`——热重载后会失配，参数错误被误判为代码缺陷。
 
 ### 3.3 卡片
 
@@ -72,14 +73,14 @@ python flask_server/_smoke_ct.py
 - 外部卡片「发送即结束」：投递后立即置 `done` 并回填 `/api/cards/<id>/reply`，**不等待** AI 回复信封。
 - 外部卡片与文字消息共用统一时间戳 `_ts`（毫秒，同一单调时间源），渲染时统一排序，不做类型特殊处理。
 
-### 3.4 站点规则（content.js）
+### 3.4 站点规则（extend/content/00_state.js）
 
 - 只用稳定类名 / 语义选择器，**不要**用 CSS-Module 哈希类（会随前端发版失效）。
 - 一个消息可能被拆成多个容器（文字 + 代码块），抓取时必须全取，否则会漏掉工具调用代码块。
 
 ### 3.5 System Prompt
 
-由 `extend/dialog/app.js` 的 `generateSystemPrompt()` 拼装，工具列表只给名称与描述，参数由 AI 调 `get_tool_params` 自取；技能说明来自后端 `/prompt_sections`，注入到最末尾。
+由 `extend/dialog/parts/05_messages.js` 的 `generateSystemPrompt()` 拼装，工具列表只给名称与描述，参数由 AI 调 `get_tool_params` 自取；技能说明来自后端 `/prompt_sections`，注入到最末尾。
 
 ---
 
@@ -87,7 +88,7 @@ python flask_server/_smoke_ct.py
 
 ### 新增一个内置工具
 
-1. 在 `tools_impl.py` 的 `TOOLS` 加参数声明，在 `DISPATCH` 注册实现函数。
+1. 在 `tool_meta.py` 的元数据表加参数声明，在 `tools_impl.py` 的 `DISPATCH` 注册实现函数。
 2. 调 `POST /hot_fix` 或重启服务。
 3. 在设置页上线（写 `config.yaml`）。
 
@@ -105,7 +106,7 @@ python flask_server/_smoke_ct.py
 ### 排查「外部工具离线」
 
 - 提供方在线判定为 3 秒内有 `poll`。调试扩展仅在**抽屉展开且页面活动**时轮询。
-- 若需在抽屉折叠时仍可服务，需改 `content/03_heartbeat.js` 的轮询条件。
+- 若需在抽屉折叠时仍可服务，需改 `skills/debug_chrome/extension/content/03_heartbeat.js` 的轮询条件。
 
 ---
 
@@ -113,15 +114,15 @@ python flask_server/_smoke_ct.py
 
 | 编号 | 位置 | 问题 |
 |---|---|---|
-| M1 | `extend/dialog/app.js` | （已修）外部卡片曾未按会话隔离 / 不持久化 |
-| M2 | `extend/dialog/app.js` | （已修）关闭自动开关后外部卡片曾卡死 |
-| M3 | `card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
-| D1 | `routes_ext.py` | 提供方通道未按 tab 定向，多标签页指令串台 |
-| D2 | `content/03_heartbeat.js` | 抽屉折叠即停轮询 → 3 秒后判离线 |
-| D3 | `05_tool-handlers.js` | `get_element_style` 默认不返回样式 |
-| D4 | `00_namespace.js` | 后端地址端口硬编码 5000 |
-| D5 | `content.js` | DeepSeek 输入框选择器含哈希类 |
-| D6 | `tool.json` / `app.js` | 参数名与 silent 语义边角不一致 |
+| M1 | `extend/dialog/parts/00_data.js` / `04_sessions.js` | （已修）外部卡片曾未按会话隔离 / 不持久化 |
+| M2 | `extend/dialog/parts/06_execute.js` | （已修）关闭自动开关后外部卡片曾卡死 |
+| M3 | `flask_server/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
+| D1 | `flask_server/routes/ext.py` | 提供方通道未按 tab 定向，多标签页指令串台 |
+| D2 | `skills/debug_chrome/extension/content/03_heartbeat.js` | 抽屉折叠即停轮询 → 3 秒后判离线 |
+| D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | `get_element_style` 默认不返回样式 |
+| D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 |
+| D5 | `extend/content/00_state.js` | DeepSeek 输入框选择器含哈希类 |
+| D6 | `skills/debug_chrome/tool.json` / `extend/dialog/parts/` | 参数名与 silent 语义边角不一致 |
 
 ---
 

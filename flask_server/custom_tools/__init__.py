@@ -1,6 +1,6 @@
 """自定义工具（来自标准 skill）—— 包入口
 
-对外保持与原 custom_tools.py 完全一致的函数名与语义，调用方（server / routes）
+对外保持与拆分前完全一致的函数名与语义，调用方（runtime / routes）
 无需改动导入方式（`import custom_tools as ct` 后 `ct.load_tools()` 等仍然可用）。
 
 子模块划分：

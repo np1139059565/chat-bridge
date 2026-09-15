@@ -80,6 +80,7 @@ POST 请求体示例：
 
 等价于 `hot_reload_fix` 工具，对工具实现文件打补丁并热重载，失败自动回滚。
 请求体：`{ file_path?, old_str?, new_str?, content? }`。
+`file_path` 省略时默认 `tools_impl.py`；`tool_helpers.py` 与 `tool_meta.py` 同样支持热重载。
 
 ### GET /prompt_sections
 
