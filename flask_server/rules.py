@@ -38,7 +38,7 @@ DEFAULT_SELF_HEALING_RULE = """# 异常与自愈（self-healing）
    - 立即调用 get_tool_params 核对准确参数名，若你用了别名（如把 target_directory 写成 path），用正确参数名重试即可——这属于 parameter 问题，不是代码缺陷，不要用 hot_reload_fix。
 3. 确认为工具代码缺陷（tool_internal）时，执行自愈：
    - 调用 read_tool_source（参数 tool=出问题的工具名）读取其当前源码，定位缺陷函数；
-   - 调用 hot_reload_fix（参数 old_str/new_str 或 content）对 tools_impl.py 打补丁，服务会自动热重载，失败会回滚；
+   - 调用 hot_reload_fix（参数 old_str/new_str 或 content）对工具实现文件（tools_impl.py，或辅助模块 tool_helpers.py / tool_meta.py）打补丁，服务会自动热重载，失败会回滚；
    - 热重载完成后，用「原参数」重新调用该工具验证。不要反复改参数。
 """
 

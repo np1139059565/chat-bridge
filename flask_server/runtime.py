@@ -30,7 +30,7 @@ APP_DIR_STR = str(APP_DIR)
 # Flask 应用实例；路由模块通过蓝图注册到这里
 app = Flask(__name__)
 
-# 当前生效的工具实现模块；由 server.py 在初始化阶段注入 tools_impl
+# 当前生效的工具实现模块；由 app.py 的 _init_runtime() 在初始化阶段注入 tools_impl
 impl = None
 
 # 配置唯一来源：本地 config.yaml（插件从后端读取，不存浏览器）
@@ -39,7 +39,7 @@ CONFIG = {"flask": {"host": "127.0.0.1", "port": 5000},
           "limits": {"max_json_chars": 100000},
           "default_profile": "glm", "site_profiles": {}, "tools": {}}
 
-# 工具表：初始化阶段由 server.py 调用 _reload_impl 填充
+# 工具表：初始化阶段由 app.py 的 _init_runtime() 调用 self_healing._reload_impl() 填充
 TOOLS = {}
 DISPATCH = {}
 FIX_TOOLS = {}

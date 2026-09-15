@@ -53,18 +53,21 @@
 ```
 chat-bridge-main/
 ├── flask_server/
+│   ├── app.py                # 公共：应用装配（create_app）
+│   ├── runtime.py            # 公共：运行期全局状态（工具表 / 配置 / 提供方）
 │   ├── card_bus.py           # 公共：卡片总线
-│   ├── routes_cards.py       # 公共：POST /api/cards
+│   ├── routes/cards.py       # 公共：POST /api/cards
 │   ├── external_tools.py     # 公共：外部工具提供方注册与转发
-│   ├── routes_ext.py         # 公共：POST /api/ext/<provider>
-│   ├── custom_tools.py       # 公共：自定义工具加载
+│   ├── routes/ext.py         # 公共：POST /api/ext/<provider>
+│   ├── custom_tools/         # 公共：自定义工具加载（包）
 │   ├── prompt_sections.py    # 公共：技能说明段落收集
-│   └── server.py             # 公共：服务入口
+│   └── server.py             # 公共：兼容启动入口
 ├── extend/
-│   ├── content.js            # 公共：外部卡片渲染、信封检索
+│   ├── content/02_blocks.js  # 公共：对话块抓取
+│   ├── content/03_bridge.js  # 公共：发送通道
 │   └── dialog/
-│       ├── app.js            # 公共：卡片支持 source、发送即结束、技能说明注入
-│       └── style.css         # 公共：外部卡片样式
+│       ├── parts/08_settings.js  # 公共：卡片 source、发送即结束、技能说明注入
+│       └── styles/04_cards.css   # 公共：外部卡片样式
 └── skills/
     └── debug_chrome/         # 调试扩展（自包含）
         ├── tool.json         # 工具声明（含 prompt 字段）
@@ -74,8 +77,10 @@ chat-bridge-main/
             ├── manifest.json
             ├── service_worker.js
             ├── vendor/       # 前端依赖
-            ├── content/      # 内容脚本
-            └── drawer/       # 抽屉页面
+            ├── content/      # 内容脚本（00_namespace ~ 07_index）
+            ├── drawer/       # 抽屉脚本分片
+            ├── drawer-styles/# 抽屉样式分片
+            └── shared/       # 共享模块（url-utils.js）
 ```
 
 `skills/debug_chrome/` 内部分层：
@@ -103,16 +108,19 @@ chat-bridge-main/
 | title | 卡片标题 |
 | content | 发送给网页 AI 的正文 |
 | payload | 附加上下文 |
-| status | `pending` / `done`（发送即结束，无等待态；`counting`/`sending` 等为历史遗留，实际只用 pending/done） |
-| created_at | 创建时刻，决定对话列表时序 |
-| timeout_ms | 等待上限 |
-| result / error | 最终结果 |
+| status | `pending`（待投递/待回填）/ `done`（已投递）；异常路径保留 `error` / `timeout` |
+| delivered | 是否已被镜像插件取走（避免重复投递） |
+| created_at | 创建时刻（毫秒），决定对话列表时序 |
+| timeout_ms | 等待上限（毫秒，默认 120000） |
+| result / error | 最终结果 / 错误 |
 
 **核心能力**：创建并挂起、按 `id` 回填唤醒、超时置 `timeout` 并唤醒。
 
+线程安全：对卡片表的读写均在锁内完成；阻塞等待使用 `threading.Event`，等待期间不持锁。
+
 ### 4.2 公共卡片接口
 
-文件：`flask_server/routes_cards.py`
+文件：`flask_server/routes/cards.py`
 
 `POST /api/cards`
 
@@ -132,7 +140,7 @@ chat-bridge-main/
 
 ### 4.4 提供方通道
 
-文件：`flask_server/routes_ext.py`
+文件：`flask_server/routes/ext.py`
 
 `POST /api/ext/<provider>`
 
@@ -152,7 +160,7 @@ chat-bridge-main/
 
 ### 4.6 自定义工具加载
 
-文件：`flask_server/custom_tools.py`
+文件：`flask_server/custom_tools/`（包）
 
 `tool.json` 解析支持字段：
 
@@ -177,19 +185,20 @@ chat-bridge-main/
 
 ### 4.8 服务入口
 
-文件：`flask_server/server.py`
+文件：`flask_server/app.py`（装配）、`flask_server/server.py`（兼容启动入口）
 
-- 启动时开启多线程。
-- 注册卡片路由、提供方通道路由、技能说明段路由。
+- `app.create_app()` 注册卡片路由、提供方通道路由、技能说明段路由。
+- 启动时开启多线程（`server.py` 中 `threaded=True`）。
 - 启动时加载外部工具提供方。
 
 ### 4.9 镜像插件端
 
 | 文件 | 职责 |
 |---|---|
-| `extend/dialog/app.js` | 卡片渲染支持 `source`；按 `id` 检索信封结构并回填；拉取技能说明段落并注入 System Prompt 末尾 |
-| `extend/content.js` | 外部卡片渲染驱动 |
-| `extend/dialog/style.css` | 外部卡片样式，与工具卡片视觉一致，以徽标区分来源 |
+| `extend/dialog/parts/08_settings.js` | 外部卡片渲染与设置区块 |
+| `extend/dialog/parts/05_messages.js` | 卡片渲染支持 `source`；拉取技能说明段落并注入 System Prompt 末尾 |
+| `extend/dialog/parts/01_backend.js` | 后端轮询：取走待投递卡片并回填 `/api/cards/<id>/reply` |
+| `extend/dialog/styles/04_cards.css` | 外部卡片样式，与工具卡片视觉一致，以徽标区分来源 |
 
 **System Prompt 注入**
 
@@ -207,7 +216,7 @@ chat-bridge-main/
 
 ### 4.10 信封与结果归属
 
-外部卡片通过信封结构与网页 AI 往返，信封以 `type` 区分方向、以 `id` 配对。
+外部卡片以信封结构发往网页 AI，信封以 `type` 标识任务类型。
 
 **输入信封**（发往网页 AI）
 
@@ -237,28 +246,33 @@ chat-bridge-main/
 ```
 {
   "provider": "debug_chrome",
-  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次。",
+  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务（发送即结束，无需回传结果信封）。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。",
   "tools": [
     {
       "name": "get_element_style",
-      "description": "按选择器采集元素样式与 DOM 信息",
+      "description": "按选择器采集元素样式与 DOM 信息。默认返回常用 CSS 属性；可用 properties 指定属性、include_all=true 取全量。若目标元素位于 iframe 内，必须传 page_url 指定该 iframe 的地址（可从调试卡片给出的「本地源码」对应 URL 或可用页面列表获取）。",
       "executor": "external",
       "parameters": [
-        { "name": "selector", "type": "string", "required": true, "description": "CSS 选择器" }
+        { "name": "selector", "type": "string", "required": true, "description": "CSS 选择器" },
+        { "name": "page_url", "type": "string", "required": false, "description": "目标元素所在页面的 URL（顶层页面可省略；iframe 内元素必须提供，否则查不到）" },
+        { "name": "properties", "type": "array", "required": false, "description": "只采集这些 CSS 属性（如 [\"color\",\"font-size\"]）；省略则返回常用属性集" },
+        { "name": "include_all", "type": "boolean", "required": false, "description": "是否返回全量计算样式（默认 false，返回常用属性）" }
       ]
     },
     {
       "name": "get_page_snapshot",
-      "description": "采集页面快照",
+      "description": "采集页面快照。若目标页面是 iframe，必须传 page_url 指定其地址。",
       "executor": "external",
       "parameters": [
-        { "name": "snapshot_type", "type": "string", "required": true, "description": "dom 或 screenshot" }
+        { "name": "snapshot_type", "type": "string", "required": true, "description": "dom 或 screenshot" },
+        { "name": "page_url", "type": "string", "required": false, "description": "目标页面 URL（顶层页面可省略；iframe 必须提供）" }
       ]
     },
     {
       "name": "push_message",
       "description": "向调试扩展抽屉推送一条文字信息",
       "executor": "external",
+      "silent": true,
       "parameters": [
         { "name": "text", "type": "string", "required": true, "description": "推送内容" },
         { "name": "title", "type": "string", "required": false, "description": "可选标题" }
@@ -283,7 +297,6 @@ chat-bridge-main/
 ```
 {
   "type": "debug-chrome-req",
-  "id": "<card_id>",
   "request": ...
 }
 ```
@@ -354,16 +367,24 @@ chat-bridge-main/
 
 **工具服务**
 
+- `flask_server/app.py`
+- `flask_server/runtime.py`
 - `flask_server/card_bus.py`
-- `flask_server/routes_cards.py`
+- `flask_server/routes/cards.py`
 - `flask_server/external_tools.py`
-- `flask_server/routes_ext.py`
-- `flask_server/custom_tools.py`
+- `flask_server/routes/ext.py`
+- `flask_server/custom_tools/`
 - `flask_server/prompt_sections.py`
 - `flask_server/server.py`
-- `extend/content.js`
-- `extend/dialog/app.js`
-- `extend/dialog/style.css`
+
+**镜像插件**
+
+- `extend/content/02_blocks.js`
+- `extend/content/03_bridge.js`
+- `extend/dialog/parts/01_backend.js`
+- `extend/dialog/parts/05_messages.js`
+- `extend/dialog/parts/08_settings.js`
+- `extend/dialog/styles/04_cards.css`
 
 **调试扩展**
 
@@ -375,6 +396,8 @@ chat-bridge-main/
 - `skills/debug_chrome/extension/vendor/`
 - `skills/debug_chrome/extension/content/`
 - `skills/debug_chrome/extension/drawer/`
+- `skills/debug_chrome/extension/drawer-styles/`
+- `skills/debug_chrome/extension/shared/`
 
 ---
 
@@ -383,7 +406,7 @@ chat-bridge-main/
 1. 卡片总线与 `POST /api/cards`，服务入口开启多线程。
 2. 外部工具与提供方机制，自定义工具加载支持 `provider`、`prompt`、`executor`。
 3. 技能说明段落收集与 `GET /prompt_sections`。
-4. 镜像插件外部卡片渲染、信封封装与按 `id` 捕获回填、技能说明注入。
+4. 镜像插件外部卡片渲染、信封封装与投递确认回填、技能说明注入。
 5. `skills/debug_chrome/` 落位，调试扩展接入工具服务、轮询执行、抽屉对接。
 6. 联调、超时与并发边界、文档。
 
