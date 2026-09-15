@@ -51,7 +51,11 @@
     return { selector: path.join(' > ') || el.tagName.toLowerCase(), confidence: 'low' };
   };
 
-  A.buildElementData = function (el, selectorInfo) {
+  // 采集元素数据。
+  // forceStyle：强制采集计算样式（get_element_style 工具默认需要样式，
+  //   不应受「采集样式列表」全局开关限制——否则工具名不副实）。
+  // properties：只返回指定 CSS 属性（数组），省略则返回全量。
+  A.buildElementData = function (el, selectorInfo, forceStyle, properties) {
     const data = {
       selector: selectorInfo.selector,
       selector_confidence: selectorInfo.confidence,
@@ -61,12 +65,21 @@
       dom_html: A.truncate(el.outerHTML, A.MAX_DOM_CHARS),
       page_url: location.href,
     };
-    if (state.styleListEnabled) {
+    // 采集样式：工具显式要求，或全局样式开关开启
+    if (forceStyle || state.styleListEnabled) {
       const computed = window.getComputedStyle(el);
       const style = {};
-      for (let i = 0; i < computed.length; i++) {
-        const key = computed[i];
-        style[key] = computed.getPropertyValue(key);
+      if (Array.isArray(properties) && properties.length) {
+        // 只取指定属性，避免返回数百条无关样式
+        properties.forEach((k) => {
+          const v = computed.getPropertyValue(k);
+          if (v) style[k] = v;
+        });
+      } else {
+        for (let i = 0; i < computed.length; i++) {
+          const key = computed[i];
+          style[key] = computed.getPropertyValue(key);
+        }
       }
       data.computed_style = style;
     }
@@ -135,6 +148,73 @@
     return out;
   };
 
+  // 列出当前页面所有 iframe 的归一 URL（供工具在顶层找不到元素时给出候选提示）
+  A.frameUrls = function () {
+    const seen = {};
+    const out = [];
+    A.collectAllIframes().forEach((f) => {
+      let href = '';
+      try {
+        if (f.contentWindow && f.contentWindow.location && f.contentWindow.location.href) {
+          href = f.contentWindow.location.href;
+        }
+      } catch (e) { /* 跨域读不到，退回 src */ }
+      if (!href && f.getAttribute) href = f.getAttribute('src') || '';
+      const n = A.normalizeUrl(href);
+      if (n && !seen[n]) { seen[n] = true; out.push(n); }
+    });
+    return out;
+  };
+
+  // 按归一 URL 找到匹配的 iframe（用于把工具调用路由到元素实际所在的子页面）。
+  // 调试扩展的 content script 只运行在顶层文档，子页面里没有它；
+  // 因此必须借助用户已安装的「iframe 点选补丁」来代答查询。
+  A.findFrameByUrl = function (url) {
+    const target = A.normalizeUrl(url);
+    if (!target) return null;
+    const frames = A.collectAllIframes();
+    for (let i = 0; i < frames.length; i++) {
+      const f = frames[i];
+      let href = '';
+      try {
+        if (f.contentWindow && f.contentWindow.location && f.contentWindow.location.href) {
+          href = f.contentWindow.location.href;
+        }
+      } catch (e) { /* 跨域读不到，退回 src */ }
+      if (!href && f.getAttribute) href = f.getAttribute('src') || '';
+      if (A.normalizeUrl(href) === target) return f;
+    }
+    return null;
+  };
+
+  // 向指定 iframe 发起一次查询并等待回包（依赖该 iframe 内已安装点选补丁）。
+  // 用 reqId 关联请求与响应，避免并发查询串包。
+  A.queryFrame = function (frame, payload, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      if (!frame || !frame.contentWindow) { reject(new Error('FRAME_UNAVAILABLE')); return; }
+      const reqId = 'q-' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+      const timer = setTimeout(() => {
+        window.removeEventListener('message', onMsg);
+        reject(new Error('FRAME_TIMEOUT'));
+      }, timeoutMs || 3000);
+      function onMsg(ev) {
+        const d = ev.data;
+        if (!d || d.source !== 'ai-debug-iframe' || d.type !== 'query-result' || d.reqId !== reqId) return;
+        clearTimeout(timer);
+        window.removeEventListener('message', onMsg);
+        resolve(d);
+      }
+      window.addEventListener('message', onMsg);
+      try {
+        frame.contentWindow.postMessage(Object.assign({ source: 'ai-debug-parent', reqId }, payload), '*');
+      } catch (e) {
+        clearTimeout(timer);
+        window.removeEventListener('message', onMsg);
+        reject(new Error('FRAME_POST_FAILED'));
+      }
+    });
+  };
+
   A.isInsideDrawer = function (el) {
     const host = document.getElementById(A.SHADOW_HOST_ID);
     if (!host) return false;
@@ -145,7 +225,7 @@
     state.selectMode = active;
     if (state.selectMode) {
       document.body.classList.add('ai-style-select-mode');
-      A.showToast('已进入元素选择模式，点击页面元素即可连续多选；再次点击「退出选择」结束');
+      A.showToast('已进入元素选择模式，鼠标中键（滚轮键）点击页面元素即可连续多选；右键单击或按 Esc 退出');
     } else {
       document.body.classList.remove('ai-style-select-mode');
       A.hideHighlight();

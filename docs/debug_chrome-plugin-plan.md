@@ -27,13 +27,15 @@
 ## 二、总体架构
 
 ```
-调试扩展抽屉 ──POST /api/cards(挂起)──▶ 工具服务 card_bus ──心跳──▶ 镜像插件
+调试扩展抽屉 ──POST /api/cards(挂起)──▶ 工具服务 card_bus ──轮询──▶ 镜像插件
                                                                       │
-                                                              右侧对话列表渲染外部卡片
+                                                          右侧对话列表按统一时间戳 _ts 渲染外部卡片
                                                                       │
-                                                              倒计时→自动发网页 AI→按 id 捕获结果
+                                                          倒计时→发信封{type,request}到网页 AI
                                                                       │
-工具服务 card_bus ◀──POST /api/cards/<id>/reply── 镜像插件 ──▶ 挂起的 POST 返回结果
+工具服务 card_bus ◀──POST /api/cards/<id>/reply(已投递确认)── 镜像插件 ──▶ 挂起的 POST 立即返回
+                                                                      │
+                                                          网页 AI 用 push_message 主动推送进度
 
 网页 AI 工具调用 ──▶ 工具卡片 ──POST /tool(挂起)──▶ 工具服务外部工具队列
                                                         │
@@ -61,7 +63,7 @@ chat-bridge-main/
 ├── extend/
 │   ├── content.js            # 公共：外部卡片渲染、信封检索
 │   └── dialog/
-│       ├── app.js            # 公共：卡片支持 source、按 id 回填、技能说明注入
+│       ├── app.js            # 公共：卡片支持 source、发送即结束、技能说明注入
 │       └── style.css         # 公共：外部卡片样式
 └── skills/
     └── debug_chrome/         # 调试扩展（自包含）
@@ -101,7 +103,7 @@ chat-bridge-main/
 | title | 卡片标题 |
 | content | 发送给网页 AI 的正文 |
 | payload | 附加上下文 |
-| status | `pending` / `counting` / `sending` / `waiting_reply` / `done` / `error` / `timeout` |
+| status | `pending` / `done`（发送即结束，无等待态；`counting`/`sending` 等为历史遗留，实际只用 pending/done） |
 | created_at | 创建时刻，决定对话列表时序 |
 | timeout_ms | 等待上限 |
 | result / error | 最终结果 |
@@ -212,27 +214,19 @@ chat-bridge-main/
 ```
 {
   "type": "debug-chrome-req",
-  "id": "<card_id>",
   "request": ...
 }
 ```
 
-**输出信封**（网页 AI 回复）
-
-```
-{
-  "type": "debug-chrome-res",
-  "id": "<card_id>",
-  "result": ...
-}
-```
+> 说明：外部卡片采用「发送即结束」模型，**不存在输出信封**，输入信封也**不再携带 `id`**。
+> 发送后立即经 `POST /api/cards/<id>/reply` 回一个「已投递」确认，唤醒挂起的 `POST /api/cards`。
+> 卡片自身的 uuid 仅用于轮询去重与回填确认，不再用于与网页 AI 的结果配对。
 
 **镜像插件处理**
 
-- 发送时按输入信封封装，卡片自身记录其 `type`。
-- 镜像到助手消息后，从任意块（代码块或文本块）提取顶层 JSON 对象，匹配 `type` 为该卡片对应的输出信封类型、且 `id` 相同者；命中则经 `POST /api/cards/<id>/reply` 回填工具服务，唤醒挂起的 `POST /api/cards` 请求。
-- 输出信封类型由输入信封类型推导（`-req` 对应 `-res`）。
-- 未命中任何待回填卡片的信封按普通内容处理。
+- 发送时按输入信封封装 `{ type, request }`，卡片自身记录其 `type`。
+- 发送成功后立即将卡片置为 `done` 并回填 `/api/cards/<id>/reply`，不再检索网页 AI 的任何返回。
+- 任务进展与结论由网页 AI 通过 `push_message` 工具主动推送到调试抽屉。
 
 ---
 
@@ -243,7 +237,7 @@ chat-bridge-main/
 ```
 {
   "provider": "debug_chrome",
-  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先读取 skills/debug_chrome/SKILL.md，再按其规定处理；同一会话内只需读取一次；完成后按 SKILL.md 规定的结构回复。",
+  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。当收到 type=debug-chrome-req 的消息时，属于外部调试卡片任务。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次。",
   "tools": [
     {
       "name": "get_element_style",
@@ -294,17 +288,7 @@ chat-bridge-main/
 }
 ```
 
-**输出信封**
-
-```
-{
-  "type": "debug-chrome-res",
-  "id": "<card_id>",
-  "result": ...
-}
-```
-
-处理规则：按 `request` 完成页面调试任务，可调用本技能提供的页面探查工具；完成后以输出信封回复，`id` 原样保留。
+处理规则：按 `request` 完成页面调试任务，可调用本技能提供的页面探查工具；处理过程中用 `push_message` 主动向用户推送进度、方案与结论。**无需**返回任何输出信封。
 
 ---
 
@@ -330,8 +314,8 @@ chat-bridge-main/
 
 1. 用户输入需求并附带已选元素（html、style、元素信息）。
 2. 组装为 `POST /api/cards` 请求，携带信封类型 `debug-chrome-req`，挂起等待。
-3. 工具服务完成卡片渲染、倒计时、自动发网页 AI，并按卡片 `id` 捕获输出信封结果。
-4. 请求返回后，结果作为回复展示在抽屉对话区。
+3. 工具服务完成卡片渲染、倒计时、自动发网页 AI；发送后立即回「已投递」确认。
+4. 请求很快返回，抽屉显示「已发送，后续进展会由 AI 推送」。真正的进展由网页 AI 用 `push_message` 主动推送。
 
 ---
 
@@ -342,15 +326,15 @@ chat-bridge-main/
 | 步骤 | 动作 |
 |---|---|
 | 1 | 调试扩展抽屉发出 `POST /api/cards`，请求挂起 |
-| 2 | 工具服务创建卡片（生成 `id`、记录信封类型），经心跳推给镜像插件 |
-| 3 | 镜像插件在右侧对话列表按时序渲染外部卡片 |
-| 4 | 倒计时结束，卡片内容按输入信封封装（`type`、`id`、`request`）自动发送到网页 AI |
-| 5 | 网页 AI 首次处理时读取 SKILL.md，按需调用元素探查、文件读写等工具，逐步完成需求 |
-| 6 | 网页 AI 输出带该 `id` 的输出信封结构 |
-| 7 | 镜像插件检索到该结构，经 `POST /api/cards/<id>/reply` 回填工具服务 |
-| 8 | 挂起的 `POST /api/cards` 返回最终结果给调试扩展抽屉 |
+| 2 | 工具服务创建卡片（生成 uuid、记录信封类型），经轮询推给镜像插件 |
+| 3 | 镜像插件在右侧对话列表按统一时间戳 `_ts` 渲染外部卡片（与文字消息统一排序） |
+| 4 | 倒计时结束，卡片内容按输入信封封装（`type`、`request`，不含 `id`）自动发送到网页 AI |
+| 5 | 镜像插件立即将卡片置 `done`，并经 `POST /api/cards/<id>/reply` 回「已投递」确认 |
+| 6 | 挂起的 `POST /api/cards` 立即返回，抽屉收到「已发送」提示 |
+| 7 | 网页 AI 用 `read_skill` 读取 SKILL.md，按需调用元素探查、文件读写等工具，逐步完成需求 |
+| 8 | 网页 AI 用 `push_message` 主动把进度、方案、结论推送到调试抽屉 |
 
-超时未回填：工具服务置 `timeout`，请求返回超时错误。
+发送即结束，不等待网页 AI 回传结果，因而不会因未回复而超时。
 
 ### 7.2 元素探查与消息推送
 
@@ -409,21 +393,22 @@ chat-bridge-main/
 
 | 项 | 取值 |
 |---|---|
-| 外部卡片等待上限 | 120 秒 |
+| 外部卡片等待上限 | 120 秒（发送即结束，通常立即返回） |
 | 调试扩展轮询节奏 | 1 秒一次，上线即启、下线即停 |
 | 提供方在线判定 | 3 秒内有 `poll` |
-| 信封类型 | 输入 `debug-chrome-req`，输出 `debug-chrome-res` |
-| 结果归属标识 | 卡片 `id` |
+| 信封类型 | 仅输入 `debug-chrome-req`（无输出信封） |
+| 卡片唯一标识 | 后端生成 uuid，仅用于轮询去重与回填确认 |
 | 技能说明注入位置 | System Prompt 最末尾 |
 | 技能说明生效条件 | 该技能下有工具上线 |
 | 卡片视觉 | 外部卡片与工具卡片共用渲染与状态机，以 `source` 区分来源 |
+| 卡片时序 | 与文字消息共用统一时间戳 `_ts`，统一排序，不做类型特殊处理 |
 
 ---
 
 ## 十一、边界
 
-1. 卡片结果以带卡片 `id` 的输出信封为准，并发卡片按 `id` 配对。
+1. 外部卡片发送即结束：发送后立即置 `done` 并回填确认，不再等待网页 AI 回传，因而不存在「未回复超时」。
 2. 每个挂起请求占用一个服务线程，设定并发上限。
 3. 调试扩展命令执行异常由工具服务捕获并回传错误。
-4. 超时统一返回 `TIMEOUT`，卡片状态置 `timeout`。
-5. 信封可从代码块或普通文本块中提取，两者同等对待。
+4. 任务进展由网页 AI 通过 `push_message` 主动推送，不依赖结果信封。
+5. 输入信封固定为 `{ type, request }`，不含 `id`；`request` 为发送给网页 AI 的正文。

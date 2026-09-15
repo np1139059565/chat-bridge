@@ -47,26 +47,83 @@
     });
   };
 
+  // 目标页面：工具调用可携带 page_url，把查询路由到元素实际所在的 iframe。
+  // 调试扩展的 content script 只运行在顶层文档，子页面内没有它；
+  // 因此子页面查询依赖用户已安装的「iframe 点选补丁」代答。
+  // 未传 page_url 时，在顶层文档查询。
+  async function runInTargetPage(params, fnTop, fnFrame) {
+    const url = params.page_url || params.pageUrl || '';
+    if (url) {
+      const frame = A.findFrameByUrl(url);
+      if (!frame) {
+        return { success: false, error: 'FRAME_NOT_FOUND', page_url: url, available: A.frameUrls() };
+      }
+      return fnFrame(frame);
+    }
+    return fnTop();
+  }
+
   A.handleToolRequest = async function (detail) {
     const tool = detail.tool;
     const params = detail.params || {};
 
     if (tool === 'get_element_style') {
       const selector = params.selector;
-      const matches = selector ? document.querySelectorAll(selector) : null;
-      if (!matches || matches.length === 0) {
-        return { success: false, error: 'ELEMENT_NOT_FOUND', selector };
-      }
-      if (matches.length > 1) {
-        return { success: false, error: 'ELEMENT_NOT_UNIQUE', selector, count: matches.length };
-      }
-      return { success: true, data: A.buildElementData(matches[0], A.generateSelector(matches[0])) };
+      // 该工具的职责就是采集样式，故默认强制采集（不再受「采集样式列表」全局开关限制）；
+      // 允许用 properties 精确指定要看的属性，或 include_all=true 取全量。
+      const properties = Array.isArray(params.properties) ? params.properties : null;
+      const includeAll = params.include_all === true;
+      const wantStyle = true;
+      const styleFilter = includeAll ? null : (properties || A.DEFAULT_STYLE_PROPS);
+      // 顶层文档直接查询
+      const queryTop = () => {
+        const matches = selector ? document.querySelectorAll(selector) : null;
+        if (!matches || matches.length === 0) {
+          return { success: false, error: 'ELEMENT_NOT_FOUND', selector, frames: A.frameUrls() };
+        }
+        if (matches.length > 1) {
+          return { success: false, error: 'ELEMENT_NOT_UNIQUE', selector, count: matches.length };
+        }
+        return { success: true, data: A.buildElementData(matches[0], A.generateSelector(matches[0]), true, styleFilter) };
+      };
+      // 子页面：交给点选补丁代答
+      const queryFrame = async (frame) => {
+        try {
+          const res = await A.queryFrame(frame, {
+            type: 'query-element',
+            selector: selector,
+            wantStyle: wantStyle,
+            includeAll: includeAll,
+            properties: properties,
+          }, 4000);
+          return res.result;
+        } catch (e) {
+          return {
+            success: false,
+            error: e.message || 'FRAME_QUERY_FAILED',
+            selector,
+            page_url: params.page_url || '',
+            hint: '目标页面内需已安装「iframe 点选补丁」才能查询子页面元素。请在调试抽屉设置页复制补丁，'
+              + '并粘贴到该 iframe 的控制台执行，然后请用户确认后重试。'
+          };
+        }
+      };
+      return runInTargetPage(params, queryTop, queryFrame);
     }
 
     if (tool === 'get_page_snapshot') {
       const snapshotType = params.snapshot_type || 'dom';
       if (snapshotType === 'dom') {
-        return { success: true, data: { dom: A.truncate(document.documentElement.outerHTML, A.MAX_SNAPSHOT_CHARS) } };
+        const snapTop = () => ({ success: true, data: { dom: A.truncate(document.documentElement.outerHTML, A.MAX_SNAPSHOT_CHARS) } });
+        const snapFrame = async (frame) => {
+          try {
+            const res = await A.queryFrame(frame, { type: 'query-dom' }, 4000);
+            return res.result;
+          } catch (e) {
+            return { success: false, error: e.message || 'FRAME_QUERY_FAILED', hint: '目标页面内需已安装「iframe 点选补丁」。' };
+          }
+        };
+        return runInTargetPage(params, snapTop, snapFrame);
       }
       if (snapshotType === 'screenshot') {
         try {
@@ -83,7 +140,6 @@
       const text = params.text || '';
       const title = params.title || '';
       A.postToDrawer({ type: 'append-reply', id: A.generateId ? A.generateId() : String(Date.now()), text: (title ? ('【' + title + '】') : '') + text, timestamp: Date.now() });
-      A.showToast('收到推送：' + (title || text).slice(0, 40));
       return { success: true, data: { pushed: true } };
     }
 

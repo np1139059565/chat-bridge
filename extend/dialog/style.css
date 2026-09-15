@@ -173,6 +173,10 @@ body {
   background: var(--cb-on-primary-soft); color: var(--cb-on-primary);
   border: 0; border-radius: var(--cb-r-md);
   width: 28px; height: 28px; cursor: pointer; font-size: var(--cb-fs-lg);
+  /* 设置页整体按钮规则带 padding，此处清空并改用 flex 居中，
+     否则 ✕ 字形会被内边距挤到左上角而显得不居中 */
+  padding: 0;
+  display: flex; align-items: center; justify-content: center; line-height: 1;
 }
 .settings-bar .close:hover { background: var(--cb-on-primary-soft-hover); }
 /* 当前站点提示 */
@@ -193,7 +197,9 @@ body {
   display: block; width: 100%; margin-top: 3px; padding: var(--cb-sp-2) var(--cb-sp-3);
   border: 1px solid var(--cb-border-strong); border-radius: var(--cb-r-md); font-size: var(--cb-fs-sm);
 }
-.settings button {
+/* 作用域限定为设置页内容区：标题栏 .settings-bar 内的按钮
+   （如关闭按钮 ✕）有自己的尺寸规则，不能被这里的通用按钮样式覆盖 */
+.settings-body button {
   background: var(--cb-primary); color: var(--cb-on-primary);
   border: 0; border-radius: var(--cb-r-md);
   padding: var(--cb-sp-2) var(--cb-sp-5); cursor: pointer; font-size: var(--cb-fs-sm);
@@ -262,8 +268,10 @@ body {
   padding: var(--cb-sp-1) var(--cb-sp-3); cursor: pointer;
   font-size: var(--cb-fs-xs); color: var(--cb-on-primary);
 }
-.switch.on { background: var(--cb-ok); }
-.switch.off { background: var(--cb-neutral); }
+/* 上下线开关：浅底深字，11px 小字也满足对比度要求；
+   状态靠色相区分，不靠亮度差 */
+.switch.on { background: var(--cb-ok-bg); color: var(--cb-ok); border: 1px solid var(--cb-ok-border); }
+.switch.off { background: var(--cb-bg-fill); color: var(--cb-text-sub); border: 1px solid var(--cb-border-strong); }
 
 /* 工具行：第一行放名称 + 描述（描述过长省略），第二行放按钮组（开关 / 编辑 / 删除） */
 .tool-row { flex-wrap: wrap; align-items: center; }
@@ -317,7 +325,7 @@ body {
   display: block; width: 100%; min-height: 130px; resize: vertical;
   padding: var(--cb-sp-2) var(--cb-sp-3); border: 1px solid var(--cb-border-strong);
   border-radius: var(--cb-r-md); font-family: ui-monospace, Consolas, monospace;
-  font-size: var(--cb-fs-xs); color: var(--cb-text-body); background: var(--cb-bg-card);
+  font-size: var(--cb-fs-sm); color: var(--cb-text-body); background: var(--cb-bg-card);
 }
 
 /* 规则模块：新建输入行 / 规则条目 / 内容预览 */
@@ -326,7 +334,7 @@ body {
 .rule-new input {
   flex: 1 1 auto; min-width: 0; padding: 4px var(--cb-sp-3);
   border: 1px solid var(--cb-border-strong); border-radius: var(--cb-r-md);
-  font-size: var(--cb-fs-xs); color: var(--cb-text-body); background: var(--cb-bg-card);
+  font-size: var(--cb-fs-sm); color: var(--cb-text-body); background: var(--cb-bg-card);
 }
 .rule-item {
   display: flex; flex-wrap: wrap; align-items: center;
@@ -545,26 +553,32 @@ body {
   font-size: var(--cb-fs-xs); padding: 2px var(--cb-sp-3);
   border-radius: var(--cb-r-pill); color: var(--cb-on-primary);
 }
-.badge.pending { background: var(--cb-neutral); }
-.badge.running { background: var(--cb-warn); }
-.badge.done { background: var(--cb-ok); }
-.badge.error { background: var(--cb-danger); }
+/* 状态徽标：底色为浅色系 + 深色文字，保证 11px 小字也满足对比度要求 */
+.badge.pending { background: var(--cb-bg-fill); color: var(--cb-text-sub); }
+.badge.running { background: var(--cb-warn-bg); color: var(--cb-warn-text); border: 1px solid var(--cb-warn-border); }
+.badge.done { background: var(--cb-ok-bg); color: var(--cb-ok); border: 1px solid var(--cb-ok-border); }
+.badge.error { background: var(--cb-danger-bg); color: var(--cb-danger-text); border: 1px solid var(--cb-danger-border); }
 
+/* 参数预览 / 结果 / 错误：内容都是 JSON 文本，统一用等宽字体，
+   与 .usage、.stack 保持一致，便于对齐阅读 */
 .params-json {
   white-space: pre-wrap; background: var(--cb-bg-subtle);
   border: 1px solid var(--cb-border-soft); border-radius: var(--cb-r-md);
   padding: var(--cb-sp-2); font-size: var(--cb-fs-xs);
   max-height: 160px; overflow: auto; overscroll-behavior: contain;
+  font-family: ui-monospace, Consolas, monospace;
 }
 .result {
   white-space: pre-wrap; background: var(--cb-ok-bg); border: 1px solid var(--cb-ok-border);
   border-radius: var(--cb-r-md); padding: var(--cb-sp-2); font-size: var(--cb-fs-xs);
   margin-top: var(--cb-sp-2); max-height: 240px; overflow: auto; overscroll-behavior: contain;
+  font-family: ui-monospace, Consolas, monospace;
 }
 .error {
   white-space: pre-wrap; background: var(--cb-danger-bg); border: 1px solid var(--cb-danger-border);
   border-radius: var(--cb-r-md); padding: var(--cb-sp-2); font-size: var(--cb-fs-xs);
   margin-top: var(--cb-sp-2); color: var(--cb-danger-text);
+  font-family: ui-monospace, Consolas, monospace;
 }
 /* 失败诊断：错误分类 + 完整堆栈（AI 自愈关键信息） */
 .origin-line {
@@ -581,6 +595,16 @@ body {
 }
 /* 后端连接异常告警 */
 .flask-warn { color: var(--cb-danger-text); font-size: var(--cb-fs-xs); margin-top: var(--cb-sp-1); }
+
+/* 键盘焦点样式：所有按钮都清掉了边框，只靠浏览器默认 outline 提示偏弱。
+   :focus-visible 只在键盘导航时出现，不影响鼠标点击的观感。 */
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--cb-primary);
+  outline-offset: 1px;
+}
 
 /* ========== 轻提示 ========== */
 .toast {
@@ -599,8 +623,10 @@ body {
  * 窄屏规则；取 419px，表示「面板比常态更窄」时才收紧。
  * ============================================================ */
 @media (max-width: 419px) {
-  /* 收窄左右留白，把宽度让给内容 */
-  .m-header, .settings, .m-body { padding-left: var(--cb-sp-3); padding-right: var(--cb-sp-3); }
+  /* 收窄左右留白，把宽度让给内容。
+     不包含 .settings：它是绝对定位铺满面板的容器，加内边距会让
+     其子元素 .settings-bar（蓝色标题栏）左右缩进、两侧露出底色条。 */
+  .m-header, .m-body { padding-left: var(--cb-sp-3); padding-right: var(--cb-sp-3); }
 
   /* 表格是窄屏撑破卡片的头号来源：改为定宽布局 + 单元格强制断词 */
   .mb-table, .params { table-layout: fixed; }

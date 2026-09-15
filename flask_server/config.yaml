@@ -17,6 +17,8 @@ tools:
     enabled: true
   read_file:
     enabled: true
+  read_skill:
+    enabled: true
   read_lints:
     enabled: true
   replace_in_file:
