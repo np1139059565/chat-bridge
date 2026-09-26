@@ -1,18 +1,9 @@
-"""卡片路由：创建并同步等待、投递给镜像插件、结果回填。"""
+"""卡片路由：登记外部卡片、投递给镜像插件、确认已展示。"""
 from flask import Blueprint, request, jsonify
 
-from card_bus import bus, DEFAULT_TIMEOUT_MS
+from card_bus import bus
 
 bp = Blueprint("cards", __name__)
-
-
-def _parse_timeout(data):
-    """解析超时时间：非法或缺省时回退默认值（毫秒）。"""
-    timeout_ms = data.get("timeout_ms") or DEFAULT_TIMEOUT_MS
-    try:
-        return int(timeout_ms)
-    except (TypeError, ValueError):
-        return DEFAULT_TIMEOUT_MS
 
 
 def _parse_card_fields(data):
@@ -32,11 +23,14 @@ def _parse_card_fields(data):
 
 @bp.route("/api/cards", methods=["POST", "OPTIONS"])
 def create_card():
-    """创建一张卡片并阻塞等待结果。
+    """登记一张外部卡片并立即返回。
 
-    请求体：{ title, content, payload, timeout_ms }
-    成功返回：{ success: true, id, result }
-    超时返回：{ success: false, id, error: "TIMEOUT" }
+    外部卡片采用「发送即结束」：登记成功即返回，不等待镜像插件回填，
+    因此不存在超时失败。卡片由镜像插件轮询取走后自行维护状态，
+    任务进展由网页 AI 通过 push_message 主动推送给发起方。
+
+    请求体：{ type, title, content, payload }
+    成功返回：{ success: true, id, status }
     """
     if request.method == "OPTIONS":
         return ("", 204)
@@ -46,12 +40,8 @@ def create_card():
     if isinstance(fields, tuple):
         return fields
 
-    timeout_ms = _parse_timeout(data)
-    card = bus.create(timeout_ms=timeout_ms, **fields)
-    ok, result = bus.wait(card.id, timeout_ms)
-    if ok:
-        return jsonify({"success": True, "id": card.id, "result": result})
-    return jsonify({"success": False, "id": card.id, "error": result})
+    card = bus.create(**fields)
+    return jsonify({"success": True, "id": card.id, "status": card.status})
 
 
 @bp.route("/api/cards/pending", methods=["GET", "OPTIONS"])
@@ -62,14 +52,16 @@ def pending_cards():
     return jsonify({"success": True, "cards": bus.claim_pending()})
 
 
-@bp.route("/api/cards/<card_id>/reply", methods=["POST", "OPTIONS"])
-def reply_card(card_id):
-    """镜像插件回填某张卡片的结果，唤醒创建请求。"""
+@bp.route("/api/cards/<card_id>/delivered", methods=["POST", "OPTIONS"])
+def confirm_delivered(card_id):
+    """确认卡片已生成并展示，此后不再投递。
+
+    客户端把卡片渲染进列表后调用。在收到确认前，卡片可被任何客户端反复取走；
+    这是卡片停止投递的唯一条件。重复调用幂等。
+    """
     if request.method == "OPTIONS":
         return ("", 204)
-    data = request.get_json(force=True, silent=True) or {}
-    result = data.get("result")
-    ok = bus.resolve(card_id, result)
+    ok = bus.confirm_delivered(card_id)
     if not ok:
         return jsonify({"success": False, "error": "UNKNOWN_CARD"}), 404
     return jsonify({"success": True, "id": card_id})

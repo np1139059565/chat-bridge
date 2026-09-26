@@ -7,19 +7,29 @@
     python _smoke_ct.py
 输出 SMOKE OK 表示全部断言通过；任一断言失败会抛异常并以非 0 退出码结束。
 
-注意：本脚本会在临时目录里造一个假 skill，并在结束时删除它；
-同时会清理它写出的 custom_tools.yaml，因此运行前建议先备份该文件。
+隔离策略：本脚本先建一个临时工作目录，并通过环境变量
+CHAT_BRIDGE_CUSTOM_TOOLS_YAML 把 custom_tools 的落盘路径指向该目录下的
+tools.yaml，随后才导入 custom_tools。因此测试全程只读写临时文件，
+不会触碰 flask_server/custom_tools.yaml，结束后整个临时目录被删除。
 """
 import os
 import tempfile
 import json
 import shutil
 
+# 临时工作目录：存放测试用的 skill 与 custom_tools 落盘文件
+root = tempfile.mkdtemp(prefix="skill_smoke_")
+# 关键：在导入 custom_tools 之前重定向落盘路径，确保测试不触碰真实配置
+os.environ["CHAT_BRIDGE_CUSTOM_TOOLS_YAML"] = os.path.join(root, "tools.yaml")
+
 import custom_tools as ct
 
-# 在临时目录中搭建一个最小可用的 skill：含 tool.json 与一个回声脚本
-root = tempfile.mkdtemp(prefix="skill_smoke_")
 try:
+    # 断言落盘路径确实落在临时目录内，避免误操作真实文件。
+    # 两侧都做真实路径归一：tempfile.mkdtemp 可能返回 8.3 短路径（如 ADMINI~1），
+    # 而 ct.CT_PATH 经 Path.resolve() 展开为长路径，直接字符串比较会误判不等。
+    assert os.path.realpath(os.path.dirname(str(ct.CT_PATH))) == os.path.realpath(root), ct.CT_PATH
+
     # ---------- 1) 构造测试用 skill ----------
     sd = os.path.join(root, "demo_skill")
     os.makedirs(os.path.join(sd, "scripts"))
@@ -94,10 +104,5 @@ try:
     assert "demo_echo" not in ct.load_tools()
     print("SMOKE OK")
 finally:
-    # 清理临时 skill 目录
+    # 清理整个临时工作目录（含测试 skill 与临时落盘文件），不触碰真实配置
     shutil.rmtree(root, ignore_errors=True)
-    # 清理可能写出的 custom_tools.yaml
-    try:
-        os.remove(ct.CT_PATH)
-    except OSError:
-        pass

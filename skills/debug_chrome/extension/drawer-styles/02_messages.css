@@ -10,11 +10,12 @@
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: var(--db-sp-4);
+  padding: var(--db-sp-4) var(--db-sp-5);
+  overscroll-behavior: contain;
 }
 
 .msg {
-  margin-bottom: 10px;
+  margin-bottom: var(--db-sp-4);
   padding: var(--db-sp-3);
   border-radius: var(--db-r-md);
   white-space: pre-wrap;
@@ -27,7 +28,7 @@
 }
 
 .msg.assistant {
-  background: var(--db-ok-bg);
+  background: var(--db-bg-subtle);
 }
 
 .msg.system {
@@ -44,6 +45,31 @@
 
 .msg .text {
   line-height: 1.4;
+}
+
+/* 用户消息操作行：重新发送等 */
+.msg-actions {
+  display: flex;
+  gap: var(--db-sp-2);
+  margin-top: var(--db-sp-2);
+}
+
+.msg-actions .icon-btn {
+  /* 图标按钮：方形定尺，避免 ↻ 被内边距撑成扁条 */
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--db-r-md);
+  line-height: 1;
+  color: var(--db-text-muted);
+}
+
+.msg-actions .icon-btn:hover {
+  background: var(--db-bg-fill-hover);
+  color: var(--db-primary);
 }
 
 /* 消息状态徽标：浅底深字 + 细边框，11px 小字也满足对比度要求 */
@@ -65,9 +91,9 @@
 }
 
 .msg-status.processing {
-  background: var(--db-primary-soft);
-  color: var(--db-primary-hover);
-  border-color: #91d5ff;
+  background: var(--db-warn-bg);
+  color: var(--db-warn-text);
+  border-color: var(--db-warn-border);
 }
 
 .msg-status.completed {
@@ -109,6 +135,6 @@
 }
 
 .element-card .dom-code {
-  font-size: 10px;
+  font-size: var(--db-fs-micro);
   max-height: 200px;
 }

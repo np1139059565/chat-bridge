@@ -11,6 +11,8 @@
  *   05_messages.js      工具列表、System Prompt、消息接收与卡片构建、导出
  *   06_execute.js       卡片执行与自动回传倒计时
  *   07_render.js        渲染函数
+ *   08_settings.js      设置面板（System Prompt / 规则 / 工具 / 通用配置 / 会话记录）
+ *   09_skills.js        设置面板「技能」区块（技能上下线、工具开关、SKILL.md 编辑）
  * 本文件仅负责把这些分片装配成 createApp 的选项并挂载。
  */
 (function () {

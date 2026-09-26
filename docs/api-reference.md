@@ -10,10 +10,10 @@
 
 ### GET /tools
 
-返回当前**已上线**的工具列表（内置 + 自定义 + 在线的外部工具）。
+返回当前**已上线**的工具列表（内置 + 自定义 + 外部工具）。
 
 - 下线工具不返回，因此不会进入 System Prompt，也无法调用。
-- 自愈工具（`read_tool_source` / `hot_reload_fix`）始终在线。
+- 外部工具只要已注册就出现在目录中；其提供方是否轮询不影响可见性。
 - `run_command` 额外带 `languages` 字段。
 
 ```json
@@ -55,7 +55,7 @@
 |---|---|---|
 | `parameter` | 参数缺失/类型错/取值非法 | 改参数重试，**不要**改代码 |
 | `environment` | 路径/权限/文件不存在 | 确认路径权限后重试 |
-| `tool_internal` | 工具实现代码缺陷 | 用 `read_tool_source` + `hot_reload_fix` 自愈 |
+| `tool_internal` | 工具实现代码缺陷 | 改参数无效，需检查工具实现 |
 | `unknown_tool` | 工具名不存在 | 从工具目录选正确名称 |
 | `disabled` | 工具已下线 | 改用其它工具或上线该工具 |
 
@@ -74,20 +74,35 @@ POST 请求体示例：
 
 响应：`{ success, saved, changed: [...], requireRestart }`。
 - `flask.host/port` 改动 `requireRestart=true`（需重启进程）。
-- 其它改动即时生效（tools_impl 每次调用现读 config.yaml）。
-
-### POST /hot_fix
-
-等价于 `hot_reload_fix` 工具，对工具实现文件打补丁并热重载，失败自动回滚。
-请求体：`{ file_path?, old_str?, new_str?, content? }`。
-`file_path` 省略时默认 `tools_impl.py`；`tool_helpers.py` 与 `tool_meta.py` 同样支持热重载。
+- 其它改动即时生效：POST 会同步更新 `runtime.CONFIG` 内存并写回 `config.yaml`；
+  `run_command` 的语言列表每次调用现读配置文件。
 
 ### GET /prompt_sections
 
-返回各技能注入 System Prompt 的说明段落。
+返回各技能注入 System Prompt 的说明段落、本机技能清单与设置页管理视图。
+- `sections`：已上线技能的统一说明，来自技能 `tool.json` 顶层的 `prompt` 字段。
+- `skills`：已上线技能清单（仅含带说明文档、且至少有一个已上线工具的技能）。
+- `skillsManage`：设置页「技能」区块的管理视图，覆盖全部技能（含已下线），不参与 System Prompt 注入。
 ```json
-{ "success": true, "sections": [ { "skill": "debug_chrome", "text": "..." } ] }
+{
+  "success": true,
+  "sections": [ { "skill": "debug_chrome", "text": "..." } ],
+  "skills": [ { "name": "debug_chrome", "summary": "...", "tools": ["get_element_style"] } ],
+  "skillsManage": [ { "name": "debug_chrome", "summary": "...", "tools": [ ... ],
+                       "tool_count": 3, "enabled_count": 2, "doc_file": "SKILL.md" } ]
+}
 ```
+
+### PUT /skills/&lt;skill&gt;/enabled
+
+技能一键上 / 下线：批量设置该技能下全部工具的 `enabled`，并刷新提供方注册表。
+请求：`{ "enabled": true }`。返回：`{ ok, skill, enabled, changed }`（`changed` 为受影响工具名列表）。
+
+### GET/PUT /skills/&lt;skill&gt;/doc
+
+技能说明文档（默认 `SKILL.md`）的读取与写回。
+- GET `?file=SKILL.md`：读取文档文本，返回 `{ ok, ... }`。
+- PUT `{ file, text }`：写回文档文本。
 
 ### GET /
 
@@ -147,25 +162,28 @@ POST 请求体示例：
 
 ## 四、外部卡片（/api/cards）
 
+外部卡片采用「发送即结束」：登记即返回，不阻塞、不等待回填，因此不存在超时失败。
+任务进展由网页 AI 通过 `push_message` 主动推送给发起方。
+
 ### POST /api/cards
 
-创建一张外部卡片并**阻塞等待**。
-请求：`{ type, title, content, payload?, timeout_ms? }`（`content` 必填且为字符串）。
+创建一张外部卡片并**立即返回**。
+请求：`{ type, title, content, payload? }`（`content` 必填且为字符串）。
 
-- 成功：`{ success: true, id, result }`
-- 超时：`{ success: false, id, error: "TIMEOUT" }`
+- 成功：`{ success: true, id, status }`
+- 失败：`{ success: false, error: "INVALID_CARD" }`（content 缺失或非字符串）
 
-> 注意：在当前「发送即结束」模型下，卡片被投递后镜像插件会立即回填确认，故该请求通常很快返回。
-> 发给网页 AI 的输入信封为 `{ type, request }`，**不携带 id**（已取消等待回复，无需配对）。
-> 卡片自身的 uuid 仅用于轮询去重与回填确认（`/api/cards/<id>/reply`）。
+> 发给网页 AI 的输入信封为 `{ type, request }`，不携带 id。
+> 卡片自身的 uuid 仅用于轮询去重。
 
 ### GET /api/cards/pending
 
-镜像插件轮询，取走尚未投递的卡片（`{ success, cards: [...] }`），取走后标记为已投递。
+镜像插件轮询，取走尚未确认「已展示」的卡片（`{ success, cards: [...] }`）。
+在收到确认前，任何客户端都可反复取走同一张卡片；接收方按 id 去重。
 
-### POST /api/cards/&lt;id&gt;/reply
+### POST /api/cards/&lt;id&gt;/delivered
 
-回填结果，唤醒挂起的创建请求。请求：`{ "result": ... }`。
+确认卡片已由某客户端生成并展示，此后不再投递。重复调用幂等。
 
 ### GET /api/cards/&lt;id&gt;
 
@@ -186,7 +204,10 @@ POST 请求体示例：
 
 命令结构：`{ request_id, tool, params, silent }`。
 
-> 提供方在线判定：3 秒内有过 `poll`。离线时调用其外部工具返回 `ProviderOffline`（origin=environment）。
+> `silent=true` 仅表示提供方不在界面生成工具卡片；无论 silent 与否，提供方都需回传真实执行结果。
+
+> 在线判定（10 秒内有过 `poll`）仅用于界面「已连接」指示灯，不参与执行判断。
+> 外部工具调用一律入队等待提供方取走执行；等待上限内未取走才返回 `ForwardTimeout`（origin=environment）。
 
 ---
 
@@ -195,9 +216,10 @@ POST 请求体示例：
 | 工具 | 必填参数 | 可选参数 |
 |---|---|---|
 | `list_dir` | `target_directory` | `ignore_globs` |
-| `search_file` | `target_directory`, `pattern` | `recursive`, `caseSensitive`, `ignore_globs` |
-| `search_content` | `pattern` | `path`, `glob`, `contextAround`, `caseSensitive` |
-| `read_file` | `filePath`（绝对路径） | `offset`, `limit` |
+| `search_file` | `target_directory`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
+| `search_content` | `pattern` | `path`, `glob`, `contextAround`（上下文行数）, `caseSensitive` |
+| `read_file` | `filePath`（绝对路径原样，相对路径以工程根为基准） | `offset`, `limit` |
+| `list_skills` | — | — |
 | `read_skill` | `skill`, `file` | `offset`, `limit` |
 | `read_lints` | — | `paths`, `severity` |
 | `replace_in_file` | `filePath`, `old_str` | `new_str` |
@@ -207,7 +229,5 @@ POST 请求体示例：
 | `list_rules` | — | — |
 | `read_rule` | `name` | — |
 | `run_command` | `language`, `command` | `cwd`, `timeout` |
-| `read_tool_source` | `tool` | — |
-| `hot_reload_fix` | `old_str`, `new_str` | `file_path`, `content` |
 
 > 参数名不统一是刻意的（如 `list_dir` 用 `target_directory`、`read_file` 用 `filePath`）。调用前请先 `get_tool_params` 核对。

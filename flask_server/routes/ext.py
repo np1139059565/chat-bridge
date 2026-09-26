@@ -19,7 +19,14 @@ def provider_channel(provider):
     action = data.get("action")
 
     if action == "poll":
-        commands = hub.poll(provider)
+        # page_url 与 is_open 由扩展心跳带上：page_url 用于把命令定向到发起页面，
+        # is_open 表示本页面工具（抽屉）是否打开。命令只认「目标页面工具已打开」，
+        # 目标没开就直接逸散到其他页面，不再依赖时间窗猜测。
+        commands = hub.poll(
+            provider,
+            page_url=data.get("page_url") or "",
+            is_open=bool(data.get("is_open", True)),
+        )
         return jsonify({"success": True, "commands": commands})
 
     if action == "result":

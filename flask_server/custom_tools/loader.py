@@ -9,8 +9,6 @@ YAML 标量级处理（去注释 / 标量转换 / 引号转义）复用 yaml_uti
 与 config.yaml 侧共用同一套规则。
 """
 import json
-import os
-import subprocess
 from pathlib import Path
 
 import yaml_utils
@@ -350,8 +348,7 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen):
         # executor=external 的工具不在本地执行，转发给 provider
         "executor": executor,
         "provider": (raw.get("provider") or provider),
-        # silent：一次性副作用工具（如推送消息），其调用结果不回传网页 AI，
-        # 也不在扩展侧生成卡片；仅完成动作本身。
+        # silent：仅在界面（抽屉 / 卡片区）不生成工具卡片（如推送消息）；结果照常回传。
         "silent": bool(raw.get("silent")),
         "enabled": False,
     }

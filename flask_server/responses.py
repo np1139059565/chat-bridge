@@ -29,7 +29,7 @@ def disabled_resp(name):
 def exception_payload(e, include_tool=None):
     """构造异常响应体：分类 + 定位 + 完整堆栈 + 提示。
 
-    工具调用失败与 /hot_fix 失败共用同一结构，便于 AI 用同一套规则解读。
+    所有工具调用失败共用同一结构，便于 AI 用同一套规则解读。
     @param e 捕获到的异常
     @param include_tool 需要回填的 tool 字段；None 表示不含该字段
     """

@@ -34,28 +34,26 @@
   }
 
   D.createApi = function (ctx) {
-    async function send() {
-      const text = ctx.draft.value.trim();
-      if (!text || !ctx.connected.value) return;
-      const userMsg = {
-        id: D.generateId(),
-        role: 'user',
-        text,
-        elements: ctx.selectedElements.value.slice(),
-        timestamp: Date.now(),
-      };
-      D.dedupPush(ctx.messages, [userMsg]);
-      ctx.draft.value = '';
-      ctx.selectedElements.value = [];
-      window.parent.postMessage({ type: 'ai-debug-clear-elements', source: 'ai-debug-drawer' }, '*');
-      ctx.scrollToBottom();
-
+    /**
+     * 组装并投递一张外部卡片。发送与重新发送共用此逻辑，避免两处实现漂移。
+     * @param {string} text 需求正文
+     * @param {Array} elements 已选元素列表
+     * @returns {Promise<boolean>} 是否登记成功
+     */
+    async function postCard(text, elements) {
+      // 剔除仅供本地还原用的备份字段 dom_html_full：它是完整 DOM，
+      // 若随卡片一起发出，体积又会回到压缩前，去重就白做了。
+      // 用浅拷贝剔除，不动原对象，保证本地仍可「还原」。
+      const wireElements = (elements || []).map((el) => {
+        const copy = Object.assign({}, el);
+        delete copy.dom_html_full;
+        return copy;
+      });
       const body = {
-        type: 'debug-chrome-req',
+        type: 'external-call',
         title: '样式调试需求',
-        content: buildCardContent(text, userMsg.elements, ctx.cfg.value.url_mappings),
-        payload: { elements: userMsg.elements, page_url: ctx.hostPageUrl.value },
-        timeout_ms: 120000,
+        content: buildCardContent(text, wireElements, ctx.cfg.value.url_mappings),
+        payload: { elements: wireElements, page_url: ctx.hostPageUrl.value },
       };
       try {
         const res = await fetch(`${ctx.backendUrl.value}/api/cards`, {
@@ -65,13 +63,50 @@
         });
         const data = await res.json();
         if (!data.success) {
-          // 外部卡片采用「发送即结束」：成功时不追加任何提示消息，
-          // 真正的进展由网页 AI 用 push_message 主动推送到本抽屉。
           ctx.showToast('卡片发送失败：' + (data.error || '未知错误'));
+          return false;
         }
+        // 外部卡片采用「发送即结束」：登记成功即完成，无需等待。
+        // 真正的任务进展由网页 AI 用 push_message 主动推送到本抽屉。
+        return true;
       } catch (e) {
         ctx.showToast('发送失败：无法连接到工具服务');
+        return false;
       }
+    }
+
+    async function send() {
+      const text = ctx.draft.value.trim();
+      if (!text) return;
+      const elements = ctx.selectedElements.value.slice();
+      // 先投递卡片，再记录消息：这次请求本身就是最直接的连接测试。
+      // 成功才落消息、清空输入；失败则提示并保留输入，用户可重试。
+      const ok = await postCard(text, elements);
+      if (!ok) return;
+      const userMsg = {
+        id: D.generateId(),
+        role: 'user',
+        text,
+        elements,
+        timestamp: Date.now(),
+      };
+      D.dedupPush(ctx.messages, [userMsg]);
+      ctx.draft.value = '';
+      ctx.selectedElements.value = [];
+      window.parent.postMessage({ type: 'ai-debug-clear-elements', source: 'ai-debug-drawer' }, '*');
+      ctx.scrollToBottom();
+    }
+
+    /**
+     * 重新发送某条已发出的用户消息。
+     * 用于 chat-bridge 未收到消息（例如当时后端未就绪）时补发，
+     * 不新增消息条目，也不改动原始已选元素。
+     * @param {Object} msg 用户消息对象（须含 text 与 elements）
+     */
+    async function resendMessage(msg) {
+      if (!msg) return;
+      // 与首次发送一致：直接投递，用请求本身的成败判断连接。
+      await postCard(String(msg.text || ''), msg.elements || []);
       ctx.scrollToBottom();
     }
 
@@ -80,7 +115,6 @@
       // 工具卡片与消息同属会话内容，一并清空
       if (ctx.toolCards) ctx.toolCards.value = [];
       D.MSG_ID_SET.clear();
-      ctx.showToast('会话记录已清空');
     }
 
     async function saveCfg() {
@@ -126,6 +160,6 @@
       document.body.removeChild(ta);
     }
 
-    return { fetchHistory: async () => {}, send, clearHistory, saveCfg, loadCfgFromBackend, copyPatch };
+    return { fetchHistory: async () => {}, send, resendMessage, clearHistory, saveCfg, loadCfgFromBackend, copyPatch };
   };
 })();

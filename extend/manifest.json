@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AI 工具调用镜像插件",
   "version": "1.0.0",
-  "description": "悬浮对话框与网页 AI 对话页形成双向镜像通道，自动提取 tool 代码块并调用本地 Flask 工具服务执行。",
+  "description": "悬浮对话框与网页 AI 对话页形成双向镜像通道，自动提取工具调用代码块并调用本地 Flask 工具服务执行。",
   "permissions": [
     "storage",
     "activeTab",

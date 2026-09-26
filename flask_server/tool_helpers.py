@@ -4,17 +4,15 @@
 
 - ToolParamError   参数错误异常（与「工具内部代码缺陷」区分）
 - PROJECT_ROOT / SKILLS_ROOT  路径基准
-- abspath / require_abspath   路径解析与绝对路径校验
+- abspath                    路径解析（相对路径以工程根为基准）
 - resolve_skill_file          skill 内相对路径解析与越界校验
 - normalize_aliases / require 参数别名归一与必填校验
 - max_json_chars / dump_len / enforce_size_limit  结果 JSON 体积上限控制
 
-拆出本模块的目的：tools_impl.py 需要保留为「可整体热重载的单元」
-（hot_reload_fix 通过 importlib.reload 重建其 TOOLS / DISPATCH），
-因此只把不随调用变化的通用辅助下沉到这里，保持热重载语义不变。
+拆出本模块的目的：把不随调用变化的通用辅助与工具实现分离，
+使 tools_impl.py 只聚焦 t_xxx 实现与派发表。
 """
 import json
-import os
 from pathlib import Path
 
 import yaml_utils
@@ -41,18 +39,6 @@ def abspath(p):
     return (PROJECT_ROOT / p).resolve()
 
 
-def require_abspath(p):
-    """要求入参必须是绝对路径（read_file 专用）。
-
-    read_file 不做「相对路径隐式以工程根为基准」的特殊处理，避免耦合。
-    提示只陈述「需要绝对路径」这一事实，不臆测调用方的意图。
-    """
-    p = Path(p)
-    if not p.is_absolute():
-        raise ToolParamError("需要绝对路径，收到的是相对路径：%s" % p)
-    return p.resolve()
-
-
 def _require_single_dir_name(skill):
     """校验 skill 名：非空、单层目录名（防止用 ../ 越出 skills 目录）。"""
     skill = str(skill or "").strip()
@@ -66,6 +52,65 @@ def _list_available_skills():
     if not SKILLS_ROOT.is_dir():
         return []
     return sorted([d.name for d in SKILLS_ROOT.iterdir() if d.is_dir()])
+
+
+def _first_content_line(text):
+    """取正文首个说明句：跳过 YAML front matter 与 Markdown 标题行，截断 120 字。
+
+    优先返回非标题的正文首行（标题通常是技能名本身，信息量低）；
+    若全文只有标题，则回退为标题文本。
+    """
+    lines = text.splitlines()
+    i = 0
+    # 跳过以 --- 包裹的 YAML front matter，避免把元数据当成正文摘要
+    if lines and lines[0].strip() == "---":
+        i = 1
+        while i < len(lines) and lines[i].strip() != "---":
+            i += 1
+        i += 1
+    fallback = ""
+    for line in lines[i:]:
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            # 标题行：仅作为兜底候选，继续找正文
+            if not fallback:
+                fallback = s.lstrip("#").strip()
+            continue
+        return s[:120]
+    return fallback[:120]
+
+
+def skill_summary(skill_dir):
+    """取技能摘要：优先 SKILL.md，其次 README.md，取正文首个非空行。"""
+    for name in ("SKILL.md", "README.md"):
+        f = skill_dir / name
+        if not f.is_file():
+            continue
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        summary = _first_content_line(text)
+        if summary:
+            return summary
+    return ""
+
+
+def list_skills():
+    """列出本机可用技能：[{name, summary}]，仅含带说明文档（SKILL.md / README.md）的目录。"""
+    if not SKILLS_ROOT.is_dir():
+        return []
+    out = []
+    for d in sorted(SKILLS_ROOT.iterdir(), key=lambda x: x.name):
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        summary = skill_summary(d)
+        if not summary:
+            continue
+        out.append({"name": d.name, "summary": summary})
+    return out
 
 
 def resolve_skill_file(skill, rel):
@@ -114,7 +159,7 @@ def require(p, *names):
     """校验必填参数；缺失 / 空串时抛 ToolParamError，并明确告知正确参数名。
 
     目的是避免 AI 臆造别名（如把 target_directory 写成 path）后工具静默用默认值、
-    返回成功却结果错误，导致自愈流程因「没抛异常」而永远不触发。
+    返回成功却结果错误，使调用方无从察觉参数用错。
     """
     for n in names:
         v = p.get(n)

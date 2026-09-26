@@ -331,9 +331,9 @@ flask_server\
   - `server.py` 从 740 行降至 27 行，已移出超大文件清单
 
 - 2.5 说明：tools_impl.py 需保留为「可整体热重载的单元」（hot_reload_fix 通过 importlib.reload 重建其 TOOLS / DISPATCH），因此不按工具类别拆成多个实现文件，而是下沉「不随调用变化的辅助」与「元数据声明」，使实现文件聚焦于 t_xxx 函数：
-  - `tool_helpers.py`（160 行）通用辅助：ToolParamError / PROJECT_ROOT / SKILLS_ROOT / abspath / require_abspath / resolve_skill_file / normalize_aliases / require / max_json_chars / dump_len / enforce_size_limit
+  - `tool_helpers.py`（通用辅助）：ToolParamError / PROJECT_ROOT / SKILLS_ROOT / abspath / resolve_skill_file / normalize_aliases / require / max_json_chars / dump_len / enforce_size_limit
   - `tool_meta.py`（108 行）内置工具元数据声明（描述 + 参数表）
-  - `tools_impl.py`（583 → 370 行）保留 t_xxx 实现与 DISPATCH；从 tool_helpers 重导出 ToolParamError 等，保证 impl.ToolParamError 既有引用不变
+  - `tools_impl.py` 保留 t_xxx 实现与 DISPATCH；从 tool_helpers 重导出 ToolParamError 等，保证 impl.ToolParamError 既有引用不变
 - 关键改动：`self_healing._reload_impl` 增加对 tool_helpers / tool_meta 的重载（先辅助与元数据，再实现模块），保证 AI 修补这三个文件中的任意一个都能即时生效。
 - 改动文件：新增 `tool_helpers.py`、`tool_meta.py`；重写 `tools_impl.py`；修改 `self_healing.py`（重载范围 + 补 sys 导入）。
 - 验证结果：
@@ -426,6 +426,11 @@ flask_server\
 - 最终状态：后端全部 `.py` 文件注释占比 ≥ 15%（不达标文件数 = 0）
 
 ### 全批次完成总结
+
+> 现状说明：本计划执行期间曾引入 `self_healing.py` 自愈 / 热重载机制与 `/hot_fix` 接口，
+> 该机制在后续版本中已移除——当前 `flask_server/` 下不存在 `self_healing.py`，
+> `routes/prompts.py` 也不再提供 `/hot_fix`，内置工具改动需重启服务。
+> 下文批次记录中的相关描述反映当时的中间状态，不作为当前实现的依据。
 
 - 完成状态：批次 1、2、3、4 全部完成，无未完成项、无阻塞项。
 - 最终验证（一次性跑通）：

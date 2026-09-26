@@ -26,15 +26,14 @@ chat-bridge-main/
 │   ├── runtime.py           # 运行期全局状态中心：app / impl / TOOLS / DISPATCH / CONFIG
 │   ├── config_store.py      # config.yaml 读写与合并
 │   ├── error_utils.py       # 错误分类与定位
-│   ├── self_healing.py      # 自愈工具与热重载（read_tool_source / hot_reload_fix）
 │   ├── responses.py         # 错误响应辅助
 │   ├── tool_helpers.py      # 工具通用辅助：参数校验、路径解析、体积控制
 │   ├── tool_meta.py         # 内置工具元数据声明（描述 + 参数表）
-│   ├── tools_impl.py        # 内置工具实现（可整体热重载的单元）
+│   ├── tools_impl.py        # 内置工具实现
 │   ├── yaml_utils.py        # YAML 标量原语（合并原两套实现）
 │   ├── routes/              # 各功能域蓝图
 │   │   ├── tools.py         # /tools、/tool
-│   │   ├── prompts.py       # /prompt_sections、/hot_fix、/（首页）
+│   │   ├── prompts.py       # /prompt_sections、/（首页）
 │   │   ├── config_route.py  # /config
 │   │   ├── custom_tools.py  # /custom_tools 系列
 │   │   ├── rules.py         # /rules 系列
@@ -45,11 +44,12 @@ chat-bridge-main/
 │   │   ├── loader.py        # custom_tools.yaml 与 tool.json 解析、命令拼装
 │   │   ├── registry.py      # 注册表读写、安装/删除/更新、本地执行
 │   │   ├── meta.py          # 对外视图（provider 分组、说明段落、元数据）
-│   │   └── scan.py          # 目录扫描
+│   │   ├── scan.py          # 目录扫描
+│   │   └── skill_docs.py    # 技能内文档（SKILL.md 等）的读取与写回
 │   ├── external_tools.py    # 外部工具提供方注册表：队列、心跳、转发与等待
-│   ├── card_bus.py          # 卡片总线：登记 / 投递 / 回填 / 超时
+│   ├── card_bus.py          # 卡片总线：登记 / 投递 / 确认已展示
 │   ├── rules.py             # 规则（rules/*.md）与优先级
-│   ├── prompt_sections.py   # 技能说明段落收集
+│   ├── prompt_sections.py   # 技能说明与技能清单收集
 │   ├── config.yaml          # 配置唯一来源
 │   └── custom_tools.yaml    # 已安装自定义工具清单（自动维护）
 ├── extend/                  # 镜像插件（Chrome MV3）
@@ -57,8 +57,7 @@ chat-bridge-main/
 │   ├── background.js        # 工具栏图标切换抽屉显隐
 │   ├── lib/                 # 公共前端模块
 │   │   ├── vue.global.prod.js
-│   │   ├── dom-utils.js     # debounce / hashStr / textOf
-│   │   └── url-utils.js     # normalizeUrl
+│   │   └── dom-utils.js     # debounce / hashStr / textOf
 │   ├── content/             # 内容脚本（按序号加载的分片）
 │   │   ├── 00_state.js      # 命名空间 A、共享 state、站点规则 PROFILES、日志
 │   │   ├── 01_panel.js      # 面板注入与外观、post 通道
@@ -69,7 +68,7 @@ chat-bridge-main/
 │   └── dialog/              # 抽屉页面
 │       ├── dialog.html
 │       ├── app.js           # 装配入口（createApp + 组件装配）
-│       ├── parts/           # 抽屉逻辑分片（00_data ~ 08_settings）
+│       ├── parts/           # 抽屉逻辑分片（00_data ~ 09_skills，含 07_render）
 │       └── styles/          # 样式分片（00_tokens ~ 05_narrow）
 ├── skills/                  # 标准 skill（自定义工具来源）
 │   └── debug_chrome/        # 页面调试扩展
@@ -77,11 +76,14 @@ chat-bridge-main/
 │       ├── SKILL.md         # 技能说明（信封结构与处理规则）
 │       ├── README.md
 │       └── extension/       # 调试扩展代码
-│           ├── content/     # 内容脚本（00_namespace ~ 07_index）
-│           ├── drawer/      # 抽屉脚本分片
+│           ├── manifest.json
+│           ├── service_worker.js
+│           ├── drawer.html
+│           ├── content/     # 内容脚本（00_namespace ~ 08_injected_main）
+│           ├── drawer/      # 抽屉脚本分片（00_config ~ 05_main）
 │           ├── drawer-styles/  # 抽屉样式分片（00_tokens ~ 06_focus）
 │           ├── shared/      # 共享模块（url-utils.js）
-│           └── vendor/      # 前端依赖
+│           └── vendor/      # 前端依赖（vue.global.prod.js）
 ├── rules/                   # 用户规则（*.md）+ _meta.json（优先级）
 └── docs/                    # 文档
 ```
@@ -96,7 +98,7 @@ chat-bridge-main/
 
 - 来源：网页 AI 在回答里输出的 `bridge-chat-call` 代码块，被 `extend/content/02_blocks.js` 抓取、`extend/dialog/parts/` 解析。
 - 执行：点击执行 → `POST /tool` → 工具服务执行内置/自定义/外部工具 → 结果回填 → 自动回传网页 AI。
-- 存储：`conv.cardMap[id]`，按会话隔离、可持久化、可在「历史卡片管理」中查看。
+- 存储：挂在消息树节点的 `node.cards`（按代码块 id 索引），由 `cardMap` computed 聚合查看；按会话隔离、可持久化。
 
 ### 2. 外部卡片（external card）
 
@@ -104,7 +106,7 @@ chat-bridge-main/
 - 执行：镜像插件把卡片内容封装成信封，自动发送到网页 AI；**发送即结束**，不等 AI 回传结果。
 - 存储：`conv.externalCards`（数组），按会话隔离、可持久化、可在「历史卡片管理」中查看。
 
-> 两类卡片的差异清单见 `docs/external-card-vs-tool-card.md`。
+> 两类卡片的核心差异：工具卡片由网页 AI 触发、需回传结果；外部卡片由外部提供方登记、发送即结束。
 
 ---
 
@@ -113,14 +115,14 @@ chat-bridge-main/
 ### 4.1 工具调用（网页 AI → 本地工具）
 
 ```
-网页 AI 输出 ```tool 代码块
+网页 AI 输出工具调用 JSON 代码块
   → content/02_blocks.js 抓取对话（含代码块）→ postMessage 给 iframe
   → dialog/parts/05_messages.js 解析为工具卡片（assistant 消息里的 bridge-chat-call）
   → 执行：POST /tool {tool, parameters}
       ├─ 内置工具：tools_impl.DISPATCH[name]
       ├─ 自定义工具 executor=script：custom_tools.run() 子进程
       └─ 自定义工具 executor=external：external_tools.hub.dispatch()
-            → 命令入提供方队列 → 提供方 poll 取走 → 执行 → result 回传 → 放行
+            → 命令一律入提供方队列（不看在线状态）→ 提供方 poll 取走 → 执行 → result 回传 → 放行
   → 结果回填卡片 → 自动回传网页 AI（auto_send）
 ```
 
@@ -130,9 +132,9 @@ chat-bridge-main/
 调试扩展抽屉 POST /api/cards（挂起）
   → card_bus 登记卡片
   → 镜像插件 GET /api/cards/pending 取走
-  → 抽屉内渲染外部卡片（与文字消息共用统一时间戳 _ts，统一排序）
+  → 抽屉内渲染外部卡片（按 anchorKey 锚点插入到对应消息之后）
   → 倒计时后 auto_send 信封 {type,request} 到网页 AI（不携带 id）
-  → 立即 POST /api/cards/<id>/reply 回确认（发送即结束）
+  → 卡片入列即 POST /api/cards/<id>/delivered 确认已展示（发送即结束）
   → 挂起的 POST /api/cards 立即返回
   → 后续进展由网页 AI 用 push_message 主动推送
 ```
@@ -150,11 +152,12 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 - **配置唯一来源**：`flask_server/config.yaml`，插件不持久化配置到浏览器（除面板挂靠侧、会话存档）。
 - **参数查询先行**：AI 调用工具前应先 `get_tool_params` 核对参数名（不同工具参数名不统一）。
-- **路径约定**：`read_file` 只接受绝对路径（不做相对工程根的隐式解析）；skill 文档统一用 `read_skill`（`skill` + skill 内相对 `file`）读取。
-- **单次一个工具块**：AI 每次回复只输出一个 ```tool 块。
-- **错误分类**：工具失败返回 `origin`（parameter / environment / tool_internal）+ 完整堆栈，供 AI 判断改参数还是改代码。
-- **自愈**：`read_tool_source` + `hot_reload_fix` 可改 `tools_impl.py` / `tool_helpers.py` / `tool_meta.py` 并热重载，失败自动回滚。
+- **路径约定**：文件类工具口径统一——绝对路径原样使用，相对路径以工程根为基准解析；skill 文档统一用 `list_skills` / `read_skill`（`skill` + skill 内相对 `file`）读取。
+- **单次一个工具块**：AI 每次回复只输出一个 JSON 代码块。
+- **错误分类**：工具失败返回 `origin`（parameter / environment / tool_internal）+ 完整堆栈，供 AI 判断是改参数、改路径，还是反馈工具实现问题。
+- **外部工具不因离线被拒**：在线状态只用于界面指示灯；调用一律入队等待提供方取走执行，等待上限内未取走才报超时。
 - **规则按需读取**：`list_rules` / `read_rule`，优先级 always / on-demand / off。
+- **技能按需读取**：`list_skills` / `read_skill`，先列可用技能再读取其文档。
 - **站点隔离**：镜像插件数据按 hostname 前缀存储（`aiMirrorConv_<site>__<conv>`）。
 
 ---
@@ -163,5 +166,4 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 - `docs/api-reference.md`：HTTP 接口清单。
 - `docs/development-guide.md`：运行、调试、常见任务、约定。
-- `docs/external-card-vs-tool-card.md`：两类卡片差异对照。
-- `docs/debug_chrome-plugin-plan.md`：调试能力挂靠方案（设计稿）。
+- `docs/refactor-plan.md`：代码走查与重构执行计划（含目录规划与批次记录）。

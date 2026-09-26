@@ -2,7 +2,7 @@
 路由：工具目录与工具调用
 
 - GET  /tools   返回已上线工具清单（内置 + 自定义 + 外部提供方）
-- POST /tool    调用工具（内置 / 自愈 / 自定义脚本 / 外部提供方）
+- POST /tool    调用工具（内置 / 自定义脚本 / 外部提供方）
 """
 from flask import Blueprint, jsonify, request
 
@@ -19,8 +19,7 @@ def tools():
     """返回工具目录。
 
     只返回「已上线」的工具；下线工具不出现在 System Prompt，也无法调用。
-    自愈工具（read_tool_source / hot_reload_fix）永远在线；自定义工具（来自 skill）合并进来。
-    executor=external 的工具由其提供方在线时并入。
+    自定义工具（来自 skill）合并进来；executor=external 的工具由其提供方并入。
     """
     builtin = []
     for k, v in runtime.TOOLS.items():
@@ -41,7 +40,7 @@ def tools():
 
 
 def _call_builtin(name, params):
-    """调用内置工具（含自愈工具）。未注册或已下线时返回 None，交由调用方继续分派。"""
+    """调用内置工具。未注册或已下线时返回 None，交由调用方继续分派。"""
     fn = runtime.DISPATCH.get(name)
     if not fn:
         return None
@@ -54,35 +53,70 @@ def _call_builtin(name, params):
         return tool_error(name, e)
 
 
-def _call_external(name, ctool, params):
-    """转发给外部提供方并阻塞等待回传；提供方离线或转发失败时返回错误响应。"""
+def _validate_external_params(name, ctool, params):
+    """校验外部工具的必填参数。
+
+    外部工具由提供方（扩展）执行，转发前必须在此拦截缺失 / 空的必填参数，
+    否则错误参数会被原样转发、扩展侧取不到值也不报错，导致「静默失败」：
+    调用方以为成功，实际动作未生效。返回错误响应；参数合法返回 None。
+    """
+    missing = []
+    for p in ctool.get("parameters") or []:
+        if not p.get("required"):
+            continue
+        pname = p.get("name")
+        val = (params or {}).get(pname)
+        if val is None or (isinstance(val, str) and val.strip() == ""):
+            missing.append(pname)
+    if not missing:
+        return None
+    return jsonify(
+        success=False, tool=name,
+        error="缺少必填参数：%s" % "、".join(missing),
+        errorType="ToolParamError", origin="parameter",
+        originLabel=runtime.ORIGIN_LABEL.get("parameter", "parameter"),
+        hint=runtime.HINTS["parameter"],
+    ), 200
+
+
+def _call_external(name, ctool, params, page_url=""):
+    """转发给外部提供方并等待回传。
+
+    在线与否只作展示，不参与执行判断：请求一律入队等待，由提供方来取走执行。
+    等待上限（FORWARD_TIMEOUT）仅作保险丝，防止提供方始终不来取时无限期挂起。
+    page_url 为发起调用的页面地址，透传给命令队列用于把命令定向到该页面。
+    """
+    param_err = _validate_external_params(name, ctool, params)
+    if param_err is not None:
+        return param_err
     provider = (ctool.get("provider") or "").strip()
-    if not provider or not external_tools.hub.is_online(provider):
+    if not provider:
         return jsonify(
             success=False, tool=name,
-            error="提供方离线，无法执行外部工具: %s" % name,
-            errorType="ProviderOffline", origin="environment",
+            error="外部工具未声明提供方: %s" % name,
+            errorType="ProviderMissing", origin="environment",
             originLabel=runtime.ORIGIN_LABEL.get("environment", "environment"),
-            hint="该工具由其提供方（扩展）执行，需提供方上线轮询后重试。",
+            hint="该外部工具缺少 provider 声明，无法确定执行方。",
         ), 200
     silent = bool(ctool.get("silent"))
-    ok, data = external_tools.hub.dispatch(provider, name, params, silent=silent)
+    ok, data = external_tools.hub.dispatch(provider, name, params, silent=silent, page_url=page_url)
     if not ok:
         return jsonify(
             success=False, tool=name,
-            error="外部工具转发失败: %s" % data,
-            errorType="ForwardError", origin="environment",
+            error="外部工具未在等待时限内被执行: %s" % name,
+            errorType="ForwardTimeout", origin="environment",
             originLabel=runtime.ORIGIN_LABEL.get("environment", "environment"),
-            hint="提供方未在超时内回传结果，请确认扩展在线后重试。",
+            hint="请求已排队但执行方未在时限内取走。请确认调试扩展已打开并停留在目标页面。",
         ), 200
-    # silent 工具：入队即结束，其结果不回传网页 AI
+    # silent 仅随结果回传，供前端决定不在抽屉生成工具卡片；结果本身照常回传。
     return jsonify(success=True, tool=name, result=data, silent=silent)
 
 
-def _call_custom(name, params):
+def _call_custom(name, params, page_url=""):
     """调用自定义工具（来自标准 skill 的 tool.json）。未注册返回 None。
 
     executor=external 走提供方转发；executor=script 走本地子进程执行。
+    page_url 仅对 external 工具有意义：透传给命令队列用于定向。
     """
     ctool = ct.get_tool(name)
     if not ctool:
@@ -90,7 +124,7 @@ def _call_custom(name, params):
     if not ct.is_enabled(name):
         return disabled_resp(name)
     if (ctool.get("executor") or "script") == "external":
-        return _call_external(name, ctool, params)
+        return _call_external(name, ctool, params, page_url=page_url)
     try:
         result = ct.run(ctool, params)
         return jsonify(success=True, tool=name, result=result)
@@ -119,13 +153,16 @@ def tool():
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("tool") or data.get("name")
     params = data.get("parameters") or data.get("arguments") or {}
+    # page_url：发起本次调用的页面地址，由对话框执行工具时带上。
+    # 外部工具据此把命令定向回该页面，避免双开时命令串到别的页面。
+    page_url = data.get("page_url") or ""
 
-    # 1) 内置工具（含自愈工具）
+    # 1) 内置工具
     resp = _call_builtin(name, params)
     if resp is not None:
         return resp
     # 2) 自定义工具
-    resp = _call_custom(name, params)
+    resp = _call_custom(name, params, page_url=page_url)
     if resp is not None:
         return resp
     # 3) 未知工具

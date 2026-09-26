@@ -55,14 +55,15 @@
    */
   A.getConversationId = function () {
     const P = A.activeProfile();
-    // 1) 优先从 URL 提取会话 id（各站正则不同，写在 profile 里）
+    // 会话 id 只从 URL 提取（各站正则不同，写在 profile 里）。
+    // 不使用「左侧选中项标题指纹」作为退路：标题文本会随未读标记、时间等变化，
+    // 同一会话刷新后会算出不同指纹，存档键随之漂移，导致历史与卡片执行状态
+    // 读不回来。取不到 id 时返回空串，由上层落到 __default__，
+    // 待 URL 给出真实 id 后再把 __default__ 的记录迁移过去。
     if (P.convIdUrl) {
       const m = new RegExp(P.convIdUrl).exec(location.href);
       if (m && m[1]) return 'cid:' + m[1];
     }
-    // 2) 退回：用左侧被选中会话项的标题做指纹
-    const sel = A.selectedHistoryItem();
-    if (sel) return 'h:' + A.hashStr(A.textOf(sel));
     return '';
   };
 
@@ -79,29 +80,33 @@
    * 结构化提取当前对话并推送给对话框。
    * 每次推送都重新算会话 id，避免切会话后内容仍被归到上一个会话名下。
    * @param {boolean} force 是否强制推送（忽略内容未变化判断）
+   * @param {string} [reason] 触发来源：'generate'（AI 新增对话）/
+   *   'scroll'（可视区滚动）/ 'switch'（切换会话）/ 'manual'（手动解析）。
+   *   仅作标签透传给消费端，不改变推送内容本身。
    */
-  A.sendPage = function (force) {
-    if (!A.state.containerEl) { A.log('sendPage: 对话容器未就绪，跳过推送'); return; }
+  A.sendPage = function (force, reason) {
+    // 面板未打开：不解析也不推送。打开时会由 activate() 主动补一次全量解析。
+    if (!A.state.active) return;
+    if (!A.state.containerEl) return;
     const convId = A.getConversationId();
     const convChanged = !!convId && convId !== A.state.currentConvId;
     if (convChanged) A.state.currentConvId = convId;
 
     const messages = A.extractBlocks(A.state.containerEl);
     const key = convId + '|' + JSON.stringify(messages);
-    if (!force && !convChanged && key === A.state.lastPageKey) {
-      A.log('sendPage: 内容未变化，跳过重复推送');
-      return;
-    }
+    // 内容未变化且非强制推送时直接返回：滚动期间会反复触发，去重可省下大量解析与消息投递
+    if (!force && !convChanged && key === A.state.lastPageKey) return;
     A.state.lastPageKey = key;
     A.log('sendPage: 推送结构化对话 force=' + !!force, '会话=' + convId, '消息数=' + messages.length);
     A.post({
       type: 'page_blocks',
       messages: messages,
-      url: location.href,
+      page_url: location.href,
       siteKey: A.state.siteKey,                       // 按站点隔离数据与设置
       profileId: A.state.profileId,
       conversationId: convId,
-      conversationTitle: A.getConversationTitle()
+      conversationTitle: A.getConversationTitle(),
+      reason: reason || 'manual'   // 触发来源标签，供消费端分流
     });
   };
 
@@ -140,7 +145,6 @@
       const key = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
       ta.dispatchEvent(new KeyboardEvent('keydown', key));
       ta.dispatchEvent(new KeyboardEvent('keyup', key));
-      A.post({ type: 'auto_send_result', ok: true, msg: '已回传结果到网页 AI' });
     }, 500);
   };
 })();

@@ -1,55 +1,58 @@
 // 模块：extend/dialog/parts/05_messages.js
-// 用途：消息与工具卡片相关逻辑：工具列表拉取、System Prompt 生成、
-//       网页消息接收与解析、卡片构建、对话记录导出、格式化辅助。
+// 用途：消息接收与消息树核心：工具列表拉取、网页消息接收与解析、
+//       分支组装、自动执行候选收集、助手回复质量检测。
+//       消息树写入口 upsertTree 在 05b_tree.js。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
+//
+// 数据模型：
+//   会话 = {
+//     title, page_url,
+//     msgTree:     { '<父id>-<子id>': 节点 },   // 唯一存完整信息处；根用哨兵 0
+//     visibleKeys: [ '<父id>-<子id>', ... ],     // 当前可见区切片（有序）
+//     branchKeys:  [ '<父id>-<子id>', ... ],     // 组装出的分支（有序）
+//     externalCards: [ ... ],                    // 外部卡片：不属于网页消息，单独存
+//     orphanSlice: [ 消息对象, ... ],            // 与历史断裂的切片，仅用于展示
+//     updatedAt
+//   }
+//   节点 = { role, name, blocks, deleted, cards }
+//     - blocks：消息内容块；代码块自带 id
+//     - deleted：删除标记（节点保留，树不断裂，列表不显示）
+//     - cards：{ 代码块id: 卡片状态 }
+//   顺序完全由 pid-id 结构决定。
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
   const log = D.log;
   const M = D.methods;
 
-  /** 拉取后端工具目录；失败时回退内置列表。随后刷新技能说明段落与 System Prompt。 */
+  /** 拉取后端工具目录；失败时回退内置列表。随后刷新技能数据与 System Prompt。 */
   M.fetchTools = async function () {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/tools', { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
+      const data = await D.apiFetch(this, '/tools', {
+        headers: { 'Accept': 'application/json' }
+      });
       this.tools = data.tools || data;
       this.flaskOk = true;
+      log('工具目录已从后端加载：' + this.tools.length + ' 个');
     } catch (e) {
       this.tools = D.FALLBACK_TOOLS;
       this.flaskOk = false;
       this.flaskError = String(e);
+      log('后端不可达，已回退内置工具目录：' + this.flaskError);
     }
-    // 工具上下线会改变技能说明段落的生效集合，故一并刷新后再生 System Prompt
+    // 工具上下线会改变技能说明的生效集合，故一并刷新技能数据后再生 System Prompt
     await this.loadPromptSections();
   };
 
-  /** 生成 System Prompt：含工具清单、调用格式、规则列表与技能说明。 */
-  M.generateSystemPrompt = function () {
-    const tools = this.tools || [];
-    // 工具列表只展示名称与描述；参数定义由 AI 在调用前通过 get_tool_params 自行查询。
-    // 这样 prompt 体积随工具数增长可控，也避免 AI 凭直觉臆造参数名。
-    const listLines = tools.map((t, i) => {
-      return `${i + 1}. ${t.name} — ${t.description}`;
-    }).join('\n');
-    // 规则列表：展示规则名、读取优先级与摘要；内容由 AI 通过 read_rule 按需读取。
-    // off 的规则不写入（视为关闭，AI 不应主动读取）。
-    const ruleLabel = (p) => ({ always: '总是', 'on-demand': '按需', off: '关闭' }[p] || '按需');
-    const ruleActive = (this.rules || []).filter((r) => r.priority !== 'off');
-    const ruleLines = ruleActive.map((r, i) => {
-      return `${i + 1}. [${ruleLabel(r.priority)}] ${r.name} — ${r.summary || ''}`;
-    }).join('\n') || '（暂无规则）';
-    return `本会话通过「AI 工具调用镜像插件」与本地工具服务联动。\n\n【工具调用格式】\n当你需要调用工具时，请在一个独立的代码块中返回 JSON，代码块语言标记为 tool，\n且必须携带 "type": "bridge-chat-call" 标记（插件仅识别带此标记的代码块）：\n\`\`\`tool\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-call",\n  "parameters": { "参数名": "参数值" }\n}\n\`\`\`\n插件会自动提取该代码块、调用本地服务执行，并把执行结果作为下一条消息回传给你，请据此继续完成任务。\n\n【执行结果回传格式】\n插件回传的结果是一段 JSON 文本，以 { 开始，无代码块围栏，形如（你无需再次调用，直接基于结果继续）：\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-res",\n  "success": true,\n  "result": ...\n}\n失败时同一结构返回，字段为 success: false 与 error 等诊断信息。\n\n【支持的工具】\n${listLines}\n\n【工具参数查询】\n工具的完整参数定义（参数名、类型、必填性、说明）不直接列在此处。\n调用任何工具前，请先用 get_tool_params 工具查询该工具的参数定义（传入参数 tool_id = 工具名称），获得完整 schema 后再用正确的参数名调用。\n\n【单次只生成一个代码块】\n每次回复只允许包含一个工具调用代码块（即一个 \`\`\`tool 块）。\n不要在一次回复里并列多个代码块，也不要把解释文字与工具调用混在同一回复中。\n完成当前工具调用、收到插件回传的结果后，再决定并执行下一步；需要多步操作时请分步进行，每一步单独回复一个代码块。\n这样插件才能稳定地以「提取 → 执行 → 回传结果」逐轮推进，避免并发多个调用导致结果错乱。\n\n请在涉及文件读取、搜索、写入、删除等需求时，主动使用上述工具，并始终以 tool 代码块格式发起调用。\n\n【规则 Rules】\n- 先调用 list_rules 查看有哪些规则（规则名 + 优先级 + 摘要）；\n- 再用 read_rule（参数 name=规则名）读取对应规则的完整内容，并遵守它。\n每条规则前标注了读取优先级：\n- [总是]：必须读取并始终遵守，开始任务前先用 read_rule 读取其内容。\n- [按需]：在相关场景下先调用 read_rule 读取后再执行，不要凭记忆臆测。\n- （优先级为「关闭」的规则不会出现在此列表，也不应主动读取。）\n\n\n【规则列表】\n${ruleLines}\n${this.promptSectionText()}`;
-  };
-
-  /** 技能说明区域：置于 System Prompt 最末尾，无段落时整块省略。 */
-  M.promptSectionText = function () {
-    const secs = this.promptSections || [];
-    if (!secs.length) return '';
-    const body = secs.map((s) => '### ' + (s.skill || '') + '\n' + (s.text || '')).join('\n\n');
-    return '\n【技能说明】\n' + body + '\n';
+  /**
+   * 应用宿主页面明暗主题。
+   * @param {string} t 'light' | 'dark'
+   */
+  M.applyTheme = function (t) {
+    const next = t === 'dark' ? 'dark' : 'light';
+    this.theme = next;
+    const root = document.documentElement;
+    if (root) root.setAttribute('data-theme', next);
   };
 
   /** 接收来自内容脚本的窗口消息（会话切换、页面结构化内容等）。 */
@@ -60,31 +63,38 @@
       this.panelSide = d.side === 'left' ? 'left' : 'right';
       return;
     }
+    if (d.type === 'host_theme') {
+      this.applyTheme(d.theme);
+      return;
+    }
+    if (d.type === 'panel_visible') {
+      log('收到面板可见性消息：' + (d.visible ? '打开' : '关闭'));
+      this.setPanelVisible(d.visible);
+      return;
+    }
     if (d.type === 'auto_send_result') {
-      this.toast(d.ok ? (d.msg || '已回传结果到网页 AI') : ('回传失败：' + (d.msg || '')));
       return;
     }
     if (d.type === 'page_blocks') {
-      // 先按站点切换（数据与设置都按站点隔离），再切会话，最后灌内容
-      // 注意：profileId 要在 applySite 之前赋值 —— applySite 内部会 loadConfig，
-      // 该站尚无存档时用内容脚本自动识别到的规则作为下拉框默认值。
+      // 先按站点切换（数据与设置都按站点隔离）
       if (d.profileId) this.profileId = d.profileId;
       this.applySite(d.siteKey);
-      this.applyConversation(d.conversationId, d.conversationTitle, d.url);
-      this.ingestMessages(d.messages);
+      // 先取历史（读 storage），拿到后再用切片处理
+      this.applyConversation(d.conversationId, d.conversationTitle, d.page_url, (ok) => {
+        if (!ok) return;
+        this.ingestMessages(d.messages, d.reason);
+      });
     }
   };
 
-  /** 判断某工具是否为 silent（一次性副作用，结果不回传网页 AI）。 */
+  /** 判断某工具是否为 silent（仅不在抽屉生成工具卡片；结果照常回传）。 */
   M.toolSilent = function (name) {
     const t = (this.tools || []).find((x) => x.name === name);
     return !!(t && t.silent);
   };
 
   /**
-   * 判断代码块是否为一次工具调用：内容是 { tool, parameters } 即算。
-   * 不再依赖语言标记 —— DeepSeek 的代码块是 .md-code-block > pre，
-   * 根本没有 language 标记，按 lang 过滤会导致工具调用完全识别不出来。
+   * 判断代码块是否为一次工具调用：内容是 { tool, parameters } 且带 bridge-chat-call 即算。
    * 安全性由调用方保证：只有「助手消息」里的代码块才会被判为工具调用。
    */
   M.parseToolCall = function (block) {
@@ -93,7 +103,6 @@
     if (!src || src.charAt(0) !== '{') return null; // 快速排除非 JSON
     try {
       const obj = JSON.parse(src);
-      // type 过滤：只有 bridge-chat-call 才是工具调用，其余代码块按普通代码渲染
       if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
         return { tool: String(obj.tool), parameters: obj.parameters || {} };
       }
@@ -101,194 +110,309 @@
     return null;
   };
 
-  /** 灌入一批网页消息：打时间戳并为助手代码块建立卡片。 */
-  M.ingestMessages = function (messages) {
+  /**
+   * 判断一条消息是否为外部调用信封（external-call）。
+   * 外部卡片发送到网页后，会以一条 user 消息落在对话里；这条消息即卡片的
+   * 本体，用于在镜像区还原为卡片、在列表里做颜色标记。
+   * 信封可能被解析成 code 或 text 两种块形态，两者都识别。
+   * @param {Object} m 消息对象
+   * @returns {Object|null} { nonce, request }；非外部调用返回 null
+   */
+  M.parseExternalCall = function (m) {
+    if (!m || m.role !== 'user') return null;
+    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (!b) continue;
+      const src = String(b.code || b.text || '').trim();
+      if (!src || src.charAt(0) !== '{') continue;
+      try {
+        const obj = JSON.parse(src);
+        if (obj && typeof obj === 'object' && obj.type === 'external-call') {
+          return {
+            nonce: obj.nonce || '',
+            request: obj.request || ''
+          };
+        }
+      } catch (e) { /* 非信封内容，继续找下一个块 */ }
+    }
+    return null;
+  };
+
+  /** 消息 id：直接复用内容指纹。指纹以 'm' 开头、不含分隔符 '-'。 */
+  M.msgId = function (m) {
+    return this.messageFingerprint(m);
+  };
+
+  // ============================ 消息树 ============================
+
+  /**
+   * 新建节点。
+   * @param {Object} msg 消息对象 { role, name, blocks }
+   * @returns {Object} 节点
+   */
+  M.makeNode = function (msg) {
+    return {
+      role: msg.role || '',
+      name: msg.name || '',
+      blocks: msg.blocks || [],
+      deleted: false,
+      cards: {}
+    };
+  };
+
+  /** 取某消息 id 在树中的 key（形如 '父id-子id'）；不存在返回空串。 */
+  M.keyOfId = function (tree, id) {
+    if (!tree || !id) return '';
+    const keys = Object.keys(tree);
+    for (let i = 0; i < keys.length; i++) {
+      const cut = keys[i].indexOf('-');
+      if (cut >= 0 && keys[i].slice(cut + 1) === id) return keys[i];
+    }
+    return '';
+  };
+
+  /** 取某消息 id 在树中的父 id；不存在返回空串。 */
+  M.parentIdOf = function (tree, id) {
+    const k = this.keyOfId(tree, id);
+    return k ? k.slice(0, k.indexOf('-')) : '';
+  };
+
+  /**
+   * 依据切片组装分支 key 列表。
+   * 以切片末条为「最新」：沿消息树从它回溯到根，得到从根到它的路径。
+   * @param {Object} conv 会话记录
+   * @param {Array} slice 有序消息（当前切片）
+   * @returns {Array<string>} 分支 key 列表（有序）
+   */
+  M.assembleBranchKeys = function (conv, slice) {
+    const tree = conv.msgTree || {};
+    const list = slice || [];
+    if (!list.length) return [];
+    const lastId = this.msgId(list[list.length - 1]);
+    const path = [];
+    const seen = {};
+    let cur = lastId;
+    while (cur && !seen[cur]) {
+      seen[cur] = true;
+      const k = this.keyOfId(tree, cur);
+      if (!k) break;
+      path.unshift(k);
+      const pid = k.slice(0, k.indexOf('-'));
+      if (pid === '0') break;
+      cur = pid;
+    }
+    return path;
+  };
+
+  /**
+   * 把一张工具卡片纳入「本轮可自动执行」候选池。
+   * 只收集未执行、未跳过、未在倒计时中的卡片；镜像里没有对应代码块的（幽灵卡片）不进入。
+   * @param {Array} pool 候选池（就地追加）
+   * @param {Object} card 工具卡片
+   */
+  M.collectAutoCandidate = function (pool, card) {
+    if (!card || !card.isTool) return;
+    if (card.executed || card.skipped || card._cdTimer) return;
+    if (!this.cardInMirror(card)) return;
+    if (pool.indexOf(card) >= 0) return;
+    pool.push(card);
+  };
+
+  /**
+   * 灌入一批网页消息。
+   * 顺序：写消息树 → 记录可见区 key → 组装分支 → 为代码块建卡 → 自动执行 / 冲突回报 → 落盘。
+   * @param {Array} messages 本次网页推送的消息（有序）
+   * @param {string} [reason] 触发来源：'generate' / 'scroll' / 'switch' / 'manual'
+   */
+  M.ingestMessages = function (messages, reason) {
     const conv = this.curConv;
-    log('ingestMessages 收到', (messages || []).length, '条消息（会话=' + this.activeConv + '）');
-    conv.messages = messages || [];
-    // 给每条消息打统一时间戳：首次出现时取当前时间，之后沿用（网页重绘不打乱顺序）。
-    // 消息与外部卡片共用同一时间源，渲染时统一排序、不做任何类型区分。
-    this.assignMsgTs(conv);
-    conv.messages.forEach((m) => {
-      (m.blocks || []).forEach((b) => {
-        if (b.type !== 'code' || !b.id) return;
-        // 已存在：保留执行状态（结果 / 错误 / 是否已执行过）
-        if (conv.cardMap[b.id]) return;
-        // 只把「助手回答」里的代码块当成可执行的工具调用。
-        // 用户消息里的 System Prompt 自带 ```tool 示例块，绝不能生成卡片。
+    const scrollOnly = reason === 'scroll';
+    // 块列表归一化：非数组统一转成数组，避免后续遍历抛错
+    (messages || []).forEach((m) => {
+      if (!m) return;
+      if (!Array.isArray(m.blocks)) {
+        m.blocks = (m.blocks && typeof m.blocks === 'object') ? Object.values(m.blocks) : [];
+      }
+    });
+    const incoming = (messages || []).filter((m) => m && m.blocks.length > 0);
+    if (!incoming.length) {
+      log('ingestMessages：切片为空，忽略');
+      return;
+    }
+    log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
+      + '，来源=' + (reason || 'generate') + '）');
+
+    // 1) 写入消息树
+    const up = this.upsertTree(conv, incoming, reason);
+
+    // 不入树（断裂 / 碰撞 / 单节点 / 中间命中）：仍建卡供手动操作，但不自动执行。
+    const notInTree = (up.mode === 'orphan' || up.mode === 'collision'
+      || up.mode === 'single' || up.mode === 'middle');
+    if (notInTree) log('本轮不入树（mode=' + up.mode + '）：建卡但跳过自动执行');
+
+    // 2) 记录可见区切片的 key（有序）
+    const visKeys = [];
+    incoming.forEach((m) => {
+      const k = this.keyOfId(conv.msgTree, this.msgId(m));
+      if (k) visKeys.push(k);
+    });
+    conv.visibleKeys = visKeys;
+
+    // 3) 组装分支：以切片末条为最新
+    conv.branchKeys = this.assembleBranchKeys(conv, incoming);
+
+    // 4) 为代码块建卡，并收集自动执行候选。
+    //   入树的消息：卡片写在节点上，并与切片消息共享同一份卡片表；
+    //   不入树的消息：卡片直接写在切片消息上（供手动操作）。
+    //   检测出的问题（多调用冲突 / 回复质量）不另立流程，直接作为该条卡片的结果。
+    const autoCandidates = [];
+    incoming.forEach((m, mi) => {
+      const key = this.keyOfId(conv.msgTree, this.msgId(m));
+      const node = conv.msgTree[key];
+      const holder = node || m;
+      holder.cards = holder.cards || {};
+      if (node) m.cards = holder.cards;
+      const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+      // 统计本条助手消息内的工具调用块数量：一次回复出现多个调用块属非法用法。
+      let toolCallCount = 0;
+      if (m.role === 'assistant') {
+        blocks.forEach((b) => {
+          if (b && b.type === 'code' && b.id && this.parseToolCall(b)) toolCallCount += 1;
+        });
+      }
+      // 本条消息的问题：多调用冲突优先，其次回复质量。二者都作为卡片的结果。
+      // 只在 AI 生产结束场景检测：其它场景要么是回看历史，要么是切换 / 手动解析，
+      // 都不该给已有卡片贴问题标签。
+      let issue = null;
+      if (reason === 'generate') {
+        if (toolCallCount > 1) {
+          issue = {
+            error: 'multiple_tool_calls',
+            message: '本条回复包含多个工具调用代码块（共 ' + toolCallCount + ' 个）。'
+              + '请一次只返回一个调用块，收到结果后再决定下一步。'
+          };
+        } else if (m.role === 'assistant') {
+          issue = this.assistantQualityIssue(m);
+        }
+      }
+      blocks.forEach((b) => {
+        if (!b || b.type !== 'code' || !b.id) return;
+        const exist = holder.cards[b.id];
+        if (exist) {
+          // 已有卡片：补记问题、按需纳入自动候选
+          if (exist.isTool && issue && !exist.preIssue) exist.preIssue = issue;
+          if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
+          return;
+        }
+        // 只把「助手回答」里的代码块当成可执行的工具调用（用户消息里的示例块不建卡）
         const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
-        // silent 工具（如推送消息）为一次性副作用：执行后不回传结果，避免多一轮 AI 请求
         const silent = !!(call && this.toolSilent(call.tool));
-        conv.cardMap[b.id] = {
+        const card = {
           id: b.id,
           lang: b.lang || '',
-          phase: '',   // 自动流程阶段：'' / 'exec'(执行倒计时) / 'send'(回传倒计时)
+          phase: '',
           code: b.code || '',
           isTool: !!call,
           silent: silent,
+          // noReply：调用方显式声明「不需要结果回传」。
+          noReply: !!(call && call.parameters && call.parameters.no_reply === true),
           tool: call ? call.tool : '',
           parameters: call ? call.parameters : {},
           status: 'pending',
           result: null,
           error: null,
-          executed: false,   // 是否已被执行过（切换会话 / 刷新后据此恢复）
-          stack: null,       // 本地工具代码完整堆栈（失败自愈用）
+          executed: false,
+          // preIssue：建卡阶段检测出的问题。执行时直接作为结果，不去调工具。
+          preIssue: (call && issue) ? issue : null,
+          autoArmed: false,
+          stack: null,
           errorType: '',
-          origin: '',        // parameter / environment / tool_internal
+          origin: '',
           location: null,
           hint: '',
-          createdAt: Date.now()
+          nonce: ''
         };
-        // 开启自动回传时，新建的工具卡片自动倒计时触发执行（无需点击）
-        if (this.autoSendEnabled && !!call && !conv.cardMap[b.id].skipped) this.scheduleExecute(conv.cardMap[b.id]);
-        log('新建卡片', b.id, call ? '工具:' + call.tool : '代码:' + (b.lang || '无'));
+        holder.cards[b.id] = card;
+        if (call) {
+          if (scrollOnly) {
+            // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行。
+            if (mi === incoming.length - 1) card.autoArmed = true;
+          } else {
+            // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
+            // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象，
+            // 导致倒计时数字不刷新而执行仍照常发生。
+            this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
+          }
+        }
       });
     });
-    // 恢复进行中先不写盘：等 mergeCardMap 合并完再写，
-    // 避免把「尚未恢复的 pending 状态」写进存档把执行记录冲掉
-    if (this._restoring > 0) return;
+
+    // 5) 自动执行：仅本轮最新的一张；滚动轮次与不入树切片绝不自动执行
+    const runnable = autoCandidates.filter((c) => c && !c.skipped);
+    if (!scrollOnly && !notInTree && this.autoSendEnabled && runnable.length) {
+      // 候选按本轮建卡顺序追加，末位即最新
+      const newest = runnable[runnable.length - 1];
+      if (newest && !newest.skipped) this.scheduleExecute(newest);
+    }
+    // 预备标记只生效一次
+    autoCandidates.forEach((c) => { if (c) c.autoArmed = false; });
+
+    log('本轮处理完成：消息=' + incoming.length
+      + '，可见=' + conv.visibleKeys.length
+      + '，分支=' + conv.branchKeys.length
+      + '，自动候选=' + autoCandidates.length);
     if (this._persist) this._persist();
   };
 
-  /** 重新解析当前网页对话。 */
-  M.reparse = function () {
-    window.parent.postMessage({ type: 'request_page' }, '*');
-    this.toast('已重新解析当前网页对话');
-  };
-
-  /** 导出对话记录：纯 JSON，不含任何样式 / DOM 信息，便于存档与排查问题。 */
-  M.buildLogJson = function () {
-    const cards = [];
-    Object.keys(this.cardMap).forEach((id) => {
-      const c = this.cardMap[id];
-      cards.push({
-        id: c.id,
-        type: c.isTool ? 'tool_call' : 'code',
-        language: c.lang,
-        tool: c.tool || undefined,
-        parameters: c.isTool ? c.parameters : undefined,
-        code: c.isTool ? undefined : c.code,
-        status: c.status,
-        executed: !!c.executed,          // 该卡片是否已被执行过
-        origin: c.origin || undefined,   // 失败分类（parameter / environment / tool_internal）
-        result: c.result,
-        error: c.error
-      });
-    });
-    return {
-      source: 'ai-mirror',
-      pageUrl: this.pageUrl,
-      conversationId: this.activeConv,
-      exportedAt: new Date().toISOString(),
-      messageCount: this.messages.length,
-      messages: this.messages.map((m) => ({
-        role: m.role,
-        name: m.name,
-        blocks: (m.blocks || []).map((b) => {
-          const base = { type: b.type };
-          if (b.type === 'code') {
-            base.language = b.lang;
-            base.code = b.code;
-            const c = this.cardMap[b.id];
-            if (c && c.isTool) {
-              base.tool = c.tool;
-              base.parameters = c.parameters;
-              base.status = c.status;
-              if (c.result != null) base.result = c.result;
-              if (c.error != null) base.error = c.error;
-            }
-          } else if (b.type === 'list') {
-            base.ordered = b.ordered;
-            base.items = b.items;
-          } else if (b.type === 'table') {
-            base.rows = b.rows;
-          } else if (b.type === 'heading') {
-            base.level = b.level;
-            base.text = b.text;
-          } else {
-            base.text = b.text;
-          }
-          return base;
-        })
-      })),
-      cards: cards
-    };
-  };
-
-  /** 复制对话记录 JSON 到剪贴板。 */
-  M.copyConversationJson = function () {
-    const json = JSON.stringify(this.buildLogJson(), null, 2);
-    this.copy(json);
-    log('已导出对话记录 JSON，长度=' + json.length);
-    this.toast('对话记录已复制为 JSON');
-  };
-
-  /** 展开 / 收起某个内置工具。 */
-  M.toggleTool = function (name) {
-    this.expanded[name] = !this.expanded[name];
-  };
-
-  /** 生成某工具的调用用法示例（JSON 文本）。 */
-  M.usageOf = function (tool) {
-    const params = {};
-    (tool.parameters || []).forEach((p) => {
-      params[p.name] = p.type === 'integer' || p.type === 'boolean' ? `<${p.type}>` : `<${p.type}>`;
-    });
-    return JSON.stringify({ tool: tool.name, parameters: params }, null, 2);
-  };
-
-  /** 卡片状态码 → 中文。 */
-  M.statusText = function (s) {
-    return ({ pending: '待执行', running: '执行中', done: '完成', error: '失败' })[s] || s;
-  };
-
-  /** 把值格式化为可读文本（字符串原样，其它 JSON 化）。 */
-  M.fmt = function (val) {
-    if (val == null) return '';
-    return typeof val === 'string' ? val : JSON.stringify(val, null, 2);
+  /** 保证卡片拥有唯一标记，供回传与复制共用同一份文本。 */
+  M.ensureNonce = function (holder) {
+    if (!holder.nonce) {
+      holder.nonce = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+    }
+    return holder.nonce;
   };
 
   /**
-   * 回传给 AI 的结果：bridge-chat-res 结构化 JSON 代码块。
-   * 失败时务必带上「错误分类 + 完整堆栈」，让 AI 能一眼分清是
-   * 「参数写错」还是「本地工具代码缺陷」。
+   * 判定一条助手消息的质量问题。返回 null 表示无问题，否则返回问题描述。
+   * @param {Object} m 消息对象
+   * @returns {Object|null} { error, message }
    */
-  M.resultText = function (card) {
-    const payload = { tool: card.tool, type: 'bridge-chat-res' };
-    if (card.status === 'done') {
-      payload.success = true;
-      payload.result = card.result;
-    } else {
-      payload.success = false;
-      payload.origin = card.origin || 'unknown';
-      payload.originNote = 'parameter=参数问题，改参数重试即可；environment=路径/权限问题；'
-        + 'tool_internal=本地工具代码缺陷，必须用 hot_reload_fix 修代码，改参数无效';
-      if (card.errorType) payload.errorType = card.errorType;
-      if (card.error) payload.error = card.error;
-      if (card.location && card.location.file) payload.location = card.location;
-      if (card.hint) payload.hint = card.hint;
-      if (card.stack) payload.stack = card.stack;
+  M.assistantQualityIssue = function (m) {
+    if (!m || m.role !== 'assistant') return null;
+    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+    if (!blocks.length) return null;
+    // 问题一：只有代码块，没有任何文字说明
+    const hasCode = blocks.some((b) => b && b.type === 'code');
+    const hasText = blocks.some((b) => {
+      if (!b || b.type === 'code' || b.type === 'thinking') return false;
+      let s = '';
+      if (b.text != null) s = String(b.text);
+      else if (b.items) s = window.AIMirrorDomUtils.toArray(b.items).join(' ');
+      else if (b.rows) s = JSON.stringify(b.rows);
+      return s.trim().length > 0;
+    });
+    if (hasCode && !hasText) {
+      return {
+        error: 'code_only_reply',
+        message: '本条回复只包含代码块，缺少文字说明，无法监控流程。'
+          + '请在代码块之外补充说明再重新生成。'
+      };
     }
-    return JSON.stringify(payload, null, 2);
-  };
-
-  /** 复制文本到剪贴板；不支持时回退到 execCommand 方案。 */
-  M.copy = function (text) {
-    const t = String(text);
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(t).then(() => this.toast('已复制'), () => this.fallbackCopy(t));
-    } else {
-      this.fallbackCopy(t);
+    // 问题二：思考内容大段英文
+    const think = blocks.find((b) => b && b.type === 'thinking');
+    if (think) {
+      const t = String(think.text || '');
+      const letters = (t.match(/[A-Za-z]/g) || []).length;
+      const total = t.replace(/\s/g, '').length;
+      if (total > 200 && letters / total > 0.8) {
+        return {
+          error: 'thinking_english',
+          message: '本条回复的思考内容以英文为主（约 ' + Math.round(letters / total * 100)
+            + '% 为英文字符），无法监控流程。请用中文重新生成。'
+        };
+      }
     }
-  };
-
-  /** 兼容旧环境的复制实现：临时 textarea + execCommand。 */
-  M.fallbackCopy = function (t) {
-    const ta = document.createElement('textarea');
-    ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); this.toast('已复制'); }
-    catch (e) { this.toast('复制失败，请手动选择'); }
-    document.body.removeChild(ta);
+    return null;
   };
 })();

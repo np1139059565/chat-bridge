@@ -10,10 +10,9 @@
   /** 读取已安装的自定义工具列表与可扫描的默认根目录。 */
   M.loadCustomTools = async function () {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/custom_tools', { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
+      const data = await D.apiFetch(this, '/custom_tools', {
+        headers: { 'Accept': 'application/json' }
+      });
       this.customTools = data.tools || [];
       this.scanRoots = data.scanRoots || [];
     } catch (e) {
@@ -31,13 +30,10 @@
     const t = this.customTools.find((x) => x.name === name);
     if (t) t.enabled = enabled;  // 乐观更新
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/custom_tools/' + encodeURIComponent(name), {
+      await D.apiFetch(this, '/custom_tools/' + encodeURIComponent(name), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: enabled }),
+        body: { enabled: enabled },
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
       await this.loadCustomTools();
       await this.fetchTools();  // 上线影响 System Prompt
       this.toast(enabled ? ('已上线：' + name) : ('已下线：' + name));
@@ -51,9 +47,7 @@
   M.removeCustom = async function (name) {
     if (!confirm('确认删除自定义工具 ' + name + '？此操作不可撤销。')) return;
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/custom_tools/' + encodeURIComponent(name), { method: 'DELETE' });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      await D.apiFetch(this, '/custom_tools/' + encodeURIComponent(name), { method: 'DELETE' });
       await this.loadCustomTools();
       await this.fetchTools();   // 删除影响工具列表与技能说明段落
       this.toast('已删除：' + name);
@@ -80,12 +74,10 @@
   /** 扫描指定目录下的可安装 skill。 */
   M.scanSkills = async function () {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/custom_tools/scan', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dir: this.skillScanDir }),
+      const data = await D.apiFetch(this, '/custom_tools/scan', {
+        method: 'POST',
+        body: { dir: this.skillScanDir },
       });
-      const data = await r.json();
       if (!data.ok) throw new Error(data.error);
       this.scanResults = data.skills || [];
     } catch (e) {
@@ -102,12 +94,10 @@
   /** 安装指定 skill 中的某个工具，并即时更新扫描列表中的安装态。 */
   M.installSkill = async function (dir, name) {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/custom_tools/install', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dir: dir, names: [name] }),
+      const data = await D.apiFetch(this, '/custom_tools/install', {
+        method: 'POST',
+        body: { dir: dir, names: [name] },
       });
-      const data = await r.json();
       if (!data.ok) throw new Error(data.error);
       await this.loadCustomTools();
       await this.fetchTools();   // 安装后刷新工具列表与技能说明段落
@@ -150,18 +140,15 @@
         required: !!p.required,
         description: String(p.description || ''),
       }));
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/custom_tools/' + encodeURIComponent(name), {
+      await D.apiFetch(this, '/custom_tools/' + encodeURIComponent(name), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           description: obj.description,
           arg_style: obj.arg_style,
           interpreter: obj.interpreter,
           parameters: obj.parameters,
-        }),
+        },
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
       await this.loadCustomTools();
       this.customEditing[name] = false;
       this.toast('已保存：' + name);

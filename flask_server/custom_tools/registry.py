@@ -115,6 +115,23 @@ def update(name, patch):
     return t
 
 
+def set_skill_enabled(skill_name, enabled):
+    """把某个技能下的全部工具批量设为上线 / 下线，并落盘。
+
+    用于设置页「技能一键上下线」：技能是容器，其包含的工具共享同一开关。
+    返回受影响的工具名列表；技能不存在或没有工具时返回空列表。
+    """
+    tools = load_tools()
+    changed = []
+    for t in tools.values():
+        if (t.get("skill_name") or "") == skill_name:
+            t["enabled"] = bool(enabled)
+            changed.append(t.get("name"))
+    if changed:
+        save_tools(tools)
+    return changed
+
+
 def get_tool(name):
     """按名取工具定义；不存在返回 None。"""
     return load_tools().get(name)
@@ -196,8 +213,14 @@ def _validate_required(tool, params):
             raise ValueError("缺少必填参数 %s（工具 %s）" % (nm, tool.get("name")))
 
 
+# 自定义工具单次执行的超时上限（秒）。
+# 脚本可能因死循环、等待输入或外部依赖无响应而长期不返回，
+# 若不加限制会一直占用执行线程；达到上限即终止并报超时。
+CUSTOM_TOOL_TIMEOUT = 60
+
+
 def _spawn(cmd, skill_dir):
-    """启动子进程执行命令；解释器或脚本缺失时转为环境类错误。"""
+    """启动子进程执行命令；解释器或脚本缺失时转为环境类错误，超时则终止并报错。"""
     try:
         # Windows 上子进程默认按 GBK 写 stdout，强制 UTF-8 以免中文乱码（mojibake）。
         child_env = dict(os.environ)
@@ -205,10 +228,17 @@ def _spawn(cmd, skill_dir):
         return subprocess.run(
             cmd, cwd=str(skill_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace", shell=False, env=child_env,
+            timeout=CUSTOM_TOOL_TIMEOUT,
         )
     except FileNotFoundError as e:
         # 解释器或脚本缺失 → 环境/路径类
         raise FileNotFoundError("无法启动脚本（解释器或脚本缺失）：" + str(e))
+    except subprocess.TimeoutExpired:
+        # 超时：转为专用错误类型，交由上层归类为「执行超时」而非工具代码缺陷
+        raise subprocess.TimeoutExpired(
+            "自定义工具脚本执行超过 %d 秒未结束，已终止" % CUSTOM_TOOL_TIMEOUT,
+            CUSTOM_TOOL_TIMEOUT,
+        )
 
 
 def _normalize_output(proc):

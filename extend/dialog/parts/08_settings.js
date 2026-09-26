@@ -1,6 +1,5 @@
 // 模块：extend/dialog/parts/08_settings.js
-// 用途：设置面板相关渲染：System Prompt 块、工具列表行、自定义工具行、
-//       自定义工具安装块、规则块、通用配置与历史卡片管理、设置面板整体。
+// 用途：设置面板渲染（一）：System Prompt 块、内置 / 自定义工具行、自定义工具安装块。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）、Vue 全局构建
 //
 // 说明：这些渲染函数原先定义在 D.render 内部，依赖 Vue 实例上下文（this）。
@@ -130,7 +129,7 @@
           onInput: (e) => { ctx.skillScanDir = e.target.value; }
         })
       ])]),
-      h('div', [
+      h('div', { class: 'install-actions' }, [
         h('button', { onClick: () => ctx.scanSkills() }, '扫描可安装'),
         h('button', { onClick: () => ctx.scanDefaults() }, '用默认目录扫描')
       ]),
@@ -180,7 +179,7 @@
             ]),
             h('div', { class: 'tool-btns' }, [
               h('label', { class: 'rule-priority' }, [
-                '读取优先级',
+                // '读取优先级',
                 h('select', {
                   value: r.priority || 'on-demand',
                   onChange: (e) => ctx.setRulePriority(r.name, e.target.value)
@@ -204,7 +203,7 @@
                 : h('pre', { class: 'rule-view' }, ctx.rulesEdit[r.name] || r.summary)
             ]) : null
           ]))
-          : h('div', { class: 'empty' }, '（暂无规则，可新建；首次启动会自动生成 self-healing 规则）')
+          : h('div', { class: 'empty' }, '（暂无规则，可新建）')
       ]) : null
     ]);
   };
@@ -230,7 +229,7 @@
           onClick: () => ctx.setAutoSendEnabled(!ctx.autoSendEnabled)
         }, ctx.autoSendEnabled ? '自动：开' : '自动：关')
       ])]),
-      h('div', { class: 'hint' }, '开启自动后：卡片会倒计时自动执行，执行完再倒计时自动发送到网页 AI（两者共用此时长）；卡片上可单独跳过。'),
+      h('div', { class: 'hint' }, '开启自动后：只对最新一张待执行卡片倒计时自动执行，执行完再倒计时自动发送到网页 AI（两者共用此时长）；积压的旧卡片需手动执行，卡片上可单独跳过。'),
       (!ctx.flaskOk) ? h('div', { class: 'flask-warn' }, '⚠ 无法连接 Flask 服务（' + ctx.flaskError + '），当前使用内置工具目录。') : null,
       h('br'),
       // Flask 连接地址：由后端 config.yaml 下发，仅会话内使用，不持久化到浏览器
@@ -266,109 +265,5 @@
         h('span', { class: 'hint' }, 'search_content / read_file 等结果超过此字符数会报错，提示 AI 缩小范围')
       ])
     ]);
-  };
-
-  /**
-   * 历史卡片管理区块：按创建时间倒序展示，可单删 / 清空。
-   * @param {Object} ctx Vue 实例
-   * @returns {VNode} 区块节点
-   */
-  D.renderHistoryBlock = function (ctx) {
-    return h('div', { class: 'sp-block' }, [
-      h('div', { class: 'card-head' }, [
-        h('span', '历史卡片管理（' + ctx.sortedHistoryCards.length + '）'),
-        h('button', { onClick: () => ctx.clearAllCards() }, '清空')
-      ]),
-      ctx.sortedHistoryCards.length
-        ? h('div', { class: 'history-list' },
-          ctx.sortedHistoryCards.map((c) => {
-            const time = c.createdAt ? new Date(c.createdAt).toLocaleString() : '';
-            // 外部卡片与工具/代码卡片字段不同：按 _kind 分别生成可读标签
-            const label = c._kind === 'external'
-              ? ('外部卡片 · ' + (c.title || c.type || ''))
-              : (c.isTool ? ('工具 · ' + (c.tool || '')) : ('代码 · ' + (c.lang || '')));
-            return h('div', { class: 'history-item', key: c.id }, [
-              h('span', { class: 'h-time' }, time),
-              h('span', { class: 'h-label' }, label),
-              h('span', { class: 'badge ' + c.status }, ctx.statusText(c.status)),
-              h('button', { class: 'h-del', onClick: () => ctx.removeHistoryCard(c) }, '删除')
-            ]);
-          }))
-        : h('div', { class: 'empty' }, '（暂无历史卡片）')
-    ]);
-  };
-
-  /**
-   * 设置面板整体：System Prompt + 规则 + 工具 + 通用配置 + 历史卡片。
-   * @param {Object} ctx Vue 实例
-   * @returns {VNode|null} 设置面板节点；未打开时返回 null
-   */
-  D.renderSettings = function (ctx) {
-    if (!ctx.settingsOpen) return null;
-    // 已安装的自定义工具名集合：内置工具列表需排除它们，避免「上线后」与自定义列表重复出现两条同名
-    const customNames = new Set(ctx.customTools.map((t) => t.name));
-    return h('div', { class: 'settings' }, [
-      h('div', { class: 'settings-bar' }, [
-        h('span', '设置'),
-        h('button', { class: 'close', onClick: () => { ctx.settingsOpen = false; } }, '✕')
-      ]),
-      h('div', { class: 'settings-body' }, [
-        // 1) System Prompt：供复制粘贴到网页 AI 对话框
-        D.renderSystemPromptBlock(ctx),
-        // 2) 规则：用户自定义约定文件，AI 按需读取
-        D.renderRulesBlock(ctx),
-        // 3) 工具（内置 + 自定义）：合并「支持的工具」与「后端工具上 / 下线」，
-        //    开关写回后端，立即影响 System Prompt。默认折叠。
-        h('div', { class: 'sp-block' }, [
-          h('div', { class: 'card-head' }, [
-            h('span', { title: '内置 + 自定义；点名称展开参数，开关控制是否上线到 System Prompt' }, '工具'),
-            h('button', { onClick: () => { ctx.toolsOpen = !ctx.toolsOpen; } }, ctx.toolsOpen ? '▾' : '▸')
-          ]),
-          ctx.toolsOpen ? h('div', { class: 'tool-list' }, [
-            ...ctx.tools.filter((t) => !customNames.has(t.name)).map((t) => D.renderUnifiedToolRow(ctx, t)),
-            ...ctx.customTools.map((t) => D.renderCustomToolRow(ctx, t)),
-            (ctx.tools.length === 0 && ctx.customTools.length === 0)
-              ? h('div', { class: 'hint' }, '（未读取到工具列表，请先连接后端）')
-              : null
-          ]) : null,
-          D.renderCustomInstallBlock(ctx)
-        ]),
-        // 4) 通用配置：连接地址 / 端口 / 自动回传延迟
-        D.renderGeneralSettings(ctx),
-        // 5) 历史卡片管理：严格按创建时间倒序展示，可单删 / 清空
-        D.renderHistoryBlock(ctx)
-      ])
-    ]);
-  };
-
-  /**
-   * 外部卡片：与工具卡片同一套视觉与状态机，仅以徽标区分来源。
-   * @param {Object} ctx Vue 实例
-   * @param {Object} c 外部卡片
-   * @returns {VNode} 卡片节点
-   */
-  D.renderExternalCard = function (ctx, c) {
-    const kids = [
-      h('div', { class: 'code-head' }, [
-        h('span', { class: 'toolname' }, '外部卡片 · ' + (c.title || '')),
-        h('span', { class: 'head-controls' }, [
-          h('span', { class: 'badge ' + (c.status || 'pending') }, ctx.statusText(c.status)),
-          h('span', { class: 'badge external' }, 'external'),
-          D.renderAutoSwitch(ctx),
-          c.countdown > 0 ? h('span', { class: 'countdown' }, '发送 ' + c.countdown + 's') : null
-        ])
-      ]),
-      h('pre', { class: 'params-json' }, c.content)
-    ];
-    kids.push(h('div', { class: 'row' }, [
-      h('button', {
-        onClick: () => ctx.onExternalSendClick(c),
-        disabled: c.status === 'running'
-      }, c.executed ? '重新发送' : '发送到网页 AI'),
-      (c.status === 'done') ? h('button', { onClick: () => ctx.copy(ctx.fmt(c.result)) }, '复制结果') : null
-    ]));
-    if (c.status === 'done') kids.push(h('pre', { class: 'result' }, ctx.fmt(c.result)));
-    if (c.status === 'error') kids.push(h('pre', { class: 'error' }, c.error || ctx.fmt(c.result)));
-    return h('div', { class: 'code-card external-card', key: c.id }, kids);
   };
 })();

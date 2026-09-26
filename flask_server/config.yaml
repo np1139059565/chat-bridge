@@ -39,3 +39,5 @@ tools:
     - cmd
     - git
     - python
+  list_skills:
+    enabled: true

@@ -3,8 +3,8 @@
 存放内置工具的声明（描述 + 参数表），供 tools_impl 组装为 TOOLS，
 并由 /tools、get_tool_params 与 System Prompt 使用。
 
-与 tools_impl 分离的原因：本文件是「声明」而非「实现」，内容稳定、
-几乎不参与热重载；把实现文件留给 t_xxx 函数，可让 AI 自愈时面对的代码更聚焦。
+与 tools_impl 分离的原因：本文件是「声明」而非「实现」，内容稳定；
+实现文件只保留 t_xxx 函数，声明与实现各自独立、职责边界清晰。
 
 字段约定（每个工具条目）：
 - description：给 AI 看的功能说明，会写入 System Prompt，质量直接影响调用准确率
@@ -20,6 +20,14 @@
 """
 
 TOOLS = {
+    # ---------- 自描述类：让 AI 先查参数再调用，避免臆造参数名 ----------
+    "get_tool_params": {
+        "description": "根据工具 id 查询其参数、说明与用法",
+        "parameters": [
+            {"name": "tool_id", "type": "string", "required": True, "description": "工具名称/id"},
+        ],
+    },
+
     # ---------- 文件系统类：目录浏览、文件检索、读写与删除 ----------
     "list_dir": {
         "description": "列出指定目录下的文件和子目录（不含点文件）",
@@ -32,10 +40,9 @@ TOOLS = {
         "description": "按文件名通配符模式递归搜索文件，支持忽略特定模式",
         "parameters": [
             {"name": "target_directory", "type": "string", "required": True, "description": "搜索根目录"},
-            {"name": "pattern", "type": "string", "required": True, "description": "文件名通配符，如 *.js"},
+            {"name": "pattern", "type": "string", "required": True, "description": "文件名通配符，如 *.js；匹配不区分大小写"},
             {"name": "recursive", "type": "boolean", "required": False, "description": "是否递归子目录，默认 true"},
-            {"name": "caseSensitive", "type": "boolean", "required": False, "description": "是否区分大小写"},
-            {"name": "ignore_globs", "type": "array", "required": False, "description": "忽略模式列表"},
+            {"name": "ignore_globs", "type": "array", "required": False, "description": "忽略模式列表，同样不区分大小写"},
         ],
     },
     "search_content": {
@@ -49,13 +56,17 @@ TOOLS = {
         ],
     },
     "read_file": {
-        # 只接受绝对路径：不做「相对工程根」的隐式推导，避免调用方以为在项目内却读到别处
-        "description": "读取本地文件内容（仅接受绝对路径），支持指定偏移与行数",
+        # 路径口径与写文件类工具一致：绝对路径原样，相对路径以工程根为基准
+        "description": "读取本地文件内容（绝对路径原样，相对路径以工程根为基准），支持指定偏移与行数",
         "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件绝对路径"},
+            {"name": "filePath", "type": "string", "required": True, "description": "文件路径（绝对路径原样，相对路径以工程根为基准）"},
             {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
             {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
         ],
+    },
+    "list_skills": {
+        "description": "列出本机可用的 skill（名称 + 摘要），供 AI 判断该读取哪个技能文档",
+        "parameters": [],
     },
     "read_skill": {
         # 专用通道：按 skill 名 + skill 内相对路径定位，替代传 skills/xxx/SKILL.md 的耦合做法
@@ -99,21 +110,13 @@ TOOLS = {
         ],
     },
 
-    # ---------- 自描述类：让 AI 先查参数再调用，避免臆造参数名 ----------
-    "get_tool_params": {
-        "description": "根据工具 id 查询其参数、说明与用法",
-        "parameters": [
-            {"name": "tool_id", "type": "string", "required": True, "description": "工具名称/id"},
-        ],
-    },
-
     # ---------- 规则类：按需读取用户自定义约定（规则内容本身不写入 System Prompt） ----------
     "list_rules": {
         "description": "列出本机可用的规则文件（规则名 + 摘要），供 AI 判断该读取哪条规则",
         "parameters": [],
     },
     "read_rule": {
-        "description": "按规则名读取某条规则的完整内容（如 self-healing 异常自愈规则）",
+        "description": "按规则名读取某条规则的完整内容",
         "parameters": [
             {"name": "name", "type": "string", "required": True, "description": "规则名（不含扩展名），先用 list_rules 获取"},
         ],

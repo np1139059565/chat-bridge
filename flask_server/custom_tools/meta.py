@@ -59,7 +59,7 @@ def public_meta(tool):
         "description": tool.get("description", ""),
         "parameters": tool.get("parameters") or [],
     }
-    # silent：一次性副作用工具，其结果不回传网页 AI
+    # silent：仅在界面不生成工具卡片；结果照常回传
     if tool.get("silent"):
         meta["silent"] = True
     return meta

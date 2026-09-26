@@ -1,0 +1,396 @@
+/* 设置面板（续）：工具列表 / 自定义工具 / 规则 / 技能 */
+
+/* 后端工具上 / 下线列表 */
+.tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-1);
+  max-height: 750px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--cb-sp-1) 0;
+}
+
+/* 单个工具行：工具名与开关两端对齐 */
+.tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-card);
+  border: 1px solid var(--cb-border-soft);
+}
+
+.tool-row .tn {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-sm);
+  color: var(--cb-text-body);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 上 / 下线开关：与同面板主按钮同尺寸，仅配色区分状态 */
+.switch {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: var(--cb-r-md);
+  padding: var(--cb-sp-1) var(--cb-sp-3);
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-on-primary);
+}
+
+/* 上下线开关：浅底深字，11px 小字也满足对比度要求；
+   状态靠色相区分，不靠亮度差 */
+.switch.on {
+  background: var(--cb-ok-bg);
+  color: var(--cb-ok);
+  border: 1px solid var(--cb-ok-border);
+}
+
+.switch.off {
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-sub);
+  border: 1px solid var(--cb-border-strong);
+}
+
+/* 工具行：第一行放名称 + 描述（描述过长省略），第二行放按钮组（开关 / 编辑 / 删除） */
+.tool-row {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* 名称 + 描述占满第一行，强制把按钮挤到第二行 */
+.tool-row>.tree-node {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.tool-row>.tree-detail {
+  flex-basis: 100%;
+}
+
+/* 按钮组统一贴右放在第二行 */
+.tool-btns {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
+}
+
+/* 工具行右侧的操作按钮（编辑 / 删除） */
+.tool-actions {
+  display: flex;
+  gap: var(--cb-sp-2);
+  flex: 0 0 auto;
+}
+
+.tool-actions button {
+  background: var(--cb-bg-fill);
+  border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md);
+  padding: 3px var(--cb-sp-4);
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+}
+
+.tool-actions button:hover {
+  background: var(--cb-bg-fill-hover);
+}
+
+.tool-actions button.danger {
+  color: var(--cb-danger-text);
+  border-color: var(--cb-danger-border);
+}
+
+.tool-actions button.danger:hover {
+  background: var(--cb-danger-bg);
+}
+
+/* 自定义工具来源徽标 */
+.badge.custom {
+  background: var(--cb-border-strong);
+  color: var(--cb-text-body);
+  font-weight: 400;
+}
+
+/* 外部卡片来源徽标：与工具卡片同结构，以颜色区分 */
+
+
+/* 自定义工具安装区 */
+.custom-install {
+  margin-top: var(--cb-sp-4);
+}
+
+/* 安装区操作按钮：两个扫描按钮之间需要留出间隔，否则边框紧贴 */
+.install-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cb-sp-3);
+}
+
+.custom-install>.card-head {
+  margin-top: var(--cb-sp-3);
+}
+
+.custom-install .scan-results {
+  margin-top: var(--cb-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-3);
+}
+
+.custom-install .scan-skill {
+  border: 1px solid var(--cb-border-soft);
+  border-radius: var(--cb-r-lg);
+  padding: var(--cb-sp-3);
+  background: var(--cb-bg-subtle);
+}
+
+.custom-install .scan-skill>div:first-child {
+  font-weight: 600;
+  color: var(--cb-text-body);
+  margin-bottom: var(--cb-sp-2);
+}
+
+.custom-install .scan-tool {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) 0;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-sub);
+}
+
+/* 扫描结果里的「安装」按钮：与设置页按钮统一为灰底 + 细边框 + 深色字 */
+.custom-install .scan-tool button {
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-body);
+  border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md);
+  padding: 2px var(--cb-sp-4);
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+  flex: 0 0 auto;
+}
+
+.custom-install .scan-tool button:hover:not(:disabled) {
+  background: var(--cb-bg-fill-hover);
+}
+
+.custom-install .scan-tool button:disabled {
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-faint);
+  border-color: var(--cb-border);
+  cursor: default;
+}
+
+/* 安装区：目录输入框与「选择目录」按钮同行 */
+.dir-row {
+  display: flex;
+  gap: var(--cb-sp-2);
+}
+
+.dir-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 自定义工具内联编辑（参数 / 说明 / 解释器 JSON） */
+.custom-edit {
+  flex-basis: 100%;
+  margin-top: var(--cb-sp-2);
+}
+
+.custom-edit textarea {
+  display: block;
+  width: 100%;
+  min-height: 750px;
+  resize: vertical;
+  padding: var(--cb-sp-2) var(--cb-sp-3);
+  border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md);
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-sm);
+  color: var(--cb-text-body);
+  background: var(--cb-bg-card);
+}
+
+/* 规则模块：新建输入行 / 规则条目 / 内容预览 */
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-2);
+  margin-top: var(--cb-sp-2);
+}
+
+.rule-new {
+  display: flex;
+  gap: var(--cb-sp-2);
+}
+
+.rule-new input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px var(--cb-sp-3);
+  border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-sm);
+  color: var(--cb-text-body);
+  background: var(--cb-bg-card);
+}
+
+.rule-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-lg);
+  padding: var(--cb-sp-2) var(--cb-sp-3);
+}
+
+.rule-item>.tree-node {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.rule-item>.tree-detail {
+  flex-basis: 100%;
+}
+
+.rule-priority {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted, var(--cb-text-body));
+}
+
+.rule-priority select {
+  padding: 2px var(--cb-sp-2);
+  border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+  background: var(--cb-bg-card);
+}
+
+.rule-view {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: var(--cb-sp-2) 0 0;
+  padding: var(--cb-sp-3);
+  background: var(--cb-bg-fill);
+  border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+}
+
+/* 技能模块：技能是工具的容器，一键控制其下全部工具的上 / 下线 */
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-2);
+  margin-top: var(--cb-sp-2);
+}
+
+/* 单个技能行：头部一行放名称 / 摘要 / 工具计数 / 一键开关，展开区另起一行 */
+.skill-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-lg);
+  padding: var(--cb-sp-2) var(--cb-sp-3);
+}
+
+.skill-item>.tree-node {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.skill-item>.tree-detail {
+  flex-basis: 100%;
+}
+
+/* 工具计数徽标：弱化底色，突出「已上线 / 总数」 */
+.badge.skill-count {
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-sub);
+  font-weight: 400;
+}
+
+/* 技能内工具列表：每行左侧信息、右侧单独开关 */
+.skill-tools {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-1);
+  margin-top: var(--cb-sp-2);
+}
+
+.skill-tool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  background: var(--cb-bg-card);
+  border: 1px solid var(--cb-border-soft);
+  border-radius: var(--cb-r-md);
+}
+
+.skill-tool-info {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.skill-tool-info>b {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-sm);
+  color: var(--cb-text-body);
+}
+
+/* 技能说明文档：查看 / 编辑区 */
+.skill-doc {
+  margin-top: var(--cb-sp-3);
+}
+
+.skill-doc .row {
+  display: flex;
+  gap: var(--cb-sp-2);
+}
+
+.skill-doc-view {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: var(--cb-sp-2) 0 0;
+  padding: var(--cb-sp-3);
+  background: var(--cb-bg-fill);
+  border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 文档编辑区文本框：与自定义工具内联编辑同观感，但更高以适应文档长度 */
+.skill-doc .custom-edit textarea {
+  min-height: 240px;
+}
+
+/* 无工具的技能：开关置灰，明确不可操作 */
+.skill-item>.tool-btns .switch:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}

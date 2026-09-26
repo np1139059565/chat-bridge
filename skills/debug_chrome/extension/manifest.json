@@ -27,6 +27,7 @@
         "content/02_drawer.js",
         "content/03_heartbeat.js",
         "content/04_element-selector.js",
+        "content/04b_element-selector.js",
         "content/05_tool-handlers.js",
         "content/06_messages.js",
         "content/07_index.js"
@@ -38,6 +39,7 @@
     {
       "resources": [
         "drawer.html",
+        "content/08_injected_main.js",
         "shared/url-utils.js",
         "drawer-styles/00_tokens.css",
         "drawer-styles/01_base.css",

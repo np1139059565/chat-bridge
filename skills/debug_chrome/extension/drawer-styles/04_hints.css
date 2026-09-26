@@ -18,10 +18,10 @@
   top: 50px;
   left: 50%;
   transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.75);
+  background: var(--db-bg-toast);
   color: var(--db-on-primary);
-  padding: var(--db-sp-2) 14px;
-  border-radius: var(--db-r-sm);
+  padding: var(--db-sp-2) var(--db-sp-5);
+  border-radius: var(--db-r-lg);
   font-size: var(--db-fs-sm);
   z-index: var(--db-z);
   pointer-events: none;

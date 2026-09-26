@@ -1,6 +1,5 @@
 {
-  "self-healing": "on-demand",
   "Negative-constraint-leakage-problem": "always",
   "user-rule": "always",
-  "ANTI-FLATTERY_PROTOCOL": "off"
+  "ANTI-FLATTERY_PROTOCOL": "always"
 }

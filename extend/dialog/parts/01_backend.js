@@ -29,49 +29,102 @@
     window.parent.postMessage({ type: 'close_panel' }, '*');
   };
 
-  /** 依次完成：发现后端 → 取配置 → 取自定义工具 → 取工具目录 → 取规则 → 启动外部卡片轮询。 */
+  /** 依次完成：发现后端 → 取配置 → 取自定义工具 → 取工具目录 → 取规则。
+   *  外部卡片轮询不在这里启动，改由面板可见性驱动（见 setPanelVisible）。 */
   M.initBackend = async function () {
     await this.discoverFlask();
     await this.loadConfig();
     await this.loadCustomTools();
     await this.fetchTools();   // 内部会刷新技能说明段落并生成 System Prompt
     await this.loadRules();
-    this.startExternalPoll();
+    // 外部卡片轮询不在此启动：它由面板可见性驱动（见 setPanelVisible）。
+    // iframe 首次加载时面板通常是隐藏的，若在此无条件启动，
+    // 关闭的面板仍会取走卡片，正是要避免的问题。
   };
 
-  /** 技能说明段落：注入 System Prompt 末尾。 */
+  /** 技能数据：说明段落与技能清单，注入 System Prompt。 */
   M.loadPromptSections = async function () {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/prompt_sections', { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
+      const data = await D.apiFetch(this, '/prompt_sections', {
+        headers: { 'Accept': 'application/json' }
+      });
       this.promptSections = (data && data.sections) || [];
+      this.skills = (data && data.skills) || [];
+      this.skillsManage = (data && data.skillsManage) || [];
     } catch (e) {
       this.promptSections = [];
+      this.skills = [];
+      this.skillsManage = [];
     }
     this.systemPrompt = this.generateSystemPrompt();
   };
 
   // ---------- 外部卡片：轮询后端取待投递卡片，渲染后自动发送并等待结果 ----------
 
-  /** 启动外部卡片轮询（幂等）。 */
+  /**
+   * 启动外部卡片轮询（幂等）。
+   * 固定 5 秒一次：外部卡片是「用户主动发送」的低频事件，
+   * 秒级轮询没有必要，还会持续占用后端与浏览器资源。
+   * 仅面板可见时运行：面板关闭即停，避免关闭后仍把卡片取走。
+   */
   M.startExternalPoll = function () {
     if (this._extTimer) return;
-    this._extTimer = setInterval(() => this.pollExternalCards(), 1000);
+    this._extTimer = setInterval(() => this.pollExternalCards(), 5000);
     this.pollExternalCards();
+  };
+
+  /**
+   * 停止外部卡片轮询：清掉定时器。
+   * 面板关闭时调用，此后本对话框不再取外部卡片，卡片留给其他打开的页面。
+   */
+  M.stopExternalPoll = function () {
+    if (this._extTimer) {
+      clearInterval(this._extTimer);
+      this._extTimer = null;
+    }
+  };
+
+  /**
+   * 按面板可见性启停外部卡片轮询。
+   * 可见才轮询、关闭即停：面板关着时不该再收到并消费外部卡片。
+   * @param {boolean} visible 面板是否可见
+   */
+  M.setPanelVisible = function (visible) {
+    const was = this.panelVisible;
+    this.panelVisible = !!visible;
+    if (visible) this.startExternalPoll();
+    else this.stopExternalPoll();
+    // 仅在可见性真的变化时打印：避免重复消息刷屏。
+    if (was !== this.panelVisible) {
+      log('面板可见性：' + (this.panelVisible ? '打开 → 启动卡片轮询' : '关闭 → 停止卡片轮询'));
+    }
   };
 
   /** 轮询后端待投递卡片；新卡片入列，并按全局自动开关决定是否进入倒计时。 */
   M.pollExternalCards = async function () {
+    // 面板不可见时不取卡片：关闭的面板不该再消费外部卡片，
+    // 把它留给其他打开的页面。
+    if (!this.panelVisible) return;
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/api/cards/pending', { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) return;
-      const data = await r.json();
+      const data = await D.apiFetch(this, '/api/cards/pending', {
+        headers: { 'Accept': 'application/json' }
+      });
       const cards = (data && data.cards) || [];
+      // 只在真取到卡片时打印：轮询每 5 秒一次，逐次打印会淹没控制台。
+      // 取到卡片说明本对话框当前可见且在消费卡片；若关闭后仍看到这条，
+      // 即说明可见性同步没生效。
+      if (cards.length) log('取到外部卡片 ' + cards.length + ' 张：', cards.map((c) => c.id).join(', '));
+      // 确保当前会话对象存在再写入：curConv 在会话未建立时会回退到共享的
+      // EMPTY_CONV，直接 push 会把卡片写进这个全局空壳，随后创建真实会话对象时
+      // 读不到，表现为「卡片莫名消失」。
+      const conv = this.ensureConv(this.activeConv);
+      const added = [];
       cards.forEach((c) => {
         if (this.externalCards.some((x) => x.id === c.id)) return;
+        // 锚点定位：记下创建时「当前分支末端」那条消息的树 key，
+        // 渲染时据此把卡片插到该消息之后。会话尚无消息时锚点为空，卡片排在最前。
+        const bk = conv.branchKeys || [];
+        const anchorKey = bk.length ? bk[bk.length - 1] : '';
         const card = {
           id: c.id,
           type: c.type || '',
@@ -85,17 +138,35 @@
           result: null,
           error: null,
           executed: false,
-          // 统一时间戳：与文字消息同字段、同量纲（毫秒）。
-          // 渲染时所有条目一律按 _ts 排序，无任何类型特殊处理。
-          _ts: (c.created_at || Date.now()),
-          createdAt: c.created_at || Date.now()
+          skipped: false,   // 是否已被用户跳过（跳过后不再自动发送）
+          // anchorKey：结构定位锚点（创建时分支末端的树 key）。
+          anchorKey: anchorKey,
+          // key：条目 key，与消息的 'pid-id' 同构（两段、连字符连接）。
+          // 左段取锚点消息 id（无锚点用 '0'，与消息树根一致）；
+          // 右段是卡片短 id（'x' + 哈希），替代 36 字符 UUID，避免巨长。
+          key: (anchorKey ? anchorKey.slice(anchorKey.indexOf('-') + 1) : '0')
+            + '-' + ('x' + D.hashStr(c.id)),
+          nonce: ''
         };
         this.externalCards.push(card);
+        added.push(card);
+        // 卡片已入列（即将渲染展示），回执后端确认收货，此后不再重复投递。
+        // 若此处在回执前中断（刷新 / 崩溃），后端仍会把卡片判为未确认，
+        // 下次轮询可再次取走，不会出现「取走了却没展示，还再也拿不到」的情况。
+        this.confirmCardDelivered(c.id);
         log('外部卡片已投递', card.id, card.title);
-        // 与工具卡片一致：仅当全局自动开关开启时才自动倒计时发送；
-        // 未开启时等待用户手动发送。
-        if (this.autoSendEnabled) this.scheduleExternalSend(card);
       });
+      // 与工具卡片一致：仅当全局自动开关开启时才自动发送，且本轮只自动发送
+      // 最新一张（积压多张时不全部触发，其余等待用户手动发送）。
+      if (this.autoSendEnabled && added.length) {
+        // 同一批新卡片按入列顺序追加，末位即最新。
+        // 从响应式列表末位回读：externalCards 里的元素是 Vue 代理，
+        // 倒计时改它才会驱动界面刷新；added 里存的是原始对象，改它不刷新。
+        this.scheduleExternalSend(this.externalCards[this.externalCards.length - 1]);
+      }
+      // 新卡片入列后立即写盘：待处理卡片此前只存在内存里，刷新会整批丢失。
+      // 恢复进行中不写盘，避免尚未合并完的存档被空列表覆盖。
+      if (added.length && this._persist) this._persist();
     } catch (e) { /* 后端未就绪时静默重试 */ }
   };
 
@@ -111,16 +182,23 @@
 
   /**
    * 立即发送外部卡片到网页 AI。
-   * 发送即结束：不再等待网页 AI 回传结果信封，避免卡片长期悬挂。
+   * 发送即结束：投递完成即置为完成态。
    * 后续进展由网页 AI 通过 push_message 工具主动推送给用户。
    */
   M.sendExternalCard = async function (card) {
     if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
     card.countdown = 0;
     card.phase = '';
-    // 输入信封：{ type, request }。
-    // 不再携带 id —— 外部卡片已取消「等待回复」，无需与网页 AI 的返回结果配对。
-    const envelope = { type: card.type || 'debug-chrome-req', request: card.content };
+    // 输入信封：{ type, request, page_url }，不携带 id。
+    // page_url 为卡片发起方所在页面的地址（由调试扩展随卡片一并传来），
+    // 让网页 AI 知道这条外部卡片来自哪个页面。
+    const sourceUrl = (card.payload && card.payload.page_url) || card.page_url || '';
+    const envelope = {
+      type: card.type || 'external-call',
+      nonce: this.ensureNonce(card),
+      request: card.content,
+      page_url: sourceUrl
+    };
     const text = JSON.stringify(envelope, null, 2);
     window.parent.postMessage({ type: 'auto_send', text }, '*');
     // 执行完成即结束：立即置为完成态并记为已执行过（供刷新/切会话后恢复）
@@ -131,27 +209,58 @@
       note: '已发送到网页 AI。任务执行与进展由网页 AI 通过 push_message 工具主动推送到调试抽屉。'
     };
     if (this._persist) this._persist();
-    // 唤醒后端挂起的创建请求，让抽屉的 POST /api/cards 立即返回（不再空等超时）
-    await this.ackExternalCard(card.id, card.result);
     this.toast('外部卡片已发送到网页 AI');
   };
 
-  /** 手动发送（自动开关未开启时使用）。 */
-  M.onExternalSendClick = function (card) {
-    this.sendExternalCard(card);
+  /**
+   * 按 id 或对象取回本会话中的外部卡片原件。
+   * 历史卡片管理列表里的条目是浅拷贝，直接改它不会影响真实数据，
+   * 因此所有操作入口都先经此函数取回原件。
+   * @param {Object|string} idOrCard 卡片对象或卡片 id
+   * @returns {Object|null} 本会话中的卡片原件
+   */
+  M.findExternalCard = function (idOrCard) {
+    if (!idOrCard) return null;
+    const id = typeof idOrCard === 'object' ? idOrCard.id : idOrCard;
+    if (!id) return null;
+    // 优先按 id 查回原件；查不到（例如新建后尚未入列）时回退到传入对象本身
+    return (this.externalCards || []).find((c) => c.id === id) || (typeof idOrCard === 'object' ? idOrCard : null);
   };
 
-  /** 通知后端唤醒挂起的创建请求：外部卡片不再等待 AI 回复，仅回一个「已投递」确认。 */
-  M.ackExternalCard = async function (cardId, result) {
+  /**
+   * 回执后端：该卡片已生成并展示，此后不再投递。
+   * 在卡片推入列表（即进入渲染流程）后调用；
+   * 调用失败仅记录——后端仍视其为未确认，下次轮询会再次投递，
+   * 接收方按卡片 id 去重，不会出现重复卡片。
+   * @param {string} cardId 卡片 id
+   */
+  M.confirmCardDelivered = async function (cardId) {
+    if (!cardId) return;
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      await fetch(base + '/api/cards/' + encodeURIComponent(cardId) + '/reply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ result: result })
+      await D.apiFetch(this, '/api/cards/' + encodeURIComponent(cardId) + '/delivered', {
+        method: 'POST'
       });
-    } catch (e) { /* 回填失败仅记录 */ }
-    return true;
+    } catch (e) { /* 回执失败不阻断；下次轮询会重新投递，接收方按 id 去重 */ }
+  };
+
+  /** 手动发送（自动开关未开启时使用）。 */
+  M.onExternalSendClick = function (idOrCard) {
+    const card = this.findExternalCard(idOrCard);
+    if (card) this.sendExternalCard(card);
+  };
+
+  /**
+   * 跳过某张外部卡片：取消其倒计时并标记为已跳过，不再自动发送。
+   * 与工具卡片的跳过语义一致；已发送过的卡片不提供跳过。
+   * @param {Object|string} idOrCard 卡片对象或卡片 id
+   */
+  M.skipExternalCard = function (idOrCard) {
+    const card = this.findExternalCard(idOrCard);
+    if (!card) return;
+    D.cancelCountdown(card);
+    card.skipped = true;
+    if (this._persist) this._persist();
+    this.toast('已跳过该外部卡片');
   };
 
   /**
@@ -184,6 +293,16 @@
     this.siteKey = k;
     // 清空上一站点的数据视图，避免不同站点内容混在一起
     this.conversations = {};
+    // 同时清掉上一站点的待写计时器：它们持有旧会话 id，若稍后触发，
+    // 会以新站点的存档键前缀写入，把数据串到别的站点上。
+    if (this._persistTimers) {
+      Object.keys(this._persistTimers).forEach((id) => {
+        clearTimeout(this._persistTimers[id]);
+        delete this._persistTimers[id];
+      });
+    }
+    // 会话「已从存档恢复」标记按站点隔离：不同站点的同名会话对应不同存档键。
+    this._convReady = {};
     this.activeConv = '__default__';
     this.ensureConv(this.activeConv);
   };
@@ -196,10 +315,9 @@
   /** 配置从后端 config.yaml 读取（不存浏览器）：连接地址、端口、工具上下线状态。 */
   M.loadConfig = async function () {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/config', { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const cfg = await r.json();
+      const cfg = await D.apiFetch(this, '/config', {
+        headers: { 'Accept': 'application/json' }
+      });
       // 注意：flaskUrl 由 discoverFlask() 探测到的「实际可连通地址」决定，绝不能用
       // cfg.flask.url（= 配置文件里声明的端口）覆盖——否则端口改了但服务还没重启时，
       // 会连到一个根本没在监听的新端口，导致连接断开。
@@ -223,13 +341,10 @@
     if (!this.configTools[name]) this.configTools[name] = {};
     this.configTools[name].enabled = enabled;   // 乐观更新
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/config', {
+      await D.apiFetch(this, '/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tools: { [name]: { enabled: enabled } } })
+        body: { tools: { [name]: { enabled: enabled } } }
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
       await this.fetchTools();   // 上下线影响 System Prompt 与支持的工具树
       this.toast(enabled ? ('已上线：' + name) : ('已下线：' + name));
     } catch (e) {
@@ -243,13 +358,10 @@
     const name = 'run_command';
     const enabled = !this.configTools[name] || this.configTools[name].enabled !== false;
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/config', {
+      await D.apiFetch(this, '/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tools: { [name]: { enabled: enabled, languages: languages } } })
+        body: { tools: { [name]: { enabled: enabled, languages: languages } } }
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
       await Promise.all([this.fetchTools(), this.loadConfig()]);
       this.toast('已更新 run_command 支持语言');
     } catch (e) {
@@ -293,14 +405,11 @@
     const port = parseInt(this.config.flaskPort, 10);
     if (!port || port < 1 || port > 65535) { this.toast('端口非法'); return; }
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/config', {
+      const data = await D.apiFetch(this, '/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flask: { port: port } })
+        body: { flask: { port: port } },
+        lenientJson: true
       });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json().catch(() => ({}));
       // 不改连接地址：重新探测，只有新端口真的在监听才切过去
       await this.initBackend();
       if (data.requireRestart) {
@@ -321,14 +430,12 @@
     const v = parseInt(this.maxJsonChars, 10);
     if (!v || v <= 0) { this.toast('上限必须为正整数'); return; }
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/config', {
+      const data = await D.apiFetch(this, '/config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limits: { max_json_chars: v } })
+        body: { limits: { max_json_chars: v } },
+        lenientJson: true
       });
-      const data = await r.json().catch(() => ({}));
-      if (!r.ok || !data.success) throw new Error(data.error || ('HTTP ' + r.status));
+      if (!data.success) throw new Error(data.error || '保存失败');
       this.maxJsonChars = v;
       this.toast('已保存体积上限：' + v + ' 字符');
     } catch (e) {

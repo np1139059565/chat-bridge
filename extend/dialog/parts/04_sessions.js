@@ -1,238 +1,287 @@
 // 模块：extend/dialog/parts/04_sessions.js
-// 用途：多会话的状态管理：会话创建、切换、恢复、持久化，以及历史卡片删除。
+// 用途：多会话的状态管理：会话创建、切换、恢复、持久化与清空；
+//       条目删除、栏宽调节、条目跳转与导出在 04b_sessions.js。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
+//
+// 数据模型（与会话相关）：
+//   会话 = { title, page_url, msgTree, visibleKeys, branchKeys, externalCards, orphanSlice, updatedAt }
+//   消息树节点 = { role, name, blocks, deleted, cards }
+// 卡片状态只在节点内。
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
   const log = D.log;
-  const hashStr = D.hashStr;
   const M = D.methods;
 
-  /** 确保某会话的记录对象存在，并补齐统一时序所需字段（兼容旧存档）。 */
+  /** 确保某会话的记录对象存在，并补齐统一所需字段。 */
   M.ensureConv = function (id) {
     const key = id || '__default__';
     if (!this.conversations[key]) {
       this.conversations[key] = {
-        title: '', pageUrl: '', messages: [], cardMap: {}, externalCards: [],
-        msgTs: {}, _lastTs: 0, updatedAt: 0
+        title: '', page_url: '',
+        msgTree: {}, visibleKeys: [], branchKeys: [], externalCards: [], orphanSlice: [],
+        updatedAt: 0
       };
     }
     const conv = this.conversations[key];
-    // 兼容旧存档：补齐统一时序所需字段
+    if (!conv.msgTree || typeof conv.msgTree !== 'object') conv.msgTree = {};
+    if (!Array.isArray(conv.visibleKeys)) conv.visibleKeys = [];
+    if (!Array.isArray(conv.branchKeys)) conv.branchKeys = [];
     if (!Array.isArray(conv.externalCards)) conv.externalCards = [];
-    if (!conv.msgTs || typeof conv.msgTs !== 'object') conv.msgTs = {};
-    if (typeof conv._lastTs !== 'number') conv._lastTs = 0;
+    if (!Array.isArray(conv.orphanSlice)) conv.orphanSlice = [];
     return conv;
   };
 
   /**
    * 消息内容指纹：role + 名称 + 各块内容的稳定摘要。
-   * 注意：它只代表「内容」，相同内容的两条消息指纹相同，
-   * 因此不能直接当序号键，必须叠加「第几次出现」才是唯一键。
+   * 相同内容的两条消息指纹相同，因此不能当唯一序号键。
    */
   M.messageFingerprint = function (m) {
-    if (!m) return 'm';
-    const parts = [m.role || '', m.name || ''];
-    (m.blocks || []).forEach((b) => {
-      if (!b) return;
-      if (b.type === 'code') parts.push('c:' + (b.lang || '') + ':' + String(b.code || '').slice(0, 200));
-      else if (b.type === 'list') parts.push('l:' + (b.items || []).join('|').slice(0, 200));
-      else if (b.type === 'table') parts.push('t:' + JSON.stringify(b.rows || []).slice(0, 200));
-      else parts.push('x:' + String(b.text || '').slice(0, 200));
-    });
-    return 'm' + hashStr(parts.join('\u0001'));
+    return window.AIMirrorDomUtils.messageFingerprint(m);
   };
 
-  /**
-   * 单调时间戳：与外部卡片的 createdAt 同源（Date.now()，毫秒）。
-   * 保证严格递增，避免同一毫秒内多条条目时间戳相同导致顺序抖动。
-   */
-  M.monotonicTs = function (conv) {
-    if (!conv) return Date.now();
-    const now = Date.now();
-    const last = conv._lastTs || 0;
-    const ts = now > last ? now : last + 1;
-    conv._lastTs = ts;
-    return ts;
-  };
+  // ---------- 卡片查找：卡片状态存在消息树节点内，这里提供统一入口 ----------
 
-  /**
-   * 为一批消息打时间戳：按顺序遍历，同一内容第 n 次出现用「指纹#n」作键，
-   * 首次出现时打一个时间戳并记住，之后沿用（网页重绘不打乱顺序）。
-   * 时间戳与外部卡片同源同量纲，二者渲染时统一排序。
-   */
-  M.assignMsgTs = function (conv) {
-    if (!conv) return;
-    if (!conv.msgTs || typeof conv.msgTs !== 'object') conv.msgTs = {};
-    if (typeof conv._lastTs !== 'number') conv._lastTs = 0;
-    const seen = {};
-    (conv.messages || []).forEach((m) => {
-      const fp = this.messageFingerprint(m);
-      seen[fp] = (seen[fp] || 0) + 1;
-      const k = fp + '#' + seen[fp];
-      if (conv.msgTs[k] == null) conv.msgTs[k] = this.monotonicTs(conv);
-      m._ts = conv.msgTs[k];
+  /** 遍历当前会话消息树的所有卡片，回调 (card, node, blockId)。 */
+  M.eachCard = function (conv, fn) {
+    const tree = (conv && conv.msgTree) || {};
+    Object.keys(tree).forEach((k) => {
+      const node = tree[k];
+      const cards = (node && node.cards) || {};
+      Object.keys(cards).forEach((bid) => { fn(cards[bid], node, bid); });
     });
   };
 
-  /** 网页端切换会话时调用：切换活动记录并恢复该会话已保存的卡片状态。 */
-  M.applyConversation = function (convId, title, url) {
-    const id = convId || '__default__';
-    if (id !== this.activeConv) {
-      log('会话切换：', this.activeConv, '→', id, title ? '（' + title + '）' : '');
-      this.activeConv = id;
-      this.loadConversation(id);
+  /** 按代码块 id 查找卡片；返回卡片对象或 null。 */
+  M.findCard = function (id) {
+    if (!id) return null;
+    let found = null;
+    this.eachCard(this.curConv, (c, node, bid) => {
+      if (!found && bid === id) found = c;
+    });
+    return found;
+  };
+
+  /** 汇总当前会话全部卡片为 { 代码块id: 卡片 }。 */
+  M.allCards = function () {
+    const out = {};
+    this.eachCard(this.curConv, (c, node, bid) => { out[bid] = c; });
+    return out;
+  };
+
+  // ---------- 会话切换 / 恢复 ----------
+
+  /**
+   * 网页端切换会话时调用。
+   * 正常流程：先从 URL 得到会话 id（由内容脚本透传）；
+   *   · 无 id → 什么都不做；
+   *   · 有 id → 从 storage 读该会话历史，读完后回调，再由调用方按切片处理。
+   * @param {string} convId 会话 id（无则为空）
+   * @param {string} title 会话标题
+   * @param {string} page_url 页面地址
+   * @param {Function} [done] 历史就绪后的回调，入参 true 表示可以继续处理切片
+   */
+  M.applyConversation = function (convId, title, page_url, done) {
+    const id = convId || '';
+    const cb = typeof done === 'function' ? done : function () {};
+    // 无 id：什么都不做，保留当前状态，等带 id 的推送再来
+    if (!id) {
+      log('applyConversation：未取得会话 id，跳过本次处理');
+      cb(false);
+      return;
     }
+    if (id === this.activeConv && this._convReady && this._convReady[id]) {
+      // 已在本会话且历史已就绪：仅更新标题，直接处理切片
+      const conv = this.ensureConv(id);
+      if (title) conv.title = title;
+      if (page_url) conv.page_url = page_url;
+      cb(true);
+      return;
+    }
+    // 切换到新会话：先建立会话对象，再从 storage 读历史
+    this.activeConv = id;
     const conv = this.ensureConv(id);
     if (title) conv.title = title;
-    if (url) conv.pageUrl = url;
+    if (page_url) conv.page_url = page_url;
+    this.loadConversation(id, cb);
   };
 
-  /** 从本地存储恢复会话（含卡片「是否已执行过」的状态）。 */
-  M.loadConversation = function (convId) {
+  /**
+   * 从本地存储恢复会话历史（消息树 + 外部卡片 + 执行状态）。
+   * 恢复完成后调用 done(true)，由调用方按切片继续处理。
+   * @param {string} convId 会话 id
+   * @param {Function} done 完成回调
+   */
+  M.loadConversation = function (convId, done) {
+    const cb = typeof done === 'function' ? done : function () {};
     const key = this.convKey(convId);
-    this._restoring = (this._restoring || 0) + 1;
+    const self = this;
     chrome.storage.local.get(key, (res) => {
-      this._restoring = (this._restoring || 0) - 1;
+      // 期间可能又切换了会话：不再处理，避免把旧会话历史写进新会话
+      if (self.activeConv !== convId) { cb(false); return; }
       const saved = res && res[key];
-      if (!saved || this.activeConv !== convId) return;
-      const conv = this.ensureConv(convId);
-      // 统一时序：序号随会话恢复。必须在恢复消息之前合入，
-      // 否则恢复出的消息会被重新分配新序号、顺序错乱。
-      if (saved.msgTs && typeof saved.msgTs === 'object') {
-        Object.keys(saved.msgTs).forEach((k) => {
-          if (conv.msgTs[k] == null) conv.msgTs[k] = saved.msgTs[k];
+      const conv = self.ensureConv(convId);
+      if (!saved) {
+        log('loadConversation：会话无存档 ' + convId);
+        self._convReady = self._convReady || {};
+        self._convReady[convId] = true;
+        cb(true);
+        return;
+      }
+      // 消息树：把存档节点并入内存树（存档为准），保留节点自带卡片状态
+      if (saved.msgTree && typeof saved.msgTree === 'object') {
+        Object.keys(saved.msgTree).forEach((k) => {
+          const node = saved.msgTree[k];
+          if (!node) return;
+          conv.msgTree[k] = node;
         });
       }
-      if (typeof saved._lastTs === 'number' && saved._lastTs > (conv._lastTs || 0)) {
-        conv._lastTs = saved._lastTs;
-      }
-      // 消息：仅在本地尚无内容时用快照恢复，避免旧快照覆盖刚从网页抓到的新内容
-      if (!conv.messages.length && (saved.messages || []).length) {
-        conv.messages = saved.messages;
-        conv.title = saved.title || conv.title;
-        conv.pageUrl = saved.pageUrl || conv.pageUrl;
-        // 恢复出的消息若已有历史时间戳则沿用；缺失的按当前顺序补时间戳
-        this.assignMsgTs(conv);
-        log('已恢复会话消息', convId, '消息数=' + conv.messages.length);
-      }
-      // 外部卡片：随会话快照恢复。存档优先（含执行态），本地已有则不覆盖，
-      // 与 cardMap 的恢复策略保持一致（异步回调晚于同步灌入，故按存档补齐）。
-      const savedExt = saved.externalCards;
-      if (Array.isArray(savedExt) && savedExt.length) {
-        const known = new Set((conv.externalCards || []).map((c) => c.id));
-        savedExt.forEach((c) => {
-          if (c && c.id && !known.has(c.id)) (conv.externalCards || (conv.externalCards = [])).push(c);
+      if (saved.title) conv.title = conv.title || saved.title;
+      if (saved.page_url) conv.page_url = conv.page_url || saved.page_url;
+      // 外部卡片：补齐本地没有的
+      if (Array.isArray(saved.externalCards)) {
+        const known = new Set((conv.externalCards || []).map((c) => c && c.id));
+        saved.externalCards.forEach((c) => {
+          if (c && c.id && !known.has(c.id)) conv.externalCards.push(c);
         });
       }
-      // 卡片执行状态：必须无条件合并，绝不能也加「消息为空」的条件。
-      // 因为 chrome.storage 是异步的，而 ingestMessages 是同步执行的：
-      // 本回调触发时页面内容早已灌入（conv.messages 非空），
-      // 一旦加了那道门，卡片状态就永远恢复不了 —— 刷新后一律变回待执行。
-      this.mergeCardMap(convId, saved.cardMap);
+      // 可见区 key 与分支 key：优先用存档
+      conv.visibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : (conv.visibleKeys || []);
+      if (Array.isArray(saved.branchKeys)) conv.branchKeys = saved.branchKeys;
+      if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
+      self._convReady = self._convReady || {};
+      self._convReady[convId] = true;
+      log('loadConversation：会话 ' + convId + ' 历史就绪，节点=' + Object.keys(conv.msgTree).length);
+      cb(true);
     });
   };
 
-  /** 把持久化的卡片执行状态合并回当前会话。 */
-  M.mergeCardMap = function (convId, savedCardMap) {
-    const conv = this.conversations[convId];
-    if (!conv || !savedCardMap) return;
-    let n = 0;
-    Object.keys(savedCardMap).forEach((id) => {
-      const saved = savedCardMap[id];
-      if (!saved) return;
-      const cur = conv.cardMap[id];
-      if (cur) {
-        // 已跳过状态优先恢复：跳过的卡片不应因页面重绘而变回可自动执行
-        if (saved.skipped) {
-          cur.skipped = true;
-          cur.countdown = 0;
-          cur.phase = '';
-        }
-        // 页面重绘只会重建出 pending 卡片，把已执行的结果回填
-        if (saved.executed && !cur.executed) {
-          cur.status = saved.status || cur.status;
-          cur.result = saved.result;
-          cur.error = saved.error;
-          cur.stack = saved.stack || null;
-          cur.errorType = saved.errorType || '';
-          cur.origin = saved.origin || '';
-          cur.location = saved.location || null;
-          cur.hint = saved.hint || '';
-          cur.executed = true;
-          n++;
-        }
-      } else {
-        // 页面上已不存在的代码块：仍恢复，切回来时执行记录不丢
-        conv.cardMap[id] = saved;
-        n++;
-      }
-    });
-    if (n) log('已恢复卡片执行状态', convId, '卡片数=' + n);
-    // 无论是否恢复出内容都要落盘，确保合并后的状态被保存
-    if (this._persist) this._persist();
-  };
-
-  /** 把当前会话写入本地存储。 */
-  M.persistConv = function () {
-    const convId = this.activeConv;
-    const conv = this.conversations[convId];
-    if (!conv) return;
-    const payload = {
+  /**
+   * 组装当前会话的存档载荷。
+   * @param {Object} conv 会话记录
+   * @returns {Object} 可直接写入 storage 的普通对象
+   */
+  M.buildConvPayload = function (conv) {
+    return {
       title: conv.title,
-      pageUrl: conv.pageUrl,
-      messages: conv.messages,
-      cardMap: conv.cardMap,
-      externalCards: conv.externalCards || [],   // 外部卡片随会话持久化
-      msgTs: conv.msgTs || {},                   // 统一时序：消息指纹 → 时间戳
-      _lastTs: conv._lastTs || 0,                // 统一时序：当前最大时间戳
+      page_url: conv.page_url,
+      msgTree: conv.msgTree || {},           // 唯一存完整信息处
+      visibleKeys: conv.visibleKeys || [],   // 可见区切片（只存 key）
+      branchKeys: conv.branchKeys || [],     // 组装分支（只存 key）
+      externalCards: conv.externalCards || [],
+      orphanSlice: conv.orphanSlice || [],
       updatedAt: Date.now()
     };
-    chrome.storage.local.set({ [this.convKey(convId)]: payload });
   };
 
-  /** 删除单个历史卡片（若在自动倒计时中一并取消）。 */
-  M.removeCard = function (id) {
-    const card = this.cardMap[id];
-    if (card && card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-    delete this.cardMap[id];
-    if (this._persist) this._persist();
-    this.toast('已删除卡片');
-  };
-
-  /** 删除外部卡片：取消其倒计时并从外部卡片列表中移除，并落盘。 */
-  M.removeExternalCard = function (id) {
-    const idx = (this.externalCards || []).findIndex((c) => c.id === id);
-    if (idx < 0) return;
-    const card = this.externalCards[idx];
-    if (card && card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-    this.externalCards.splice(idx, 1);
-    if (this._persist) this._persist();
-    this.toast('已删除外部卡片');
-  };
-
-  /** 历史卡片管理列表中的删除入口：按来源分派到对应的删除方法。 */
-  M.removeHistoryCard = function (card) {
-    if (!card) return;
-    if (card._kind === 'external') this.removeExternalCard(card.id);
-    else this.removeCard(card.id);
-  };
-
-  /** 清空当前会话全部历史卡片（工具/代码卡片与外部卡片一并清空）。 */
-  M.clearAllCards = function () {
-    if (!confirm('确认清空当前会话全部历史卡片？此操作不可撤销。')) return;
-    Object.keys(this.cardMap).forEach((id) => {
-      const card = this.cardMap[id];
-      if (card && card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-      delete this.cardMap[id];
+  /**
+   * 把指定会话写入本地存储（含写入失败检查）。
+   * 必须显式接收会话 id：落盘是延迟执行的，延迟期间可能切换会话。
+   * @param {string} [convId] 目标会话 id；缺省为当前活动会话
+   */
+  M.persistConv = function (convId) {
+    const id = convId || this.activeConv;
+    const conv = this.conversations[id];
+    if (!conv) return;
+    const self = this;
+    const payload = self.buildConvPayload(conv);
+    log('persistConv 写入：会话=' + id + '，节点=' + Object.keys(payload.msgTree || {}).length
+      + '，外部卡片=' + (payload.externalCards || []).length);
+    chrome.storage.local.set({ [self.convKey(id)]: payload }, function () {
+      const err = chrome.runtime.lastError;
+      if (err) {
+        log('persistConv 写入失败：' + (err.message || err));
+        self.toast('会话存档失败：存储空间不足');
+      }
     });
-    const ext = this.curConv.externalCards || [];
-    ext.forEach((c) => {
-      if (c && c._cdTimer) { clearTimeout(c._cdTimer); c._cdTimer = null; }
+  };
+
+  /**
+   * 扫描本地存储里的全部会话存档，把标题等摘要填入 convScanned。
+   * 只读标题 / 页面地址 / 更新时间等轻量字段。
+   */
+  M.scanConversations = function () {
+    const self = this;
+    const prefix = 'aiMirrorConv_' + this.siteKey + '__';
+    chrome.storage.local.get(null, function (all) {
+      const out = {};
+      Object.keys(all || {}).forEach(function (k) {
+        if (k.indexOf(prefix) !== 0) return;
+        const id = k.slice(prefix.length) || '__default__';
+        const saved = all[k] || {};
+        // 消息条数：统计整棵消息树的节点数（不做分支筛选），
+        // 这样不切会话也能一眼看出该会话累积了多少条消息。
+        const tree = saved.msgTree || {};
+        let msgCount = 0;
+        Object.keys(tree).forEach(function (key) {
+          if (tree[key]) msgCount += 1;
+        });
+        out[id] = {
+          title: saved.title || '',
+          pageUrl: saved.page_url || '',
+          updatedAt: saved.updatedAt || 0,
+          msgCount: msgCount
+        };
+      });
+      self.convScanned = out;
+      log('会话列表已扫描存储：' + Object.keys(out).length + ' 个会话');
     });
-    // 就地清空当前会话的外部卡片数组，保持 computed 引用不变
-    ext.length = 0;
-    if (this._persist) this._persist();
-    this.toast('已清空历史卡片');
+  };
+
+  /**
+   * 在会话列表中切换到某个会话。
+   * 读取历史后不做切片处理，仅展示已存历史。
+   * @param {string} id 目标会话 id
+   */
+  M.selectConversation = function (id) {
+    if (!id || id === this.activeConv) return;
+    this.applyConversation(id, '', '', null);
+    log('会话列表切换：' + id);
+  };
+
+  /**
+   * 清空全部会话：逐个删除内存与本地存储里的会话存档。
+   */
+  M.clearAllConversations = function () {
+    if (!confirm('确认清空全部会话？所有会话的聊天记录与卡片都会被删除，此操作不可撤销。')) return;
+    const self = this;
+    const memIds = Object.keys(this.conversations || {});
+    const keys = memIds.map((id) => this.convKey(id));
+    memIds.forEach((id) => {
+      const c = self.conversations[id];
+      if (!c) return;
+      self.eachCard(c, (card) => {
+        if (card && card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
+      });
+      (c.externalCards || []).forEach((ec) => {
+        if (ec && ec._cdTimer) { clearTimeout(ec._cdTimer); ec._cdTimer = null; }
+      });
+    });
+    this.conversations = {};
+    chrome.storage.local.remove(keys, function () {
+      chrome.storage.local.get(null, function (all) {
+        const prefix = 'aiMirrorConv_' + self.siteKey + '__';
+        const remain = Object.keys(all || {}).filter((k) => k.indexOf(prefix) === 0);
+        if (remain.length) {
+          chrome.storage.local.remove(remain, function () { self._afterClearAll(); });
+        } else {
+          self._afterClearAll();
+        }
+      });
+    });
+  };
+
+  /** 清空全部会话后的收尾：重建一个空的活动会话并复位相关状态。 */
+  M._afterClearAll = function () {
+    this.convScanned = {};
+    this.activeConv = '__default__';
+    this._convReady = {};
+    this.ensureConv(this.activeConv);
+    Object.keys(this.entryChecked).forEach((k) => { delete this.entryChecked[k]; });
+    Object.keys(this.entryOpen).forEach((k) => { delete this.entryOpen[k]; });
+    this.sessionSearch = '';
+    if (this._persist) this._persist(this.activeConv);
+    log('已清空全部会话');
+    this.toast('已清空全部会话');
   };
 })();

@@ -131,33 +131,24 @@
   };
 
   /**
-   * 生成块的摘要指纹，用于给代码块算稳定 id。
-   * @param {Object} b 块对象
-   * @returns {Object} 只含关键字段的摘要
-   */
-  A.blockDigest = function (b) {
-    if (!b) return { type: '', text: '' };
-    if (b.type === 'code') return { type: 'code', lang: b.lang || '', code: b.code || '' };
-    if (b.type === 'heading') return { type: 'heading', level: b.level, text: b.text || '' };
-    if (b.type === 'list') return { type: 'list', ordered: !!b.ordered, items: b.items || [] };
-    if (b.type === 'table') return { type: 'table', rows: b.rows || [] };
-    return { type: b.type || '', text: b.text || '' };
-  };
-
-  /**
-   * 给每条消息内的代码块生成带消息指纹 + 块索引的稳定 id。
+   * 给每条消息内的代码块生成带消息指纹 + 代码块序号的稳定 id。
+   * 指纹来自公共库 messageFingerprint（正文参与、思考内容剔除），
    * 只按代码内容做指纹在多轮对话中会大量重复：相同工具调用出现在不同轮次时，
    * 旧卡片会被复用，出现“没执行却显示旧结果”的问题。
    * @param {Object} msg 消息对象，就地修改其 blocks 内的 code.id
    */
   A.stampCodeBlockIds = function (msg) {
     const blocks = msg.blocks || [];
-    const digest = blocks.map(A.blockDigest);
-    const fp = A.hashStr(msg.role + '|' + (msg.name || '') + '|' + JSON.stringify(digest));
-    blocks.forEach(function (b, i) {
-      if (b.type === 'code') {
-        b.id = 'c' + A.hashStr(fp + '|' + i + '|' + (b.lang || '') + '|' + (b.code || ''));
-      }
+    // 指纹统一由公共库提供：正文参与、思考内容剔除。
+    // 这样思考区展开 / 折叠不会改变指纹，卡片编号也就不会跟着变。
+    const fp = window.AIMirrorDomUtils.messageFingerprint(msg);
+    // 代码块序号独立计数：不能用整条消息里的块下标，
+    // 否则思考块增删会让后续代码块的下标整体位移、编号随之改变。
+    let codeIdx = -1;
+    blocks.forEach(function (b) {
+      if (b.type !== 'code') return;
+      codeIdx += 1;
+      b.id = 'c' + A.hashStr(fp + '|' + codeIdx + '|' + (b.lang || '') + '|' + (b.code || ''));
     });
   };
 
@@ -196,8 +187,8 @@
     //    又和上面独立的 thinking 块重复。
     // 2) 一个回答常被拆成多个容器（例如文字一段、代码块另起一段）。
     //    只取第一个会把代码块整段漏掉 —— 表现为「插件记录落后于网页」，
-    //    更严重的是：AI 的 tool 代码块提取不到 → 不生成卡片 → 无法执行 →
-    //    没有 [TOOL_RESULT] 回传，自愈流程直接断在这里。
+    //    更严重的是：AI 的工具调用代码块提取不到 → 不生成卡片 → 无法执行 →
+    //    没有 [TOOL_RESULT] 回传，整条工具调用链直接断在这里。
     let wraps = [];
     if (P.answerWrap) {
       const host = P.answerContent ? (el.querySelector(P.answerContent) || el) : el;
@@ -253,8 +244,33 @@
       });
     });
 
-    A.log('extractBlocks: 结构化提取到', messages.length, '条消息');
-    messages.forEach(A.stampCodeBlockIds);
-    return messages;
+    // 过滤掉网页 AI 的「生成中占位消息」：正式回答出现后它会消失，
+    // 若记入消息树，会与正式回答在不同父节点下重复挂载、触发碰撞报错。
+    const kept = messages.filter(function (m) { return !A.isPlaceholderMessage(m); });
+    kept.forEach(A.stampCodeBlockIds);
+    return kept;
+  };
+
+  /**
+   * 判断是否为网页 AI 的「生成中占位消息」。
+   * 典型如 GLM 在正式回答前先渲染的一小段固定文案（含 "ChatGLM" 与 "语音"），
+   * 回答完成后这段内容会消失。判定同时看结构与内容，避免误伤正式回答：
+   *  · 结构：只含段落块（出现代码 / 列表 / 表格 / 标题等一律视为正式回答）
+   *  · 内容：同时出现固定占位词
+   * @param {Object} msg 消息对象
+   * @returns {boolean} true 表示应丢弃
+   */
+  A.isPlaceholderMessage = function (msg) {
+    if (!msg || msg.role !== 'assistant') return false;
+    const blocks = msg.blocks || [];
+    // 空回答一律丢弃：没有任何块的助手消息没有记录价值
+    if (!blocks.length) return true;
+    // 只含段落才算占位；出现任何实质内容块都不丢弃
+    const onlyParagraph = blocks.every(function (b) {
+      return b && b.type === 'paragraph';
+    });
+    if (!onlyParagraph) return false;
+    const text = blocks.map(function (b) { return b.text || ''; }).join('');
+    return text.indexOf('ChatGLM') >= 0 && text.indexOf('语音') >= 0;
   };
 })();

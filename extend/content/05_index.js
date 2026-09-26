@@ -10,54 +10,56 @@
   window.addEventListener('message', function (e) {
     const d = e.data;
     if (!d || !d.type) return;
-    A.log('收到 iframe 消息 ←', d.type);
-    if (d.type === 'request_page') A.sendPage(true);
-    else if (d.type === 'auto_send') { A.log('收到 auto_send 请求'); A.pasteToWebpageAI(d.text || ''); }
+    if (d.type === 'request_page') A.sendPage(true, 'manual');
+    else if (d.type === 'auto_send') A.pasteToWebpageAI(d.text || '');
+    else if (d.type === 'request_theme') {
+      // 对话框就绪后主动询问主题，避免 iframe 加载早于主题推送而错过首帧
+      A.postTheme();
+    }
     else if (d.type === 'request_panel_side') {
       // iframe 就绪后主动询问当前挂靠侧，避免刷新后面板方向与记录不一致
       A.post({ type: 'panel_side', side: A.state.panelSide });
+    }
+    else if (d.type === 'request_panel_visible') {
+      // iframe 就绪后主动询问面板可见性：对话框据此决定是否启动外部卡片轮询
+      A.post({ type: 'panel_visible', visible: !A.state.dialogHidden });
     }
     else if (d.type === 'set_panel_side') {
       A.state.panelSide = d.side === 'left' ? 'left' : 'right';
       A.applyPanelSide();
       // 持久化挂靠侧，刷新后保持
       try { chrome.storage.local.set({ aiMirrorPanelSide: A.state.panelSide }); } catch (e) {}
-      A.log('set_panel_side: 挂靠侧 →', A.state.panelSide);
     }
     else if (d.type === 'close_panel') {
       A.setDialogVisible(false);
-      A.log('close_panel: 已隐藏抽屉');
     }
   });
 
   // 来自后台（工具栏点击）的消息：切换悬浮对话框显隐
   chrome.runtime.onMessage.addListener(function (msg) {
     if (msg && msg.type === 'toggle_dialog') {
-      let f = document.getElementById('ai-mirror-iframe');
-      // 界面被清理 / 旧实例残留 / 注入失败时，点图标应先重新拉起，而不是直接隐藏一个不存在的元素
-      if (!f) {
-        A.log('toggle_dialog: 未找到 iframe，尝试重新注入');
-        A.inject();
-        f = document.getElementById('ai-mirror-iframe');
-      }
-      if (!f) {
-        A.warn('toggle_dialog: 重新注入后仍无 iframe');
-        return;
-      }
-      // 真正的 toggle：当前可见 → 隐藏；当前隐藏（display:none）→ 显示并重新探测对话容器
-      if (f.style.display === 'none') {
-        A.setDialogVisible(true);
-        A.log('toggle_dialog: 显示对话框并重新探测对话容器');
-        A.reprobe();
-      } else {
-        A.setDialogVisible(false);
-        A.log('toggle_dialog: 隐藏对话框');
-      }
+      // 以「iframe 是否存在」为唯一开关依据：
+      //   存在（面板打开中）→ 关闭（销毁 iframe）；
+      //   不存在（面板关闭）→ 打开（创建 iframe 并激活）。
+      // 不再用 display 判断，避免「创建即显示」与「隐藏态」两套状态打架。
+      const f = document.getElementById('ai-mirror-iframe');
+      if (f) A.setDialogVisible(false);
+      else A.setDialogVisible(true);
     }
   });
 
-  // 定时巡检：会话切换 / 容器节点被替换时补绑
-  setInterval(A.watchConversation, 700);
+  // 会话巡检定时器：仅面板打开期间运行。
+  // 关闭时由 stopBackground 清掉，不在后台空转。
+  let convTimer = null;
+  /** 启动会话巡检：面板打开时调用。幂等，重复调用不叠加定时器。 */
+  A.startConvWatch = function () {
+    if (convTimer) clearInterval(convTimer);
+    convTimer = setInterval(A.watchConversation, A.CONV_POLL_MS);
+  };
+  /** 停止会话巡检：面板关闭时调用。 */
+  A.stopConvWatch = function () {
+    if (convTimer) { clearInterval(convTimer); convTimer = null; }
+  };
 
   // 建立长连接用于感知扩展卸载（见 cleanup 注释）
   try {
@@ -67,15 +69,35 @@
     A.warn('cleanup: 建立长连接失败（扩展可能已卸载）', e && e.message);
   }
 
-  // 前进/后退缓存（bfcache）恢复时内容脚本不会重跑，需要补注入，否则界面消失
+  // 前进/后退缓存（bfcache）恢复时内容脚本不会重跑，需要重挂事件监听。
+  // 注意：此处不预注入 iframe —— 面板默认关闭，等用户点开时再按需创建。
+  // 只把选择器记回 state，供打开时绑定观察器使用。
   window.addEventListener('pageshow', function (e) {
-    if (e.persisted && !document.getElementById('ai-mirror-iframe')) {
-      A.log('pageshow: bfcache 恢复，补注入 iframe');
-      A.getConfig(function (cfg) { A.inject(); A.startObserver(cfg.container); });
+    if (e.persisted) {
+      A.getConfig(function (cfg) { A.state.currentSel = cfg.container; });
     }
   });
 
-  A.log('content 脚本已加载', location.href);
+  // 宿主主题监听器：仅面板打开期间存在。
+  // 面板关闭时对话框已销毁，推送主题无人接收，继续观察纯属后台空转。
+  let themeObserver = null;
+  /** 启动宿主主题监听：面板打开时调用。幂等，已在监听则跳过。 */
+  A.startThemeWatch = function () {
+    if (themeObserver) return;
+    let timer = null;
+    const onChange = function () {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () { A.postTheme(); }, 200);
+    };
+    const opts = { attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-color-mode'] };
+    themeObserver = new MutationObserver(onChange);
+    themeObserver.observe(document.documentElement, opts);
+    if (document.body) themeObserver.observe(document.body, opts);
+  };
+  /** 停止宿主主题监听：面板关闭时调用。 */
+  A.stopThemeWatch = function () {
+    if (themeObserver) { themeObserver.disconnect(); themeObserver = null; }
+  };
 
   // 初始化
   A.getConfig(function (cfg) {
@@ -84,9 +106,11 @@
     chrome.storage.local.get(['aiMirrorPanelSide'], function (res) {
       A.state.panelSide = (res && res.aiMirrorPanelSide === 'left') ? 'left' : 'right';
       A.state.dialogHidden = true;
-      A.log('初始化：抽屉默认关闭，挂靠侧 =', A.state.panelSide);
-      A.inject();
-      A.startObserver(cfg.container);
+      // 只记下当前站点的对话容器选择器，不注入 iframe、不绑定观察器：
+      // 面板默认关闭，此时不需要任何界面与监听；等用户点开面板时
+      // setDialogVisible(true) 再按需创建 iframe、绑定观察器。
+      // 这样页面在面板关闭期间没有任何本扩展的活动代码，杜绝后台空转。
+      A.state.currentSel = cfg.container;
     });
   });
 })();

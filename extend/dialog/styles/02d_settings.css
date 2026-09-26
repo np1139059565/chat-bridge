@@ -1,0 +1,160 @@
+/* 设置面板（续）：会话记录左「会话列表」+ 分隔条 + 右「会话记录」 */
+/* ========== 会话记录：左「会话列表」+ 中分隔条 + 右「会话记录」========== */
+/* 整体横向分栏容器：左栏固定宽度（可拖动调），中间细条，右栏占满剩余空间 */
+.conv-split {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+/* 左栏：会话列表。宽度由内联 style 控制，此处只做布局与描边 */
+.conv-list-pane {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 70px;
+  border-right: 1px solid var(--cb-border);
+}
+
+/* 列表头部：标题 + 「清空全部」按钮 */
+.conv-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-2);
+  padding: 0 var(--cb-sp-2) var(--cb-sp-2) 0;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-sub);
+  font-weight: 600;
+}
+
+/* 「清空全部」按钮：危险操作，用浅红底 + 红字与普通灰底按钮区分 */
+.conv-list-head button.danger {
+  padding: 2px var(--cb-sp-3);
+  border: 1px solid var(--cb-danger-border);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-fill);
+  color: var(--cb-danger-text);
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+}
+
+.conv-list-head button.danger:hover:not(:disabled) {
+  background: var(--cb-danger-bg);
+}
+
+.conv-list-head button.danger:disabled {
+  color: var(--cb-text-faint);
+  border-color: var(--cb-border);
+  cursor: not-allowed;
+}
+
+/* 会话列表：可滚动，条目纵向排列 */
+.conv-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-1);
+  padding-right: var(--cb-sp-2);
+}
+
+/* 单个会话条目：点一下切换会话。选中态用浅主色底 + 左侧主色竖条标记 */
+.conv-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--cb-sp-2) var(--cb-sp-3);
+  border-radius: var(--cb-r-md);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background-color .15s ease;
+}
+
+.conv-list-item:hover {
+  background: var(--cb-bg-hover);
+}
+
+.conv-list-item.active {
+  background: var(--cb-bg-fill);
+  border-left-color: var(--cb-primary);
+}
+
+.conv-list-title {
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-list-item.active .conv-list-title {
+  color: var(--cb-primary);
+  font-weight: 600;
+}
+
+/* 标题下方一行元信息：左侧条数、右侧日期，两端对齐 */
+.conv-list-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-1);
+}
+
+/* 会话消息条数：浅底胶囊，便于一眼扫到 */
+.conv-list-count {
+  flex: 0 0 auto;
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-sub);
+  background: var(--cb-bg-fill);
+  border-radius: var(--cb-r-pill);
+  padding: 0 6px;
+  line-height: 16px;
+}
+
+.conv-list-date {
+  margin-left: auto;
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-muted);
+}
+
+/* 分隔条：细条 + 拖动手柄光标。热区做宽到 6px，方便鼠标抓取；
+   视觉上只显示 1px 细线，不喧宾夺主。 */
+.conv-resizer {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+}
+
+.conv-resizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--cb-border);
+  transition: background-color .15s ease;
+}
+
+.conv-resizer:hover::before {
+  background: var(--cb-primary);
+  width: 2px;
+}
+
+/* 右栏：会话记录。占满剩余空间，内部自带滚动 */
+.conv-record-pane {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding-left: var(--cb-sp-3);
+  display: flex;
+  flex-direction: column;
+}
+
+/* 分栏内的卡片标题不再额外占整宽，避免与左栏抢位 */
+.conv-record-pane>.card-head {
+  margin-bottom: var(--cb-sp-2);
+}

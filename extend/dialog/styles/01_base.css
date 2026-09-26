@@ -6,9 +6,16 @@
  * ============================================================ */
 
 /* ========== 骨架 ========== */
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
-html, body { margin: 0; padding: 0; height: 100%; }
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
 
 body {
   font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
@@ -17,36 +24,106 @@ body {
   background: var(--cb-bg-page);
 }
 
-#app { height: 100%; display: flex; flex-direction: column; }
+/* 滚动条跟随主题：Firefox 用 scrollbar-color，Chromium 用 ::-webkit-scrollbar。
+   不设置时暗色下会露出系统亮色滚动条，与面板底色割裂。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cb-border-strong) transparent;
+}
 
-.mirror-app { display: flex; flex-direction: column; height: 100%; position: relative; }
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--cb-border-strong);
+  border-radius: var(--cb-r-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--cb-text-faint);
+}
+
+#app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mirror-app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
 
 /* ========== 顶栏 ========== */
 .m-header {
-  display: flex; align-items: center; justify-content: space-between;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   padding: var(--cb-sp-4) var(--cb-sp-5);
-  background: var(--cb-primary); color: var(--cb-on-primary);
+  /* 顶栏底色走专用令牌：与卡片同底，避免大面积饱和蓝 */
+  background: var(--cb-bg-header);
+  color: var(--cb-text);
+  border-bottom: 1px solid var(--cb-header-border);
   flex: 0 0 auto;
 }
+
 .m-header .title {
-  display: flex; align-items: center; gap: var(--cb-sp-3);
-  font-weight: 600; font-size: var(--cb-fs-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-3);
+  font-weight: 600;
+  font-size: var(--cb-fs-lg);
 }
+
 /* 站点徽标：明确当前数据属于哪个网站 */
 .site-badge {
-  font-size: var(--cb-fs-micro); font-weight: 400;
-  padding: 2px var(--cb-sp-2); border-radius: var(--cb-r-lg);
-  background: var(--cb-on-primary-badge); max-width: 150px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: var(--cb-fs-micro);
+  font-weight: 400;
+  padding: 2px var(--cb-sp-2);
+  border-radius: var(--cb-r-lg);
+  /* 浅底顶栏下的徽标：主色淡蒙层 + 主色文字，保持轻量标识感 */
+  background: var(--cb-on-primary-badge);
+  color: var(--cb-primary);
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 /* 顶栏按钮组：撑满高度并让内部按钮横向排列 */
-.m-header .actions { display: flex; align-items: center; gap: var(--cb-sp-2); }
-.m-header .actions button {
-  background: var(--cb-on-primary-soft); color: var(--cb-on-primary);
-  border: 0; border-radius: var(--cb-r-md);
-  width: 28px; height: 28px; cursor: pointer; font-size: var(--cb-fs-lg);
+.m-header .actions {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
 }
-.m-header .actions button:hover { background: var(--cb-on-primary-soft-hover); }
+
+/* 顶栏按钮：浅底顶栏下改用灰底 + 深色图标，与卡片标题按钮同一观感 */
+.m-header .actions button {
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-body);
+  border: 1px solid var(--cb-border-strong);
+  border-radius: var(--cb-r-pill);
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+  font-size: var(--cb-fs-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color .2s;
+}
+
+.m-header .actions button:hover {
+  background: var(--cb-bg-fill-hover);
+}
 
 /* 键盘焦点样式：所有按钮都清掉了边框，只靠浏览器默认 outline 提示偏弱。
    :focus-visible 只在键盘导航时出现，不影响鼠标点击的观感。 */
@@ -60,8 +137,15 @@ textarea:focus-visible,
 
 /* ========== 轻提示 ========== */
 .toast {
-  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
-  background: var(--cb-bg-toast); color: var(--cb-on-primary);
-  padding: var(--cb-sp-3) 14px; border-radius: var(--cb-r-lg);
-  font-size: var(--cb-fs-sm); z-index: var(--cb-z-toast); pointer-events: none;
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  background: var(--cb-bg-toast);
+  color: var(--cb-on-toast);
+  padding: var(--cb-sp-3) 14px;
+  border-radius: var(--cb-r-lg);
+  font-size: var(--cb-fs-sm);
+  z-index: var(--cb-z-toast);
+  pointer-events: none;
 }

@@ -38,7 +38,7 @@ python flask_server/_smoke_ct.py
 
 | 要改什么 | 去哪里 |
 |---|---|
-| 新增/修改内置工具 | `flask_server/tools_impl.py`（改完可热重载）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
+| 新增/修改内置工具 | `flask_server/tools_impl.py`（改完需重启服务）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
 | 工具上线开关、端口、体积上限 | `flask_server/config.yaml` 或 `POST /config` |
 | 卡片总线行为 | `flask_server/card_bus.py` + `routes/cards.py` |
 | 外部工具转发 | `flask_server/external_tools.py` + `routes/ext.py` |
@@ -46,7 +46,7 @@ python flask_server/_smoke_ct.py
 | 网页对话抓取、站点规则 | `extend/content/00_state.js`（PROFILES 表）+ `extend/content/02_blocks.js` |
 | 抽屉 UI、卡片渲染 | `extend/dialog/parts/`（Vue 渲染函数）+ `extend/dialog/styles/` |
 | 调试扩展行为 | `skills/debug_chrome/extension/**` |
-| 技能说明注入 | `skills/debug_chrome/tool.json` 的 `prompt` 字段 |
+| 技能说明注入 | `skills/<name>/tool.json` 的 `prompt` 字段；技能清单由后端扫描 `skills/` 生成 |
 | 规则 | `rules/*.md`（设置页可编辑） |
 
 ---
@@ -56,22 +56,22 @@ python flask_server/_smoke_ct.py
 ### 3.1 工具实现（tools_impl.py）
 
 - 参数不合法抛 `ToolParamError`（归类为 `parameter`）。
-- 其它异常视为 `tool_internal`，AI 会据此触发自愈。
+- 其它异常视为 `tool_internal`，提示 AI 改参数无效、需检查工具实现。
 - 必填参数用 `tool_helpers.require(p, "参数名")` 校验，报错信息里点明正确参数名。
 - 结果体积受 `limits.max_json_chars` 限制（`tool_helpers.enforce_size_limit`），超限**报错**而不是截断（避免喂不完整结果）。
-- `read_file` 只接受**绝对路径**，不做「相对工程根」的隐式解析（避免耦合）。
-- 读取 skill 目录内的文档统一走 `read_skill`（参数 `skill` + `file` 相对路径），
+- 文件类工具路径口径统一：绝对路径原样使用，相对路径以工程根为基准解析（`tool_helpers.abspath`）。
+- 读取 skill 目录内的文档统一走 `list_skills` / `read_skill`（`read_skill` 参数 `skill` + `file` 相对路径），
   不要用 `read_file` 拼 `skills/xxx/SKILL.md`。新增 skill 文档读取需求时也应遵循此约定。
 
 ### 3.2 错误分类不可破坏
 
-`error_utils.classify_error` 用 `param_error_cls()` 动态取当前模块（`runtime.impl`）的 `ToolParamError`，以兼容热重载。**不要**在模块顶层 `from tools_impl import ToolParamError`——热重载后会失配，参数错误被误判为代码缺陷。
+`error_utils.classify_error` 用 `param_error_cls()` 动态取当前模块（`runtime.impl`）的 `ToolParamError`，以兼容实现模块被替换的场景。**不要**在模块顶层 `from tools_impl import ToolParamError`——实现模块被替换后类对象会失配，参数错误被误判为代码缺陷。
 
 ### 3.3 卡片
 
-- 工具卡片存 `conv.cardMap`；外部卡片存 `conv.externalCards`。两者都按会话隔离并持久化。
-- 外部卡片「发送即结束」：投递后立即置 `done` 并回填 `/api/cards/<id>/reply`，**不等待** AI 回复信封。
-- 外部卡片与文字消息共用统一时间戳 `_ts`（毫秒，同一单调时间源），渲染时统一排序，不做类型特殊处理。
+- 工具卡片挂在消息树节点的 `node.cards` 上（按代码块 id 索引）；`cardMap` 是由全部节点卡片聚合出的 computed 视图。外部卡片存 `conv.externalCards`。两者都按会话隔离并持久化。
+- 外部卡片「发送即结束」：登记即返回，卡片入列即 `POST /api/cards/<id>/delivered` 确认已展示，此后不再投递；任务进展由网页 AI 用 `push_message` 主动推送。
+- 外部卡片带 `anchorKey`（消息树 key）：渲染时按锚点插入到对应消息之后；锚点不在当前列表时放到末尾。镜像区会跳过已处理且无消息本体的卡片，避免与消息本体重复显示。
 
 ### 3.4 站点规则（extend/content/00_state.js）
 
@@ -80,7 +80,12 @@ python flask_server/_smoke_ct.py
 
 ### 3.5 System Prompt
 
-由 `extend/dialog/parts/05_messages.js` 的 `generateSystemPrompt()` 拼装，工具列表只给名称与描述，参数由 AI 调 `get_tool_params` 自取；技能说明来自后端 `/prompt_sections`，注入到最末尾。
+由 `extend/dialog/parts/05_messages.js` 的 `generateSystemPrompt()` 拼装，按 tool / rule / skill 三类组织，每类两段：
+- TOOL：调用说明（格式与约束，含参数由 AI 调 `get_tool_params` 自取）、工具列表。
+- RULE：读取说明、规则列表（含优先级与摘要）。
+- SKILL：读取说明、技能列表（含摘要、所含工具与已上线技能的统一说明）。
+
+技能数据来自后端 `/prompt_sections`（同时返回 `sections` 与 `skills`）。
 
 ---
 
@@ -89,7 +94,7 @@ python flask_server/_smoke_ct.py
 ### 新增一个内置工具
 
 1. 在 `tool_meta.py` 的元数据表加参数声明，在 `tools_impl.py` 的 `DISPATCH` 注册实现函数。
-2. 调 `POST /hot_fix` 或重启服务。
+2. 重启服务。
 3. 在设置页上线（写 `config.yaml`）。
 
 ### 新增一个 skill
@@ -105,8 +110,9 @@ python flask_server/_smoke_ct.py
 
 ### 排查「外部工具离线」
 
-- 提供方在线判定为 3 秒内有 `poll`。调试扩展仅在**抽屉展开且页面活动**时轮询。
-- 若需在抽屉折叠时仍可服务，需改 `skills/debug_chrome/extension/content/03_heartbeat.js` 的轮询条件。
+- 提供方在线判定为 10 秒内有 `poll`（`external_tools.ONLINE_WINDOW`）。在线状态仅用于界面指示灯，不参与执行判断。
+- 命令路由依据「目标页面的工具（抽屉）是否打开」：扩展每次轮询上报 `is_open`，目标页面工具未打开时命令立即逸散到其他页面代收，不再依赖时间窗猜测。
+- 命令等待上限为 10 秒（`external_tools.FORWARD_TIMEOUT`），超时返回 `ForwardTimeout`（origin=environment）。
 
 ---
 
@@ -117,16 +123,17 @@ python flask_server/_smoke_ct.py
 | M1 | `extend/dialog/parts/00_data.js` / `04_sessions.js` | （已修）外部卡片曾未按会话隔离 / 不持久化 |
 | M2 | `extend/dialog/parts/06_execute.js` | （已修）关闭自动开关后外部卡片曾卡死 |
 | M3 | `flask_server/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
-| D1 | `flask_server/routes/ext.py` | 提供方通道未按 tab 定向，多标签页指令串台 |
-| D2 | `skills/debug_chrome/extension/content/03_heartbeat.js` | 抽屉折叠即停轮询 → 3 秒后判离线 |
-| D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | `get_element_style` 默认不返回样式 |
+| D1 | `flask_server/routes/ext.py` | （已修）提供方通道按 `page_url` / `is_open` 定向，目标页面工具未开即逸散 |
+| D2 | `skills/debug_chrome/extension/content/03_heartbeat.js` | 抽屉折叠即停轮询 → 10 秒后判离线（仅影响指示灯） |
+| D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |
 | D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 |
 | D5 | `extend/content/00_state.js` | DeepSeek 输入框选择器含哈希类 |
-| D6 | `skills/debug_chrome/tool.json` / `extend/dialog/parts/` | 参数名与 silent 语义边角不一致 |
+| D6 | `skills/debug_chrome/tool.json` / `extend/dialog/parts/` | （已修）参数名与 silent 语义边角不一致 |
 
 ---
 
-## 六、Git / 产物
+## 六、验证脚本
 
-- 知识图谱产物 `graphify-out/` 已在 `.gitignore`。
-- `_verify_fixes.py` 用于验证修复。
+- `flask_server/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
+- `_verify_fixes.py`：验证必填参数校验与 `/config` 端口变更 `requireRestart` 两项修复。
+- `scripts/check_quality.py`：行数 / 圈复杂度 / 重复块质量扫描。

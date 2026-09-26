@@ -1,0 +1,215 @@
+/* 设置面板（续）：会话记录条目 */
+/* 会话记录列表：按时间倒序展示（最新在上），可勾选范围、展开查看并复制 JSON */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-1);
+  max-height: 750px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--cb-sp-1) 0;
+}
+
+/* 条目容器：边框与底色放在外层，展开区才能与标题行连成一体。
+   flex: 0 0 auto 是关键：.history-list 是 flex 列容器，子项默认 flex-shrink: 1，
+   条目一多就会被压缩，表现为「条目越多高度越小」。禁止收缩即可保持固定高度。 */
+.conv-entry {
+  flex: 0 0 auto;
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-card);
+  border: 1px solid var(--cb-border-soft);
+  overflow: hidden;
+}
+
+/* 外部卡片条目：左侧用警示色竖条标记，与普通消息条目区分 */
+.conv-entry.is-external {
+  border-left: 3px solid var(--cb-warn);
+}
+
+/* 外部调用消息（external-call 信封）：同属外部来源，用同一警示色标记 */
+.conv-entry.is-external-call {
+  border-left: 3px solid var(--cb-warn);
+}
+
+/* 分支父节点：其下挂有两条以上分支边，用主色竖条标记，便于定位分叉处 */
+.conv-entry.is-branch-parent {
+  border-left: 3px solid var(--cb-primary);
+}
+
+/* 同时命中两种标记时，以外部卡片色优先，保证外部卡片始终可辨 */
+.conv-entry.is-external.is-branch-parent {
+  border-left-color: var(--cb-warn);
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-card);
+  border: 1px solid var(--cb-border-soft);
+  font-size: var(--cb-fs-xs);
+}
+
+/* 嵌套在条目容器内时不再单独描边，避免出现双层边框 */
+.conv-entry .history-item {
+  border: 0;
+  border-radius: 0;
+}
+
+/* 展开 / 收起按钮：箭头指示折叠态，与镜像区「思考过程」同一交互 */
+.history-item .h-toggle {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: var(--cb-text-muted);
+  font-size: var(--cb-fs-xs);
+  padding: 0 var(--cb-sp-1);
+  line-height: 1;
+}
+
+.history-item .h-toggle:hover {
+  color: var(--cb-primary);
+}
+
+/* 展开区：内容本体，与标题行以细线分隔，底色弱化以区分层次 */
+.conv-body {
+  padding: var(--cb-sp-3);
+  border-top: 1px solid var(--cb-border-soft);
+  background: var(--cb-bg-subtle);
+  max-height: 400px;
+  overflow: scroll;
+}
+
+/* 展开区内的卡片不再重复描边，避免与外层容器叠加成双层边框 */
+.conv-body .code-card {
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* 范围说明行：无全选复选框，仅提示当前勾选数量。
+   同样禁止收缩，否则条目多时这一行也会被压扁。 */
+.conv-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-sub);
+}
+
+.conv-head .conv-hint {
+  color: var(--cb-text-muted);
+}
+
+/* 卡片标题栏内的按钮组：未勾选任何会话时「复制 JSON」为禁用态 */
+.sp-block .card-head .head-actions button:disabled {
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-faint);
+  border-color: var(--cb-border);
+  cursor: not-allowed;
+}
+
+/* 复选框容器：保持固定宽度，避免不同文案导致列宽跳动 */
+.conv-check {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cb-sp-1);
+  cursor: pointer;
+  color: var(--cb-text-sub);
+}
+
+.conv-check input {
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--cb-primary);
+}
+
+/* 条目主标签：宽度随内容自适应（仅「用户」/「AI」两字），
+   不设下限，缩到内容宽度，把空间留给预览列。 */
+.conv-title {
+  flex: 0 1 auto;
+  min-width: 25px;
+  color: var(--cb-text-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 条目 key：形如 'pid-id'（消息）或 'x-<卡片id>'（外部卡片）。
+   等宽小字完整显示，悬浮提示完整 key，点击复制。固定不伸缩，避免被预览列挤掉。 */
+.conv-id {
+  flex: 0 0 auto;
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted);
+  opacity: .8;
+  cursor: pointer;
+}
+
+.conv-id:hover {
+  color: var(--cb-primary);
+  opacity: 1;
+}
+
+/* 条目预览：只占剩余空间，过长省略，不挤掉右侧状态徽标 */
+.conv-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--cb-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.h-time {
+  color: var(--cb-text-muted);
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-item .h-del {
+  flex: 0 0 auto;
+  background: var(--cb-bg-fill);
+  border: 1px solid var(--cb-danger-border);
+  border-radius: var(--cb-r-md);
+  /* 图标按钮：方形定尺，避免 ✕ 被内边距撑成扁条 */
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-danger-text);
+}
+
+.history-item .h-del:hover:not(:disabled) {
+  background: var(--cb-danger-bg);
+}
+
+/* 当前会话不可删除：置灰并禁用指针，明确表达不可操作 */
+.history-item .h-del:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* 只读展示值：后端连接地址、当前站点规则。做成只读输入框的样子，
+   与普通输入框区分开（不可编辑、不抢焦点） */
+.ro {
+  margin-top: 3px;
+  padding: var(--cb-sp-2) var(--cb-sp-3);
+  border: 1px dashed var(--cb-border-strong);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-subtle);
+  color: var(--cb-text-sub);
+  font-size: var(--cb-fs-xs);
+  word-break: break-all;
+}

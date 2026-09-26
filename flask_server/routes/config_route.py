@@ -38,14 +38,11 @@ def _apply_run_command_languages(tv, changed):
 
 
 def _apply_tools_section(data, changed):
-    """应用 tools 区块：工具上下线开关，以及 run_command 的支持语言列表。
-
-    自愈工具不可被下线，因此显式排除 FIX_TOOLS。
-    """
+    """应用 tools 区块：工具上下线开关，以及 run_command 的支持语言列表。"""
     if not isinstance(data.get("tools"), dict):
         return
     for name, tv in data["tools"].items():
-        if name not in runtime.TOOLS or name in runtime.FIX_TOOLS or not isinstance(tv, dict):
+        if name not in runtime.TOOLS or not isinstance(tv, dict):
             continue
         enabled = bool(tv.get("enabled", True))
         runtime.CONFIG["tools"].setdefault(name, {})["enabled"] = enabled
@@ -87,7 +84,7 @@ def _config_snapshot():
         "default_profile": runtime.CONFIG.get("default_profile", "glm"),
         "site_profiles": runtime.CONFIG.get("site_profiles", {}),
         "tools": runtime.CONFIG.get("tools", {}),
-        "available_tools": sorted([k for k in runtime.TOOLS if k not in runtime.FIX_TOOLS]),
+        "available_tools": sorted(list(runtime.TOOLS.keys())),
     }
 
 

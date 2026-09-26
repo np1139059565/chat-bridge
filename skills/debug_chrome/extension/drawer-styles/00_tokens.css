@@ -1,65 +1,207 @@
 /* ============================================================
  * 调试扩展抽屉样式 · 00_tokens.css
  * ------------------------------------------------------------
- * 本文件由原 drawer.css 按分节拆分而来，内容保持一致。
+ * 本文件由原 drawer.css 按分节拆分而来。
  * 归属分节：设计令牌层
- * 全部取值来自 00_tokens.css 的设计令牌（--db-*）。
+ * 本文件只放 CSS 变量（:root），是全部样式分片的取值来源。
+ * 组件层只允许引用令牌，禁止再写死色值，否则「同一层级两种颜色」
+ * 的老问题会重新累积。
+ * 令牌取值与镜像插件（extend/dialog/styles/00_tokens.css）的 --cb-* 同语义项对齐。
  * ============================================================ */
 
 /* ========== 设计令牌层 ========== */
 :root {
   /* ---- 主色 ---- */
-  --db-primary: #1890ff;                    /* 主按钮、选中态、链接式图标 */
-  --db-primary-hover: #096dd9;              /* 主按钮悬浮态 */
-  --db-primary-soft: #e6f7ff;               /* 用户消息底、处理中徽标底 */
-  --db-on-primary: #ffffff;                 /* 主色底之上的文字 */
+  --db-primary: #2d6cdf;
+  /* 主按钮、选中态、链接式图标 */
+  --db-primary-hover: #245bc0;
+  /* 主按钮悬浮态 */
+  --db-primary-soft: #e6f7ff;
+  /* 用户消息底、处理中徽标底 */
+  --db-primary-disabled: #b5c4dc;
+  /* 主按钮禁用态 */
+  --db-primary-ring: rgba(45, 108, 223, .15);
+  /* 输入控件聚焦光圈 */
+  --db-on-primary: #ffffff;
+  /* 主色底之上的文字 */
+  --db-on-primary-soft: rgba(255, 255, 255, .18);
+  /* 顶栏按钮底色 */
+  --db-on-primary-soft-hover: rgba(255, 255, 255, .32);
+  /* 顶栏按钮悬浮底色 */
+  --db-bg-header: #ffffff;
+  /* 顶栏底色：与卡片同底，避免大面积饱和蓝 */
+  --db-header-border: #e3e7ee;
+  /* 顶栏下边框：浅底顶栏需细线分隔 */
 
   /* ---- 中性边框：三档 ---- */
-  --db-border: #e8e8e8;                     /* 区块边框、分隔线 */
-  --db-border-soft: #f0f0f0;                /* 列表行分隔等次级线 */
-  --db-border-strong: #d9d9d9;              /* 输入框、次级按钮边框 */
+  --db-border: #e3e7ee;
+  /* 区块边框、分隔线 */
+  --db-border-soft: #eceff3;
+  /* 列表行分隔等次级线 */
+  --db-border-strong: #c7cdd6;
+  /* 输入框、次级按钮边框 */
 
   /* ---- 背景 ---- */
-  --db-bg-page: #ffffff;                    /* 抽屉底色 */
-  --db-bg-subtle: #fafafa;                  /* 卡片内浅底块 */
-  --db-bg-fill: #f0f0f0;                    /* 次级按钮底色 */
-  --db-bg-fill-hover: #e6e6e6;              /* 次级按钮悬浮态 */
+  --db-bg-page: #ffffff;
+  /* 抽屉底色 */
+  --db-bg-subtle: #f7f9fc;
+  /* 卡片内浅底块 */
+  --db-bg-card: #ffffff;
+  /* 卡片、输入框底 */
+  --db-bg-fill: #f0f3f8;
+  /* 次级按钮底色 */
+  --db-bg-fill-hover: #e6ecf5;
+  /* 次级按钮悬浮态 */
+  --db-bg-hover: #f5f8fd;
+  /* 列表行悬浮态 */
+  --db-bg-sunken: #fafbfd;
+  /* 内凹详情区 */
+  --db-bg-code: #1e2430;
+  /* 代码块、参数用法的深色底 */
+  --db-bg-toast: rgba(30, 36, 48, .92);
+  /* 轻提示底色 */
 
-  /* ---- 文字：四档 ---- */
-  --db-text: #333333;                       /* 正文强调、次级按钮文字 */
-  --db-text-body: #555555;                  /* 次要说明、只读值 */
-  --db-text-muted: #888888;                 /* 弱化信息（署名、提示语） */
-  --db-text-faint: #bfbfbf;                 /* 禁用态、占位 */
+  /* ---- 文字：五档 ---- */
+  --db-text: #1f2329;
+  /* 标题、强调、次级按钮文字 */
+  --db-text-body: #2b313b;
+  /* 正文、只读值 */
+  --db-text-sub: #5a6474;
+  /* 次要说明 */
+  --db-text-muted: #8a93a3;
+  /* 弱化信息（署名、提示语） */
+  --db-text-faint: #999999;
+  /* 禁用态、空态占位 */
+
+  /* ---- 代码区文字 ---- */
+  --db-code-text: #d6e2f5;
+  /* 普通代码、参数用法 */
+  --db-code-text-error: #ffb4a8;
+  /* 异常堆栈 */
 
   /* ---- 功能色：徽标与状态提示共用，保证同状态同色 ---- */
-  --db-ok: #389e0d;
-  --db-ok-bg: #f6ffed;
-  --db-ok-border: #b7eb8f;
-  --db-warn: #d46b08;
+  --db-ok: #2e9e5b;
+  --db-ok-bg: #f1f8f3;
+  --db-ok-border: #cfe8d6;
+  --db-warn: #e0a32e;
   --db-warn-bg: #fff7e6;
-  --db-warn-border: #ffd591;
-  --db-danger: #cf1322;
-  --db-danger-bg: #fff2f0;
-  --db-danger-border: #ffccc7;
-  --db-neutral: #d9d9d9;                    /* 未连接状态点 */
+  --db-warn-border: #f2dfae;
+  --db-warn-text: #8a6416;
+  --db-danger: #d9534f;
+  --db-danger-bg: #fdf0ef;
+  --db-danger-border: #f3c9c6;
+  --db-danger-text: #b0413e;
+  --db-neutral: #9aa3b2;
+  /* 未连接状态点 */
+  --db-avatar-user: #5b7fd4;
+  /* 用户头像底 */
 
-  /* ---- 圆角 ---- */
+  /* ---- 圆角：四档 + 全圆 ---- */
   --db-r-sm: 4px;
   --db-r-md: 6px;
+  --db-r-lg: 8px;
+  --db-r-xl: 10px;
+  --db-r-2xl: 12px;
   --db-r-pill: 999px;
 
-  /* ---- 字号 ---- */
-  --db-fs-xs: 11px;                         /* 徽标、署名 */
-  --db-fs-sm: 12px;                         /* 次要说明、卡片正文 */
-  --db-fs-md: 13px;                         /* 基准字号、消息正文 */
-  --db-fs-lg: 14px;                         /* 区块标题 */
+  /* ---- 字号：五档 ---- */
+  --db-fs-micro: 10px;
+  /* 仅站点徽标 */
+  --db-fs-xs: 11px;
+  /* 徽标、署名 */
+  --db-fs-sm: 12px;
+  /* 次要说明、卡片正文 */
+  --db-fs-md: 13px;
+  /* 基准字号、消息正文 */
+  --db-fs-lg: 14px;
+  /* 区块标题 */
 
-  /* ---- 间距 ---- */
+  /* ---- 间距：五档 ---- */
   --db-sp-1: 4px;
   --db-sp-2: 6px;
   --db-sp-3: 8px;
-  --db-sp-4: 12px;
+  --db-sp-4: 10px;
+  --db-sp-5: 12px;
 
   /* ---- 层级：抽屉与轻提示取层级上限，确保浮于宿主页面之上 ---- */
   --db-z: 2147483647;
+}
+
+/* ========== 暗色主题覆盖 ========== */
+/* 抽屉根元素带 data-theme="dark" 时启用（由抽屉脚本依据宿主 <html> 底色设置）。
+   只覆盖颜色令牌，字号 / 圆角 / 间距等与主题无关的令牌保持不变。 */
+:root[data-theme='dark'] {
+  /* ---- 主色 ---- */
+  --db-primary: #4a8cf0;
+  /* 暗底下提亮，保证对比度 */
+  --db-primary-hover: #6ba0f5;
+  --db-primary-soft: #1e2a3d;
+  /* 用户消息底、处理中徽标底 */
+  --db-primary-disabled: #3a4658;
+  --db-primary-ring: rgba(74, 140, 240, .22);
+  --db-bg-header: #232833;
+  /* 顶栏底色：暗色下与卡片同底，避免大面积亮蓝 */
+  --db-header-border: #3a4150;
+  /* 顶栏下边框：暗色下用细线分隔顶栏与内容 */
+
+  /* ---- 中性边框：三档 ---- */
+  --db-border: #3a4150;
+  --db-border-soft: #2f3542;
+  --db-border-strong: #4a5262;
+
+  /* ---- 背景 ---- */
+  --db-bg-page: #1c2029;
+  /* 抽屉底色 */
+  --db-bg-subtle: #232833;
+  /* 卡片内浅底块 */
+  --db-bg-card: #232833;
+  /* 卡片、输入框底 */
+  --db-bg-fill: #2b313d;
+  /* 次级按钮底色 */
+  --db-bg-fill-hover: #353c4a;
+  /* 次级按钮悬浮态 */
+  --db-bg-hover: #262c37;
+  /* 列表行悬浮态 */
+  --db-bg-sunken: #191d25;
+  /* 内凹详情区 */
+  --db-bg-code: #12151c;
+  /* 代码块、参数用法的深色底 */
+  --db-bg-toast: rgba(240, 243, 248, .92);
+  /* 轻提示底色：暗底下反转为浅色 */
+
+  /* ---- 文字：五档 ---- */
+  --db-text: #e8ecf2;
+  /* 标题、强调 */
+  --db-text-body: #c6ccd6;
+  /* 正文、只读值 */
+  --db-text-sub: #98a1af;
+  /* 次要说明 */
+  --db-text-muted: #7b8593;
+  /* 弱化信息 */
+  --db-text-faint: #5a6371;
+  /* 禁用态、空态占位 */
+
+  /* ---- 代码区文字 ---- */
+  --db-code-text: #c9d6ea;
+  --db-code-text-error: #ff9d8c;
+
+  /* ---- 功能色：暗底重调，保证可读 ---- */
+  --db-ok: #4fbf7a;
+  --db-ok-bg: #17291f;
+  --db-ok-border: #2c5138;
+  --db-warn: #e0b050;
+  --db-warn-bg: #2b2416;
+  --db-warn-border: #524324;
+  --db-warn-text: #e0b050;
+  --db-danger: #e8706b;
+  --db-danger-bg: #2e1b1a;
+  --db-danger-border: #573330;
+  --db-danger-text: #f0918c;
+  --db-neutral: #5a6371;
+  --db-avatar-user: #4a6fa8;
+
+  /* ---- 顶栏按钮底色：暗色下主色已提亮，白蒙层仍然适用 ---- */
+  --db-on-primary: #ffffff;
+  --db-on-primary-soft: rgba(255, 255, 255, .18);
+  --db-on-primary-soft-hover: rgba(255, 255, 255, .32);
 }

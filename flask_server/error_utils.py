@@ -1,14 +1,15 @@
 """
 AI 工具调用镜像插件 —— 错误分类与定位
 
-把工具执行异常归类为三类，决定 AI 下一步该「改参数重试」还是「改工具代码」：
+把工具执行异常归类为三类，帮助 AI 与用户判断下一步动作：
 - parameter     参数问题（缺失 / 类型不符 / 取值非法）
 - environment   环境或路径问题（文件不存在、权限不足等）
 - tool_internal 本地工具代码自身的缺陷
 
-错误分类的关键作用：避免 AI 在「代码缺陷」上反复调整参数无效重试，
-而是转向 read_tool_source + hot_reload_fix 的自愈流程。
+错误分类的关键作用：让「参数写错」与「工具实现有问题」区分开，
+避免在代码缺陷上反复调整参数做无效重试。
 """
+import subprocess
 import traceback
 
 import runtime
@@ -18,9 +19,8 @@ import runtime
 def param_error_cls():
     """取当前生效模块里的 ToolParamError。
 
-    注意：热重载会重建该类对象，若在导入期 `from tools_impl import ToolParamError`
-    绑定旧类，isinstance 会失配，导致参数错误被误判成工具代码缺陷。
-    因此这里每次现取 runtime.impl 上的类对象。
+    通过 runtime.impl 现取类对象，避免导入期绑定旧引用导致 isinstance 失配，
+    把参数错误误判成工具代码缺陷。
     """
     return getattr(runtime.impl, "ToolParamError", ())
 
@@ -33,6 +33,10 @@ def classify_error(e):
         return "parameter"
     if isinstance(e, (FileNotFoundError, NotADirectoryError, IsADirectoryError,
                       PermissionError, UnicodeDecodeError)):
+        return "environment"
+    # 执行超时属环境 / 运行条件问题：脚本可能死循环或等外部响应，
+    # 不是工具代码缺陷，归入 environment 提示调用方调整用法而非改代码。
+    if isinstance(e, subprocess.TimeoutExpired):
         return "environment"
     return "tool_internal"
 

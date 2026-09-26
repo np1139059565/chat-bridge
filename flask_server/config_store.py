@@ -113,10 +113,8 @@ def init_config():
     cfg["flask"].setdefault("port", 5000)
     # 工具结果 JSON 体积上限，未配置时取默认 10 万字符
     cfg["limits"].setdefault("max_json_chars", 100000)
-    # 为每个内置工具补齐开关；自愈工具始终在线，不受开关影响
+    # 为每个内置工具补齐开关
     for name in runtime.TOOLS:
-        if name in runtime.FIX_TOOLS:
-            continue
         cfg["tools"][name] = _tool_entry_for(name, cfg["tools"].get(name) or {})
     return cfg
 

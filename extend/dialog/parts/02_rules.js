@@ -10,10 +10,9 @@
   /** 读取规则列表与规则目录；规则变动会影响 System Prompt，故随后重新生成。 */
   M.loadRules = async function () {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/rules', { headers: { 'Accept': 'application/json' } });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      const data = await r.json();
+      const data = await D.apiFetch(this, '/rules', {
+        headers: { 'Accept': 'application/json' }
+      });
       this.rules = data.rules || [];
       this.rulesDir = data.rulesDir || '';
     } catch (e) {
@@ -34,13 +33,10 @@
     const old = r ? r.priority : null;
     if (r) r.priority = priority;   // 乐观更新
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const resp = await fetch(base + '/rules/' + encodeURIComponent(name), {
+      const data = await D.apiFetch(this, '/rules/' + encodeURIComponent(name), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ priority: priority }),
+        body: { priority: priority },
       });
-      const data = await resp.json();
       if (!data.ok) throw new Error(data.error);
       await this.loadRules();   // 优先级影响 System Prompt，重新生成
       this.toast('已设置优先级：' + name + ' → ' + priority);
@@ -53,9 +49,9 @@
   /** 进入某条规则的编辑态，拉取完整内容。 */
   M.editRule = async function (name) {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/rules/' + encodeURIComponent(name), { headers: { 'Accept': 'application/json' } });
-      const data = await r.json();
+      const data = await D.apiFetch(this, '/rules/' + encodeURIComponent(name), {
+        headers: { 'Accept': 'application/json' }
+      });
       if (!data.ok) throw new Error(data.error);
       this.rulesEdit[name] = data.content || '';
       this.rulesEditing[name] = true;
@@ -69,13 +65,10 @@
   /** 保存规则内容。 */
   M.saveRule = async function (name) {
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/rules/' + encodeURIComponent(name), {
+      const data = await D.apiFetch(this, '/rules/' + encodeURIComponent(name), {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: this.rulesEdit[name] || '' }),
+        body: { content: this.rulesEdit[name] || '' },
       });
-      const data = await r.json();
       if (!data.ok) throw new Error(data.error);
       this.rulesEditing[name] = false;
       await this.loadRules();
@@ -91,13 +84,10 @@
     if (!/^[A-Za-z0-9_-]+$/.test(name)) { this.toast('规则名非法（仅字母、数字、下划线、连字符）'); return; }
     if (this.rules.some((x) => x.name === name)) { this.toast('规则已存在：' + name); return; }
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/rules', {
+      const data = await D.apiFetch(this, '/rules', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, content: '# ' + name + '\n\n' }),
+        body: { name: name, content: '# ' + name + '\n\n' },
       });
-      const data = await r.json();
       if (!data.ok) throw new Error(data.error);
       this.newRuleName = '';
       await this.loadRules();
@@ -112,10 +102,8 @@
   M.removeRule = async function (name) {
     if (!confirm('确认删除规则 ' + name + '？此操作不可撤销。')) return;
     try {
-      const base = this.config.flaskUrl.replace(/\/+$/, '');
-      const r = await fetch(base + '/rules/' + encodeURIComponent(name), { method: 'DELETE' });
-      const data = await r.json();
-      if (!data.ok) throw new Error('HTTP ' + r.status);
+      const data = await D.apiFetch(this, '/rules/' + encodeURIComponent(name), { method: 'DELETE' });
+      if (!data.ok) throw new Error(data.error || '删除失败');
       await this.loadRules();
       this.toast('已删除规则：' + name);
     } catch (e) {

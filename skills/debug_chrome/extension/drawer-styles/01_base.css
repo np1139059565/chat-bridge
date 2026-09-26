@@ -7,13 +7,42 @@
  * ============================================================ */
 
 /* ========== 骨架 ========== */
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 html,
 body {
   margin: 0;
   padding: 0;
   overflow: hidden;
+  font-size: var(--db-fs-md);
+  color: var(--db-text);
+}
+
+/* 滚动条跟随主题：Firefox 用 scrollbar-color，Chromium 用 ::-webkit-scrollbar。
+   不设置时暗色下会露出系统亮色滚动条，与面板底色割裂。 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--db-border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--db-border-strong);
+  border-radius: var(--db-r-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--db-text-faint);
 }
 
 .drawer {
@@ -23,17 +52,12 @@ body {
   width: 380px;
   height: 100vh;
   background: var(--db-bg-page);
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+  /* 投影与圆角由 iframe 元素本身提供（content/02_drawer.js 的 openShape）：
+     iframe 会裁剪内部元素，写在这里的投影落在 iframe 之外，实际不可见。 */
   display: flex;
   flex-direction: column;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  transform: translateX(100%);
-  transition: transform 0.2s;
+  font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', Roboto, Helvetica, Arial, sans-serif;
   z-index: var(--db-z);
-}
-
-.drawer.open {
-  transform: translateX(0);
 }
 
 /* ========== 顶栏 ========== */
@@ -41,9 +65,13 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--db-sp-4);
-  border-bottom: 1px solid var(--db-border);
-  font-weight: bold;
+  padding: var(--db-sp-4) var(--db-sp-5);
+  /* 顶栏底色走专用令牌：与卡片同底，避免大面积饱和蓝 */
+  background: var(--db-bg-header);
+  color: var(--db-text);
+  border-bottom: 1px solid var(--db-header-border);
+  font-weight: 600;
+  font-size: var(--db-fs-lg);
 }
 
 .status-bar {
@@ -51,34 +79,42 @@ body {
   align-items: center;
   gap: var(--db-sp-2);
   font-size: var(--db-fs-sm);
-  color: var(--db-text-body);
+  color: var(--db-text-sub);
 }
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ccc;
+  background: var(--db-neutral);
 }
 
 .dot.connected {
-  background: #52c41a;
+  background: var(--db-ok);
 }
 
 .dot.disconnected {
-  background: #ff4d4f;
+  background: var(--db-danger);
 }
 
-/* 顶栏图标按钮：无底色，靠色相变化提示可点 */
+/* 顶栏图标按钮：固定 34px 方形热区 + 胶囊圆角，图标 14px 居中。
+   浅底顶栏下改用灰底 + 细边框 + 深色图标，与卡片按钮同一观感。 */
 .icon-btn {
-  border: none;
-  background: transparent;
+  border: 1px solid var(--db-border-strong);
+  background: var(--db-bg-fill);
   color: var(--db-text-body);
   cursor: pointer;
-  font-size: var(--db-fs-md);
-  padding: 2px var(--db-sp-2);
+  font-size: var(--db-fs-lg);
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: var(--db-r-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color .2s;
 }
 
 .icon-btn:hover {
-  color: var(--db-primary);
+  background: var(--db-bg-fill-hover);
 }

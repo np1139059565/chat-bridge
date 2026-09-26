@@ -6,16 +6,12 @@ AI 工具调用镜像插件 —— Flask 应用装配
 2. 注册各功能域蓝图与 CORS 响应头
 3. 暴露 create_app() 供 server.py 与测试脚本使用
 
-自愈相关设计：
-- 工具实现放在 tools_impl.py，可热重载，改代码不必重启服务。
+错误回传设计：
 - 工具执行失败时返回完整堆栈（traceback）+ 错误分类（origin），
-  让 AI 能区分「参数问题」与「工具代码缺陷」，避免反复改参无效重试。
-- 提供 read_tool_source / hot_reload_fix 两个 AI 自愈工具，并暴露 /hot_fix 接口。
+  让 AI 能区分「参数问题」与「环境问题」，据此改参数或改路径重试。
 """
 import runtime
 import tools_impl
-import rules as rules_mod
-import self_healing
 
 # 各功能域蓝图
 from routes.tools import bp as tools_bp
@@ -53,23 +49,15 @@ def _register_cors(app):
 
 
 def _init_runtime():
-    """初始化运行期状态：工具实现、工具表、配置、默认规则与外部提供方。"""
-    # 1) 注入工具实现模块，登记自愈工具表
+    """初始化运行期状态：工具实现、工具表、配置与外部提供方。"""
+    # 1) 注入工具实现模块，直接建立工具表与派发表
     runtime.impl = tools_impl
-    self_healing.setup_fix_tools()
-    runtime.FIX_TOOLS = self_healing.FIX_TOOLS
-    runtime.FIX_TOOL_META = self_healing.FIX_TOOL_META
-    # 2) 重建工具表（内置 + 自愈工具）
-    self_healing._reload_impl()
-    # 3) 配置在工具就绪后初始化（需要 TOOLS / FIX_TOOLS）
+    runtime.TOOLS = dict(tools_impl.TOOLS)
+    runtime.DISPATCH = dict(tools_impl.DISPATCH)
+    # 2) 配置在工具就绪后初始化（需要 TOOLS）
     from config_store import init_config
     runtime.CONFIG = init_config()
-    # 4) 首次启动（规则目录为空）时写入默认 self-healing 规则
-    try:
-        rules_mod.seed_defaults()
-    except Exception as e:
-        print("[rules] 初始化默认规则失败：", e)
-    # 5) 加载外部工具提供方（executor=external 的工具按 provider 注册）
+    # 3) 加载外部工具提供方（executor=external 的工具按 provider 注册）
     runtime.refresh_external_providers()
 
 
@@ -77,7 +65,7 @@ def create_app():
     """构建并返回可用的 Flask 应用实例（重复调用会复用同一 runtime.app）。"""
     app = runtime.app
     _init_runtime()
-    # 6) 注册蓝图与响应头
+    # 注册蓝图与响应头
     _register_blueprints(app)
     _register_cors(app)
     return app

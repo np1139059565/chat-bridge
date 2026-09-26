@@ -9,6 +9,7 @@
 - registry.py  注册表读写、安装/删除/更新、本地执行
 - meta.py      对外视图（provider 分组、说明段落、元数据）
 - scan.py      目录扫描
+- skill_docs.py 技能内文档（SKILL.md 等）的读取与写回
 """
 # 路径与常量
 from .paths import (
@@ -25,8 +26,11 @@ from .loader import (
 # 注册表与执行
 from .registry import (
     load_tools, save_tools, install, remove, update,
-    get_tool, is_enabled, run,
+    get_tool, is_enabled, run, set_skill_enabled,
 )
+
+# 技能文档读写
+from .skill_docs import read_skill_doc, write_skill_doc
 
 # 对外视图
 from .meta import (

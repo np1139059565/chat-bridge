@@ -8,11 +8,11 @@
 
 /* ========== 工具调用卡片 ========== */
 .tool-card {
-  border: 1px solid var(--db-border-strong);
-  border-radius: var(--db-r-sm);
-  padding: var(--db-sp-3);
-  margin: var(--db-sp-3) var(--db-sp-4);
-  background: #f7f9fc;
+  border: 1px solid var(--db-border);
+  border-radius: var(--db-r-lg);
+  padding: var(--db-sp-4);
+  margin: var(--db-sp-4) var(--db-sp-5);
+  background: var(--db-bg-card);
   font-size: var(--db-fs-sm);
 }
 
@@ -25,7 +25,7 @@
 
 .tool-card .toolname {
   font-weight: 600;
-  color: #2d6cdf;
+  color: var(--db-primary);
 }
 
 /* 工具状态徽标：浅底深字 + 细边框，与消息状态徽标同一套观感 */
@@ -63,15 +63,17 @@
   font-size: var(--db-fs-xs);
   max-height: 200px;
   overflow: auto;
-  background: var(--db-bg-page);
-  padding: var(--db-sp-1);
-  border-radius: var(--db-r-sm);
+  background: var(--db-bg-code);
+  color: var(--db-code-text);
+  padding: var(--db-sp-3);
+  border-radius: var(--db-r-md);
+  line-height: 1.5;
   font-family: ui-monospace, Consolas, monospace;
 }
 
 /* ========== 已选元素列表 ========== */
 .selected-list {
-  max-height: 120px;
+  max-height: 300px;
   overflow-y: auto;
   padding: var(--db-sp-3) var(--db-sp-4);
   border-top: 1px solid var(--db-border);
@@ -79,52 +81,200 @@
 }
 
 .selected-item {
+  display: block;
+  padding: var(--db-sp-2) 0;
+  font-size: var(--db-fs-sm);
+  border-bottom: 1px solid var(--db-border-soft);
+}
+
+/* 已选条目首行：选择器摘要 + 移除按钮 */
+.selected-item .selected-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--db-sp-1) 0;
-  font-size: var(--db-fs-sm);
-  border-bottom: 1px solid var(--db-border-soft);
+  gap: var(--db-sp-2);
+}
+
+.selected-item .selected-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 已选条目详情：折叠区，展开后展示选择器全文、URL、样式与 DOM */
+.selected-item .selected-detail {
+  margin-top: var(--db-sp-1);
+  font-size: var(--db-fs-xs);
+  color: var(--db-text-sub);
+}
+
+/* 详情折叠开关行：一行内并排「查看详情」标签、DOM 源码字数、去重 / 还原按钮。
+   去掉浏览器默认三角标记（list-item），改用 ::before 生成箭头，
+   与页面其它折叠块保持同一套观感。 */
+.selected-item .selected-detail summary.detail-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--db-sp-2);
+  cursor: pointer;
+  color: var(--db-text-muted);
+  list-style: none;
+}
+
+.selected-item .selected-detail summary.detail-summary::-webkit-details-marker {
+  display: none;
+}
+
+/* 折叠箭头：收起为 ▸，展开为 ▾，跟随文字色 */
+.selected-item .selected-detail summary.detail-summary::before {
+  content: '▸';
+  flex: 0 0 auto;
+  color: var(--db-primary);
+}
+
+.selected-item .selected-detail[open] summary.detail-summary::before {
+  content: '▾';
+}
+
+/* 标签文字：不伸缩 */
+.selected-item .selected-detail summary.detail-summary .summary-label {
+  flex: 0 0 auto;
+}
+
+/* DOM 源码字数：弱化显示，占据剩余空间，过长省略 */
+.selected-item .selected-detail summary.detail-summary .dom-len {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--db-text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 去重 / 还原按钮在 summary 行内：保持图标按钮定尺，不与折叠箭头抢位 */
+.selected-item .selected-detail summary.detail-summary .icon-btn {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border: 1px solid var(--db-border-strong);
+  border-radius: var(--db-r-md);
+  background: var(--db-bg-fill);
+  color: var(--db-text-body);
+  font-size: var(--db-fs-xs);
+}
+
+.selected-item .selected-detail summary.detail-summary .icon-btn:hover {
+  background: var(--db-bg-fill-hover);
+}
+
+.selected-item .selected-detail pre {
+  /* 换行：保留源码自身换行，并在任意字符处都可折行。
+     HTML 源码常是一整行，只靠 pre-wrap 会在容器边界处卡住不折，
+     这里用 overflow-wrap:anywhere 保证长串标签也能良好换行。 */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  margin: var(--db-sp-1) 0 0;
+  max-height: 160px;
+  overflow: auto;
+  /* 背景跟随主题：浅色主题下用内凹浅底 + 深色字，
+     不再沿用为深色代码区设计的近黑底，避免与浅色主题冲突。
+     暗色主题下这些令牌自动转为深底浅字，同样协调。 */
+  background: var(--db-bg-sunken);
+  color: var(--db-text-body);
+  border: 1px solid var(--db-border);
+  padding: var(--db-sp-3);
+  border-radius: var(--db-r-md);
+  line-height: 1.5;
+}
+
+.selected-item .selected-detail img {
+  max-width: 100%;
+  margin-top: var(--db-sp-2);
+  border: 1px solid var(--db-border);
 }
 
 .selected-item:last-child {
   border-bottom: none;
 }
 
+/* 已选列表里的操作按钮：处于浅底之上，不能沿用顶栏的反色文字 */
+.selected-item .icon-btn {
+  flex: 0 0 auto;
+  /* 图标按钮：方形定尺，避免 ✕ 被内边距撑成扁条 */
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  border-radius: var(--db-r-md);
+  color: var(--db-danger);
+}
+
+.selected-item .icon-btn:hover {
+  background: var(--db-danger-bg);
+  color: var(--db-danger);
+}
+
 /* ========== 输入区 ========== */
+/* align-items: flex-end 是关键：输入框随内容长高时，按钮贴底对齐、
+   不被拉伸成与输入框等高。否则多行输入会把发送按钮拉成一根长条。 */
 .input-area {
   display: flex;
+  align-items: flex-end;
   padding: var(--db-sp-4);
   border-top: 1px solid var(--db-border);
   gap: var(--db-sp-3);
 }
 
+/* 输入框：高度由脚本按内容自适应，这里只给上下限。
+   下限保证单行时与发送按钮齐平，上限避免长文本把消息区挤没。 */
 .input-area textarea {
   flex: 1;
-  height: 52px;
+  min-height: 52px;
+  max-height: 160px;
+  overflow-y: auto;
   resize: none;
-  padding: var(--db-sp-2);
+  padding: var(--db-sp-2) var(--db-sp-3);
   border: 1px solid var(--db-border-strong);
-  border-radius: var(--db-r-sm);
+  border-radius: var(--db-r-md);
   font-family: inherit;
   font-size: var(--db-fs-md);
+  line-height: 1.5;
+  background: var(--db-bg-card);
+  color: var(--db-text);
 }
 
+/* 发送按钮：与「重新解析」等常规按钮同一套观感（灰底 + 细边框 + 深色字），
+   不再用饱和主色底。底部对齐由 .input-area 的 align-items 保证。 */
 .input-area button {
-  padding: 0 var(--db-sp-4);
-  border: none;
-  border-radius: var(--db-r-sm);
-  background: var(--db-primary);
-  color: var(--db-on-primary);
+  flex: 0 0 auto;
+  padding: var(--db-sp-2) var(--db-sp-5);
+  border: 1px solid var(--db-border-strong);
+  border-radius: var(--db-r-lg);
+  background: var(--db-bg-fill);
+  color: var(--db-text-body);
   cursor: pointer;
+  font-size: var(--db-fs-sm);
+  transition: background-color .15s ease, border-color .15s ease;
 }
 
 .input-area button:hover:not(:disabled) {
-  background: var(--db-primary-hover);
+  background: var(--db-bg-fill-hover);
 }
 
 .input-area button:disabled {
-  background: var(--db-text-faint);
+  background: var(--db-bg-fill);
+  color: var(--db-text-faint);
+  border-color: var(--db-border);
   cursor: not-allowed;
 }
 
@@ -138,9 +288,16 @@
 .tools button {
   padding: var(--db-sp-2) var(--db-sp-4);
   border: 1px solid var(--db-border-strong);
-  border-radius: var(--db-r-sm);
+  border-radius: var(--db-r-md);
   background: var(--db-bg-page);
+  /* 按钮不继承父级文字色，必须显式给出，否则暗色下背景变深而文字仍是默认黑 */
+  color: var(--db-text-body);
   cursor: pointer;
+  font-size: var(--db-fs-sm);
+}
+
+.tools button:hover:not(.active) {
+  background: var(--db-bg-fill-hover);
 }
 
 .tools button.active {

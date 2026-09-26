@@ -1,59 +1,51 @@
-"""卡片总线：统一登记外部卡片、投递给镜像插件、等待结果回填、超时唤醒。
+"""卡片总线：统一登记外部卡片、投递给镜像插件。
 
-对外只暴露一个同步语义：调用方登记一张卡片后一直等待，
-直到结果按卡片 id 回填，或等待达到上限后超时。
+外部卡片采用「发送即结束」：登记即返回，不等待镜像插件回填结果，
+因此不存在超时失败。任务进展由网页 AI 通过 push_message 主动推送给发起方。
 
 典型调用链（外部系统 → 网页 AI）：
-1. 外部系统 POST /api/cards，本模块 create() 登记卡片并阻塞在 wait()；
-2. 镜像插件 GET /api/cards/pending 轮询，本模块 claim_pending() 交出卡片并标记已投递；
-3. 镜像插件把卡片内容发送给网页 AI，并在完成后 POST /api/cards/<id>/reply；
-4. 本模块 resolve() 回填结果并唤醒第 1 步的等待方；超时则 wait() 返回 TIMEOUT。
+1. 外部系统 POST /api/cards，本模块 create() 登记卡片，请求立即返回；
+2. 镜像插件 GET /api/cards/pending 轮询，本模块 claim_pending() 交出尚未确认的卡片；
+3. 镜像插件把卡片渲染进列表后，调用 confirm_delivered() 回执「已展示」，
+   此后该卡片不再投递；在此之前任何客户端都可反复取走，直到有人确认为止；
+4. 镜像插件把卡片内容发送给网页 AI，任务进展由网页 AI 主动推送。
 
-线程安全：所有对 _cards / _events / _results 的读写都在 _lock 保护下进行；
-阻塞等待使用 threading.Event，因此等待期间不持锁，不会阻塞其它请求。
+线程安全：所有对 _cards 的读写都在 _lock 保护下进行。
 """
 import threading
 import time
 import uuid
 
-# 卡片状态常量
-# 说明：外部卡片采用「发送即结束」，只有 pending（待投递）与 done（已投递）两个常态；
-# error / timeout 保留以兼容异常路径。counting / sending / waiting_reply 属历史遗留，已移除。
+# 卡片状态常量：外部卡片采用「发送即结束」，登记后即处于待投递态。
 STATUS_PENDING = "pending"
-STATUS_DONE = "done"
-STATUS_ERROR = "error"
-STATUS_TIMEOUT = "timeout"
-
-# 默认等待上限（毫秒）
-DEFAULT_TIMEOUT_MS = 120000
 
 
 class Card:
     """单张卡片的数据载体。
 
     字段说明：
-    - id         ：全局唯一标识（uuid4），用于轮询去重与结果回填配对
+    - id         ：全局唯一标识（uuid4），用于轮询去重
     - source     ：来源标识（默认 external），供前端区分展示
-    - type       ：信封类型（如 debug-chrome-req），决定接收方如何解读 content
+    - type       ：信封类型（如 external-call），决定接收方如何解读 content
     - content    ：投递给网页 AI 的正文
     - payload    ：附加结构化数据，随卡片一并投递
-    - status     ：pending（待投递/待回填）/ done / error / timeout
-    - delivered  ：是否已被镜像插件取走（避免重复投递）
+    - status     ：pending（待投递）
+    - delivered  ：是否已被某个客户端确认「已展示」
     """
 
-    def __init__(self, source, card_type, title, content, payload, timeout_ms):
+    def __init__(self, source, card_type, title, content, payload):
         self.id = str(uuid.uuid4())
         self.source = source or "external"
-        self.type = card_type or ""   # 信封类型，如 debug-chrome-req
+        self.type = card_type or ""   # 信封类型，如 external-call
         self.title = title or ""
         self.content = content or ""
         self.payload = payload or {}
         self.status = STATUS_PENDING
         self.created_at = int(time.time() * 1000)
-        self.timeout_ms = int(timeout_ms or DEFAULT_TIMEOUT_MS)
-        self.result = None
-        self.error = None
-        self.delivered = False   # 是否已投递给镜像插件
+        # delivered：是否已被某个客户端确认「已展示」。
+        # 为 false 时任何客户端都可取走（可反复取走）；
+        # 直到有客户端回执，才置 true 并停止投递。
+        self.delivered = False
 
     def to_dict(self):
         """转为可 JSON 序列化的字典（供 API 返回给前端）。"""
@@ -66,83 +58,56 @@ class Card:
             "payload": self.payload,
             "status": self.status,
             "created_at": self.created_at,
-            "timeout_ms": self.timeout_ms,
-            "result": self.result,
-            "error": self.error,
         }
 
 
 class CardBus:
-    """卡片总线：线程安全地登记、投递、回填、超时。
+    """卡片总线：线程安全地登记与投递。
 
     内部结构：
-    - _cards   ：id → Card，卡片数据
-    - _events  ：id → threading.Event，用于唤醒阻塞中的 wait()
-    - _results ：id → 回填结果，在唤醒后由 wait() 取走并删除
+    - _cards ：id → Card，卡片数据
     """
 
     def __init__(self):
         self._lock = threading.Lock()
         self._cards = {}
-        self._events = {}
-        self._results = {}
 
-    def create(self, source, card_type, title, content, payload, timeout_ms):
+    def create(self, source, card_type, title, content, payload):
         """登记一张卡片，返回卡片对象。"""
-        card = Card(source, card_type, title, content, payload, timeout_ms)
+        card = Card(source, card_type, title, content, payload)
         with self._lock:
             self._cards[card.id] = card
-            self._events[card.id] = threading.Event()
         return card
 
-    def set_status(self, card_id, status):
-        """更新卡片状态；卡片不存在时静默忽略。"""
-        with self._lock:
-            card = self._cards.get(card_id)
-            if card:
-                card.status = status
-
     def claim_pending(self):
-        """取走尚未投递的卡片（镜像插件轮询用），标记为已投递。"""
+        """取走尚未被确认的卡片（镜像插件轮询用）。
+
+        只要卡片没被任何客户端确认「已展示」，任何客户端都可以取走；
+        不设租约、不设占位：确认之前可被反复取走，直到有客户端回执为止。
+        重复投递由接收方按卡片 id 去重。
+        """
         out = []
         with self._lock:
             for card in self._cards.values():
-                if not card.delivered:
-                    card.delivered = True
-                    # 投递后状态仍为 pending：真正「完成」由镜像插件回填确认时置为 done
-                    out.append(card.to_dict())
+                if card.delivered:
+                    continue
+                out.append(card.to_dict())
         out.sort(key=lambda c: c["created_at"])
         return out
 
-    def resolve(self, card_id, result, status=STATUS_DONE):
-        """按 id 回填结果，唤醒等待方。"""
-        with self._lock:
-            card = self._cards.get(card_id)
-            event = self._events.get(card_id)
-            if card:
-                card.status = status
-                card.result = result
-            if event:
-                self._results[card_id] = result
-                event.set()
-        return bool(card)
+    def confirm_delivered(self, card_id):
+        """确认卡片已由某客户端生成并展示，此后不再投递。
 
-    def wait(self, card_id, timeout_ms=None):
-        """阻塞等待结果。返回 (ok, result_or_error)。"""
+        客户端把卡片渲染进列表后调用。这是卡片停止投递的唯一条件：
+        在收到确认之前，任何客户端都可以反复取走该卡片。
+        重复确认是幂等的。
+        """
         with self._lock:
             card = self._cards.get(card_id)
-            event = self._events.get(card_id)
-        if not card or not event:
-            return False, "UNKNOWN_CARD"
-        limit = (timeout_ms if timeout_ms is not None else card.timeout_ms) / 1000.0
-        if not event.wait(timeout=limit):
-            with self._lock:
-                card.status = STATUS_TIMEOUT
-                card.error = "TIMEOUT"
-            return False, "TIMEOUT"
-        with self._lock:
-            result = self._results.pop(card_id, None)
-        return True, result
+            if not card:
+                return False
+            card.delivered = True
+        return True
 
     def get(self, card_id):
         """查询单张卡片的状态快照；不存在返回 None。"""

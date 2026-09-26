@@ -4,7 +4,7 @@
 
 参数（arg_style=flag）：--text 文本 / --indent 数字 / --sort_keys（开关）。
 - 标准输出为合法 JSON 时，原样返回给 AI；
-- 非法 JSON 时以非 0 退出码结束，并输出 {"ok":false,"error":...}（触发 AI 自愈链路）。
+- 非法 JSON 时以非 0 退出码结束，并输出 {"ok":false,"error":...}（作为错误诊断回传）。
 调用方已强制 PYTHONIOENCODING=utf-8，Windows 下中文不乱码。
 """
 import sys
@@ -43,7 +43,7 @@ def _parse_args(args):
 
 
 def main():
-    """入口：解析参数并校验 JSON，非法时以非 0 退出码结束（触发 AI 自愈链路）。"""
+    """入口：解析参数并校验 JSON，非法时以非 0 退出码结束（作为错误诊断回传）。"""
     text, indent, sort_keys = _parse_args(sys.argv[1:])
     try:
         data = json.loads(text)

@@ -6,6 +6,13 @@
   // ctx 需包含：cfg, view, saveCfg, loadCfgFromBackend, cfgStatus, cfgStatusClass,
   //            pageUrls, setMappingPath, refreshUrls, copyPatch
   D.createSettingsRenderer = function (ctx) {
+    // 配置项变更后的延迟保存：勾选 / 输入即生效，无需再手动点「保存」。
+    // 用防抖把连续输入合并成一次写入，避免每敲一个字符就写一次存储。
+    let saveTimer = null;
+    function scheduleSave() {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(function () { ctx.saveCfg(); }, 400);
+    }
     function renderSettings() {
       const c = ctx.cfg.value;
       const urls = ctx.pageUrls.value || [];
@@ -13,29 +20,30 @@
         h('div', { class: 'header' }, [
           h('span', '设置'),
           h('div', { class: 'status-bar' }, [
-            h('button', { class: 'icon-btn', onClick: () => { ctx.view.value = 'chat'; } }, '返回'),
+            h('button', { class: 'icon-btn', title: '返回对话', onClick: () => { ctx.view.value = 'chat'; } }, '←'),
           ]),
         ]),
 
         h('div', { class: 'settings' }, [
           h('div', { class: 'section' }, [
             h('h3', '连接配置'),
-            D.field('工具服务地址', D.textInput(c.backend_url, (v) => { c.backend_url = v; }, 'http://127.0.0.1:5000')),
+            D.field('工具服务地址', D.textInput(c.backend_url, (v) => { c.backend_url = v; scheduleSave(); }, 'http://127.0.0.1:5000')),
             h('p', { class: 'hint-text' }, '工具服务由 chat-bridge 提供；调试能力以工具形式挂靠在其上。'),
           ]),
 
           h('div', { class: 'section' }, [
             h('h3', '采集配置'),
-            D.checkBox(c.screenshot_enabled === true, (v) => { c.screenshot_enabled = v; }, '开启页面截图（默认关闭）'),
+            // 勾选即自动保存：改动立刻写入存储，内容脚本随即收到变更。
+            D.checkBox(c.screenshot_enabled === true, (v) => { c.screenshot_enabled = v; scheduleSave(); }, '开启页面截图（默认关闭）'),
             h('p', { class: 'hint-text' }, '开启后，选中的元素卡片会附带当前可视区整屏截图（不做元素裁剪）。关闭时仍可主动请求截图。'),
-            D.checkBox(c.style_list_enabled === true, (v) => { c.style_list_enabled = v; }, '采集样式列表（默认关闭）'),
+            D.checkBox(c.style_list_enabled === true, (v) => { c.style_list_enabled = v; scheduleSave(); }, '采集样式列表（默认关闭）'),
             h('p', { class: 'hint-text' }, '开启后，元素卡片会附带 getComputedStyle 全量样式列表；关闭时仅采集选择器、DOM 源码等必要信息。'),
           ]),
 
           // URL 映射：自动列出当前页面所有 URL（含 iframe），用户只需为每个 URL 填本地路径。
           h('div', { class: 'section' }, [
             h('h3', 'URL 与本地工程映射'),
-            h('p', { class: 'hint-text' }, '已自动列出当前页面所有 URL（去参数，含 iframe）。请为需要调试的 URL 填写本地工程路径；未填写映射的 URL 无法选择元素。'),
+            h('p', { class: 'hint-text' }, '已自动列出当前页面所有 URL（去参数，含 iframe）。请为需要调试的 URL 填写本地工程路径，供 AI 定位源码；未填写映射的 URL 仍可正常选择元素，只是 AI 拿不到本地源码路径。'),
             h('div', { class: 'row' }, [
               h('button', { class: 'secondary', onClick: ctx.refreshUrls }, '刷新 URL 列表'),
             ]),
@@ -46,7 +54,8 @@
                   h('input', {
                     value: (ctx.mappingFor(u) || {}).local_path || '',
                     placeholder: '本地工程路径，如 E:/projects/demo/src',
-                    onInput: (e) => ctx.setMappingPath(u, e.target.value),
+                    // 输入即更新映射并自动保存，不必再点「保存」
+                    onInput: (e) => { ctx.setMappingPath(u, e.target.value); scheduleSave(); },
                   }),
                 ])
               )
@@ -60,8 +69,8 @@
             h('button', { class: 'secondary', onClick: ctx.copyPatch }, '补丁（复制代码）'),
           ]),
 
+          // 配置项已改为改动即自动保存，「保存」按钮不再需要，仅保留「重新载入」。
           h('div', { class: 'actions' }, [
-            h('button', { onClick: ctx.saveCfg }, '保存'),
             h('button', { class: 'secondary', onClick: ctx.loadCfgFromBackend }, '重新载入'),
           ]),
           h('p', { class: ['status', ctx.cfgStatusClass.value] }, String(ctx.cfgStatus.value || '')),

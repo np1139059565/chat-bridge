@@ -13,70 +13,116 @@
 /* ========== 设计令牌层 ========== */
 :root {
   /* ---- 主色 ---- */
-  --cb-primary: #2d6cdf;                    /* 顶栏底色、主按钮、卡片标题、工具名、展开箭头 */
-  --cb-primary-hover: #245bc0;              /* 主按钮悬浮态 */
-  --cb-primary-disabled: #b5c4dc;           /* 主按钮禁用态 */
-  --cb-on-primary: #ffffff;                 /* 主色底之上的文字 */
-  --cb-on-primary-soft: rgba(255, 255, 255, .18);        /* 顶栏按钮底色 */
-  --cb-on-primary-soft-hover: rgba(255, 255, 255, .32);  /* 顶栏按钮悬浮底色 */
-  --cb-on-primary-badge: rgba(255, 255, 255, .22);       /* 顶栏站点徽标底色 */
+  --cb-primary: #2d6cdf;
+  /* 顶栏底色、主按钮、卡片标题、工具名、展开箭头 */
+  --cb-primary-hover: #245bc0;
+  /* 主按钮悬浮态 */
+  --cb-primary-disabled: #b5c4dc;
+  /* 主按钮禁用态 */
+  --cb-on-primary: #ffffff;
+  /* 主色底之上的文字 */
+  --cb-on-primary-soft: rgba(255, 255, 255, .18);
+  /* 顶栏按钮底色 */
+  --cb-on-primary-soft-hover: rgba(255, 255, 255, .32);
+  /* 顶栏按钮悬浮底色 */
+  --cb-on-primary-badge: rgba(45, 108, 223, .12);
+  /* 顶栏站点徽标底色：浅底顶栏下改用主色淡蒙层 */
+  --cb-bg-header: #ffffff;
+  /* 顶栏底色：与卡片同底，避免大面积饱和蓝 */
+  --cb-header-border: #e3e7ee;
+  /* 顶栏下边框：浅底顶栏需细线分隔 */
 
   /* ---- 中性边框：三档。原先同类边框散落 12 种色值，统一收敛到此 ---- */
-  --cb-border: #e3e7ee;                     /* 卡片边框、面板分隔线 */
-  --cb-border-soft: #eceff3;                /* 卡片内部次级分隔（表格线、列表行分隔） */
-  --cb-border-strong: #c7cdd6;              /* 可交互控件边框、虚线装饰边框 */
+  --cb-border: #e3e7ee;
+  /* 卡片边框、面板分隔线 */
+  --cb-border-soft: #eceff3;
+  /* 卡片内部次级分隔（表格线、列表行分隔） */
+  --cb-border-strong: #c7cdd6;
+  /* 可交互控件边框、虚线装饰边框 */
 
   /* ---- 背景 ---- */
-  --cb-bg-page: #f5f6f8;                    /* 页面底。content/01_panel.js 的 PANEL_BG 与本值同名同值 */
-  --cb-bg-panel: #eef1f6;                   /* 设置面板底 */
-  --cb-bg-card: #ffffff;                    /* 卡片、输入框底 */
-  --cb-bg-subtle: #f7f9fc;                  /* 卡片内浅底块（引用 / 思考 / 代码头 / 参数预览） */
-  --cb-bg-fill: #f0f3f8;                    /* 表头、次级按钮 */
-  --cb-bg-fill-hover: #e6ecf5;              /* 次级按钮悬浮态 */
-  --cb-bg-hover: #f5f8fd;                   /* 列表行悬浮态 */
-  --cb-bg-sunken: #fafbfd;                  /* 内凹详情区 */
-  --cb-bg-code: #1e2430;                    /* 代码块、参数用法、堆栈的深色底 */
-  --cb-bg-toast: rgba(30, 36, 48, .92);     /* 轻提示底色 */
+  --cb-bg-page: #f5f6f8;
+  /* 页面底。content/01_panel.js 的 PANEL_BG_LIGHT 与本值同名同值 */
+  --cb-bg-panel: #eef1f6;
+  /* 设置面板底 */
+  --cb-bg-card: #ffffff;
+  /* 卡片、输入框底 */
+  --cb-bg-subtle: #f7f9fc;
+  /* 卡片内浅底块（引用 / 思考 / 代码头 / 参数预览） */
+  --cb-bg-fill: #f0f3f8;
+  /* 表头、次级按钮 */
+  --cb-bg-fill-hover: #e6ecf5;
+  /* 次级按钮悬浮态 */
+  --cb-bg-hover: #f5f8fd;
+  /* 列表行悬浮态 */
+  --cb-bg-sunken: #fafbfd;
+  /* 内凹详情区 */
+  --cb-bg-code: #1e2430;
+  /* 代码块、参数用法、堆栈的深色底 */
+  --cb-bg-toast: rgba(30, 36, 48, .92);
+  /* 轻提示底色 */
+  --cb-on-toast: #ffffff;
+  /* 轻提示文字：亮底深、暗底浅，随底色反转，保证对比度 */
 
   /* ---- 文字：五档。原先散落 13 种灰阶，统一收敛到此 ---- */
-  --cb-text: #1f2329;                       /* 标题、强调 */
-  --cb-text-body: #2b313b;                  /* 正文 */
-  --cb-text-sub: #5a6474;                   /* 次要说明 */
-  --cb-text-muted: #8a93a3;                 /* 弱化信息（署名、会话标题、提示语） */
-  --cb-text-faint: #999999;                 /* 空态占位 */
+  --cb-text: #1f2329;
+  /* 标题、强调 */
+  --cb-text-body: #2b313b;
+  /* 正文 */
+  --cb-text-sub: #5a6474;
+  /* 次要说明 */
+  --cb-text-muted: #8a93a3;
+  /* 弱化信息（署名、会话标题、提示语） */
+  --cb-text-faint: #999999;
+  /* 空态占位 */
 
   /* ---- 功能色：徽标、结果块、告警共用同一组，保证同状态同色 ---- */
-  --cb-ok: #2e9e5b;                         /* 成功：徽标、AI 头像 */
+  --cb-ok: #2e9e5b;
+  /* 成功：徽标、AI 头像 */
   --cb-ok-bg: #f1f8f3;
   --cb-ok-border: #cfe8d6;
-  --cb-warn: #e0a32e;                       /* 执行中：徽标 */
+  --cb-warn: #e0a32e;
+  /* 执行中：徽标 */
   --cb-warn-bg: #fff7e6;
   --cb-warn-border: #f2dfae;
   --cb-warn-text: #8a6416;
-  --cb-danger: #d9534f;                     /* 失败：徽标 */
+  --cb-danger: #d9534f;
+  /* 失败：徽标 */
   --cb-danger-bg: #fdf0ef;
   --cb-danger-border: #f3c9c6;
   --cb-danger-text: #b0413e;
-  --cb-neutral: #9aa3b2;                    /* 待执行：徽标 */
-  --cb-avatar-user: #5b7fd4;                /* 用户头像底 */
+  --cb-neutral: #9aa3b2;
+  /* 待执行：徽标 */
+  --cb-avatar-user: #5b7fd4;
+  /* 用户头像底 */
 
   /* ---- 代码区文字 ---- */
-  --cb-code-text: #d6e2f5;                  /* 普通代码、参数用法 */
-  --cb-code-text-error: #ffb4a8;            /* 异常堆栈 */
+  --cb-code-text: #d6e2f5;
+  /* 普通代码、参数用法 */
+  --cb-code-text-error: #ffb4a8;
+  /* 异常堆栈 */
 
   /* ---- 圆角：四档 + 全圆。原先 4/6/8/10px 各写各的，统一取用 ---- */
   --cb-r-sm: 4px;
   --cb-r-md: 6px;
   --cb-r-lg: 8px;
   --cb-r-xl: 10px;
+  --cb-r-2xl: 16px;
+  --cb-r-bubble: 12px;
+  /* 消息气泡圆角 */
   --cb-r-pill: 999px;
 
   /* ---- 字号：五档。原先 10/10.5/11/11.5/12/12.5/13/14px 八档，压到五档 ---- */
-  --cb-fs-micro: 10px;                      /* 仅顶栏站点徽标 */
-  --cb-fs-xs: 11px;                         /* 次要说明、表格、参数、堆栈 */
-  --cb-fs-sm: 12px;                         /* 正文、按钮、输入框 */
-  --cb-fs-md: 13px;                         /* 基准字号、小标题 */
-  --cb-fs-lg: 14px;                         /* 顶栏标题、顶栏按钮 */
+  --cb-fs-micro: 10px;
+  /* 仅顶栏站点徽标 */
+  --cb-fs-xs: 11px;
+  /* 次要说明、表格、参数、堆栈 */
+  --cb-fs-sm: 12px;
+  /* 正文、按钮、输入框 */
+  --cb-fs-md: 13px;
+  /* 基准字号、小标题 */
+  --cb-fs-lg: 14px;
+  /* 顶栏标题、顶栏按钮 */
 
   /* ---- 间距：五档，覆盖绝大多数内外边距 ---- */
   --cb-sp-1: 4px;
@@ -86,9 +132,91 @@
   --cb-sp-5: 12px;
 
   /* ---- 布局上限 ---- */
-  --cb-settings-maxh: 62vh;                 /* 设置面板最大高度，超出后面板自身滚动 */
-  --cb-sysprompt-maxh: 200px;               /* System Prompt 预览最大高度 */
+  --cb-settings-maxh: 62vh;
+  /* 设置面板最大高度，超出后面板自身滚动 */
+  --cb-sysprompt-maxh: 200px;
+  /* System Prompt 预览最大高度 */
 
   /* ---- 层级：仅面板内部。面板自身在宿主页面的层级见 content/00_state.js 的 PANEL_Z ---- */
   --cb-z-toast: 10;
+}
+
+/* ========== 暗色主题覆盖 ========== */
+/* 根元素带 data-theme="dark" 时启用（由对话框脚本依据宿主 <html> 底色设置）。
+   只覆盖颜色令牌，字号 / 圆角 / 间距等与主题无关的令牌保持不变。
+   面板外框底色另由 content/01_panel.js 的 PANEL_BG_DARK 控制，两处必须同步。 */
+:root[data-theme='dark'] {
+  /* ---- 主色 ---- */
+  --cb-primary: #4a8cf0;
+  /* 暗底下提亮，保证对比度 */
+  --cb-primary-hover: #6ba0f5;
+  --cb-primary-disabled: #3a4658;
+  --cb-on-primary: #ffffff;
+  --cb-on-primary-soft: rgba(255, 255, 255, .18);
+  --cb-on-primary-soft-hover: rgba(255, 255, 255, .32);
+  --cb-on-primary-badge: rgba(255, 255, 255, .22);
+  --cb-bg-header: #232833;
+  /* 顶栏底色：暗色下与卡片同底，避免大面积亮蓝 */
+  --cb-header-border: #3a4150;
+  /* 顶栏下边框：暗色下用细线分隔顶栏与内容 */
+
+  /* ---- 中性边框：三档 ---- */
+  --cb-border: #3a4150;
+  --cb-border-soft: #2f3542;
+  --cb-border-strong: #4a5262;
+
+  /* ---- 背景 ---- */
+  --cb-bg-page: #1c2029;
+  /* 页面底。content/01_panel.js 的 PANEL_BG_DARK 与本值同名同值 */
+  --cb-bg-panel: #232833;
+  /* 设置面板底 */
+  --cb-bg-card: #232833;
+  /* 卡片、输入框底 */
+  --cb-bg-subtle: #1a1f28;
+  /* 卡片内浅底块 */
+  --cb-bg-fill: #2b313d;
+  /* 表头、次级按钮 */
+  --cb-bg-fill-hover: #353c4a;
+  /* 次级按钮悬浮态 */
+  --cb-bg-hover: #262c37;
+  /* 列表行悬浮态 */
+  --cb-bg-sunken: #191d25;
+  /* 内凹详情区 */
+  --cb-bg-code: #12151c;
+  /* 代码块、参数用法、堆栈的深色底 */
+  --cb-bg-toast: rgba(240, 243, 248, .92);
+  /* 轻提示底色：暗底下反转为浅色 */
+  --cb-on-toast: #1f2329;
+  /* 轻提示文字：暗底下取深色，压在浅色底上 */
+
+  /* ---- 文字：五档 ---- */
+  --cb-text: #e8ecf2;
+  /* 标题、强调 */
+  --cb-text-body: #c6ccd6;
+  /* 正文 */
+  --cb-text-sub: #98a1af;
+  /* 次要说明 */
+  --cb-text-muted: #7b8593;
+  /* 弱化信息 */
+  --cb-text-faint: #5a6371;
+  /* 空态占位 */
+
+  /* ---- 功能色：暗底重调，保证可读 ---- */
+  --cb-ok: #4fbf7a;
+  --cb-ok-bg: #17291f;
+  --cb-ok-border: #2c5138;
+  --cb-warn: #e0b050;
+  --cb-warn-bg: #2b2416;
+  --cb-warn-border: #524324;
+  --cb-warn-text: #e0b050;
+  --cb-danger: #e8706b;
+  --cb-danger-bg: #2e1b1a;
+  --cb-danger-border: #573330;
+  --cb-danger-text: #f0918c;
+  --cb-neutral: #5a6371;
+  --cb-avatar-user: #4a6fa8;
+
+  /* ---- 代码区文字 ---- */
+  --cb-code-text: #c9d6ea;
+  --cb-code-text-error: #ff9d8c;
 }

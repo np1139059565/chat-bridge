@@ -15,27 +15,29 @@
   D.render = function () {
     const ctx = this;
 
-    // 统一时序：所有条目（文字消息、外部卡片）放进同一个数组，一律按 _ts 排序。
-    // 消息与卡片都带同一个 _ts 字段、同为毫秒时间戳，因此排序规则完全相同，
-    // 没有任何类型区分、没有任何先后推送设定。工具卡片是消息内的代码块，随其消息一并渲染。
-    // 渲染方向为「最新在前」（倒序），与镜像对话一致。
-    const entries = [];
-    ctx.messages.forEach((m, i) => {
-      entries.push({ ts: (m._ts != null ? m._ts : 0), node: () => D.renderMessage(ctx, m, i, i) });
+    // 顺序由消息树结构与锚点决定：消息按可见区 key 顺序，外部卡片按锚点插到
+    // 对应消息之后。锚点不在可见列表里的已处理卡片不显示（其内容已滚出视野）；
+    // 未处理的卡片放末尾，允许堆在底部等用户决定。
+    // 镜像列表：优先用可见区时序；可见区为空（切片未入树）时，展示该切片内容。
+    const orphanMsgs = (ctx.curConv.orphanSlice || []);
+    const timeline = D.buildTimeline(ctx.curConv, ctx.curConv.visibleKeys || [], { orphanMode: 'skip-handled' });
+    const listItems = (timeline && timeline.length)
+      ? timeline
+      : orphanMsgs.map(function (m, i) { return { kind: 'message', key: 'orphan-' + i, node: m }; });
+    // 镜像按「最新在前」倒序渲染，与网页对话一致
+    const mirrorItems = listItems.slice().reverse().map((it, idx) => {
+      if (it.kind === 'message') return D.renderMessage(ctx, it.node, idx, idx);
+      return D.renderExternalCard(ctx, it.card);
     });
-    ctx.externalCards.forEach((c) => {
-      entries.push({ ts: (c._ts != null ? c._ts : (c.createdAt || 0)), node: () => D.renderExternalCard(ctx, c) });
-    });
-    entries.sort((a, b) => b.ts - a.ts);
-    const mirrorItems = entries.map((e) => e.node());
 
     // 主界面只保留网页对话镜像（外部卡片与工具卡片一并呈现）
     const mirrorBlock = h('section', { class: 'card' }, [
-      h('div', { class: 'card-head' }, [
+      // 头部加 card-head-sticky：滚动时吸附在滚动区顶部，数量与按钮不被内容淹没
+      h('div', { class: 'card-head card-head-sticky' }, [
         h('span', '网页对话镜像（' + ctx.messages.length + '）'),
         h('span', { class: 'head-actions' }, [
           h('button', { onClick: () => ctx.reparse() }, '重新解析'),
-          h('button', { onClick: () => ctx.copyConversationJson() }, '复制JSON')
+          h('button', { onClick: () => ctx.copyConversationJson() }, '复制')
         ])
       ]),
       ctx.curConv.title ? h('div', { class: 'conv-title' }, '当前会话：' + ctx.curConv.title) : null,
@@ -57,7 +59,21 @@
             title: ctx.panelSide === 'left' ? '切换到右侧挂靠' : '切换到左侧挂靠',
             onClick: () => ctx.switchPanelSide()
           }, ctx.panelSide === 'left' ? '⇥' : '⇤'),
-          h('button', { title: '设置', onClick: () => { ctx.settingsOpen = !ctx.settingsOpen; } }, '⚙'),
+          h('button', {
+            title: '设置',
+            onClick: () => {
+              ctx.settingsOpen = !ctx.settingsOpen;
+              // 打开设置页时清空条目的勾选态与展开态：条目 key 含消息下标，
+              // 消息被重解析后下标会变化，残留状态会错位到别的条目上。
+              if (ctx.settingsOpen) {
+                Object.keys(ctx.entryChecked).forEach((k) => { delete ctx.entryChecked[k]; });
+                Object.keys(ctx.entryOpen).forEach((k) => { delete ctx.entryOpen[k]; });
+                // 打开设置页时扫描存储里的全部会话，保证左侧会话列表显示完整，
+                // 而不是只有当前已读入内存的这一个。
+                ctx.scanConversations();
+              }
+            }
+          }, '⚙'),
           h('button', { title: '关闭', onClick: () => ctx.closePanel() }, '✕')
         ])
       ]),

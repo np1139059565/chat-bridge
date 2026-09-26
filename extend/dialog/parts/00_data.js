@@ -1,12 +1,12 @@
 // 模块：extend/dialog/parts/00_data.js
 // 用途：对话框 Vue 应用的共享命名空间、常量与 data/computed/mounted。
 //  - 定义 window.AIMirrorDialog（下称 D），承载 methods/data/computed 等分片。
-//  - 提供本地兜底工具目录 FALLBACK_TOOLS、空会话壳 EMPTY_CONV。
-// 依赖：lib/dom-utils.js（debounce / hashStr）
+//  - 提供后端不可达时的占位工具名 FALLBACK_TOOLS、空会话壳 EMPTY_CONV。
+//    工具参数的唯一来源是后端 /tools，前端不维护参数副本。
+// 依赖：lib/dom-utils.js（debounce / hashStr / toArray）
 //
-// 背景：原 app.js 是单个 IIFE 内的 createApp 选项对象。拆分后改为把各段
-// 挂到 D.methods / D.data / D.computed，由 app.js 统一装配成 createApp 的选项。
-// Vue 会在实例上绑定 methods，因此 this 语义与原实现一致。
+// 数据模型：会话只存 msgTree（节点含完整信息）、visibleKeys、branchKeys、
+//   externalCards。顺序完全由消息树结构与入列先后决定。
 window.AIMirrorDialog = (function () {
   'use strict';
   const D = window.AIMirrorDialog || {};
@@ -18,139 +18,180 @@ window.AIMirrorDialog = (function () {
   };
   const log = D.log;
 
+  /**
+   * 统一的后端请求辅助：拼地址、按需序列化 JSON 请求体、检查响应状态、解析 JSON。
+   * @param {Object} ctx Vue 实例（读取 config.flaskUrl）
+   * @param {string} path 接口路径
+   * @param {Object} [options] fetch 选项
+   * @returns {Promise<Object>} 解析后的 JSON
+   */
+  D.apiFetch = async function (ctx, path, options) {
+    const opts = Object.assign({}, options || {});
+    const lenientJson = !!opts.lenientJson;
+    delete opts.lenientJson;
+    const base = (ctx.config.flaskUrl || '').replace(/\/+$/, '');
+    opts.headers = Object.assign({}, opts.headers || {});
+    if (opts.body && typeof opts.body !== 'string') {
+      opts.body = JSON.stringify(opts.body);
+      opts.headers['Content-Type'] = 'application/json';
+    }
+    const r = await fetch(base + path, opts);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (lenientJson) return r.json().catch(function () { return {}; });
+    return r.json();
+  };
+
   // 公共工具：由 lib/dom-utils.js 提供
   D.debounce = window.AIMirrorDomUtils.debounce;
   D.hashStr = window.AIMirrorDomUtils.hashStr;
+  D.toArray = window.AIMirrorDomUtils.toArray;
 
-  // 尚未建立会话记录时的空壳，供 computed 安全读取（避免 computed 内产生副作用）
-  D.EMPTY_CONV = { title: '', pageUrl: '', messages: [], cardMap: {}, externalCards: [], updatedAt: 0 };
+  /**
+   * 外部卡片的条目 key：与消息的 'pid-id' 同构（两段、连字符连接）。
+   * 卡片在创建时即生成 key 字段。
+   * @param {Object} c 外部卡片
+   * @returns {string} 条目 key
+   */
+  D.externalCardKey = function (c) {
+    return (c && c.key) || '';
+  };
 
-  // 与 Flask 服务保持一致的本地兜底工具目录（Flask 不可达时使用）
-  D.FALLBACK_TOOLS = [
-    {
-      name: 'list_dir', description: '列出指定目录下的文件和子目录（不含点文件）', parameters: [
-        { name: 'target_directory', type: 'string', required: true, description: '要列出的目录路径（相对或绝对）' },
-        { name: 'ignore_globs', type: 'array', required: false, description: '要忽略的通配符模式列表' }
-      ]
-    },
-    {
-      name: 'search_file', description: '按文件名通配符模式递归搜索文件，支持忽略特定模式', parameters: [
-        { name: 'target_directory', type: 'string', required: true, description: '搜索根目录' },
-        { name: 'pattern', type: 'string', required: true, description: '文件名通配符，如 *.js' },
-        { name: 'recursive', type: 'boolean', required: false, description: '是否递归子目录，默认 true' },
-        { name: 'caseSensitive', type: 'boolean', required: false, description: '是否区分大小写' },
-        { name: 'ignore_globs', type: 'array', required: false, description: '忽略模式列表' }
-      ]
-    },
-    {
-      name: 'search_content', description: '基于正则在文件内容中搜索匹配（支持上下文、类型过滤）', parameters: [
-        { name: 'pattern', type: 'string', required: true, description: '正则表达式' },
-        { name: 'path', type: 'string', required: false, description: '搜索路径，默认当前目录' },
-        { name: 'glob', type: 'string', required: false, description: '文件名过滤，如 *.py' },
-        { name: 'contextAround', type: 'integer', required: false, description: '上下文字节数/行数' },
-        { name: 'caseSensitive', type: 'boolean', required: false, description: '是否区分大小写' }
-      ]
-    },
-    {
-      name: 'read_file', description: '读取本地文件内容（仅接受绝对路径），支持指定偏移与行数', parameters: [
-        { name: 'filePath', type: 'string', required: true, description: '文件绝对路径' },
-        { name: 'offset', type: 'integer', required: false, description: '起始行（从 1 开始）' },
-        { name: 'limit', type: 'integer', required: false, description: '读取行数' }
-      ]
-    },
-    {
-      name: 'read_skill', description: '读取某个 skill 目录下的文档（相对该 skill 目录的路径，如 SKILL.md）', parameters: [
-        { name: 'skill', type: 'string', required: true, description: 'skill 名称（skills/ 下的目录名，如 debug_chrome）' },
-        { name: 'file', type: 'string', required: true, description: 'skill 目录内的相对路径，如 SKILL.md' },
-        { name: 'offset', type: 'integer', required: false, description: '起始行（从 1 开始）' },
-        { name: 'limit', type: 'integer', required: false, description: '读取行数' }
-      ]
-    },
-    {
-      name: 'read_lints', description: '读取工作区或指定文件的 linter 诊断信息（错误/警告）', parameters: [
-        { name: 'paths', type: 'array', required: false, description: '文件或目录路径' },
-        { name: 'severity', type: 'array', required: false, description: '过滤严重级别' }
-      ]
-    },
-    {
-      name: 'replace_in_file', description: '在已有文件中进行精确字符串替换（用于最小化改动）', parameters: [
-        { name: 'filePath', type: 'string', required: true, description: '文件路径' },
-        { name: 'old_str', type: 'string', required: true, description: '待替换原文（须唯一）' },
-        { name: 'new_str', type: 'string', required: true, description: '替换后的文本' }
-      ]
-    },
-    {
-      name: 'write_to_file', description: '创建或覆盖写入完整文件内容', parameters: [
-        { name: 'filePath', type: 'string', required: true, description: '文件路径' },
-        { name: 'content', type: 'string', required: true, description: '完整文件内容' }
-      ]
-    },
-    {
-      name: 'delete_file', description: '删除指定路径的文件', parameters: [
-        { name: 'target_file', type: 'string', required: true, description: '要删除的文件路径' }
-      ]
-    },
-    {
-      name: 'get_tool_params', description: '根据工具 id 查询其参数、说明与用法', parameters: [
-        { name: 'tool_id', type: 'string', required: true, description: '工具名称/id' }
-      ]
-    },
-    {
-      name: 'list_rules', description: '列出本机可用的规则文件（规则名 + 摘要），供 AI 判断该读取哪条规则', parameters: []
-    },
-    {
-      name: 'read_rule', description: '按规则名读取某条规则的完整内容（如 self-healing 异常自愈规则）', parameters: [
-        { name: 'name', type: 'string', required: true, description: '规则名（不含扩展名），先用 list_rules 获取' }
-      ]
-    },
-    {
-      name: 'run_command', description: '执行本地命令（按指定脚本语言选择解释器；支持的语言由后端配置决定）', parameters: [
-        { name: 'language', type: 'string', required: true, description: '脚本语言类型，如 python / shell / cmd / powershell / git 等（以 get_tool_params 返回的支持列表为准）' },
-        { name: 'command', type: 'string', required: true, description: '要执行的命令或代码块内容' },
-        { name: 'cwd', type: 'string', required: false, description: '工作目录，默认使用当前工程目录' },
-        { name: 'timeout', type: 'integer', required: false, description: '超时秒数，默认 60 秒' }
-      ]
+  /**
+   * 判断外部卡片是否已由消息树中的 external-call 消息代表。
+   * 卡片发送完成后，本体以一条 user 消息落在消息树里；此时数组里那份不应
+   * 再单独渲染，否则同一张卡片会重复出现两次。以 nonce 匹配二者。
+   * @param {Object} conv 会话记录
+   * @param {Object} card 外部卡片
+   * @returns {boolean} 是否已有消息本体
+   */
+  D.cardHasMessage = function (conv, card) {
+    if (!card || !card.executed || !card.nonce) return false;
+    const tree = (conv && conv.msgTree) || {};
+    const keys = Object.keys(tree);
+    for (let i = 0; i < keys.length; i++) {
+      const node = tree[keys[i]];
+      if (!node || node.role !== 'user') continue;
+      const blocks = window.AIMirrorDomUtils.toArray(node.blocks);
+      for (let j = 0; j < blocks.length; j++) {
+        const b = blocks[j];
+        const src = String((b && (b.code || b.text)) || '').trim();
+        if (!src || src.charAt(0) !== '{') continue;
+        try {
+          const obj = JSON.parse(src);
+          if (obj && obj.type === 'external-call' && obj.nonce === card.nonce) return true;
+        } catch (e) { /* 非信封内容 */ }
+      }
     }
-  ];
+    return false;
+  };
 
-  // data 工厂：Vue 组件的数据定义
+  // 尚未建立会话记录时的空壳
+  D.EMPTY_CONV = {
+    title: '', page_url: '',
+    msgTree: {}, visibleKeys: [], branchKeys: [], externalCards: [],
+    updatedAt: 0
+  };
+
+  // 后端不可达时的占位清单：只列名称。
+  D.FALLBACK_TOOL_NAMES = [
+    'list_dir', 'search_file', 'search_content', 'read_file',
+    'list_skills', 'read_skill', 'read_lints', 'replace_in_file',
+    'write_to_file', 'delete_file', 'list_rules', 'read_rule',
+    'get_tool_params', 'run_command'
+  ];
+  D.FALLBACK_TOOLS = D.FALLBACK_TOOL_NAMES.map(function (name) {
+    return { name: name, description: '（后端未连接，参数以后端为准）', parameters: [] };
+  });
+
+  /**
+   * 按结构关系装配时序列表：消息严格按给定的 key 顺序，
+   * 外部卡片按锚点（创建时所在分支末端的 key）插到对应消息之后。
+   * 顺序完全由结构与入列先后决定。
+   * @param {Object} conv 会话记录
+   * @param {Array<string>} msgKeys 有序的消息树 key 列表
+   * @param {Object} [opts]
+   * @param {string} [opts.orphanMode] 锚点不在列表时的处理：'end'（默认，放到末尾）
+   *   或 'skip-handled'（已处理的不显示，未处理的放末尾，用于镜像区）
+   * @returns {Array} 条目数组 { kind, key, node?, card? }
+   */
+  D.buildTimeline = function (conv, msgKeys, opts) {
+    const tree = (conv && conv.msgTree) || {};
+    const mode = (opts && opts.orphanMode) || 'end';
+    // 已发送、且消息树里已有对应 external-call 消息本体的卡片不再单独渲染：
+    // 否则同一张卡片会以「数组卡片」和「消息本体」两种形态各出现一次。
+    const cards = ((conv && conv.externalCards) || []).filter(function (c) {
+      return c && !D.cardHasMessage(conv, c);
+    });
+    // 外部卡片按入列先后排列：同一锚点内的先后即入列顺序。
+    const byAnchor = {};
+    const orphan = [];
+    cards.forEach(function (c) {
+      const a = c.anchorKey;
+      if (a && tree[a]) (byAnchor[a] = byAnchor[a] || []).push(c);
+      else orphan.push(c);
+    });
+    const items = [];
+    (msgKeys || []).forEach(function (k) {
+      const node = tree[k];
+      if (!node || node.deleted) return;
+      items.push({ kind: 'message', key: k, node: node });
+      const cs = byAnchor[k];
+      if (cs) cs.forEach(function (c) { items.push({ kind: 'external', key: D.externalCardKey(c), card: c }); });
+    });
+    orphan.forEach(function (c) {
+      // 锚点不在当前列表：镜像区里已处理的不显示，未处理的放到末尾；会话记录里一律放末尾。
+      if (mode === 'skip-handled' && (c.executed || c.skipped)) return;
+      items.push({ kind: 'external', key: D.externalCardKey(c), card: c });
+    });
+    return items;
+  };
+
+  // data 工厂
   D.data = function () {
     return {
-      // 配置统一由后端 config.yaml 管理，插件不从浏览器存储配置（避免丢失）
       siteKey: '',
-      profileId: '',   // 当前生效的站点规则（由 content 脚本回传）
+      profileId: '',
       config: {
-        flaskUrl: 'http://127.0.0.1:5000',   // 由后端 /config 下发，仅会话内使用，不持久化到浏览器
+        flaskUrl: 'http://127.0.0.1:5000',
         profile: 'glm',
         flaskPort: 5000
       },
-      portMismatch: false,   // 配置端口 ≠ 实际连通端口（端口已改但服务未重启）
-      configTools: {},   // { 工具名: { enabled: bool } }，来自后端 /config
-      maxJsonChars: 100000,  // 工具结果 JSON 体积上限（字符），来自后端 config.yaml 的 limits
+      portMismatch: false,
+      configTools: {},
+      maxJsonChars: 100000,
       systemPrompt: '',
       toolsOpen: false,
       tools: D.FALLBACK_TOOLS,
-      // 多会话：切换左侧历史会话后各自保留消息与卡片执行状态
+      // 多会话
       activeConv: '__default__',
       conversations: {},
       expanded: Vue.reactive({}),
       thinkOpen: Vue.reactive({}),
-      userOpen: Vue.reactive({}),   // 用户消息折叠态：默认折叠（与「思考过程」一致）
-      // 卡片「完整堆栈」展开状态（按卡片 id）
+      userOpen: Vue.reactive({}),
       stackOpen: Vue.reactive({}),
+      entryChecked: Vue.reactive({}),
+      entryOpen: Vue.reactive({}),
+      sessionSearch: '',
+      convListWidth: 180,
+      convScanned: {},
       settingsOpen: false,
-      panelSide: 'right',   // 悬浮抽屉挂靠侧：right / left（由 content 脚本下发）
-      // 外部卡片已改为按会话存放（见 computed externalCards / curConv.externalCards），
-      // 不再放在 data 顶层，避免跨会话串台与刷新丢失。
-      _extTimer: null,       // 外部卡片轮询定时器
-      promptSections: [],    // 技能说明段落：来自后端 /prompt_sections
-      // 自定义工具（来自标准 skill 的 tool.json）：列表 / 展开态 / 内联编辑态
+      panelSide: 'right',
+      theme: 'light',
+      _extTimer: null,
+      panelVisible: false,
+      promptSections: [],
+      skills: [],
+      skillsManage: [],
+      skillsOpen: false,
+      skillsExpanded: Vue.reactive({}),
+      skillDocOpen: Vue.reactive({}),
+      skillDocText: Vue.reactive({}),
+      skillDocEdit: Vue.reactive({}),
+      skillDocEditing: Vue.reactive({}),
       customTools: [],
-      // 规则文件（用户自定义约定，AI 按需读取）：列表 / 展开态 / 编辑态
       rules: [],
       rulesDir: '',
       rulesOpen: false,
-      // 规则读取优先级：always(总是) / on-demand(按需) / off(关闭)
       rulePriorities: [
         { value: 'always', label: '总是' },
         { value: 'on-demand', label: '按需' },
@@ -169,11 +210,12 @@ window.AIMirrorDialog = (function () {
       flaskOk: false,
       flaskError: '',
       toastMsg: '',
-      autoSendEnabled: false,  // 全局「自动」开关：勾选后执行按钮倒计时自动执行并回传
-      autoSendDelay: 3000,     // 自动执行 / 自动回传共用倒计时（毫秒），在设置页配置
+      autoSendEnabled: false,
+      autoSendDelay: 3000,
       _toastTimer: null,
       _persist: null,
-      _restoring: 0   // 正在从存储恢复的会话数（>0 时暂停写盘）
+      _persistTimers: null,
+      _convReady: null
     };
   };
 
@@ -183,41 +225,165 @@ window.AIMirrorDialog = (function () {
     curConv: function () {
       return this.conversations[this.activeConv] || D.EMPTY_CONV;
     },
-    messages: function () { return this.curConv.messages; },
-    cardMap: function () { return this.curConv.cardMap; },
-    pageUrl: function () { return this.curConv.pageUrl; },
-    // 外部卡片随会话隔离：切换会话 / 站点时各自保留，与工具卡片行为一致。
-    // 写入方式与 cardMap 相同（直接 push/splice 当前会话的数组），不整体替换引用。
+    // 消息树：唯一存完整信息处
+    msgTree: function () { return this.curConv.msgTree || {}; },
+    // 可见区消息对象数组（镜像区渲染用）：按 visibleKeys 回树取，跳过已删除；
+    // 切片与历史断裂、未入树时，回退展示这批切片内容。
+    messages: function () {
+      const tree = this.curConv.msgTree || {};
+      const out = [];
+      (this.curConv.visibleKeys || []).forEach(function (k) {
+        const node = tree[k];
+        if (node && !node.deleted) out.push(node);
+      });
+      if (!out.length && (this.curConv.orphanSlice || []).length) {
+        return this.curConv.orphanSlice.slice();
+      }
+      return out;
+    },
+    // 扁平卡片字典：运行时派生（不存储），供渲染按代码块 id 取卡片
+    cardMap: function () {
+      const out = {};
+      const conv = this.curConv;
+      const tree = conv.msgTree || {};
+      Object.keys(tree).forEach(function (k) {
+        const node = tree[k];
+        const cards = (node && node.cards) || {};
+        Object.keys(cards).forEach(function (bid) { out[bid] = cards[bid]; });
+      });
+      // 不入树的切片：卡片挂在切片消息上，一并纳入，保证可渲染可操作
+      (conv.orphanSlice || []).forEach(function (m) {
+        const cards = (m && m.cards) || {};
+        Object.keys(cards).forEach(function (bid) { out[bid] = cards[bid]; });
+      });
+      return out;
+    },
+    page_url: function () { return this.curConv.page_url; },
+    // 外部卡片随会话隔离
     externalCards: function () { return this.curConv.externalCards || []; },
-    // 历史卡片管理列表：把工具/代码卡片与外部卡片统一按时序（创建时间倒序）合并。
-    // 外部卡片同样属于本会话发生过的卡片，必须一并按时序记录，
-    // 否则「历史卡片管理」会遗漏外部卡片，时序也不完整。
-    // 同毫秒用 id 保证排序稳定。
-    sortedHistoryCards: function () {
-      const local = Object.keys(this.cardMap)
-        .map(function (id) { return Object.assign({}, this.cardMap[id], { _kind: 'code' }); }.bind(this));
-      const ext = (this.externalCards || [])
-        .map(function (c) { return Object.assign({}, c, { _kind: 'external' }); });
-      return local.concat(ext)
-        .sort(function (a, b) {
-          return (b.createdAt || 0) - (a.createdAt || 0)
-            || String(a.id || '').localeCompare(String(b.id || ''));
+    // 会话条目列表：按 branchKeys 回树取消息，加外部卡片。
+    // 每条只生成轻量摘要；key 即消息树 key（'父id-子id'），
+    // 外部卡片用其自身 key，同样与消息 key 同构。
+    sessionEntries: function () {
+      const conv = this.curConv;
+      // 保存实例引用：下方 timeline.forEach 用普通函数，其内部 this 为 undefined，
+      // 直接用 this 调方法会抛错。
+      const self = this;
+      const tree = conv.msgTree || {};
+      // 统计每个 id 作为父节点出现的次数：出现 ≥2 次即为「分支父节点」
+      // （树里有两条以上边从它分叉出去），用于列表里做颜色标记。
+      const childCount = {};
+      Object.keys(tree).forEach(function (k) {
+        const cut = k.indexOf('-');
+        if (cut < 0) return;
+        const pid = k.slice(0, cut);
+        childCount[pid] = (childCount[pid] || 0) + 1;
+      });
+      // 顺序完全由消息树结构决定：消息按 branchKeys 的顺序，
+      // 外部卡片按锚点插到对应消息之后。
+      // 切片与历史断裂（未入树）时 branchKeys 为空：改用 orphanSlice 回退，
+      // 与镜像区保持一致，否则会出现「镜像有内容、列表却为空」。
+      let timeline = D.buildTimeline(conv, conv.branchKeys || []);
+      if (!timeline.length && (conv.orphanSlice || []).length) {
+        timeline = conv.orphanSlice.map(function (m, i) {
+          return { kind: 'message', key: 'orphan-' + i, node: m };
         });
+      }
+      const items = [];
+      timeline.forEach(function (it) {
+        if (it.kind === 'message') {
+          const node = it.node;
+          const id = window.AIMirrorDomUtils.messageFingerprint(node);
+          items.push({
+            key: it.key,
+            kind: 'message',
+            id: id,
+            role: node.role || '',
+            name: node.name || '',
+            preview: D.firstLine(node),
+            // 是否为外部调用信封（external-call）：在会话记录列表里单独着色标记。
+            isExternalCall: !!(self.parseExternalCall && self.parseExternalCall(node)),
+            isBranchParent: (childCount[id] || 0) >= 2
+          });
+        } else {
+          const c = it.card;
+          items.push({
+            key: it.key,
+            kind: 'external',
+            id: c.id,
+            label: '用户 · ' + (c.title || c.type || ''),
+            status: c.status || '',
+            skipped: !!c.skipped
+          });
+        }
+      });
+      return items;
+    },
+    // 按 id 搜索词过滤后的条目列表。
+    // 只匹配条目自身的 id，不匹配 key：key 形如 'pid-id'，其中 pid 段是
+    // 另一条消息的 id，匹配 key 会把「子条目」也带出来，搜一个 id 命中多条。
+    filteredSessionEntries: function () {
+      const list = this.sessionEntries || [];
+      const q = String(this.sessionSearch || '').trim().toLowerCase();
+      if (!q) return list;
+      return list.filter(function (e) {
+        return String(e.id || '').toLowerCase().indexOf(q) >= 0;
+      });
+    },
+    // 已勾选的条目 key 列表
+    checkedEntryKeys: function () {
+      return (this.sessionEntries || [])
+        .filter((e) => !!this.entryChecked[e.key])
+        .map((e) => e.key);
     },
     // 对话镜像倒序显示：最新消息在前
     reversedMessages: function () {
       return this.messages.slice().reverse();
+    },
+    // 会话列表：按最近更新时间倒序
+    convList: function () {
+      const convs = this.conversations || {};
+      const map = {};
+      const scanned = this.convScanned || {};
+      Object.keys(scanned).forEach((id) => {
+        const s = scanned[id] || {};
+        map[id] = {
+          id: id,
+          title: s.title || '（未命名会话）',
+          pageUrl: s.pageUrl || '',
+          updatedAt: s.updatedAt || 0,
+          msgCount: s.msgCount || 0
+        };
+      });
+      Object.keys(convs).forEach((id) => {
+        const c = convs[id];
+        if (!c) return;
+        const prev = map[id];
+        // 消息条数：统计整棵消息树的全部节点（不筛分支，含已删除）
+        let msgCount = 0;
+        const tree = c.msgTree || {};
+        Object.keys(tree).forEach(function (k) {
+          if (tree[k]) msgCount += 1;
+        });
+        map[id] = {
+          id: id,
+          title: c.title || (prev && prev.title) || '（未命名会话）',
+          pageUrl: c.page_url || (prev && prev.pageUrl) || '',
+          updatedAt: c.updatedAt || (prev && prev.updatedAt) || 0,
+          msgCount: (tree && Object.keys(tree).length) ? msgCount : ((prev && prev.msgCount) || msgCount)
+        };
+      });
+      const list = Object.keys(map).map(function (id) { return map[id]; });
+      list.sort(function (a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); });
+      return list;
     }
   };
 
   /**
    * 启动带倒计时的卡片状态机（工具卡片与外部卡片共用）。
-   * 倒计时期间只改 phase / countdown，不改 status，
-   * 这样中途关闭「自动」时卡片能自然退回待处理态，不会卡死。
-   *
-   * @param {Object} ctx Vue 实例（读取 autoSendDelay）
-   * @param {Object} card 目标卡片（就地修改 _cdTimer / phase / countdown）
-   * @param {string} phase 阶段名：'exec'（执行）或 'send'（回传 / 发送）
+   * @param {Object} ctx Vue 实例
+   * @param {Object} card 目标卡片
+   * @param {string} phase 'exec' 或 'send'
    * @param {Function} onDone 倒计时结束后的动作
    */
   D.startCountdown = function (ctx, card, phase, onDone) {
@@ -231,7 +397,6 @@ window.AIMirrorDialog = (function () {
         card._cdTimer = setTimeout(tick, 1000);
         return;
       }
-      // 倒计时归零：清理定时器与阶段标记，交给调用方执行最终动作
       card._cdTimer = null;
       card.countdown = 0;
       card.phase = '';
@@ -240,10 +405,7 @@ window.AIMirrorDialog = (function () {
     card._cdTimer = setTimeout(tick, 1000);
   };
 
-  /**
-   * 取消卡片上正在进行的倒计时，并复位阶段与计数。
-   * @param {Object} card 目标卡片
-   */
+  /** 取消卡片上正在进行的倒计时，并复位阶段与计数。 */
   D.cancelCountdown = function (card) {
     if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
     card.countdown = 0;
@@ -254,14 +416,23 @@ window.AIMirrorDialog = (function () {
   D.mounted = function () {
     log('dialog mounted，准备就绪');
     this.ensureConv(this.activeConv);
-    this._persist = D.debounce(function () { this.persistConv(); }.bind(this), 500);
-    // 配置统一从后端读取：先发现后端地址，再取配置，再取工具目录
+    // 落盘队列：按会话 id 各自延迟排队
+    this._persistTimers = {};
+    this._persist = function (convId) {
+      const id = convId || this.activeConv;
+      const timers = this._persistTimers;
+      if (timers[id]) clearTimeout(timers[id]);
+      timers[id] = setTimeout(function () {
+        delete timers[id];
+        this.persistConv(id);
+      }.bind(this), 500);
+    };
     this.initBackend();
     window.addEventListener('message', this.onPageMessage);
-    // 对话框可能晚于初始推送加载，主动请求一次当前工具调用
     window.parent.postMessage({ type: 'request_page' }, '*');
     window.parent.postMessage({ type: 'request_panel_side' }, '*');
-    log('已发送 request_page 请求重发结构化对话');
+    window.parent.postMessage({ type: 'request_theme' }, '*');
+    window.parent.postMessage({ type: 'request_panel_visible' }, '*');
   };
 
   return D;

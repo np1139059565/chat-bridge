@@ -18,7 +18,8 @@
 
   // 处理一条待执行命令：{ request_id, tool, params, silent }
   // 普通工具：执行前后向抽屉推送卡片信息，展示工具调用细节。
-  // silent 工具（如 push_message）：仅执行动作本身，不生成卡片、不回传结果。
+  // silent 工具（如 push_message）：不生成抽屉卡片；执行结果仍照常回传，
+  // 否则调用方只能拿到入队确认，无法得知动作是否真正生效。
   A.handleTask = async function (task) {
     if (!task || !task.request_id) return;
     const silent = !!task.silent;
@@ -34,8 +35,11 @@
       });
     }
     const outcome = await A.handleToolRequest(task);
-    if (silent) return;   // 副作用工具：无需回传结果
+    // 结果一律回传（含 silent 工具），让调用方拿到真实执行状态；
+    // silent 仅表示不在抽屉生成工具卡片。
+    // 是否把结果再发回网页 AI，由调用方（插件侧 no_reply 参数）决定，不在此处理。
     await A.postResult(task.request_id, outcome);
+    if (silent) return;
     A.postToDrawer({
       type: 'tool-card',
       id: cardId,
@@ -51,9 +55,14 @@
   // 调试扩展的 content script 只运行在顶层文档，子页面内没有它；
   // 因此子页面查询依赖用户已安装的「iframe 点选补丁」代答。
   // 未传 page_url 时，在顶层文档查询。
+  //
+  // 关键分支：page_url 指向顶层文档本身时必须在顶层查询。
+  // findFrameByUrl 只遍历 iframe，顶层文档不在其中，若不先判断就会把
+  // 「在当前页面查元素」误判为子页面路由，直接返回 FRAME_NOT_FOUND。
   async function runInTargetPage(params, fnTop, fnFrame) {
-    const url = params.page_url || params.pageUrl || '';
+    const url = params.page_url || '';
     if (url) {
+      if (A.normalizeUrl(url) === A.normalizeUrl(location.href)) return fnTop();
       const frame = A.findFrameByUrl(url);
       if (!frame) {
         return { success: false, error: 'FRAME_NOT_FOUND', page_url: url, available: A.frameUrls() };
@@ -114,7 +123,12 @@
     if (tool === 'get_page_snapshot') {
       const snapshotType = params.snapshot_type || 'dom';
       if (snapshotType === 'dom') {
-        const snapTop = () => ({ success: true, data: { dom: A.truncate(document.documentElement.outerHTML, A.MAX_SNAPSHOT_CHARS) } });
+        const snapTop = () => {
+          // 整页快照保持完整：截断会让页面结构不完整，影响调试判断。
+          // 只附带长度，便于调用方评估体积。
+          const dom = document.documentElement.outerHTML;
+          return { success: true, data: { dom: dom, dom_length: (dom || '').length } };
+        };
         const snapFrame = async (frame) => {
           try {
             const res = await A.queryFrame(frame, { type: 'query-dom' }, 4000);
@@ -137,28 +151,52 @@
     }
 
     if (tool === 'push_message') {
-      const text = params.text || '';
+      // 参数名为 message；为空时显式报错，避免推送空内容后仍返回成功（静默失败）。
+      const message = params.message;
       const title = params.title || '';
-      A.postToDrawer({ type: 'append-reply', id: A.generateId ? A.generateId() : String(Date.now()), text: (title ? ('【' + title + '】') : '') + text, timestamp: Date.now() });
+      if (typeof message !== 'string' || message.trim() === '') {
+        return { success: false, error: 'MISSING_MESSAGE', hint: 'push_message 需要非空的 message 参数（推送正文）。' };
+      }
+      A.postToDrawer({ type: 'append-reply', id: A.generateId ? A.generateId() : String(Date.now()), text: (title ? ('【' + title + '】') : '') + message, timestamp: Date.now() });
       return { success: true, data: { pushed: true } };
     }
 
     return { success: false, error: 'UNKNOWN_TOOL', tool };
   };
 
+  // 截图请求的超时上限（毫秒）：后台若因 service worker 休眠、截图失败丢响应
+  // 等原因不回传结果，必须自行超时退出，否则等待方会永久挂起，
+  // 进而卡死整个轮询循环（见 03_heartbeat.js 的 state.polling 守卫）。
+  A.SCREENSHOT_TIMEOUT_MS = 8000;
+
   A.requestScreenshot = function () {
     return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (fn, arg) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        chrome.runtime.onMessage.removeListener(listener);
+        fn(arg);
+      };
       const listener = (msg) => {
         if (!msg || msg.type !== 'screenshot-result') return;
-        chrome.runtime.onMessage.removeListener(listener);
         if (msg.success) {
-          resolve(A.downscaleImage(msg.data.screenshot, A.MAX_SHOT_WIDTH));
+          // 缩放本身是异步的，完成后才真正结束
+          A.downscaleImage(msg.data.screenshot, A.MAX_SHOT_WIDTH)
+            .then((url) => finish(resolve, url))
+            .catch((e) => finish(reject, e));
         } else {
-          reject(new Error(msg.error || '截图失败'));
+          finish(reject, new Error(msg.error || '截图失败'));
         }
       };
+      const timer = setTimeout(() => finish(reject, new Error('SNAPSHOT_TIMEOUT')), A.SCREENSHOT_TIMEOUT_MS);
       chrome.runtime.onMessage.addListener(listener);
-      chrome.runtime.sendMessage({ type: 'capture-visible-tab' });
+      try {
+        chrome.runtime.sendMessage({ type: 'capture-visible-tab' });
+      } catch (e) {
+        finish(reject, e);
+      }
     });
   };
 
