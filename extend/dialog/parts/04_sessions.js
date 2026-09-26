@@ -241,9 +241,11 @@
 
   /**
    * 清空全部会话：逐个删除内存与本地存储里的会话存档。
+   * @param {boolean} [skipConfirm] 跳过确认弹窗。远程指令（QQ 发来）无法弹窗，
+   *   由调用方传 true；界面按钮不传，照常确认。
    */
-  M.clearAllConversations = function () {
-    if (!confirm('确认清空全部会话？所有会话的聊天记录与卡片都会被删除，此操作不可撤销。')) return;
+  M.clearAllConversations = function (skipConfirm) {
+    if (!skipConfirm && !confirm('确认清空全部会话？所有会话的聊天记录与卡片都会被删除，此操作不可撤销。')) return;
     const self = this;
     const memIds = Object.keys(this.conversations || {});
     const keys = memIds.map((id) => this.convKey(id));

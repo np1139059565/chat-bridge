@@ -29,6 +29,7 @@ chat-bridge-main/
 │   │   ├── 02_blocks.js       # 代码块解析、消息构造、extractBlocks
 │   │   ├── 03_bridge.js       # 会话识别、sendPage、粘贴发送
 │   │   ├── 04_observer.js     # 观察器与生命周期
+│   │   ├── 06_picker.js       # 元素选择模式：悬停高亮、选择器生成、按选择器点击
 │   │   └── 05_index.js        # 入口：消息监听、巡检、初始化
 │   └── dialog/                # 悬浮对话框 UI
 │       ├── dialog.html

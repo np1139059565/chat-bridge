@@ -197,7 +197,8 @@ window.AIMirrorDialog = (function () {
       bridgeAppSecret: '',
       bridgePush: { user: true, tool: true, ai: true, thinking: false },
       bridgeCommands: [],
-      bridgeNewCmd: { name: '', label: '', action: '', arg: '' },
+      bridgePicking: false, bridgePicked: null,     // 元素选择：进行中标记 / 已选元素对象
+      bridgeNewCmdName: '', bridgeNewCmdLabel: '',  // 新指令录入：命令名 / 显示名
       rules: [],
       rulesDir: '',
       rulesOpen: false,

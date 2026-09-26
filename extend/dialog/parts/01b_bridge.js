@@ -64,15 +64,47 @@
     this.saveBridge();
   };
 
-  /** 新增一条 QQ 指令。 */
+  /** 进入元素选择模式：请求内容脚本开始选元素。 */
+  M.startPickElement = function () {
+    this.bridgePicking = true;
+    window.parent.postMessage({ type: 'picker_start' }, '*');
+    this.toast('请在页面上点击要绑定的元素（Esc 取消）');
+  };
+
+  /** 停止元素选择模式。 */
+  M.stopPickElement = function () {
+    this.bridgePicking = false;
+    window.parent.postMessage({ type: 'picker_stop' }, '*');
+  };
+
+  /**
+   * 新增一条 QQ 指令。
+   * 必须已经通过「选择元素」拿到选择器，指令才有可执行的目标。
+   */
   M.addBridgeCommand = function () {
-    const c = this.bridgeNewCmd;
-    if (!c.name || !c.label) { this.toast('命令名与显示名必填'); return; }
+    const name = (this.bridgeNewCmdName || '').trim();
+    const label = (this.bridgeNewCmdLabel || '').trim();
+    const picked = this.bridgePicked;
+    if (!name || !label) { this.toast('命令名与显示名必填'); return; }
+    if (!name.startsWith('/')) { this.toast('命令名需以 / 开头'); return; }
+    if (!picked || !picked.selector) { this.toast('请先选择要点击的元素'); return; }
+    // 命令名去重
+    if ((this.bridgeCommands || []).some((c) => (c.name || '').toLowerCase() === name.toLowerCase())) {
+      this.toast('该命令名已存在');
+      return;
+    }
     this.bridgeCommands.push({
-      name: c.name, label: c.label, action: c.action || '', arg: c.arg || ''
+      name: name,
+      label: label,
+      selector: picked.selector,
+      page_url: picked.page_url || ''
     });
-    this.bridgeNewCmd = { name: '', label: '', action: '', arg: '' };
+    // 复位录入状态
+    this.bridgeNewCmdName = '';
+    this.bridgeNewCmdLabel = '';
+    this.bridgePicked = null;
     this.saveBridge();
+    this.toast('已添加指令：' + name);
   };
 
   /** 删除一条 QQ 指令。 */
@@ -115,5 +147,93 @@
         body: { conversationId: this.activeConv, messages: messages }
       }).catch(function () { /* 桥接未启用时忽略 */ });
     } catch (e) { /* 忽略 */ }
+  };
+
+  // ---------- 抽屉命令：后端下发的远程指令，在浏览器侧执行 ----------
+
+  /**
+   * 消费一张抽屉命令卡片。
+   *
+   * 后端通过卡片总线（type=drawer-command）下发远程指令，
+   * 内容形如 {action, params}。这类卡片不下发网页 AI，直接在抽屉里执行，
+   * 执行完回执后端、不入 externalCards 列表。
+   * @param {Object} c 后端下发的卡片
+   * @returns {boolean} 是否为命令卡片（是则调用方跳过后续处理）
+   */
+  M.consumeBridgeCommand = function (c) {
+    if (!c || c.type !== 'drawer-command') return false;
+    let payload = c.payload || {};
+    // payload 可能未解析，退回解析 content
+    if (!payload.action) {
+      try { payload = JSON.parse(c.content || '{}'); } catch (e) { payload = {}; }
+    }
+    this._runBridgeAction(payload.action, payload.params || {});
+    // 回执后端：命令已消费，此后不再重复投递
+    this.confirmCardDelivered(c.id);
+    return true;
+  };
+
+  /**
+   * 执行一条抽屉命令。
+   * @param {string} action 动作名
+   * @param {Object} params 动作参数
+   */
+  M._runBridgeAction = function (action, params) {
+    if (action === 'clear_all_sessions') { this._bridgeClearAllSessions(); return; }
+    if (action === 'clear_messages') { this._bridgeClearMessages(); return; }
+    if (action === 'copy_system_prompt') { this._bridgeSendSystemPrompt(); return; }
+    if (action === 'toggle_auto_send') {
+      // 远程指令没有确认框，直接切换自动回传开关
+      this.setAutoSendEnabled(!this.autoSendEnabled);
+      this.toast('自动回传已' + (this.autoSendEnabled ? '开启' : '关闭'));
+      return;
+    }
+    if (action === 'set_delay') {
+      const secs = Number(params.seconds) || 0;
+      if (secs > 0) { this.autoSendDelay = secs * 1000; this.toast('自动回传延迟已设为 ' + secs + ' 秒'); }
+      return;
+    }
+    if (action === 'click_element') {
+      // 点击动作在页面上下文执行：交给内容脚本处理
+      window.parent.postMessage({
+        type: 'bridge_click_element',
+        selector: params.selector || ''
+      }, '*');
+      this.toast('已下发点击：' + (params.selector || ''));
+      return;
+    }
+  };
+
+  /**
+   * 清空所有会话。
+   * 复用界面的 clearAllConversations，传 true 跳过确认框——
+   * 远程指令来自 QQ，用户不在电脑前，无法点确认。
+   */
+  M._bridgeClearAllSessions = function () {
+    this.clearAllConversations(true);
+  };
+
+  /** 清空当前会话的消息列表（保留外部卡片，供远程指令使用）。 */
+  M._bridgeClearMessages = function () {
+    const conv = this.curConv;
+    if (!conv) return;
+    this.eachCard(conv, (c) => { if (c && c._cdTimer) { clearTimeout(c._cdTimer); c._cdTimer = null; } });
+    conv.msgTree = {};
+    conv.visibleKeys = [];
+    conv.branchKeys = [];
+    conv.orphanSlice = [];
+    Object.keys(this.entryChecked).forEach((k) => { delete this.entryChecked[k]; });
+    Object.keys(this.entryOpen).forEach((k) => { delete this.entryOpen[k]; });
+    if (this._persist) this._persist();
+    this.toast('已清空消息列表');
+  };
+
+  /** 复制 System Prompt 并自动粘贴发送给网页 AI。 */
+  M._bridgeSendSystemPrompt = function () {
+    const text = this.systemPrompt || '';
+    if (!text) { this.toast('System Prompt 为空'); return; }
+    this.copy(text);
+    window.parent.postMessage({ type: 'auto_send', text: text }, '*');
+    this.toast('已复制并发送 System Prompt');
   };
 })();

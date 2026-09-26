@@ -33,6 +33,18 @@
     else if (d.type === 'close_panel') {
       A.setDialogVisible(false);
     }
+    else if (d.type === 'picker_start') {
+      // 抽屉发起「选择元素」：进入选择模式，选中后回传 picker_result
+      A.pickerStart();
+    }
+    else if (d.type === 'picker_stop') {
+      A.pickerStop();
+    }
+    else if (d.type === 'bridge_click_element') {
+      // QQ 指令「点击元素」：按选择器点击页面元素
+      const ok = A.clickBySelector(d.selector || '');
+      A.post({ type: 'click_result', ok: ok, selector: d.selector || '' });
+    }
   });
 
   // 来自后台（工具栏点击）的消息：切换悬浮对话框显隐

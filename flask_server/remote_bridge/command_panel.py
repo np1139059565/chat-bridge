@@ -1,15 +1,18 @@
 """远程桥接 —— QQ 指令处理与指令面板注册
 
 职责：
-1. 处理以「/」开头的 QQ 消息，按类型分流：
-   - 控制类（/start /stop）：切换桥接层开关
-   - 查询类（/status）：读本地状态直接回复
-   - 转发类（/ask 内容）：包装成卡片投给网页 AI
-   - 工具类（/run 工具 参数）：经外部工具提供方通道下发
-2. 把设置页配置的指令列表注册到 QQ 的指令面板 / 自定义菜单
+1. 处理以「/」开头的 QQ 消息
+2. 内置指令：通过卡片总线下发到抽屉执行
+   （清空会话 / 消息、复制 System Prompt、设置回传延迟）
+3. 自定义指令：点击用户预先选定的网页元素
 
-【待核对】指令面板与自定义菜单的接口路径、请求体结构以官方文档为准，
-本文件按通行结构实现，接入前请对照官网确认。
+设计说明：
+- 指令的「执行」都在浏览器侧完成——会话数据、System Prompt、
+  网页元素都在抽屉与页面里，后端只负责识别指令、下发命令。
+- 下发通道复用卡片总线：创建一张 type=drawer-command 的卡片，
+  抽屉轮询取到后按 action 执行，而非发送给网页 AI。
+
+【待核对】指令面板与自定义菜单的接口路径、请求体结构以官方文档为准。
 """
 import json
 
@@ -21,11 +24,13 @@ def log(*args):
     print("[bridge][command]", *args)
 
 
-# 内置指令：不依赖设置页配置即可用
+# 内置指令表：命令名 → 说明
 BUILTIN = {
-    "/start": "开启消息推送",
-    "/stop": "暂停消息推送",
-    "/status": "查看当前状态",
+    "/css": "清空所有会话",
+    "/cms": "清空当前会话的消息列表",
+    "/csp": "复制 System Prompt 并发送给 AI",
+    "/rtime": "设置自动回传延迟（秒）",
+    "/stime": "切换自动回传开关",
     "/help": "显示指令列表",
 }
 
@@ -46,20 +51,26 @@ def _reply(qq_client, openid, text):
     return ok
 
 
-def _status_text():
-    """组装当前状态文本。"""
-    cfg = bridge_store.get_config()
-    push = cfg.get("push") or {}
-    lines = [
-        "桥接状态：" + ("开启" if cfg.get("enabled") else "关闭"),
-        "推送：用户=%s 工具=%s AI=%s 思考=%s" % (
-            "开" if push.get("user") else "关",
-            "开" if push.get("tool") else "关",
-            "开" if push.get("ai") else "关",
-            "开" if push.get("thinking") else "关",
-        ),
-    ]
-    return "\n".join(lines)
+def _dispatch(action, params=None):
+    """把一条抽屉命令通过卡片总线下发。
+
+    卡片类型为 drawer-command：抽屉轮询取到后按 action 执行本地动作，
+    不发送给网页 AI。
+    @param action 动作名：clear_all_sessions / clear_messages /
+                  copy_system_prompt / toggle_auto_send / set_delay / click_element
+    @param params 动作参数
+    """
+    import card_bus
+    payload = {"action": action, "params": params or {}}
+    card = card_bus.bus.create(
+        source="bridge",
+        card_type="drawer-command",
+        title="远程指令",
+        content=json.dumps(payload, ensure_ascii=False),
+        payload=payload,
+    )
+    log("已下发抽屉命令", action, "id=" + card.id[:8])
+    return card
 
 
 def _help_text():
@@ -78,35 +89,52 @@ def handle_command(qq_client, openid, msg_id, text):
     cmd = parts[0].lower()
     arg = parts[1] if len(parts) > 1 else ""
 
-    if cmd == "/start":
-        bridge_store.save_config({"enabled": True})
-        _reply(qq_client, openid, "已开启消息推送")
+    if cmd == "/css":
+        _dispatch("clear_all_sessions")
+        _reply(qq_client, openid, "已下发：清空所有会话")
         return True
-    if cmd == "/stop":
-        bridge_store.save_config({"enabled": False})
-        _reply(qq_client, openid, "已暂停消息推送")
+    if cmd == "/cms":
+        _dispatch("clear_messages")
+        _reply(qq_client, openid, "已下发：清空当前会话的消息列表")
         return True
-    if cmd == "/status":
-        _reply(qq_client, openid, _status_text())
+    if cmd == "/stime":
+        _dispatch("toggle_auto_send")
+        _reply(qq_client, openid, "已下发：切换自动回传开关")
+        return True
+    if cmd == "/csp":
+        _dispatch("copy_system_prompt")
+        _reply(qq_client, openid, "已下发：复制 System Prompt 并发送给 AI")
+        return True
+    if cmd == "/rtime":
+        if not arg:
+            _reply(qq_client, openid, "用法：/rtime 秒数（如 /rtime 5）")
+            return True
+        try:
+            secs = float(arg)
+        except ValueError:
+            _reply(qq_client, openid, "秒数必须是数字")
+            return True
+        if secs <= 0:
+            _reply(qq_client, openid, "秒数必须大于 0")
+            return True
+        _dispatch("set_delay", {"seconds": secs})
+        _reply(qq_client, openid, "已下发：设置自动回传延迟 %s 秒" % secs)
         return True
     if cmd == "/help":
         _reply(qq_client, openid, _help_text())
         return True
-    if cmd == "/ask":
-        # 转发类：把内容包装成卡片投给网页 AI
-        if not arg:
-            _reply(qq_client, openid, "用法：/ask 你的问题")
-            return True
-        from .qq_gateway import QqGateway
-        QqGateway()._deliver_as_card(openid, arg, msg_id)
-        _reply(qq_client, openid, "已转发给网页 AI")
-        return True
-    if cmd == "/run":
-        # 工具类：经外部工具提供方通道下发
-        _reply(qq_client, openid, "工具类指令暂未开放")
-        return True
 
-    # 未知指令：交还调用方当普通消息处理
+    # 自定义指令：在配置里按命令名匹配，命中则下发「点击元素」
+    for c in (bridge_store.get_config().get("commands") or []):
+        if (c.get("name") or "").lower() == cmd:
+            _dispatch("click_element", {
+                "selector": c.get("selector", ""),
+                "page_url": c.get("page_url", ""),
+            })
+            _reply(qq_client, openid, "已下发：%s" % (c.get("label") or c.get("name")))
+            return True
+
+    # 未命中任何指令：交还调用方当普通消息处理
     return False
 
 

@@ -96,6 +96,37 @@
   white-space: nowrap;
 }
 
+/* 选择元素行：按钮 + 已选提示 + 添加按钮 */
+.bridge-pick-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cb-sp-2);
+}
+
+/* 已选元素提示：等宽字体，超长省略 */
+.bridge-picked {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-ok-text, #1a7f37);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 指令行里的选择器摘要 */
+.bridge-cmd-sel {
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-muted);
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* 删除按钮：危险操作，红字红边 */
 .bridge-cmd-item button.danger {
   padding: 2px var(--cb-sp-3);

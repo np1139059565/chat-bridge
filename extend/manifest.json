@@ -29,6 +29,7 @@
         "content/02_blocks.js",
         "content/03_bridge.js",
         "content/04_observer.js",
+        "content/06_picker.js",
         "content/05_index.js"
       ],
       "run_at": "document_idle"

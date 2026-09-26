@@ -121,6 +121,8 @@
       const conv = this.ensureConv(this.activeConv);
       const added = [];
       cards.forEach((c) => {
+        // 抽屉命令卡片：不下发网页 AI，直接执行本地动作（桥接指令）
+        if (this.consumeBridgeCommand(c)) return;
         if (this.externalCards.some((x) => x.id === c.id)) return;
         // 锚点定位：记下创建时「当前分支末端」那条消息的树 key，
         // 渲染时据此把卡片插到该消息之后。会话尚无消息时锚点为空，卡片排在最前。

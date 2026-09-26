@@ -83,33 +83,45 @@
         pushRow(ctx, 'ai', 'AI 消息'),
         pushRow(ctx, 'thinking', '思考过程（默认不推，冗长）'),
         h('br'),
-        // 指令列表编辑器
+        // 指令列表：内置指令说明 + 自定义指令编辑器
         h('div', { class: 'card-head' }, [h('span', 'QQ 指令')]),
         h('div', { class: 'hint' },
-          '内置指令：/start 开启推送、/stop 暂停推送、/status 查看状态、/help 指令列表'),
+          '内置：/css 清空所有会话、/cms 清空当前会话消息、'
+          + '/csp 复制 System Prompt 并发送、/rtime 秒数 设置回传延迟、'
+          + '/stime 切换自动回传开关、/help 指令列表'),
+        // 自定义指令：命令名 + 显示名 + 选择元素（不再手填选择器）
         h('div', { class: 'bridge-cmd-new' }, [
           h('input', {
             type: 'text', placeholder: '命令名（含 /，如 /deploy）',
-            value: ctx.bridgeNewCmd.name,
-            onInput: (e) => { ctx.bridgeNewCmd.name = e.target.value; }
+            value: ctx.bridgeNewCmdName,
+            onInput: (e) => { ctx.bridgeNewCmdName = e.target.value; }
           }),
           h('input', {
             type: 'text', placeholder: '显示名',
-            value: ctx.bridgeNewCmd.label,
-            onInput: (e) => { ctx.bridgeNewCmd.label = e.target.value; }
-          }),
-          h('input', {
-            type: 'text', placeholder: '动作（可选）',
-            value: ctx.bridgeNewCmd.action,
-            onInput: (e) => { ctx.bridgeNewCmd.action = e.target.value; }
-          }),
-          h('button', { onClick: () => ctx.addBridgeCommand() }, '添加')
+            value: ctx.bridgeNewCmdLabel,
+            onInput: (e) => { ctx.bridgeNewCmdLabel = e.target.value; }
+          })
+        ]),
+        h('div', { class: 'bridge-pick-row' }, [
+          h('button', {
+            onClick: () => ctx.bridgePicking ? ctx.stopPickElement() : ctx.startPickElement()
+          }, ctx.bridgePicking ? '取消选择' : '选择元素'),
+          ctx.bridgePicked
+            ? h('span', { class: 'bridge-picked', title: ctx.bridgePicked.selector },
+              '已选：' + (ctx.bridgePicked.tag || '') + ' ' + ctx.bridgePicked.selector)
+            : h('span', { class: 'hint' }, '点「选择元素」后，在页面上点击要触发的元素'),
+          h('button', {
+            disabled: !ctx.bridgePicked || !ctx.bridgeNewCmdName || !ctx.bridgeNewCmdLabel,
+            onClick: () => ctx.addBridgeCommand()
+          }, '添加')
         ]),
         ctx.bridgeCommands.length
           ? h('div', { class: 'bridge-cmd-list' }, ctx.bridgeCommands.map((c, i) =>
             h('div', { class: 'bridge-cmd-item', key: i }, [
               h('span', { class: 'bridge-cmd-name' }, c.name),
               h('span', { class: 'bridge-cmd-label' }, c.label),
+              h('span', { class: 'bridge-cmd-sel', title: c.selector || '' },
+                c.selector ? ('点击 ' + c.selector) : ''),
               h('button', {
                 class: 'danger',
                 onClick: () => ctx.removeBridgeCommand(i)
