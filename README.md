@@ -93,6 +93,7 @@ python server.py
   - `tools.run_command.languages`：`run_command` 支持的语言列表。
   - `limits.max_json_chars`：工具结果 JSON 体积上限。
 - **`flask_server/custom_tools.yaml`**：自定义工具清单，由插件自动维护。
+- **`flask_server/remote_bridge.yaml`**：远程桥接配置（QQ 凭证、推送开关、自定义指令），由设置页维护；`remote_bridge_state.json` 为其去重记账，自动生成。
 
 ## 自定义工具 / Skill
 
@@ -100,6 +101,15 @@ python server.py
 `custom_tools.yaml` 并生成可调用工具。示例见 `skills/json_tool`（`json_validate`：校验并格式化 JSON）。
 
 内置工具声明在 `tool_meta.py`、实现与派发表在 `tools_impl.py`；改动后需重启服务。
+
+## 远程桥接（QQ）
+
+在手机 QQ 里与网页 AI 对话，实现远程查看回复、远程下达指令。
+
+- 接入方式：QQ 官方 Bot API 的 WebSocket 长连接，本地服务无需公网地址。
+- 对网页 AI 完全透明：QQ 消息包装成普通外部卡片，AI 感知不到桥接层存在。
+- 配置入口：抽屉「设置」页的「远程桥接（QQ）」区块。
+- 使用说明见 `docs/remote-bridge-guide.md`，设计与架构见 `docs/remote-bridge-plan.md`。
 
 ## 开发
 

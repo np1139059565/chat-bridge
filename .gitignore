@@ -20,3 +20,6 @@ graphify-out/
 # ===== 密钥 / 环境 =====
 .env
 *.local.yaml
+# 远程桥接配置（含 QQ AppSecret）与运行时去重状态，均不入库
+flask_server/remote_bridge.yaml
+flask_server/remote_bridge_state.json

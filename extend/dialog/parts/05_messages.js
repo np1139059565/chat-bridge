@@ -363,6 +363,8 @@
       + '，分支=' + conv.branchKeys.length
       + '，自动候选=' + autoCandidates.length);
     if (this._persist) this._persist();
+    // 上报给远程桥接层：仅 generate 来源（AI 刚说完新话）
+    this.reportToBridge(reason);
   };
 
   /** 保证卡片拥有唯一标记，供回传与复制共用同一份文本。 */

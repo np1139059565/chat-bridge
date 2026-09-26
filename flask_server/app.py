@@ -21,6 +21,7 @@ from routes.custom_tools import bp as custom_tools_bp
 from routes.rules import bp as rules_bp
 from routes.cards import bp as cards_bp
 from routes.ext import bp as ext_bp
+from routes.bridge import bp as bridge_bp
 
 
 def _register_blueprints(app):
@@ -32,6 +33,7 @@ def _register_blueprints(app):
     app.register_blueprint(rules_bp)
     app.register_blueprint(cards_bp)
     app.register_blueprint(ext_bp)
+    app.register_blueprint(bridge_bp)
 
 
 def _register_cors(app):
@@ -68,4 +70,11 @@ def create_app():
     # 注册蓝图与响应头
     _register_blueprints(app)
     _register_cors(app)
+    # 启动远程桥接（QQ ↔ 网页 AI）。失败不阻断服务启动：
+    # 桥接是可选功能，凭证未填或依赖未装时其余功能照常可用。
+    try:
+        import remote_bridge
+        remote_bridge.init_bridge()
+    except Exception as e:
+        print("[bridge] 启动失败（不阻断服务）：", e)
     return app

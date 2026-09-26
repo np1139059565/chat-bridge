@@ -1,0 +1,112 @@
+/* 设置面板：远程桥接（QQ）区块 */
+/* 区块主体：纵向排列，与其它 sp-block 保持一致的间距节奏 */
+.bridge-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-2);
+}
+
+/* 总开关行：左「启用」勾选，右连接状态，两端对齐 */
+.bridge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-2);
+}
+
+.bridge-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+  cursor: pointer;
+}
+
+/* 连接状态指示灯：已连接绿字，未连接灰字 */
+.bridge-status {
+  font-size: var(--cb-fs-xs);
+  font-weight: 600;
+}
+
+.bridge-status.on {
+  color: var(--cb-ok-text, #1a7f37);
+}
+
+.bridge-status.off {
+  color: var(--cb-text-faint);
+}
+
+/* 推送开关行：左标签右开关 */
+.bridge-push-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-2);
+  padding: 2px 0;
+}
+
+.bridge-push-label {
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+}
+
+/* 新增指令行：四个输入框 + 添加按钮，允许换行 */
+.bridge-cmd-new {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cb-sp-2);
+  align-items: center;
+}
+
+.bridge-cmd-new input {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+/* 自定义指令列表 */
+.bridge-cmd-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-1);
+}
+
+.bridge-cmd-item {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-fill);
+}
+
+.bridge-cmd-name {
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-primary);
+}
+
+.bridge-cmd-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 删除按钮：危险操作，红字红边 */
+.bridge-cmd-item button.danger {
+  padding: 2px var(--cb-sp-3);
+  border: 1px solid var(--cb-danger-border);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-fill);
+  color: var(--cb-danger-text);
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+}
+
+.bridge-cmd-item button.danger:hover {
+  background: var(--cb-danger-bg);
+}

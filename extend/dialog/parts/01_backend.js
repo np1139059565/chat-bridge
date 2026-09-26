@@ -37,6 +37,7 @@
     await this.loadCustomTools();
     await this.fetchTools();   // 内部会刷新技能说明段落并生成 System Prompt
     await this.loadRules();
+    await this.loadBridge();   // 远程桥接配置与状态（失败不阻断其余功能）
     // 外部卡片轮询不在此启动：它由面板可见性驱动（见 setPanelVisible）。
     // iframe 首次加载时面板通常是隐藏的，若在此无条件启动，
     // 关闭的面板仍会取走卡片，正是要避免的问题。

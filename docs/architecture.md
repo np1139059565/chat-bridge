@@ -167,3 +167,5 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 - `docs/api-reference.md`：HTTP 接口清单。
 - `docs/development-guide.md`：运行、调试、常见任务、约定。
 - `docs/refactor-plan.md`：代码走查与重构执行计划（含目录规划与批次记录）。
+- `docs/remote-bridge-plan.md`：远程桥接方案（QQ ↔ 网页 AI），含架构选型、消息分流、推送通道与落地顺序。
+- `docs/remote-bridge-guide.md`：远程桥接使用说明（面向使用者），含配置步骤、指令、常见问题与当前限制。
