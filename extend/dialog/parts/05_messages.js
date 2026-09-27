@@ -75,27 +75,9 @@
     if (d.type === 'auto_send_result') {
       return;
     }
-    if (d.type === 'picker_result') {
-      // 元素选择完成：记下选择器与所在页面，供新增指令使用
-      this.bridgePicked = {
-        selector: d.selector || '',
-        page_url: d.page_url || '',
-        tag: d.tag || '',
-        confidence: d.confidence || ''
-      };
-      this.bridgePicking = false;
-      this.toast('已选中：' + (d.tag || '') + ' ' + (d.selector || ''));
-      return;
-    }
-    if (d.type === 'picker_stopped') {
-      this.bridgePicking = false;
-      return;
-    }
-    if (d.type === 'click_result') {
-      // QQ 指令「点击元素」的执行结果
-      this.toast(d.ok ? ('已点击：' + (d.selector || '')) : ('未找到元素：' + (d.selector || '')));
-      return;
-    }
+    // 桥接相关消息（元素选择 / 点击 / 截屏结果）统一交给桥接模块处理，
+    // 避免本文件过长，也让桥接的消息集中在一处
+    if (this.handleBridgeMessage(d)) return;
     if (d.type === 'page_blocks') {
       // 先按站点切换（数据与设置都按站点隔离）
       if (d.profileId) this.profileId = d.profileId;

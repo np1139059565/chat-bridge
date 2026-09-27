@@ -164,18 +164,63 @@
 
   /**
    * 按选择器点击一个元素（供 QQ 指令「点击元素」执行时调用）。
+   *
+   * 返回结构化结果，便于把失败原因回传 QQ：
+   *  - 未找到元素：页面结构可能已变，或选择器已失效
+   *  - 命中多个：选择器不够精确，无法确定点哪个（拒绝执行，避免误点）
    * @param {string} selector CSS 选择器
-   * @returns {boolean} 是否命中并点击
+   * @returns {Object} { ok, reason, count }
    */
   A.clickBySelector = function (selector) {
-    if (!selector) return false;
-    let el = null;
-    try { el = document.querySelector(selector); } catch (e) { return false; }
-    if (!el) { A.warn('clickBySelector：未找到元素', selector); return false; }
+    if (!selector) return { ok: false, reason: 'empty_selector', count: 0 };
+    let list = [];
+    try { list = document.querySelectorAll(selector); } catch (e) {
+      return { ok: false, reason: 'invalid_selector', count: 0 };
+    }
+    // 未找到：选择器失效或页面结构变了
+    if (!list.length) {
+      A.warn('clickBySelector：未找到元素', selector);
+      return { ok: false, reason: 'not_found', count: 0 };
+    }
+    // 命中多个：选择器不唯一，拒绝执行以免误点
+    if (list.length > 1) {
+      A.warn('clickBySelector：命中多个元素，已拒绝', selector, list.length);
+      return { ok: false, reason: 'not_unique', count: list.length };
+    }
+    const el = list[0];
     // 点击前先滚动到可见位置，避免点到视口外
     try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* 忽略 */ }
     el.click();
     A.log('已点击元素：' + selector);
-    return true;
+    return { ok: true, reason: '', count: 1 };
+  };
+
+  /**
+   * 截取浏览器当前可见区域。
+   *
+   * 为什么要绕后台：chrome.tabs.captureVisibleTab 只能在后台服务里调用，
+   * 内容脚本没有这个权限。这里发消息给后台，拿到 dataURL 后回传抽屉。
+   * @param {string} requestId 待回传请求 id，原样带回给抽屉
+   */
+  A.captureTab = function (requestId) {
+    try {
+      chrome.runtime.sendMessage({ type: 'bridge_capture_tab' }, function (resp) {
+        const ok = !!(resp && resp.ok);
+        A.post({
+          type: 'screenshot_result',
+          request_id: requestId || '',
+          ok: ok,
+          dataUrl: (resp && resp.dataUrl) || '',
+          error: (resp && resp.error) || ''
+        });
+      });
+    } catch (e) {
+      A.post({
+        type: 'screenshot_result',
+        request_id: requestId || '',
+        ok: false,
+        error: String(e)
+      });
+    }
   };
 })();

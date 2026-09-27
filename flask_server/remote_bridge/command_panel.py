@@ -15,8 +15,18 @@
 【待核对】指令面板与自定义菜单的接口路径、请求体结构以官方文档为准。
 """
 import json
+import threading
+import time
+import uuid
 
 from . import bridge_store, message_router
+
+# 待回传请求表：{ request_id: {openid, expire} }
+# 有些指令（列会话 / 截屏）需要浏览器执行后把结果回传，再转发到 QQ。
+# 这里登记请求，浏览器完成后按 request_id 找回 openid，用被动回复发出。
+_pending = {}
+_pending_lock = threading.Lock()
+PENDING_TTL = 60  # 请求有效期（秒），超时未回传则丢弃
 
 
 def log(*args):
@@ -31,6 +41,9 @@ BUILTIN = {
     "/csp": "复制 System Prompt 并发送给 AI",
     "/rtime": "设置自动回传延迟（秒）",
     "/stime": "切换自动回传开关",
+    "/sessions": "列出会话列表",
+    "/ss": "按序号切换会话（如 /ss 1）",
+    "/screenshot": "截取浏览器屏幕",
     "/help": "显示指令列表",
 }
 
@@ -73,6 +86,52 @@ def _dispatch(action, params=None):
     return card
 
 
+def _register_pending(openid):
+    """登记一个待回传请求，返回 request_id。
+
+    用于「浏览器执行后要把结果发回 QQ」的指令（列会话 / 截屏）。
+    """
+    rid = str(uuid.uuid4())
+    with _pending_lock:
+        # 顺手清理超期请求
+        now = time.time()
+        for k in [k for k, v in _pending.items() if v.get("expire", 0) < now]:
+            _pending.pop(k, None)
+        _pending[rid] = {"openid": openid, "expire": now + PENDING_TTL}
+    return rid
+
+
+def take_pending(request_id):
+    """取出并删除一个待回传请求；不存在或已过期返回 None。"""
+    with _pending_lock:
+        item = _pending.pop(request_id, None)
+    if not item:
+        return None
+    if item.get("expire", 0) < time.time():
+        return None
+    return item
+
+
+def _dispatch_with_result(action, params, openid):
+    """下发一条需要回传结果的抽屉命令。
+
+    与 _dispatch 的区别：额外带 request_id，浏览器执行完把结果 POST 回来，
+    后端据此找回 openid 并转发到 QQ。
+    """
+    import card_bus
+    rid = _register_pending(openid)
+    payload = {"action": action, "params": params or {}, "request_id": rid}
+    card = card_bus.bus.create(
+        source="bridge",
+        card_type="drawer-command",
+        title="远程指令",
+        content=json.dumps(payload, ensure_ascii=False),
+        payload=payload,
+    )
+    log("已下发抽屉命令（待回传）", action, "id=" + card.id[:8], "rid=" + rid[:8])
+    return card
+
+
 def _help_text():
     """组装指令列表文本。"""
     lines = ["可用指令："]
@@ -101,6 +160,27 @@ def handle_command(qq_client, openid, msg_id, text):
         _dispatch("toggle_auto_send")
         _reply(qq_client, openid, "已下发：切换自动回传开关")
         return True
+    if cmd == "/sessions":
+        _dispatch_with_result("list_sessions", {}, openid)
+        return True
+    if cmd == "/ss":
+        if not arg:
+            _reply(qq_client, openid, "用法：/ss 序号（序号来自 /sessions）")
+            return True
+        try:
+            idx = int(arg.strip())
+        except ValueError:
+            _reply(qq_client, openid, "序号必须是整数")
+            return True
+        if idx <= 0:
+            _reply(qq_client, openid, "序号必须大于 0")
+            return True
+        _dispatch("switch_session", {"index": idx})
+        _reply(qq_client, openid, "已下发：切换会话 #%d" % idx)
+        return True
+    if cmd == "/screenshot":
+        _dispatch_with_result("screenshot", {}, openid)
+        return True
     if cmd == "/csp":
         _dispatch("copy_system_prompt")
         _reply(qq_client, openid, "已下发：复制 System Prompt 并发送给 AI")
@@ -124,14 +204,14 @@ def handle_command(qq_client, openid, msg_id, text):
         _reply(qq_client, openid, _help_text())
         return True
 
-    # 自定义指令：在配置里按命令名匹配，命中则下发「点击元素」
+    # 自定义指令：在配置里按命令名匹配，命中则下发「点击元素」。
+    # 用 _dispatch_with_result：元素可能找不到或不唯一，失败时要在 QQ 里提示。
     for c in (bridge_store.get_config().get("commands") or []):
         if (c.get("name") or "").lower() == cmd:
-            _dispatch("click_element", {
+            _dispatch_with_result("click_element", {
                 "selector": c.get("selector", ""),
                 "page_url": c.get("page_url", ""),
-            })
-            _reply(qq_client, openid, "已下发：%s" % (c.get("label") or c.get("name")))
+            }, openid)
             return True
 
     # 未命中任何指令：交还调用方当普通消息处理

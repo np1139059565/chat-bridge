@@ -88,7 +88,8 @@
         h('div', { class: 'hint' },
           '内置：/css 清空所有会话、/cms 清空当前会话消息、'
           + '/csp 复制 System Prompt 并发送、/rtime 秒数 设置回传延迟、'
-          + '/stime 切换自动回传开关、/help 指令列表'),
+          + '/stime 切换自动回传开关、/sessions 会话列表、/ss 序号 切换会话、'
+          + '/screenshot 截屏、/help 指令列表'),
         // 自定义指令：命令名 + 显示名 + 选择元素（不再手填选择器）
         h('div', { class: 'bridge-cmd-new' }, [
           h('input', {
@@ -122,6 +123,9 @@
               h('span', { class: 'bridge-cmd-label' }, c.label),
               h('span', { class: 'bridge-cmd-sel', title: c.selector || '' },
                 c.selector ? ('点击 ' + c.selector) : ''),
+              h('button', {
+                onClick: () => ctx.editBridgeCommandSelector(i)
+              }, '改选择器'),
               h('button', {
                 class: 'danger',
                 onClick: () => ctx.removeBridgeCommand(i)

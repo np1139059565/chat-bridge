@@ -41,9 +41,21 @@
       A.pickerStop();
     }
     else if (d.type === 'bridge_click_element') {
-      // QQ 指令「点击元素」：按选择器点击页面元素
-      const ok = A.clickBySelector(d.selector || '');
-      A.post({ type: 'click_result', ok: ok, selector: d.selector || '' });
+      // QQ 指令「点击元素」：按选择器点击页面元素。
+      // 带上 request_id，抽屉据此把执行结果（含失败）发回 QQ。
+      const res = A.clickBySelector(d.selector || '');
+      A.post({
+        type: 'click_result',
+        ok: !!res.ok,
+        reason: res.reason || '',
+        count: res.count || 0,
+        selector: d.selector || '',
+        request_id: d.request_id || ''
+      });
+    }
+    else if (d.type === 'bridge_screenshot') {
+      // QQ 指令「截屏」：captureVisibleTab 只能在后台调用，转发过去
+      A.captureTab(d.request_id || '');
     }
   });
 

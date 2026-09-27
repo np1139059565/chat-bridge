@@ -93,8 +93,9 @@
   M.setPanelVisible = function (visible) {
     const was = this.panelVisible;
     this.panelVisible = !!visible;
-    if (visible) this.startExternalPoll();
-    else this.stopExternalPoll();
+    // 可见才轮询、关闭即停：外部卡片与桥接状态共用同一生命周期
+    if (visible) { this.startExternalPoll(); this.startBridgeStatusPoll(); }
+    else { this.stopExternalPoll(); this.stopBridgeStatusPoll(); }
     // 仅在可见性真的变化时打印：避免重复消息刷屏。
     if (was !== this.panelVisible) {
       log('面板可见性：' + (this.panelVisible ? '打开 → 启动卡片轮询' : '关闭 → 停止卡片轮询'));
