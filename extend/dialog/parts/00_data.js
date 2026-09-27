@@ -191,7 +191,7 @@ window.AIMirrorDialog = (function () {
       customTools: [],
       // 远程桥接（QQ ↔ 网页 AI）
       bridgeOpen: false,
-      bridgeEnabled: false,
+      bridgeEnabled: true,   // 默认开启：远程功能开箱即用
       bridgeConnected: false,
       bridgeAppId: '', bridgeAppSecret: '',
       bridgePush: { user: true, tool: true, ai: true, thinking: false },

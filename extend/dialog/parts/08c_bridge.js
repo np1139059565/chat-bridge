@@ -130,19 +130,34 @@
         h('div', { class: 'bridge-pick-row' }, [
           // 「选择元素」只在点击类型下显示
           ctx.bridgeNewCmdIsCombo
-            ? null
+            ? h('span', { class: 'hint' }, '组合指令无需选择元素')
             : h('button', {
               onClick: () => ctx.bridgePicking ? ctx.stopPickElement() : ctx.startPickElement()
             }, ctx.bridgePicking ? '取消选择' : '选择元素'),
-          ctx.bridgeNewCmdIsCombo
-            ? h('span', { class: 'hint' }, '组合指令无需选择元素')
-            : (ctx.bridgePicked
-              ? h('span', { class: 'bridge-picked', title: ctx.bridgePicked.selector },
-                '已选：' + (ctx.bridgePicked.tag || '') + ' ' + ctx.bridgePicked.selector)
-              : h('span', { class: 'hint' }, '点「选择元素」后，在页面上点击要触发的元素')),
+          (!ctx.bridgeNewCmdIsCombo)
+            ? h('span', { class: 'hint' }, '也可直接在下方输入/编辑选择器')
+            : null
+        ]),
+        // 选择器输入框：点「选择元素」会自动填入，也可直接打字修改
+        (!ctx.bridgeNewCmdIsCombo) ? h('input', {
+          type: 'text', class: 'bridge-sel-input',
+          placeholder: '选择器，如 #btn-go 或 .submit-btn',
+          value: ctx.bridgePicked ? (ctx.bridgePicked.selector || '') : '',
+          onInput: (e) => {
+            // 直接编辑选择器：保留原 page_url，清掉 tag（不再对应某个具体元素）
+            ctx.bridgePicked = {
+              selector: e.target.value,
+              page_url: (ctx.bridgePicked && ctx.bridgePicked.page_url) || '',
+              tag: ''
+            };
+          }
+        }) : null,
+        h('div', { class: 'bridge-pick-row' }, [
           h('button', {
             disabled: !ctx.bridgeNewCmdName || !ctx.bridgeNewCmdLabel
-              || (ctx.bridgeNewCmdIsCombo ? !ctx.bridgeNewCmdSteps.trim() : !ctx.bridgePicked),
+              || (ctx.bridgeNewCmdIsCombo
+                ? !ctx.bridgeNewCmdSteps.trim()
+                : !(ctx.bridgePicked && ctx.bridgePicked.selector)),
             onClick: () => ctx.saveBridgeCommand()
           }, ctx.bridgeEditIdx === null ? '添加' : '保存修改'),
           // 编辑中时提供取消按钮，避免误存

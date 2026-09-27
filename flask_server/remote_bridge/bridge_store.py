@@ -31,7 +31,7 @@ _lock = threading.RLock()
 def _default_config():
     """返回桥接配置的默认值。"""
     return {
-        "enabled": False,              # 桥接总开关，默认关闭
+        "enabled": True,               # 桥接总开关，默认开启（远程功能开箱即用）
         "app_id": "",                  # QQ 机器人 AppID
         "app_secret": "",              # QQ 机器人 AppSecret
         "intents": 0,                 # 订阅的事件位；0 表示用代码里的默认值（单聊）

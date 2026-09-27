@@ -96,6 +96,14 @@
   white-space: nowrap;
 }
 
+/* 选择器输入框：等宽字体，方便看清选择器写法 */
+.bridge-sel-input {
+  width: 100%;
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-xs);
+  box-sizing: border-box;
+}
+
 /* 类型切换行：组合指令复选框 */
 .bridge-type-row {
   margin: 2px 0;
