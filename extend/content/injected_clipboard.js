@@ -10,18 +10,11 @@
 //    readText 会失败，而 writeText 的截获照常工作。
 (function () {
   'use strict';
-  // 打标记：内容脚本可据此判断 hook 是否真的注入成功
-  window.__aiMirrorClipHook = 'loading';
   try {
     const clip = navigator.clipboard;
-    if (!clip || typeof clip.writeText !== 'function') {
-      window.__aiMirrorClipHook = 'no_clipboard_api';
-      console.log('[AI-Mirror][hook] 未找到 navigator.clipboard.writeText，hook 未装载');
-      return;
-    }
+    if (!clip || typeof clip.writeText !== 'function') return;
     const orig = clip.writeText.bind(clip);
     clip.writeText = function (text) {
-      console.log('[AI-Mirror][hook] 截获 clipboard.writeText，长度=' + String(text || '').length);
       // 把页面写入的内容原样回传；不阻断原行为，页面复制照常生效
       try {
         window.postMessage({
@@ -32,10 +25,5 @@
       } catch (e) { /* 忽略 */ }
       return orig(text);
     };
-    window.__aiMirrorClipHook = 'ok';
-    console.log('[AI-Mirror][hook] 已装载（主世界 hook 生效）');
-  } catch (e) {
-    window.__aiMirrorClipHook = 'error:' + e.message;
-    console.log('[AI-Mirror][hook] 装载异常：' + e.message);
-  }
+  } catch (e) { /* 环境不支持则静默退出 */ }
 })();
