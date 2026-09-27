@@ -104,29 +104,15 @@
             onInput: (e) => { ctx.bridgeNewCmdLabel = e.target.value; }
           })
         ]),
-        // 类型切换：点击元素 / 组合指令 / 采集 Markdown（三者互斥）
+        // 类型切换：点击元素 / 组合指令
         h('div', { class: 'bridge-type-row' }, [
           h('label', { class: 'bridge-toggle' }, [
             h('input', {
               type: 'checkbox',
               checked: ctx.bridgeNewCmdIsCombo,
-              onChange: (e) => {
-                ctx.bridgeNewCmdIsCombo = e.target.checked;
-                if (e.target.checked) ctx.bridgeNewCmdCollect = false;
-              }
+              onChange: (e) => { ctx.bridgeNewCmdIsCombo = e.target.checked; }
             }),
             '组合指令'
-          ]),
-          h('label', { class: 'bridge-toggle' }, [
-            h('input', {
-              type: 'checkbox',
-              checked: ctx.bridgeNewCmdCollect,
-              onChange: (e) => {
-                ctx.bridgeNewCmdCollect = e.target.checked;
-                if (e.target.checked) ctx.bridgeNewCmdIsCombo = false;
-              }
-            }),
-            '采集 Markdown'
           ])
         ]),
         // 组合指令：步骤列表（每行一条）。仅组合类型显示。

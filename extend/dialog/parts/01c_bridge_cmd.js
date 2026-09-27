@@ -31,7 +31,7 @@
     this.bridgePicked = null;
     this.bridgeEditIdx = null;
     this.bridgeNewCmdIsCombo = false;
-    this.bridgeNewCmdCollect = false;
+    this.bridgeNewCmdKeepCollect = false;   // 内部标记，不在界面暴露
     this.bridgeNewCmdSteps = '';
     this.bridgeNewCmdInterval = '1';
   };
@@ -44,11 +44,10 @@
     const name = (this.bridgeNewCmdName || '').trim();
     const label = (this.bridgeNewCmdLabel || '').trim();
     const isCombo = !!this.bridgeNewCmdIsCombo;
-    const isCollect = !!this.bridgeNewCmdCollect;
     const picked = this.bridgePicked;
     if (!name || !label) { this.toast('命令名与显示名必填'); return; }
     if (!name.startsWith('/')) { this.toast('命令名需以 / 开头'); return; }
-    // 三类指令各自的必填项：组合要步骤，采集/点击要选择器
+    // 两类指令各自的必填项：组合要步骤，点击要选择器
     let steps = [];
     if (isCombo) {
       steps = (this.bridgeNewCmdSteps || '').split('\n')
@@ -58,25 +57,21 @@
       this.toast('请先选择要点击的元素');
       return;
     }
-    // 命令名去重与子指令校验统一交给后端（validate_command），
-    // 前端不重复实现，避免两处规则不一致。
-    // 三类互斥：组合存 steps；采集存 selector+collect；点击存 selector。
+    // 命令名去重与子指令校验统一交给后端（validate_command）。
+    // 编辑既有指令时保留它原有的 collect 标记（内置 /md 靠它工作），
+    // 但新增界面不再暴露这个类型——用户只需理解「点击」与「组合」。
     let interval = parseFloat(this.bridgeNewCmdInterval);
     if (!(interval > 0)) interval = 1;
+    const keepCollect = this.bridgeEditIdx !== null && !!this.bridgeNewCmdKeepCollect;
     let entry;
     if (isCombo) {
       entry = { name: name, label: label, steps: steps, interval: interval };
-    } else if (isCollect) {
-      entry = {
-        name: name, label: label,
-        selector: picked.selector, page_url: picked.page_url || '',
-        collect: true
-      };
     } else {
       entry = {
         name: name, label: label,
         selector: picked.selector, page_url: picked.page_url || ''
       };
+      if (keepCollect) entry.collect = true;
     }
     try {
       const data = await D.apiFetch(this, '/api/bridge/commands', {
@@ -102,11 +97,11 @@
     this.bridgeEditIdx = idx;
     this.bridgeNewCmdName = c.name || '';
     this.bridgeNewCmdLabel = c.label || '';
-    // 三类分别回填：组合填步骤、采集勾上采集标记、点击填选择器
+    // 回填：组合填步骤、点击填选择器。
+    // collect 标记只记下来备用（编辑内置 /md 时保留它），不在界面暴露。
     const isCombo = !!(c.steps && c.steps.length);
-    const isCollect = !!c.collect;
     this.bridgeNewCmdIsCombo = isCombo;
-    this.bridgeNewCmdCollect = isCollect;
+    this.bridgeNewCmdKeepCollect = !!c.collect;
     this.bridgeNewCmdSteps = isCombo ? (c.steps || []).join('\n') : '';
     this.bridgeNewCmdInterval = isCombo ? String(c.interval || 1) : '1';
     this.bridgePicked = isCombo

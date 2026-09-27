@@ -197,7 +197,7 @@ window.AIMirrorDialog = (function () {
       bridgePush: { user: true, tool: true, ai: true, thinking: false },
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态
-      bridgeNewCmdName: '', bridgeNewCmdLabel: '', bridgeNewCmdIsCombo: false, bridgeNewCmdCollect: false, bridgeNewCmdSteps: '', bridgeNewCmdInterval: '1',  // 指令录入
+      bridgeNewCmdName: '', bridgeNewCmdLabel: '', bridgeNewCmdIsCombo: false, bridgeNewCmdKeepCollect: false, bridgeNewCmdSteps: '', bridgeNewCmdInterval: '1',  // 指令录入
       bridgeMdSelector: '', _mdCaptureTarget: '', _mdCaptureTimer: null, _afterMd: null, _mdReportTimer: null,  // Markdown
       _bridgeStatusTimer: null, bridgeLastEvent: '', bridgeIntents: 0,  // 轮询/诊断
       rules: [],
