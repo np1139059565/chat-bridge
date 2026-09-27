@@ -183,6 +183,12 @@
       this.toast('自动回传已' + (this.autoSendEnabled ? '开启' : '关闭'));
       return;
     }
+    if (action === 'set_auto_send') {
+      // 显式设置自动回传开关（幂等）：/sa on 或 /sa off
+      const on = !!params.on;
+      if (on !== this.autoSendEnabled) this.setAutoSendEnabled(on);
+      this.toast('自动回传已' + (on ? '开启' : '关闭')); return;
+    }
     if (action === 'set_delay') {
       const secs = Number(params.seconds) || 0;
       if (secs > 0) { this.autoSendDelay = secs * 1000; this.toast('自动回传延迟已设为 ' + secs + ' 秒'); }

@@ -44,7 +44,7 @@ BUILTIN = {
     "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"]},
     "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"]},
     "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"]},
-    "/switch-auto": {"desc": "切换自动回传开关", "aliases": ["/sa"]},
+    "/switch-auto": {"desc": "自动回传开关（/sa on|off，不带则切换）", "aliases": ["/sa"]},
     "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"]},
     "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"]},
     "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"]},
@@ -268,8 +268,21 @@ def handle_command(qq_client, openid, msg_id, text):
         _reply(qq_client, openid, "已下发：清空当前会话的消息列表")
         return True
     if cmd == "/switch-auto":
-        _dispatch("toggle_auto_send")
-        _reply(qq_client, openid, "已下发：切换自动回传开关")
+        # 支持显式指定开关：/sa on、/sa off；不带参数则切换。
+        # 显式形式在组合指令里更可靠——切换执行两次等于没执行，
+        # 而 on/off 是幂等的，重跑结果一致。
+        a = (arg or "").strip().lower()
+        if a in ("on", "1", "true", "开", "开启"):
+            _dispatch("set_auto_send", {"on": True})
+            _reply(qq_client, openid, "已下发：开启自动回传")
+        elif a in ("off", "0", "false", "关", "关闭"):
+            _dispatch("set_auto_send", {"on": False})
+            _reply(qq_client, openid, "已下发：关闭自动回传")
+        elif a == "":
+            _dispatch("toggle_auto_send")
+            _reply(qq_client, openid, "已下发：切换自动回传开关")
+        else:
+            _reply(qq_client, openid, "用法：/sa [on|off]，不带参数则切换")
         return True
     if cmd == "/sessions":
         _dispatch_with_result("list_sessions", {}, openid)

@@ -104,7 +104,7 @@ AI 回复里的**思考过程默认不推**（太啰嗦），需要时在设置�
 | `/cms` | 清空当前会话的消息列表（保留外部卡片） | `/clear-messages` |
 | `/csp` | 复制 System Prompt 并自动粘贴发送给 AI | `/copy-system-prompt` |
 | `/rt 秒数` | 修改自动回传延迟，如 `/rt 5` | `/re-time` |
-| `/sa` | 切换自动回传开关 | `/switch-auto` |
+| `/sa [on\|off]` | 自动回传开关，不带参数则切换 | `/switch-auto` |
 | `/ls` | 列出会话列表（带序号、id、条数，当前会话标记） | `/sessions` |
 | `/ss 序号` | 按序号切换会话，如 `/ss 2` | `/switch-session` |
 | `/sp` | 截取浏览器屏幕 | `/screenshot` |
