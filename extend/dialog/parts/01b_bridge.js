@@ -339,6 +339,11 @@
    * @returns {boolean} 是否已处理（true 则调用方直接返回）
    */
   M.handleBridgeMessage = function (d) {
+    if (d.type === 'clip_clicked') {
+      // 内容脚本回报「是否点到按钮」：记下来，供超时提示区分阶段
+      this._mdClicked = !!d.ok;
+      return true;
+    }
     if (d.type === 'clip_copied') {
       // 页面复制按钮写入剪贴板的内容（主世界 hook 截获后回传）：
       // 挂到目标消息节点，推 QQ 时优先用它。
