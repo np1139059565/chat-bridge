@@ -139,24 +139,38 @@ def _dispatch_with_result(action, params, openid):
     return card
 
 
-def _restart_server(delay=1.0):
+def _restart_server(delay=1.5):
     """重启当前服务进程。
 
-    做法：延迟一小段时间后，用 os.execv 以同样的解释器与参数原地重执行自身。
-    这样无需外部进程管理器，跨平台可用。
-    延迟是为了让「正在重启」那条回复先发出去、HTTP 响应先返回；
-    否则进程立刻被杀，回复可能来不及送达。
+    做法：起一个独立子进程，让它先等一会儿（等父进程退出、端口释放），
+    再以同样的解释器与参数重执行服务；父进程随即退出。
+
+    为什么不用 os.execv 原地重执行：execv 会继承已打开的 fd，
+    包括监听 5000 端口的 socket。新进程带着这个 socket 再去 bind 同一端口，
+    会因「地址已占用」失败，服务当场失联——这正是上一版 /restart 把服务
+    搞挂的原因。改用独立子进程 + close_fds，彻底避开 fd 继承。
     """
+    import subprocess
     import sys
-    def _do():
-        time.sleep(delay)
-        try:
-            sys.stdout.flush()
-            sys.stderr.flush()
-        except Exception:
-            pass
-        os.execv(sys.executable, [sys.executable] + sys.argv)
-    threading.Thread(target=_do, daemon=True).start()
+    # 子进程要执行的代码：等待 → 用原解释器与原参数 execv 自身
+    child_code = (
+        "import time, os, sys;"
+        "time.sleep(%s);"
+        "os.execv(sys.executable, [sys.executable] + %r)"
+    ) % (delay, list(sys.argv))
+    try:
+        subprocess.Popen(
+            [sys.executable, "-c", child_code],
+            cwd=os.getcwd(),
+            close_fds=True,           # 不继承监听 socket，避免端口占用
+            start_new_session=True,   # 脱离当前会话，父进程退出不影响它
+        )
+    except Exception as e:
+        log("重启失败：", e)
+        return
+    # 父进程立即退出：释放端口与所有资源，交给子进程拉起新服务。
+    # 用 _exit 而非 exit：跳过清理钩子，避免与子进程启动竞争。
+    os._exit(0)
 
 
 def _help_text():
