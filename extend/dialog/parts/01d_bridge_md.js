@@ -40,17 +40,8 @@
       selector: this.bridgeMdSelector
     }, '*');
     clearTimeout(this._mdCaptureTimer);
-    // 超时提示要区分阶段：按钮没点着 vs 点了但没截到剪贴板。
-    // 两者混为一谈会让排查走弯路（本次就因此误判了一轮）。
     this._mdCaptureTimer = setTimeout(() => {
-      if (!this._mdTest) return;
-      this._mdTest = false;
-      const phase = this._mdClicked
-        ? '按钮已点击，但没截到剪贴板内容（hook 未生效）'
-        : '没找到按钮（选择器未匹配到元素）';
-      this._mdCaptureTarget = '';
-      this._mdClicked = false;
-      this.toast('采集失败：' + phase);
+      if (this._mdTest) { this._mdTest = false; this._mdCaptureTarget = ''; this.toast('采集超时：选择器可能无效'); }
     }, 2000);
   };
 

@@ -79,18 +79,6 @@ def _write_yaml(cfg):
 _CONFIG = None
 
 
-def clean_selector(s):
-    """清洗选择器字符串：去掉换行与多余空白，压成单行。
-
-    为什么需要：选择器常很长，写进 YAML 时会被自动折行，读回来就带上
-    换行与缩进。选择器中间夹了换行，querySelector 会匹配失败——
-    表现为「指令点了没反应」。
-    """
-    if not s:
-        return ""
-    return " ".join(str(s).split())
-
-
 def load_config():
     """读取桥接配置并与默认值合并；结果缓存到内存。"""
     global _CONFIG
@@ -98,12 +86,9 @@ def load_config():
         raw = _read_yaml()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
             if k in raw:
                 cfg[k] = raw[k]
-        # 选择器单独清洗：YAML 长字符串会折行，不清掉换行会导致匹配失败
-        if "md_selector" in raw:
-            cfg["md_selector"] = clean_selector(raw["md_selector"])
         if isinstance(raw.get("push"), dict):
             cfg["push"].update(raw["push"])
         if isinstance(raw.get("commands"), list):
@@ -114,12 +99,7 @@ def load_config():
             user = raw["commands"]
             seen = set()
             for c in user:
-                if not isinstance(c, dict):
-                    continue
-                # 指令的选择器同样会被 YAML 折行坑到，一并清洗
-                if c.get("selector"):
-                    c["selector"] = clean_selector(c["selector"])
-                if c.get("name"):
+                if isinstance(c, dict) and c.get("name"):
                     seen.add(str(c["name"]).lower())
             merged = list(user)
             for d in cfg.get("commands") or []:
@@ -142,11 +122,9 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
             if k in patch:
                 cfg[k] = patch[k]
-        if "md_selector" in patch:
-            cfg["md_selector"] = clean_selector(patch["md_selector"])
         if isinstance(patch.get("push"), dict):
             cfg["push"].update(patch["push"])
         if isinstance(patch.get("commands"), list):

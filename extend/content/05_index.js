@@ -67,9 +67,6 @@
       // 抽屉请求：点页面的复制按钮，取带格式的 Markdown。
       // 点击后由主世界 hook 截获剪贴板内容，经 clip_copied 回传抽屉。
       const ok = A.clickCopyButton(d.selector || '');
-      // 先回报「是否点到按钮」：抽屉据此区分失败阶段——
-      // 是没找到按钮，还是点了但 hook 没截到内容。
-      A.post({ type: 'clip_clicked', ok: !!ok });
       if (!ok) A.post({ type: 'clip_copied', text: '', error: 'button_not_found' });
     }
     else if (d.type === 'bridge_refresh_page') {
