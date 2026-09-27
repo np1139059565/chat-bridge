@@ -301,7 +301,11 @@ def _push_one(qq_client, openid, m, push):
     """推送一条消息到 QQ。成功返回 True，不满足推送条件或内容为空返回 False。"""
     if not _should_push(m, push):
         return False
-    text = _blocks_to_text(m, push.get("thinking", False))
+    # 优先用 AI 回复的 Markdown 原文（由页面复制按钮采集而来），保格式；
+    # 没有（未采集 / 非 AI 消息 / 采集失败）才退回 blocks 拼的纯文本。
+    text = str(m.get("md") or "").strip()
+    if not text:
+        text = _blocks_to_text(m, push.get("thinking", False))
     if not text:
         return False
     kind = _classify(m)

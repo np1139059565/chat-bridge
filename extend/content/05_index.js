@@ -57,6 +57,12 @@
       // QQ 指令「截屏」：captureVisibleTab 只能在后台调用，转发过去
       A.captureTab(d.request_id || '');
     }
+    else if (d.type === 'bridge_copy_md') {
+      // 抽屉请求：点页面的复制按钮，取带格式的 Markdown。
+      // 点击后由主世界 hook 截获剪贴板内容，经 clip_copied 回传抽屉。
+      const ok = A.clickCopyButton(d.selector || '');
+      if (!ok) A.post({ type: 'clip_copied', text: '', error: 'button_not_found' });
+    }
     else if (d.type === 'bridge_refresh_page') {
       // QQ 指令「刷新页面」：先记标记，刷新后据此自动打开抽屉。
       // 标记存 sessionStorage：刷新后仍在，关标签页即消失，

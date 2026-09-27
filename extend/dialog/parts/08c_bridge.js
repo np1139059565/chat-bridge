@@ -71,6 +71,18 @@
           placeholder: '开放平台应用的 AppSecret',
           onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
         })]),
+        // Markdown 复制按钮选择器：AI 回复完成后点它，取带格式的原文。
+        // 留空则关闭该增强，退回按 DOM 块拼的纯文本。
+        h('label', ['Markdown 复制按钮选择器（留空则关闭格式增强）', h('input', {
+          type: 'text', class: 'bridge-sel-input',
+          value: ctx.bridgeMdSelector,
+          placeholder: '如 .ds-virtual-list--printable ... :has(.ds-cross-fade)',
+          onInput: (e) => { ctx.bridgeMdSelector = e.target.value; }
+        })]),
+        h('div', { class: 'bridge-pick-row' }, [
+          h('button', { onClick: () => ctx.testMdSelector() }, '采集测试'),
+          h('span', { class: 'hint' }, '点一下：用当前选择器试采一次，看能否取到内容')
+        ]),
         h('div', [
           h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
           h('span', { class: 'hint' }, '保存后自动重建 QQ 长连接')

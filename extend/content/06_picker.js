@@ -171,6 +171,52 @@
    * @param {string} selector CSS 选择器
    * @returns {Object} { ok, reason, count }
    */
+  /**
+   * 注入主世界 hook 脚本（截获页面写入剪贴板的内容）。
+   *
+   * 为什么用 script 标签注入：内容脚本运行在隔离世界，patch 不到页面的
+   * navigator.clipboard；只有注入到主世界（MAIN）才能截获。
+   * 只注入一次（打标记防重复）。
+   */
+  A.injectClipboardHook = function () {
+    try {
+      if (document.getElementById('ai-mirror-clip-hook')) return;
+      const s = document.createElement('script');
+      s.id = 'ai-mirror-clip-hook';
+      s.src = chrome.runtime.getURL('content/injected_clipboard.js');
+      (document.head || document.documentElement).appendChild(s);
+      s.onload = function () { if (s.parentNode) s.parentNode.removeChild(s); };
+    } catch (e) { /* 忽略 */ }
+  };
+
+  // 接收主世界 hook 回传的剪贴板内容：{
+  //   source:'ai-mirror-clip', type:'copied', text }
+  // 收到后转交抽屉（A.post 走的是与抽屉的既有通道）。
+  window.addEventListener('message', function (e) {
+    const d = e.data;
+    if (!d || d.source !== 'ai-mirror-clip' || d.type !== 'copied') return;
+    A.post({ type: 'clip_copied', text: d.text || '' });
+  });
+
+  /**
+   * 点击页面的「复制按钮」，截获它写入剪贴板的 Markdown 内容。
+   *
+   * 流程：点一下按钮 → 页面执行 clipboard.writeText(md) → 主世界 hook 截获
+   * → 回传到本脚本 → 再转交抽屉。这样拿到的就是带格式的原始 Markdown。
+   * @param {string} selector 复制按钮的选择器
+   * @returns {boolean} 是否找到按钮并点击
+   */
+  A.clickCopyButton = function (selector) {
+    A.injectClipboardHook();
+    if (!selector) return false;
+    let el = null;
+    try { el = document.querySelector(selector); } catch (e) { return false; }
+    if (!el) { A.warn('clickCopyButton：未找到复制按钮', selector); return false; }
+    el.click();
+    A.log('已点击复制按钮：' + selector);
+    return true;
+  };
+
   A.clickBySelector = function (selector) {
     if (!selector) return { ok: false, reason: 'empty_selector', count: 0 };
     let list = [];

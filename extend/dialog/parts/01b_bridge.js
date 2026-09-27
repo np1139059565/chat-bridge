@@ -25,6 +25,7 @@
       this.bridgeEnabled = !!cfg.enabled;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
+      this.bridgeMdSelector = cfg.md_copy_selector || '';
       this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false }, cfg.push || {});
       this.bridgeCommands = cfg.commands || [];
       this.bridgeConnected = !!st.connected;
@@ -86,6 +87,7 @@
           enabled: this.bridgeEnabled,
           app_id: this.bridgeAppId,
           app_secret: this.bridgeAppSecret,
+          md_copy_selector: this.bridgeMdSelector,
           push: this.bridgePush
         }
       });
@@ -130,7 +132,9 @@
       const node = tree[k];
       if (!node || node.deleted) return;
       const id = window.AIMirrorDomUtils.messageFingerprint(node);
-      messages.push({ id: id, role: node.role, blocks: node.blocks || [] });
+      // md：AI 回复的 Markdown 原文（由复制按钮采集而来）。
+      // 推送时后端优先用它，保格式；没有则退回 blocks 拼的纯文本。
+      messages.push({ id: id, role: node.role, blocks: node.blocks || [], md: node.md || '' });
     });
     if (!messages.length) return;
     // 静默上报：失败不打扰用户，桥接层没开时后端直接返回 0
@@ -281,28 +285,6 @@
   };
 
   /**
-   * 列出会话列表并回传到 QQ。
-   * 序号与 convList 的顺序一致，供 /ss 按序号切换时使用。
-   * @param {string} requestId 待回传请求 id
-   */
-  M._bridgeListSessions = function (requestId) {
-    const list = this.convList || [];
-    if (!list.length) {
-      this._postBridgeResult(requestId, '（暂无会话）');
-      return;
-    }
-    const lines = list.map((c, i) => {
-      const cur = c.id === this.activeConv ? ' [当前]' : '';
-      const title = c.title || '（未命名）';
-      const count = c.msgCount || 0;
-      const date = c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '';
-      return (i + 1) + '.' + cur + ' ' + title
-        + '\n   id: ' + c.id + '  ' + count + ' 条 ' + date;
-    });
-    this._postBridgeResult(requestId, '会话列表（用 /ss 序号 切换）：\n' + lines.join('\n'));
-  };
-
-  /**
    * 按序号切换会话。序号来自 /sessions 的输出（从 1 开始）。
    * @param {number} index 序号
    */
@@ -326,6 +308,12 @@
    * @returns {boolean} 是否已处理（true 则调用方直接返回）
    */
   M.handleBridgeMessage = function (d) {
+    if (d.type === 'clip_copied') {
+      // 页面复制按钮写入剪贴板的内容（主世界 hook 截获后回传）：
+      // 挂到目标消息节点，推 QQ 时优先用它。
+      this._onClipCopied(d.text || '');
+      return true;
+    }
     if (d.type === 'picker_result') {
       this.bridgePicking = false;
       // 处于「修改选择器」模式：直接覆盖对应指令的选择器并保存
@@ -375,31 +363,6 @@
       return true;
     }
     return false;
-  };
-
-  /**
-   * 把点击结果翻译成给人看的文案。
-   * 找不到或不唯一都要明确提示，让用户在 QQ 里知道失败原因。
-   * @param {Object} d 内容脚本回传的结果
-   * @returns {string} 提示文本
-   */
-  M._clickResultText = function (d) {
-    const sel = d.selector || '';
-    if (d.ok) return '已点击：' + sel;
-    if (d.reason === 'not_found') {
-      return '点击失败：页面上找不到元素\n' + sel + '\n（页面结构可能已变，请重新选择元素）';
-    }
-    if (d.reason === 'not_unique') {
-      return '点击失败：该选择器命中 ' + (d.count || 0) + ' 个元素，无法确定点哪个\n' + sel
-        + '\n（请重新选择更精确的元素）';
-    }
-    if (d.reason === 'invalid_selector') {
-      return '点击失败：选择器语法无效\n' + sel;
-    }
-    if (d.reason === 'empty_selector') {
-      return '点击失败：该指令没有绑定选择器';
-    }
-    return '点击失败：' + sel;
   };
 
   /**

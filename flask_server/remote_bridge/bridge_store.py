@@ -35,6 +35,9 @@ def _default_config():
         "app_id": "",                  # QQ 机器人 AppID
         "app_secret": "",              # QQ 机器人 AppSecret
         "intents": 0,                 # 订阅的事件位；0 表示用代码里的默认值（单聊）
+        # Markdown 复制按钮选择器：AI 回复完成后点它，截获带格式的原文，
+        # 推送 QQ 时优先用它。留空则关闭该增强，退回纯文本。
+        "md_copy_selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
         "push": {
             "user": True,              # 是否推送用户消息
             "tool": True,              # 是否推送工具消息
@@ -81,7 +84,7 @@ def load_config():
         raw = _read_yaml()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "md_copy_selector"):
             if k in raw:
                 cfg[k] = raw[k]
         if isinstance(raw.get("push"), dict):
@@ -104,7 +107,7 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "md_copy_selector"):
             if k in patch:
                 cfg[k] = patch[k]
         if isinstance(patch.get("push"), dict):
