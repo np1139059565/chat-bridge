@@ -194,12 +194,24 @@
    * @returns {boolean} 是否找到按钮并点击
    */
   A.clickCopyButton = function (selector) {
-    if (!selector) return false;
-    let el = null;
-    try { el = document.querySelector(selector); } catch (e) { return false; }
-    if (!el) { A.warn('clickCopyButton：未找到复制按钮', selector); return false; }
+    // 空选择器：直接判定失败，交由调用方回传空结果
+    if (!selector) { A.warn('clickCopyButton：选择器为空'); return false; }
+    // 用 querySelectorAll 而非 querySelector：
+    // 前者对 :has() 这类复杂选择器的解析更宽容，且与 clickBySelector 保持一致
+    let list = [];
+    try { list = document.querySelectorAll(selector); } catch (e) {
+      // 选择器语法无效：打出原因，避免异常被静默吞掉后无从排查
+      A.warn('clickCopyButton：选择器语法无效', selector, e && e.message);
+      return false;
+    }
+    // 未命中任何元素：页面结构可能已变，或选择器已失效
+    if (!list.length) { A.warn('clickCopyButton：未找到复制按钮', selector); return false; }
+    // 命中多个时取最后一个：采集场景面向「最新一条回复」的复制按钮
+    const el = list[list.length - 1];
+    // 点击前先滚动到可见位置，避免点到视口外
+    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* 忽略 */ }
     el.click();
-    A.log('已点击复制按钮：' + selector);
+    A.log('已点击复制按钮：' + selector + '（命中 ' + list.length + ' 个）');
     return true;
   };
 

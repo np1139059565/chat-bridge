@@ -134,17 +134,21 @@
     };
   };
 
-  /** 导出当前会话的对话记录（镜像区「复制」按钮使用，始终导出全部分支）。 */
+  /**
+   * 导出镜像区当前可见的消息切片。
+   * source 传 'visible'：只取 visibleKeys，即镜像区实际渲染的那几个节点，
+   * 不涉及分支历史与已滚出视野的消息。
+   */
   M.buildLogJson = function () {
-    return this.buildConvExport(this.activeConv, this.curConv, null);
+    return this.buildConvExport(this.activeConv, this.curConv, null, 'visible');
   };
 
-  /** 复制对话记录 JSON 到剪贴板。 */
+  /** 复制镜像区可见消息切片的 JSON 到剪贴板。 */
   M.copyConversationJson = function () {
     const json = JSON.stringify(this.buildLogJson(), null, 2);
     this.copy(json);
-    log('已导出对话记录 JSON，长度=' + json.length);
-    this.toast('对话记录已复制为 JSON');
+    log('已导出镜像区可见切片 JSON，长度=' + json.length);
+    this.toast('镜像区可见消息已复制为 JSON');
   };
 
   /** 展开 / 收起某个内置工具。 */
