@@ -118,13 +118,22 @@
         // 组合指令：步骤列表（每行一条）。仅组合类型显示。
         ctx.bridgeNewCmdIsCombo
           ? h('div', { class: 'bridge-combo-editor' }, [
-            h('div', { class: 'hint' }, '每行一条指令，按顺序执行，每条间隔 1 秒。例如：'),
+            h('div', { class: 'hint' }, '每行一条指令，按顺序执行。例如：'),
             h('pre', { class: 'bridge-combo-sample' }, '/cms\n/reparse\n/copy'),
             h('textarea', {
               placeholder: '每行一条指令',
               value: ctx.bridgeNewCmdSteps,
               onInput: (e) => { ctx.bridgeNewCmdSteps = e.target.value; }
-            })
+            }),
+            // 执行间隔：可配置，默认 1 秒
+            h('label', { class: 'bridge-interval' }, [
+              '步骤间隔（秒）',
+              h('input', {
+                type: 'number', min: '0.2', step: '0.1',
+                value: ctx.bridgeNewCmdInterval,
+                onInput: (e) => { ctx.bridgeNewCmdInterval = e.target.value; }
+              })
+            ])
           ])
           : null,
         h('div', { class: 'bridge-pick-row' }, [

@@ -152,6 +152,11 @@ def bridge_commands():
         if request.method == "POST":
             entry = data.get("entry") or {}
             idx = data.get("index")
+            # 保存前校验：命令名格式 / 重复、组合子指令是否存在。
+            # 放在后端做，前端绕过也拦得住。
+            err = command_panel.validate_command(entry, idx)
+            if err:
+                return jsonify(success=False, error=err)
             cmds = bridge_store.upsert_command(idx, entry)
             return jsonify(success=True, commands=cmds)
         # DELETE

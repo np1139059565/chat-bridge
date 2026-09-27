@@ -32,6 +32,7 @@
     this.bridgeEditIdx = null;
     this.bridgeNewCmdIsCombo = false;
     this.bridgeNewCmdSteps = '';
+    this.bridgeNewCmdInterval = '1';
   };
 
   /**
@@ -55,13 +56,13 @@
       this.toast('请先选择要点击的元素');
       return;
     }
-    // 命令名去重（修改时排除自身）
-    const dup = (this.bridgeCommands || []).some((c, i) =>
-      i !== this.bridgeEditIdx && (c.name || '').toLowerCase() === name.toLowerCase());
-    if (dup) { this.toast('该命令名已存在'); return; }
-    // 组合指令：存 steps；点击指令：存 selector。二者互斥，避免残留字段混淆。
+    // 命令名去重与子指令校验统一交给后端（validate_command），
+    // 前端不重复实现，避免两处规则不一致。
+    // 组合指令：存 steps 与间隔；点击指令：存 selector。二者互斥，避免残留字段混淆。
+    let interval = parseFloat(this.bridgeNewCmdInterval);
+    if (!(interval > 0)) interval = 1;
     const entry = isCombo
-      ? { name: name, label: label, steps: steps }
+      ? { name: name, label: label, steps: steps, interval: interval }
       : {
         name: name, label: label,
         selector: picked.selector, page_url: picked.page_url || ''
@@ -94,6 +95,7 @@
     const isCombo = !!(c.steps && c.steps.length);
     this.bridgeNewCmdIsCombo = isCombo;
     this.bridgeNewCmdSteps = isCombo ? (c.steps || []).join('\n') : '';
+    this.bridgeNewCmdInterval = isCombo ? String(c.interval || 1) : '1';
     this.bridgePicked = isCombo
       ? null
       : { selector: c.selector || '', page_url: c.page_url || '', tag: '' };

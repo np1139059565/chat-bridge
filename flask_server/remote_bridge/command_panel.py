@@ -205,7 +205,16 @@ def _run_combo(qq_client, openid, msg_id, entry):
     if not steps:
         _reply(qq_client, openid, "组合指令「%s」没有步骤" % label)
         return
-    _reply(qq_client, openid, "开始执行「%s」，共 %d 步" % (label, len(steps)))
+    # 间隔可配置：读 entry.interval（秒），未配置或非法时用默认 1 秒。
+    # 下限 0.2 秒，避免配置成 0 导致步骤挤在一起、抽屉来不及响应。
+    try:
+        interval = float(entry.get("interval", 1.0))
+    except (TypeError, ValueError):
+        interval = 1.0
+    if interval < 0.2:
+        interval = 0.2
+    _reply(qq_client, openid, "开始执行「%s」，共 %d 步，间隔 %.1f 秒"
+           % (label, len(steps), interval))
 
     def _worker():
         _reply_ctx.suppress = True
@@ -220,12 +229,57 @@ def _run_combo(qq_client, openid, msg_id, entry):
                     log("组合步骤失败：", s, e)
                 # 最后一步不必再等
                 if i < len(steps) - 1:
-                    time.sleep(1.0)
+                    time.sleep(interval)
         finally:
             _reply_ctx.suppress = False
         _reply(qq_client, openid, "「%s」执行完毕（%d/%d 步）" % (label, ok, len(steps)))
 
     threading.Thread(target=_worker, daemon=True).start()
+
+
+def validate_command(entry, index=None):
+    """校验一条自定义指令能否保存。返回错误文本；合法返回空串。
+
+    校验项：
+      1. 命令名格式：以 / 开头
+      2. 命令名重复：与内置指令、其它自定义指令（含别名）冲突
+      3. 组合指令的子指令必须存在（内置或其它自定义指令）
+    @param entry 待保存的指令对象
+    @param index 修改时的下标（用于排除自身）；新增传 None
+    """
+    name = (entry.get("name") or "").strip()
+    if not name.startswith("/"):
+        return "命令名需以 / 开头"
+    low = name.lower()
+    # 与内置指令（含别名）冲突
+    if resolve_cmd(low) in BUILTIN:
+        return "命令名 %s 与内置指令冲突" % name
+    # 与其它自定义指令（含别名）冲突
+    customs = bridge_store.get_config().get("commands") or []
+    for i, c in enumerate(customs):
+        if i == index:
+            continue
+        names = [c.get("name") or ""] + (c.get("aliases") or [])
+        if low in [str(n).lower() for n in names if n]:
+            return "命令名 %s 已存在" % name
+    # 组合指令：子指令必须存在
+    steps = entry.get("steps") or []
+    if steps:
+        # 可用的子指令集合：内置（含别名）+ 其它自定义（含别名）
+        available = set(BUILTIN.keys()) | set(_ALIAS_MAP.keys())
+        for i, c in enumerate(customs):
+            if i == index:
+                continue
+            available.add((c.get("name") or "").lower())
+            for a in (c.get("aliases") or []):
+                available.add(str(a).lower())
+        for s in steps:
+            sub = str(s).strip().split(None, 1)[0].lower()
+            if not sub:
+                continue
+            if resolve_cmd(sub) not in BUILTIN and sub not in available:
+                return "子指令 %s 不存在" % sub
+    return ""
 
 
 def _help_text():
@@ -248,6 +302,9 @@ def _help_text():
         for c in customs:
             tag = "[组合] " if c.get("steps") else ""
             lines.append("%s — %s%s" % (c.get("name", ""), tag, c.get("label", "")))
+            # 组合指令：逐条展开子指令，让用户看清它到底按什么顺序做什么
+            for i, s in enumerate(c.get("steps") or []):
+                lines.append("    %d. %s" % (i + 1, s))
     return "\n".join(lines)
 
 

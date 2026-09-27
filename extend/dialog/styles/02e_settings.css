@@ -124,6 +124,19 @@
   resize: vertical;
 }
 
+/* 组合间隔输入：标签 + 数字框一行 */
+.bridge-interval {
+  display: flex;
+  align-items: center;
+  gap: var(--cb-sp-2);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-body);
+}
+
+.bridge-interval input {
+  width: 70px;
+}
+
 /* 示例块：灰色小块，说明步骤写法 */
 .bridge-combo-sample {
   margin: 0;
