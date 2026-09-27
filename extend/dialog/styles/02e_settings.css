@@ -96,6 +96,36 @@
   white-space: nowrap;
 }
 
+/* 类型切换行：组合指令复选框 */
+.bridge-type-row {
+  margin: 2px 0;
+}
+
+/* 组合指令编辑区：步骤文本框 */
+.bridge-combo-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-1);
+}
+
+.bridge-combo-editor textarea {
+  width: 100%;
+  min-height: 72px;
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-xs);
+  resize: vertical;
+}
+
+/* 示例块：灰色小块，说明步骤写法 */
+.bridge-combo-sample {
+  margin: 0;
+  padding: var(--cb-sp-1) var(--cb-sp-2);
+  background: var(--cb-bg-fill);
+  border-radius: var(--cb-r-md);
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-sub);
+}
+
 /* 选择元素行：按钮 + 已选提示 + 添加按钮 */
 .bridge-pick-row {
   display: flex;

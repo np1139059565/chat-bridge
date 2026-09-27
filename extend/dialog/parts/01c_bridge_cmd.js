@@ -30,6 +30,8 @@
     this.bridgeNewCmdLabel = '';
     this.bridgePicked = null;
     this.bridgeEditIdx = null;
+    this.bridgeNewCmdIsCombo = false;
+    this.bridgeNewCmdSteps = '';
   };
 
   /**
@@ -39,18 +41,31 @@
   M.saveBridgeCommand = async function () {
     const name = (this.bridgeNewCmdName || '').trim();
     const label = (this.bridgeNewCmdLabel || '').trim();
+    const isCombo = !!this.bridgeNewCmdIsCombo;
     const picked = this.bridgePicked;
     if (!name || !label) { this.toast('命令名与显示名必填'); return; }
     if (!name.startsWith('/')) { this.toast('命令名需以 / 开头'); return; }
-    if (!picked || !picked.selector) { this.toast('请先选择要点击的元素'); return; }
+    // 两种类型各自的必填项：组合要步骤，点击要选择器
+    let steps = [];
+    if (isCombo) {
+      steps = (this.bridgeNewCmdSteps || '').split('\n')
+        .map((s) => s.trim()).filter(Boolean);
+      if (!steps.length) { this.toast('请填写至少一条步骤指令'); return; }
+    } else if (!picked || !picked.selector) {
+      this.toast('请先选择要点击的元素');
+      return;
+    }
     // 命令名去重（修改时排除自身）
     const dup = (this.bridgeCommands || []).some((c, i) =>
       i !== this.bridgeEditIdx && (c.name || '').toLowerCase() === name.toLowerCase());
     if (dup) { this.toast('该命令名已存在'); return; }
-    const entry = {
-      name: name, label: label,
-      selector: picked.selector, page_url: picked.page_url || ''
-    };
+    // 组合指令：存 steps；点击指令：存 selector。二者互斥，避免残留字段混淆。
+    const entry = isCombo
+      ? { name: name, label: label, steps: steps }
+      : {
+        name: name, label: label,
+        selector: picked.selector, page_url: picked.page_url || ''
+      };
     try {
       const data = await D.apiFetch(this, '/api/bridge/commands', {
         method: 'POST',
@@ -75,7 +90,13 @@
     this.bridgeEditIdx = idx;
     this.bridgeNewCmdName = c.name || '';
     this.bridgeNewCmdLabel = c.label || '';
-    this.bridgePicked = { selector: c.selector || '', page_url: c.page_url || '', tag: '' };
+    // 组合指令：勾上类型并回填步骤；点击指令：回填选择器
+    const isCombo = !!(c.steps && c.steps.length);
+    this.bridgeNewCmdIsCombo = isCombo;
+    this.bridgeNewCmdSteps = isCombo ? (c.steps || []).join('\n') : '';
+    this.bridgePicked = isCombo
+      ? null
+      : { selector: c.selector || '', page_url: c.page_url || '', tag: '' };
     this.toast('正在修改：' + (c.name || ''));
   };
 

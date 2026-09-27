@@ -35,24 +35,41 @@ def log(*args):
     print("[bridge][command]", *args)
 
 
-# 内置指令表：命令名 → 说明
+# 内置指令表：主命令名 → { desc 说明, aliases 别名列表 }
+# 别名是同一指令的快捷写法，列出时只显示主命令，不重复占行。
 BUILTIN = {
-    "/css": "清空所有会话",
-    "/cms": "清空当前会话的消息列表",
-    "/csp": "复制 System Prompt 并发送给 AI",
-    "/rtime": "设置自动回传延迟（秒）",
-    "/stime": "切换自动回传开关",
-    "/sessions": "列出会话列表",
-    "/ss": "按序号切换会话（如 /ss 1）",
-    "/screenshot": "截取浏览器屏幕（同 /sp）",
-    "/sp": "截取浏览器屏幕（/screenshot 快捷）",
-    "/copy": "复制最新卡片结果并回传 AI",
-    "/reparse": "重新解析当前网页对话",
-    "/rerun": "重新执行最新卡片并回传",
-    "/restart": "重启服务端",
-    "/refush": "刷新浏览器并打开抽屉",
-    "/help": "显示指令列表",
+    "/css": {"desc": "清空所有会话", "aliases": ["/ca"]},
+    "/cms": {"desc": "清空当前会话的消息列表", "aliases": ["/cm"]},
+    "/csp": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/cpsp"]},
+    "/rtime": {"desc": "设置自动回传延迟（秒）", "aliases": ["/delay"]},
+    "/stime": {"desc": "切换自动回传开关", "aliases": ["/auto"]},
+    "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"]},
+    "/ss": {"desc": "按序号切换会话（如 /ss 1）", "aliases": []},
+    "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"]},
+    "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"]},
+    "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"]},
+    "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"]},
+    "/restart": {"desc": "重启服务端", "aliases": ["/rs"]},
+    "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"]},
+    "/help": {"desc": "显示指令列表", "aliases": ["/h"]},
 }
+
+# 别名 → 主命令 的反查表：一次构建，之后直接查
+_ALIAS_MAP = {}
+for _main, _info in BUILTIN.items():
+    for _a in _info.get("aliases") or []:
+        _ALIAS_MAP[_a] = _main
+
+
+def resolve_cmd(cmd):
+    """把别名解析为主命令名；非别名原样返回。"""
+    if cmd in BUILTIN:
+        return cmd
+    return _ALIAS_MAP.get(cmd, cmd)
+
+
+# 线程局部标记：组合指令执行期间的中间步骤，回复会被抑制，避免刷屏。
+_reply_ctx = threading.local()
 
 
 def _reply(qq_client, openid, text):
@@ -60,7 +77,10 @@ def _reply(qq_client, openid, text):
 
     msg_seq 通过 message_router.next_seq 统一分配：
     与推送路径共用同一个计数器，避免 (msg_id, msg_seq) 重复被 QQ 判重丢弃。
+    组合指令执行期间（_reply_ctx.suppress 为真）静默跳过，只由组合层统一回执。
     """
+    if getattr(_reply_ctx, "suppress", False):
+        return False
     msg_id, seq = message_router.next_seq(openid)
     if not msg_id:
         log("窗口已关闭，无法回复")
@@ -173,20 +193,64 @@ def _restart_server(delay=1.5):
     os._exit(0)
 
 
+def _run_combo(qq_client, openid, msg_id, entry):
+    """执行一条组合指令：按顺序逐条执行 steps，每条间隔 1 秒。
+
+    中间步骤的回复被抑制（_reply_ctx.suppress），只在开头与结尾各回一条，
+    避免多条指令叠加后把 QQ 刷屏。执行放在后台线程，不阻塞 WebSocket 回调。
+    @param entry 组合指令对象，含 steps（指令文本数组）
+    """
+    steps = [s for s in (entry.get("steps") or []) if str(s).strip()]
+    label = entry.get("label") or entry.get("name") or "组合"
+    if not steps:
+        _reply(qq_client, openid, "组合指令「%s」没有步骤" % label)
+        return
+    _reply(qq_client, openid, "开始执行「%s」，共 %d 步" % (label, len(steps)))
+
+    def _worker():
+        _reply_ctx.suppress = True
+        ok = 0
+        try:
+            for i, s in enumerate(steps):
+                try:
+                    # 递归复用统一的指令处理；组合中不再嵌套组合（避免递归失控）
+                    handle_command(qq_client, openid, msg_id, str(s).strip())
+                    ok += 1
+                except Exception as e:
+                    log("组合步骤失败：", s, e)
+                # 最后一步不必再等
+                if i < len(steps) - 1:
+                    time.sleep(1.0)
+        finally:
+            _reply_ctx.suppress = False
+        _reply(qq_client, openid, "「%s」执行完毕（%d/%d 步）" % (label, ok, len(steps)))
+
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def _help_text():
-    """组装指令列表文本。"""
+    """组装指令列表文本。别名括在主命令后，不单独占行。"""
     lines = ["可用指令："]
-    for name, desc in BUILTIN.items():
-        lines.append("%s — %s" % (name, desc))
-    for c in (bridge_store.get_config().get("commands") or []):
-        lines.append("%s — %s" % (c.get("name", ""), c.get("label", "")))
+    for name, info in BUILTIN.items():
+        al = info.get("aliases") or []
+        suffix = ("（别名 " + " ".join(al) + "）") if al else ""
+        lines.append("%s — %s%s" % (name, info.get("desc", ""), suffix))
+    customs = bridge_store.get_config().get("commands") or []
+    if customs:
+        lines.append("")
+        lines.append("自定义指令：")
+        for c in customs:
+            tag = "[组合] " if c.get("steps") else ""
+            lines.append("%s — %s%s" % (c.get("name", ""), tag, c.get("label", "")))
     return "\n".join(lines)
 
 
 def handle_command(qq_client, openid, msg_id, text):
     """处理一条指令消息。返回 True 表示已处理（不再当普通消息投递）。"""
     parts = text.strip().split(None, 1)
-    cmd = parts[0].lower()
+    # 先解析别名：/sp → /screenshot、/ls → /sessions 等，
+    # 之后的分支一律按主命令名判断。
+    cmd = resolve_cmd(parts[0].lower())
     arg = parts[1] if len(parts) > 1 else ""
 
     if cmd == "/css":
@@ -219,7 +283,8 @@ def handle_command(qq_client, openid, msg_id, text):
         _dispatch("switch_session", {"index": idx})
         _reply(qq_client, openid, "已下发：切换会话 #%d" % idx)
         return True
-    if cmd == "/screenshot" or cmd == "/sp":
+    if cmd == "/screenshot":
+        # 别名 /sp 已在入口经 resolve_cmd 归一为此命令
         _dispatch_with_result("screenshot", {}, openid)
         return True
     if cmd == "/copy":
@@ -265,15 +330,23 @@ def handle_command(qq_client, openid, msg_id, text):
         _reply(qq_client, openid, _help_text())
         return True
 
-    # 自定义指令：在配置里按命令名匹配，命中则下发「点击元素」。
-    # 用 _dispatch_with_result：元素可能找不到或不唯一，失败时要在 QQ 里提示。
+    # 自定义指令：按命令名或别名匹配。
+    # 两类：
+    #  · 组合指令（含 steps）：逐条执行其指令列表，间隔 1 秒；
+    #  · 点击指令：下发「点击元素」，失败时在 QQ 里提示。
     for c in (bridge_store.get_config().get("commands") or []):
-        if (c.get("name") or "").lower() == cmd:
+        names = [c.get("name") or ""] + (c.get("aliases") or [])
+        if cmd not in [str(n).lower() for n in names if n]:
+            continue
+        steps = c.get("steps") or []
+        if steps:
+            _run_combo(qq_client, openid, msg_id, c)
+        else:
             _dispatch_with_result("click_element", {
                 "selector": c.get("selector", ""),
                 "page_url": c.get("page_url", ""),
             }, openid)
-            return True
+        return True
 
     # 未命中任何指令：交还调用方当普通消息处理
     return False
@@ -287,10 +360,13 @@ def register_panel(qq_client):
     """
     cfg = bridge_store.get_config()
     commands = []
-    for name, desc in BUILTIN.items():
-        commands.append({"name": name, "desc": desc})
+    # 内置：只注册主命令，别名不重复占位（QQ 面板最多 20 个元素）
+    for name, info in BUILTIN.items():
+        commands.append({"name": name, "desc": info.get("desc", "")})
+    # 自定义：组合与点击指令一并注册
     for c in (cfg.get("commands") or []):
-        commands.append({"name": c.get("name", ""), "desc": c.get("label", "")})
+        tag = "[组合] " if (c.get("steps") or []) else ""
+        commands.append({"name": c.get("name", ""), "desc": tag + (c.get("label") or "")})
     if not commands:
         return
     # [待核对] 注册接口：此处仅打印待注册内容，接入时替换为真实 HTTP 调用

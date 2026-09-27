@@ -91,7 +91,7 @@
           + '/stime 切换自动回传开关、/sessions 会话列表、/ss 序号 切换会话、'
           + '/sp 截屏、/copy 复制结果、/reparse 重新解析、/rerun 重新执行、'
           + '/restart 重启服务、/refush 刷新页面、/help 指令列表'),
-        // 自定义指令：命令名 + 显示名 + 选择元素（不再手填选择器）
+        // 自定义指令：命令名 + 显示名 + 类型（点击元素 / 组合指令）
         h('div', { class: 'bridge-cmd-new' }, [
           h('input', {
             type: 'text', placeholder: '命令名（含 /，如 /deploy）',
@@ -104,16 +104,45 @@
             onInput: (e) => { ctx.bridgeNewCmdLabel = e.target.value; }
           })
         ]),
+        // 类型切换：点击元素 / 组合指令
+        h('div', { class: 'bridge-type-row' }, [
+          h('label', { class: 'bridge-toggle' }, [
+            h('input', {
+              type: 'checkbox',
+              checked: ctx.bridgeNewCmdIsCombo,
+              onChange: (e) => { ctx.bridgeNewCmdIsCombo = e.target.checked; }
+            }),
+            '组合指令（按顺序执行多条指令）'
+          ])
+        ]),
+        // 组合指令：步骤列表（每行一条）。仅组合类型显示。
+        ctx.bridgeNewCmdIsCombo
+          ? h('div', { class: 'bridge-combo-editor' }, [
+            h('div', { class: 'hint' }, '每行一条指令，按顺序执行，每条间隔 1 秒。例如：'),
+            h('pre', { class: 'bridge-combo-sample' }, '/cms\n/reparse\n/copy'),
+            h('textarea', {
+              placeholder: '每行一条指令',
+              value: ctx.bridgeNewCmdSteps,
+              onInput: (e) => { ctx.bridgeNewCmdSteps = e.target.value; }
+            })
+          ])
+          : null,
         h('div', { class: 'bridge-pick-row' }, [
+          // 「选择元素」只在点击类型下显示
+          ctx.bridgeNewCmdIsCombo
+            ? null
+            : h('button', {
+              onClick: () => ctx.bridgePicking ? ctx.stopPickElement() : ctx.startPickElement()
+            }, ctx.bridgePicking ? '取消选择' : '选择元素'),
+          ctx.bridgeNewCmdIsCombo
+            ? h('span', { class: 'hint' }, '组合指令无需选择元素')
+            : (ctx.bridgePicked
+              ? h('span', { class: 'bridge-picked', title: ctx.bridgePicked.selector },
+                '已选：' + (ctx.bridgePicked.tag || '') + ' ' + ctx.bridgePicked.selector)
+              : h('span', { class: 'hint' }, '点「选择元素」后，在页面上点击要触发的元素')),
           h('button', {
-            onClick: () => ctx.bridgePicking ? ctx.stopPickElement() : ctx.startPickElement()
-          }, ctx.bridgePicking ? '取消选择' : '选择元素'),
-          ctx.bridgePicked
-            ? h('span', { class: 'bridge-picked', title: ctx.bridgePicked.selector },
-              '已选：' + (ctx.bridgePicked.tag || '') + ' ' + ctx.bridgePicked.selector)
-            : h('span', { class: 'hint' }, '点「选择元素」后，在页面上点击要触发的元素'),
-          h('button', {
-            disabled: !ctx.bridgePicked || !ctx.bridgeNewCmdName || !ctx.bridgeNewCmdLabel,
+            disabled: !ctx.bridgeNewCmdName || !ctx.bridgeNewCmdLabel
+              || (ctx.bridgeNewCmdIsCombo ? !ctx.bridgeNewCmdSteps.trim() : !ctx.bridgePicked),
             onClick: () => ctx.saveBridgeCommand()
           }, ctx.bridgeEditIdx === null ? '添加' : '保存修改'),
           // 编辑中时提供取消按钮，避免误存
@@ -127,7 +156,9 @@
               h('span', { class: 'bridge-cmd-name' }, c.name),
               h('span', { class: 'bridge-cmd-label' }, c.label),
               h('span', { class: 'bridge-cmd-sel', title: c.selector || '' },
-                c.selector ? ('点击 ' + c.selector) : ''),
+                (c.steps && c.steps.length)
+                  ? ('组合 ' + c.steps.length + ' 步：' + c.steps.join(' → '))
+                  : (c.selector ? ('点击 ' + c.selector) : '')),
               h('button', {
                 onClick: () => ctx.editBridgeCommand(i)
               }, '编辑'),

@@ -198,6 +198,7 @@ window.AIMirrorDialog = (function () {
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态
       bridgeNewCmdName: '', bridgeNewCmdLabel: '',  // 新指令录入
+      bridgeNewCmdIsCombo: false, bridgeNewCmdSteps: '',  // 组合指令：类型与步骤
       _bridgeStatusTimer: null, bridgeLastEvent: '', bridgeIntents: 0,  // 轮询/诊断
       rules: [],
       rulesDir: '',
