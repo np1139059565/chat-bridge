@@ -60,7 +60,9 @@
     else if (d.type === 'bridge_copy_md') {
       // 抽屉请求：点页面的复制按钮，取带格式的 Markdown。
       // 点击后由主世界 hook 截获剪贴板内容，经 clip_copied 回传抽屉。
+      A.log('[采集] 收到 bridge_copy_md，选择器长度=' + String(d.selector || '').length);
       const ok = A.clickCopyButton(d.selector || '');
+      A.log('[采集] 点击结果 ok=' + ok);
       // 先回报「是否点到按钮」：抽屉据此区分失败阶段——
       // 是没找到按钮，还是点了但 hook 没截到内容。
       A.post({ type: 'clip_clicked', ok: !!ok });

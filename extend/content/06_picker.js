@@ -182,6 +182,7 @@
   window.addEventListener('message', function (e) {
     const d = e.data;
     if (!d || d.source !== 'ai-mirror-clip' || d.type !== 'copied') return;
+    A.log('[采集] 主世界回传剪贴板内容，长度=' + String(d.text || '').length);
     A.post({ type: 'clip_copied', text: d.text || '' });
   });
 
@@ -194,12 +195,24 @@
    * @returns {boolean} 是否找到按钮并点击
    */
   A.clickCopyButton = function (selector) {
-    if (!selector) return false;
+    A.log('[采集] clickCopyButton 被调用，选择器长度=' + String(selector || '').length);
+    A.log('[采集] 选择器内容=' + selector);
+    A.log('[采集] hook 状态=' + (window.__aiMirrorClipHook || '未装载'));
+    if (!selector) { A.warn('[采集] 选择器为空，放弃'); return false; }
     let el = null;
-    try { el = document.querySelector(selector); } catch (e) { return false; }
-    if (!el) { A.warn('clickCopyButton：未找到复制按钮', selector); return false; }
-    el.click();
-    A.log('已点击复制按钮：' + selector);
+    try { el = document.querySelector(selector); } catch (e) {
+      A.warn('[采集] 选择器语法错误：' + e.message);
+      return false;
+    }
+    if (!el) { A.warn('[采集] 未找到匹配元素（选择器可能失效）'); return false; }
+    A.log('[采集] 找到元素：<' + el.tagName.toLowerCase() + '>，准备点击');
+    try {
+      el.click();
+      A.log('[采集] 已执行 el.click()');
+    } catch (e) {
+      A.warn('[采集] 点击抛错：' + e.message);
+      return false;
+    }
     return true;
   };
 

@@ -251,9 +251,7 @@
       return;
     }
     if (action === 'collect_md') {
-      // 手动采集：点按钮取 Markdown，挂到最新 AI 消息上。
-      // 自动采集由 reportToBridgeWithMd 在生成结束时触发，
-      // 这里是用户主动发指令时的入口。
+      // 手动采集：用户主动发指令触发（自动采集见 reportToBridgeWithMd）
       this._bridgeCollectMd(params.selector || '');
       return;
     }
@@ -342,11 +340,13 @@
     if (d.type === 'clip_clicked') {
       // 内容脚本回报「是否点到按钮」：记下来，供超时提示区分阶段
       this._mdClicked = !!d.ok;
+      D.log('[采集] 内容脚本回报点击结果 ok=' + d.ok);
       return true;
     }
     if (d.type === 'clip_copied') {
       // 页面复制按钮写入剪贴板的内容（主世界 hook 截获后回传）：
       // 挂到目标消息节点，推 QQ 时优先用它。
+      D.log('[采集] 收到 clip_copied，长度=' + String(d.text || '').length);
       this._onClipCopied(d.text || '');
       return true;
     }

@@ -33,7 +33,10 @@
    */
   M.testMdSelector = function () {
     if (!this.bridgeMdSelector) { this.toast('请先填写选择器'); return; }
+    D.log('[采集] 发出 bridge_copy_md，选择器长度=' + String(this.bridgeMdSelector).length);
+    D.log('[采集] 选择器内容=' + this.bridgeMdSelector);
     this._mdTest = true;
+    this._mdClicked = false;
     this._mdCaptureTarget = '__test__';
     window.parent.postMessage({
       type: 'bridge_copy_md',
@@ -60,6 +63,7 @@
    */
   M._onClipCopied = function (text) {
     const target = this._mdCaptureTarget;
+    D.log('[采集] 抽屉收到剪贴板内容，长度=' + String(text || '').length + '，目标=' + (target || '(空)'));
     if (!target || !text) return;
     this._mdCaptureTarget = '';
     clearTimeout(this._mdCaptureTimer);
