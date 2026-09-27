@@ -35,16 +35,18 @@ def log(*args):
     print("[bridge][command]", *args)
 
 
-# 内置指令表：主命令名 → { desc 说明, aliases 别名列表 }
-# 别名是同一指令的快捷写法，列出时只显示主命令，不重复占行。
+# 内置指令表：完整命令名 → { desc 说明, aliases 快捷键列表 }
+#
+# 命名规则：主命令用完整英文名（如 /clear-sessions），快捷键作别名（如 /css）。
+# 展示格式统一为「快捷键 — 描述（完整名）」，见 _help_text。
 BUILTIN = {
-    "/css": {"desc": "清空所有会话", "aliases": ["/ca"]},
-    "/cms": {"desc": "清空当前会话的消息列表", "aliases": ["/cm"]},
-    "/csp": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/cpsp"]},
-    "/rtime": {"desc": "设置自动回传延迟（秒）", "aliases": ["/delay"]},
-    "/stime": {"desc": "切换自动回传开关", "aliases": ["/auto"]},
+    "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"]},
+    "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"]},
+    "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"]},
+    "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"]},
+    "/switch-auto": {"desc": "切换自动回传开关", "aliases": ["/sa"]},
     "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"]},
-    "/ss": {"desc": "按序号切换会话（如 /ss 1）", "aliases": []},
+    "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"]},
     "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"]},
     "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"]},
     "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"]},
@@ -159,37 +161,35 @@ def _dispatch_with_result(action, params, openid):
     return card
 
 
-def _restart_server(delay=1.5):
-    """重启当前服务进程。
+def _restart_server(delay=3.0):
+    """延迟 3 秒重启服务（最简实现）。
 
-    做法：起一个独立子进程，让它先等一会儿（等父进程退出、端口释放），
-    再以同样的解释器与参数重执行服务；父进程随即退出。
+    步骤：
+      1. 起一个与父进程彻底脱离的子进程，让它 sleep 3 秒后启动新服务；
+      2. 父进程立即退出，把端口让出来。
 
-    为什么不用 os.execv 原地重执行：execv 会继承已打开的 fd，
-    包括监听 5000 端口的 socket。新进程带着这个 socket 再去 bind 同一端口，
-    会因「地址已占用」失败，服务当场失联——这正是上一版 /restart 把服务
-    搞挂的原因。改用独立子进程 + close_fds，彻底避开 fd 继承。
+    关键：Windows 上必须用 DETACHED_PROCESS 才能真脱离。
+    之前的 start_new_session 在 Windows 上是空操作，子进程会随父进程一起
+    被终止，新服务起不来、端口无人监听，抽屉所有接口随之全断。
     """
     import subprocess
     import sys
-    # 子进程要执行的代码：等待 → 用原解释器与原参数 execv 自身
-    child_code = (
-        "import time, os, sys;"
-        "time.sleep(%s);"
-        "os.execv(sys.executable, [sys.executable] + %r)"
-    ) % (delay, list(sys.argv))
-    try:
-        subprocess.Popen(
-            [sys.executable, "-c", child_code],
-            cwd=os.getcwd(),
-            close_fds=True,           # 不继承监听 socket，避免端口占用
-            start_new_session=True,   # 脱离当前会话，父进程退出不影响它
-        )
-    except Exception as e:
-        log("重启失败：", e)
-        return
-    # 父进程立即退出：释放端口与所有资源，交给子进程拉起新服务。
-    # 用 _exit 而非 exit：跳过清理钩子，避免与子进程启动竞争。
+    # 子进程：等 3 秒 → 用原解释器与原参数 execv 启动服务
+    code = "import time,os,sys;time.sleep(%s);os.execv(sys.executable,%r)" % (
+        delay, [sys.executable] + list(sys.argv))
+    kw = {
+        "cwd": os.getcwd(),
+        "close_fds": True,                 # 不继承监听 socket，避免端口被占
+        "stdin": subprocess.DEVNULL,       # 与控制台解耦
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if os.name == "nt":
+        kw["creationflags"] = 0x00000008   # DETACHED_PROCESS：真正脱离父进程
+    else:
+        kw["start_new_session"] = True
+    subprocess.Popen([sys.executable, "-c", code], **kw)
+    # 父进程立即退出，端口让给 3 秒后的新进程
     os._exit(0)
 
 
@@ -229,12 +229,18 @@ def _run_combo(qq_client, openid, msg_id, entry):
 
 
 def _help_text():
-    """组装指令列表文本。别名括在主命令后，不单独占行。"""
+    """组装指令列表文本。格式统一为「快捷键 — 描述（完整名）」。
+
+    每个指令都有快捷键（aliases）。若某指令没有别名，就直接显示完整名。
+    """
     lines = ["可用指令："]
     for name, info in BUILTIN.items():
         al = info.get("aliases") or []
-        suffix = ("（别名 " + " ".join(al) + "）") if al else ""
-        lines.append("%s — %s%s" % (name, info.get("desc", ""), suffix))
+        short = al[0] if al else name          # 取首个快捷键作为展示主键
+        if short != name:
+            lines.append("%s — %s（%s）" % (short, info.get("desc", ""), name))
+        else:
+            lines.append("%s — %s" % (name, info.get("desc", "")))
     customs = bridge_store.get_config().get("commands") or []
     if customs:
         lines.append("")
@@ -253,22 +259,22 @@ def handle_command(qq_client, openid, msg_id, text):
     cmd = resolve_cmd(parts[0].lower())
     arg = parts[1] if len(parts) > 1 else ""
 
-    if cmd == "/css":
+    if cmd == "/clear-sessions":
         _dispatch("clear_all_sessions")
         _reply(qq_client, openid, "已下发：清空所有会话")
         return True
-    if cmd == "/cms":
+    if cmd == "/clear-messages":
         _dispatch("clear_messages")
         _reply(qq_client, openid, "已下发：清空当前会话的消息列表")
         return True
-    if cmd == "/stime":
+    if cmd == "/switch-auto":
         _dispatch("toggle_auto_send")
         _reply(qq_client, openid, "已下发：切换自动回传开关")
         return True
     if cmd == "/sessions":
         _dispatch_with_result("list_sessions", {}, openid)
         return True
-    if cmd == "/ss":
+    if cmd == "/switch-session":
         if not arg:
             _reply(qq_client, openid, "用法：/ss 序号（序号来自 /sessions）")
             return True
@@ -307,13 +313,13 @@ def handle_command(qq_client, openid, msg_id, text):
         _dispatch("refresh_page", {})
         _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
         return True
-    if cmd == "/csp":
+    if cmd == "/copy-system-prompt":
         _dispatch("copy_system_prompt")
         _reply(qq_client, openid, "已下发：复制 System Prompt 并发送给 AI")
         return True
-    if cmd == "/rtime":
+    if cmd == "/re-time":
         if not arg:
-            _reply(qq_client, openid, "用法：/rtime 秒数（如 /rtime 5）")
+            _reply(qq_client, openid, "用法：/rt 秒数（如 /rt 5）")
             return True
         try:
             secs = float(arg)

@@ -86,11 +86,11 @@
         // 指令列表：内置指令说明 + 自定义指令编辑器
         h('div', { class: 'card-head' }, [h('span', 'QQ 指令')]),
         h('div', { class: 'hint' },
-          '内置：/css 清空所有会话、/cms 清空当前会话消息、'
-          + '/csp 复制 System Prompt 并发送、/rtime 秒数 设置回传延迟、'
-          + '/stime 切换自动回传开关、/sessions 会话列表、/ss 序号 切换会话、'
-          + '/sp 截屏、/copy 复制结果、/reparse 重新解析、/rerun 重新执行、'
-          + '/restart 重启服务、/refush 刷新页面、/help 指令列表'),
+          '内置（快捷键 — 作用）：/css 清空所有会话、/cms 清空当前会话消息、'
+          + '/csp 复制 System Prompt 并发送、/rt 秒数 设置回传延迟、'
+          + '/sa 切换自动回传开关、/ls 会话列表、/ss 序号 切换会话、'
+          + '/sp 截屏、/cp 复制结果、/rp 重新解析、/rr 重新执行、'
+          + '/rs 重启服务、/rf 刷新页面、/h 指令列表'),
         // 自定义指令：命令名 + 显示名 + 类型（点击元素 / 组合指令）
         h('div', { class: 'bridge-cmd-new' }, [
           h('input', {
