@@ -89,15 +89,14 @@ def bridge_result():
         if not saved:
             text = "截屏已收到，但保存失败"
         else:
-            base = (bridge_store.get_config().get("public_base_url") or "").rstrip("/")
-            if base:
-                img_url = base + "/api/bridge/shot/" + saved["name"]
-                msg_id, seq = message_router.next_seq(openid)
-                if msg_id and client.send_c2c_image(openid, img_url, msg_id=msg_id, msg_seq=seq)[0]:
-                    return jsonify(success=True, sent="image")
-                text = "截屏已保存，但发送图片失败（检查公网地址与媒体接口）。路径：\n" + saved["path"]
-            else:
-                text = "已截屏，保存于：\n" + saved["path"] + "\n（配置「公网地址」后可直接发到 QQ）"
+            # 直接读本地文件上传（Base64），无需公网地址
+            msg_id, seq = message_router.next_seq(openid)
+            ok, err = (False, "no_window")
+            if msg_id:
+                ok, err = client.send_c2c_image(openid, saved["path"], msg_id=msg_id, msg_seq=seq)
+            if ok:
+                return jsonify(success=True, sent="image")
+            text = "截屏已保存，但发送图片失败：%s\n路径：%s" % (err, saved["path"])
     if openid and text:
         msg_id, seq = message_router.next_seq(openid)
         if msg_id:
@@ -134,26 +133,6 @@ def _save_data_url(data_url):
     except Exception as e:
         print("[bridge] 保存截屏失败：", e)
         return None
-
-
-@bp.route("/api/bridge/shot/<path:name>", methods=["GET", "OPTIONS"])
-def bridge_shot(name):
-    """提供截屏图片的 HTTP 访问，供 QQ 服务器拉取。
-
-    QQ 发图是「给它一个 URL，它自己来取」，所以图片必须能通过公网访问。
-    本路由把 screenshots 目录下的图片暴露出去；
-    配合配置里的 public_base_url（公网地址）即可让 QQ 取到。
-    """
-    if request.method == "OPTIONS":
-        return ("", 204)
-    import os
-    from flask import send_from_directory
-    # 防目录穿越：只取文件名部分
-    safe = os.path.basename(name or "")
-    if not safe:
-        return jsonify(success=False, error="bad_name"), 400
-    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "screenshots")
-    return send_from_directory(out_dir, safe)
 
 
 @bp.route("/api/bridge/commands", methods=["GET", "POST", "DELETE", "OPTIONS"])

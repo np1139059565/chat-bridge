@@ -35,7 +35,6 @@ def _default_config():
         "app_id": "",                  # QQ 机器人 AppID
         "app_secret": "",              # QQ 机器人 AppSecret
         "intents": 0,                 # 订阅的事件位；0 表示用代码里的默认值（单聊）
-        "public_base_url": "",        # 本服务的公网地址，用于让 QQ 取图（截屏发图必需）
         "push": {
             "user": True,              # 是否推送用户消息
             "tool": True,              # 是否推送工具消息
@@ -82,7 +81,7 @@ def load_config():
         raw = _read_yaml()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents", "public_base_url"):
+        for k in ("enabled", "app_id", "app_secret", "intents"):
             if k in raw:
                 cfg[k] = raw[k]
         if isinstance(raw.get("push"), dict):
@@ -105,7 +104,7 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents", "public_base_url"):
+        for k in ("enabled", "app_id", "app_secret", "intents"):
             if k in patch:
                 cfg[k] = patch[k]
         if isinstance(patch.get("push"), dict):

@@ -57,6 +57,13 @@
       // QQ 指令「截屏」：captureVisibleTab 只能在后台调用，转发过去
       A.captureTab(d.request_id || '');
     }
+    else if (d.type === 'bridge_refresh_page') {
+      // QQ 指令「刷新页面」：先记标记，刷新后据此自动打开抽屉。
+      // 标记存 sessionStorage：刷新后仍在，关标签页即消失，
+      // 这样「刷新后自动开抽屉」只对本次操作生效，不会长期驻留。
+      try { sessionStorage.setItem('aiMirrorAutoOpen', '1'); } catch (e) { /* 忽略 */ }
+      location.reload();
+    }
   });
 
   // 来自后台（工具栏点击）的消息：切换悬浮对话框显隐
@@ -135,6 +142,15 @@
       // setDialogVisible(true) 再按需创建 iframe、绑定观察器。
       // 这样页面在面板关闭期间没有任何本扩展的活动代码，杜绝后台空转。
       A.state.currentSel = cfg.container;
+      // 「刷新页面」指令留下的标记：本次加载后自动打开抽屉，
+      // 用完即清（sessionStorage 本就随标签页关闭而失效，这里再显式清一次，
+      // 避免用户在同标签页内二次刷新时又被意外弹出）。
+      let autoOpen = false;
+      try {
+        autoOpen = sessionStorage.getItem('aiMirrorAutoOpen') === '1';
+        if (autoOpen) sessionStorage.removeItem('aiMirrorAutoOpen');
+      } catch (e) { /* 忽略 */ }
+      if (autoOpen) setTimeout(function () { A.setDialogVisible(true); }, 300);
     });
   });
 })();

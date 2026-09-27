@@ -25,7 +25,6 @@
       this.bridgeEnabled = !!cfg.enabled;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
-      this.bridgePublicBase = cfg.public_base_url || '';
       this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false }, cfg.push || {});
       this.bridgeCommands = cfg.commands || [];
       this.bridgeConnected = !!st.connected;
@@ -87,7 +86,6 @@
           enabled: this.bridgeEnabled,
           app_id: this.bridgeAppId,
           app_secret: this.bridgeAppSecret,
-          public_base_url: this.bridgePublicBase,
           push: this.bridgePush
         }
       });
@@ -231,6 +229,13 @@
     if (action === 'reparse') {
       // 重新解析当前网页对话
       this.reparse();
+      return;
+    }
+    if (action === 'refresh_page') {
+      // 刷新页面并自动打开抽屉：交给内容脚本执行（它掌控页面生命周期）。
+      // 先记下「下次加载要自动打开抽屉」的标记，刷新后由内容脚本读取。
+      window.parent.postMessage({ type: 'bridge_refresh_page' }, '*');
+      this.toast('正在刷新页面…');
       return;
     }
   };

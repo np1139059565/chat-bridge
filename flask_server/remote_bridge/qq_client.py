@@ -17,7 +17,9 @@ QQ 开放平台的接口域名、intents 位、事件字段名以官方文档为
 
 依赖：websocket-client（未安装时降级为不启动，不影响服务其余功能）
 """
+import base64
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -195,29 +197,36 @@ class QQClient:
         except Exception as e:
             return False, str(e)
 
-    def send_c2c_image(self, openid, image_url, msg_id="", msg_seq=1):
+    def send_c2c_image(self, openid, image_path, msg_id="", msg_seq=1):
         """发送单聊图片（富媒体）。
 
-        两步：先把公网可访问的图片 URL 上传为富媒体，拿到 file_info；
-        再用 msg_type=7 发送。
-        注意：QQ 服务端要主动来取图，image_url 必须是公网可达的地址，
-        本地 127.0.0.1 无效。
+        用本地文件直接上传，无需公网地址：
+        读文件 → Base64 编码 → 作为 file_data 上传拿 file_info → 发 msg_type=7。
+        官方上传接口支持 url 与 file_data 二选一；用 file_data 就绕开了
+        「QQ 服务器来取图」对公网地址的依赖。
         【待核对】上传接口路径、file_type 取值、msg_type=7 的消息体结构，
         请对照 QQ 开放平台文档确认。
-        @param openid    接收方用户 openid
-        @param image_url 公网可访问的图片地址
-        @param msg_id    被动回复引用的用户消息 id
-        @param msg_seq   同一 msg_id 下的序号
+        @param openid     接收方用户 openid
+        @param image_path 本地图片文件路径
+        @param msg_id     被动回复引用的用户消息 id
+        @param msg_seq    同一 msg_id 下的序号
         @returns (ok, data_or_error)
         """
         if not self._ensure_token():
             return False, "no_token"
+        # 读文件并 Base64 编码
+        try:
+            with open(image_path, "rb") as f:
+                raw = f.read()
+        except Exception as e:
+            return False, "read_file_failed: %s" % e
+        b64 = base64.b64encode(raw).decode("ascii")
         # 第一步：上传富媒体，拿 file_info
         upload_url = API_BASE + "/v2/users/%s/files" % openid
         try:
             up = self._http_post(upload_url, {
                 "file_type": 1,          # 1 = 图片
-                "url": image_url,
+                "file_data": b64,        # 本地文件内容，免公网地址
                 "srv_send_msg": False,   # 不自动发送，只返回 file_info
             }, self._auth_header())
         except urllib.error.HTTPError as e:

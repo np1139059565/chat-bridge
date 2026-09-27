@@ -71,14 +71,6 @@
           placeholder: '开放平台应用的 AppSecret',
           onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
         })]),
-        // 公网地址：截屏要发到 QQ 时必需——QQ 服务器要主动来取图，
-        // 本地 127.0.0.1 它够不着。留空则截屏仅回文件路径。
-        h('label', ['公网地址（截屏发图用，可留空）', h('input', {
-          type: 'text',
-          value: ctx.bridgePublicBase,
-          placeholder: '如 https://your-domain.com',
-          onInput: (e) => { ctx.bridgePublicBase = e.target.value; }
-        })]),
         h('div', [
           h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
           h('span', { class: 'hint' }, '保存后自动重建 QQ 长连接')
@@ -97,7 +89,8 @@
           '内置：/css 清空所有会话、/cms 清空当前会话消息、'
           + '/csp 复制 System Prompt 并发送、/rtime 秒数 设置回传延迟、'
           + '/stime 切换自动回传开关、/sessions 会话列表、/ss 序号 切换会话、'
-          + '/screenshot 截屏、/help 指令列表'),
+          + '/sp 截屏、/copy 复制结果、/reparse 重新解析、/rerun 重新执行、'
+          + '/restart 重启服务、/refush 刷新页面、/help 指令列表'),
         // 自定义指令：命令名 + 显示名 + 选择元素（不再手填选择器）
         h('div', { class: 'bridge-cmd-new' }, [
           h('input', {

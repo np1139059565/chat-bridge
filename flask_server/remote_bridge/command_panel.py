@@ -15,6 +15,7 @@
 【待核对】指令面板与自定义菜单的接口路径、请求体结构以官方文档为准。
 """
 import json
+import os
 import threading
 import time
 import uuid
@@ -48,6 +49,8 @@ BUILTIN = {
     "/copy": "复制最新卡片结果并回传 AI",
     "/reparse": "重新解析当前网页对话",
     "/rerun": "重新执行最新卡片并回传",
+    "/restart": "重启服务端",
+    "/refush": "刷新浏览器并打开抽屉",
     "/help": "显示指令列表",
 }
 
@@ -136,6 +139,26 @@ def _dispatch_with_result(action, params, openid):
     return card
 
 
+def _restart_server(delay=1.0):
+    """重启当前服务进程。
+
+    做法：延迟一小段时间后，用 os.execv 以同样的解释器与参数原地重执行自身。
+    这样无需外部进程管理器，跨平台可用。
+    延迟是为了让「正在重启」那条回复先发出去、HTTP 响应先返回；
+    否则进程立刻被杀，回复可能来不及送达。
+    """
+    import sys
+    def _do():
+        time.sleep(delay)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+    threading.Thread(target=_do, daemon=True).start()
+
+
 def _help_text():
     """组装指令列表文本。"""
     lines = ["可用指令："]
@@ -196,6 +219,14 @@ def handle_command(qq_client, openid, msg_id, text):
     if cmd == "/rerun":
         _dispatch("rerun_latest", {})
         _reply(qq_client, openid, "已下发：重新执行最新卡片")
+        return True
+    if cmd == "/restart":
+        _reply(qq_client, openid, "正在重启服务端…")
+        _restart_server()
+        return True
+    if cmd == "/refush":
+        _dispatch("refresh_page", {})
+        _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
         return True
     if cmd == "/csp":
         _dispatch("copy_system_prompt")
