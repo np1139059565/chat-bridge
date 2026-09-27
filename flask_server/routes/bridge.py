@@ -82,11 +82,22 @@ def bridge_result():
     openid = item.get("openid") or ""
     text = data.get("text") or ""
     image = data.get("image") or ""
-    # 截屏：把 dataURL 落盘，回复文件路径。
-    # QQ 发图需先走媒体上传接口（多步且需平台权限），此处先落盘再回复路径。
+    # 截屏：先落盘拿到文件名。若配置了公网地址，就把图片发到 QQ；
+    # 否则回退为回复文件路径（QQ 取不到本机 127.0.0.1 的图）。
     if image and not text:
-        path = _save_data_url(image)
-        text = ("已截屏，保存于：\n" + path) if path else "截屏已收到，但保存失败"
+        saved = _save_data_url(image)
+        if not saved:
+            text = "截屏已收到，但保存失败"
+        else:
+            base = (bridge_store.get_config().get("public_base_url") or "").rstrip("/")
+            if base:
+                img_url = base + "/api/bridge/shot/" + saved["name"]
+                msg_id, seq = message_router.next_seq(openid)
+                if msg_id and client.send_c2c_image(openid, img_url, msg_id=msg_id, msg_seq=seq)[0]:
+                    return jsonify(success=True, sent="image")
+                text = "截屏已保存，但发送图片失败（检查公网地址与媒体接口）。路径：\n" + saved["path"]
+            else:
+                text = "已截屏，保存于：\n" + saved["path"] + "\n（配置「公网地址」后可直接发到 QQ）"
     if openid and text:
         msg_id, seq = message_router.next_seq(openid)
         if msg_id:
@@ -118,10 +129,59 @@ def _save_data_url(data_url):
         path = os.path.join(out_dir, name)
         with open(path, "wb") as f:
             f.write(raw)
-        return path
+        # 同时返回文件名与路径：文件名供拼公网 URL，路径供回退提示
+        return {"name": name, "path": path}
     except Exception as e:
         print("[bridge] 保存截屏失败：", e)
-        return ""
+        return None
+
+
+@bp.route("/api/bridge/shot/<path:name>", methods=["GET", "OPTIONS"])
+def bridge_shot(name):
+    """提供截屏图片的 HTTP 访问，供 QQ 服务器拉取。
+
+    QQ 发图是「给它一个 URL，它自己来取」，所以图片必须能通过公网访问。
+    本路由把 screenshots 目录下的图片暴露出去；
+    配合配置里的 public_base_url（公网地址）即可让 QQ 取到。
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    import os
+    from flask import send_from_directory
+    # 防目录穿越：只取文件名部分
+    safe = os.path.basename(name or "")
+    if not safe:
+        return jsonify(success=False, error="bad_name"), 400
+    out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "screenshots")
+    return send_from_directory(out_dir, safe)
+
+
+@bp.route("/api/bridge/commands", methods=["GET", "POST", "DELETE", "OPTIONS"])
+def bridge_commands():
+    """指令的增删改：独立接口，避免与 saveBridge 的全量覆盖互相干扰。
+
+    - GET            ：列出全部指令
+    - POST {index?, entry}：index 为 null 时新增，否则修改该下标
+    - DELETE {index} ：删除该下标
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    if request.method == "GET":
+        return jsonify(success=True, commands=bridge_store.list_commands())
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        if request.method == "POST":
+            entry = data.get("entry") or {}
+            idx = data.get("index")
+            cmds = bridge_store.upsert_command(idx, entry)
+            return jsonify(success=True, commands=cmds)
+        # DELETE
+        cmds = bridge_store.remove_command(int(data.get("index")))
+        return jsonify(success=True, commands=cmds)
+    except IndexError as e:
+        return jsonify(success=False, error=str(e))
+    except Exception as e:
+        return jsonify(success=False, error=str(e))
 
 
 @bp.route("/api/bridge/restart", methods=["POST", "OPTIONS"])

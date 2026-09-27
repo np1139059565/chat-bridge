@@ -25,6 +25,7 @@
       this.bridgeEnabled = !!cfg.enabled;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
+      this.bridgePublicBase = cfg.public_base_url || '';
       this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false }, cfg.push || {});
       this.bridgeCommands = cfg.commands || [];
       this.bridgeConnected = !!st.connected;
@@ -76,14 +77,18 @@
    */
   M.saveBridge = async function () {
     try {
+      // 注意：这里不传 commands。saveBridge 是全量覆盖式保存，
+      // 若把 bridgeCommands 一起提交，抽屉重建时它先为空数组，
+      // 用户一旦在配置读回前碰了开关，就会用空数组覆盖掉已存的指令。
+      // 指令的增删改走 /api/bridge/commands 独立接口（见下）。
       const data = await D.apiFetch(this, '/api/bridge/config', {
         method: 'POST',
         body: {
           enabled: this.bridgeEnabled,
           app_id: this.bridgeAppId,
           app_secret: this.bridgeAppSecret,
-          push: this.bridgePush,
-          commands: this.bridgeCommands
+          public_base_url: this.bridgePublicBase,
+          push: this.bridgePush
         }
       });
       const st = data.status || {};
@@ -100,65 +105,8 @@
     this.saveBridge();
   };
 
-  /** 进入元素选择模式：请求内容脚本开始选元素。 */
-  M.startPickElement = function () {
-    this.bridgePicking = true;
-    window.parent.postMessage({ type: 'picker_start' }, '*');
-    this.toast('请在页面上点击要绑定的元素（Esc 取消）');
-  };
-
-  /** 停止元素选择模式。 */
-  M.stopPickElement = function () {
-    this.bridgePicking = false;
-    window.parent.postMessage({ type: 'picker_stop' }, '*');
-  };
-
-  /**
-   * 新增一条 QQ 指令。
-   * 必须已经通过「选择元素」拿到选择器，指令才有可执行的目标。
-   */
-  M.addBridgeCommand = function () {
-    const name = (this.bridgeNewCmdName || '').trim();
-    const label = (this.bridgeNewCmdLabel || '').trim();
-    const picked = this.bridgePicked;
-    if (!name || !label) { this.toast('命令名与显示名必填'); return; }
-    if (!name.startsWith('/')) { this.toast('命令名需以 / 开头'); return; }
-    if (!picked || !picked.selector) { this.toast('请先选择要点击的元素'); return; }
-    // 命令名去重
-    if ((this.bridgeCommands || []).some((c) => (c.name || '').toLowerCase() === name.toLowerCase())) {
-      this.toast('该命令名已存在');
-      return;
-    }
-    this.bridgeCommands.push({
-      name: name,
-      label: label,
-      selector: picked.selector,
-      page_url: picked.page_url || ''
-    });
-    // 复位录入状态
-    this.bridgeNewCmdName = '';
-    this.bridgeNewCmdLabel = '';
-    this.bridgePicked = null;
-    this.saveBridge();
-    this.toast('已添加指令：' + name);
-  };
-
-  /** 删除一条 QQ 指令。 */
-  M.removeBridgeCommand = function (idx) {
-    this.bridgeCommands.splice(idx, 1);
-    this.saveBridge();
-  };
-
-  /**
-   * 修改某条已有指令的选择器：进入选元素模式，选中后覆盖该指令的选择器。
-   * @param {number} idx 指令下标
-   */
-  M.editBridgeCommandSelector = function (idx) {
-    this.bridgeEditIdx = idx;
-    this.bridgePicking = true;
-    window.parent.postMessage({ type: 'picker_start' }, '*');
-    this.toast('请点击新的目标元素（Esc 取消）');
-  };
+  // 指令的增删改与元素选择入口已移到 01c_bridge_cmd.js，
+  // 便于控制本文件长度，并让指令管理集中在一处。
 
   /**
    * 把当前可见切片上报给远程桥接层（QQ ↔ 网页 AI）。
@@ -270,6 +218,55 @@
       this.toast('正在截取浏览器屏幕…');
       return;
     }
+    if (action === 'copy_latest') {
+      // 复制最新结果：走倒计时回传流程（与卡片「复制结果」同一机制）
+      this._bridgeCopyLatest();
+      return;
+    }
+    if (action === 'rerun_latest') {
+      // 重新执行最新卡片：倒计时执行 → 自动回传
+      this._bridgeRerunLatest();
+      return;
+    }
+    if (action === 'reparse') {
+      // 重新解析当前网页对话
+      this.reparse();
+      return;
+    }
+  };
+
+  /**
+   * 取最新一张工具卡片（按消息树顺序，末位即最新）。
+   * @returns {Object|null} 卡片对象
+   */
+  M._latestCard = function () {
+    const map = this.allCards ? this.allCards() : {};
+    let latest = null;
+    Object.keys(map).forEach((id) => {
+      const c = map[id];
+      if (c && c.isTool) latest = c;
+    });
+    return latest;
+  };
+
+  /** 复制最新卡片结果：走倒计时回传流程，与卡片上的「复制结果」按钮一致。 */
+  M._bridgeCopyLatest = function () {
+    const card = this._latestCard();
+    if (!card) { this.toast('没有可复制的卡片'); return; }
+    if (card.result == null && !card.error) { this.toast('最新卡片还没有结果'); return; }
+    // 与 onResultClick 的倒计时分支一致：进入 send 阶段，倒计时结束回传
+    this.scheduleAutoSend(card);
+    this.toast('已开始回传最新结果…');
+  };
+
+  /** 重新执行最新卡片：倒计时执行，执行完自动回传（与「自动」开关下的行为一致）。 */
+  M._bridgeRerunLatest = function () {
+    const card = this._latestCard();
+    if (!card) { this.toast('没有可执行的卡片'); return; }
+    // 清掉旧状态，让它重新进入执行流程
+    card.skipped = false;
+    this.executeCard(card, true);
+    this.toast('已开始重新执行…');
   };
 
   /**

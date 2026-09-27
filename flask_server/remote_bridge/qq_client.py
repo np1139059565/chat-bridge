@@ -195,6 +195,65 @@ class QQClient:
         except Exception as e:
             return False, str(e)
 
+    def send_c2c_image(self, openid, image_url, msg_id="", msg_seq=1):
+        """发送单聊图片（富媒体）。
+
+        两步：先把公网可访问的图片 URL 上传为富媒体，拿到 file_info；
+        再用 msg_type=7 发送。
+        注意：QQ 服务端要主动来取图，image_url 必须是公网可达的地址，
+        本地 127.0.0.1 无效。
+        【待核对】上传接口路径、file_type 取值、msg_type=7 的消息体结构，
+        请对照 QQ 开放平台文档确认。
+        @param openid    接收方用户 openid
+        @param image_url 公网可访问的图片地址
+        @param msg_id    被动回复引用的用户消息 id
+        @param msg_seq   同一 msg_id 下的序号
+        @returns (ok, data_or_error)
+        """
+        if not self._ensure_token():
+            return False, "no_token"
+        # 第一步：上传富媒体，拿 file_info
+        upload_url = API_BASE + "/v2/users/%s/files" % openid
+        try:
+            up = self._http_post(upload_url, {
+                "file_type": 1,          # 1 = 图片
+                "url": image_url,
+                "srv_send_msg": False,   # 不自动发送，只返回 file_info
+            }, self._auth_header())
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8")
+            except Exception:
+                pass
+            return False, "upload HTTP %s %s" % (e.code, detail)
+        except Exception as e:
+            return False, str(e)
+        file_info = (up or {}).get("file_info") or ""
+        if not file_info:
+            return False, "no_file_info"
+        # 第二步：发送富媒体消息
+        url = API_BASE + "/v2/users/%s/messages" % openid
+        body = {
+            "content": "",
+            "msg_type": 7,           # 7 = 富媒体
+            "media": {"file_info": file_info},
+            "msg_id": msg_id,
+            "msg_seq": msg_seq,
+        }
+        try:
+            resp = self._http_post(url, body, self._auth_header())
+            return True, resp
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8")
+            except Exception:
+                pass
+            return False, "send HTTP %s %s" % (e.code, detail)
+        except Exception as e:
+            return False, str(e)
+
     # ---------- WebSocket ----------
     def start(self):
         """启动长连接（后台线程）。重复调用幂等。"""

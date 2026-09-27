@@ -35,6 +35,7 @@ def _default_config():
         "app_id": "",                  # QQ 机器人 AppID
         "app_secret": "",              # QQ 机器人 AppSecret
         "intents": 0,                 # 订阅的事件位；0 表示用代码里的默认值（单聊）
+        "public_base_url": "",        # 本服务的公网地址，用于让 QQ 取图（截屏发图必需）
         "push": {
             "user": True,              # 是否推送用户消息
             "tool": True,              # 是否推送工具消息
@@ -81,7 +82,7 @@ def load_config():
         raw = _read_yaml()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "public_base_url"):
             if k in raw:
                 cfg[k] = raw[k]
         if isinstance(raw.get("push"), dict):
@@ -104,7 +105,7 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "public_base_url"):
             if k in patch:
                 cfg[k] = patch[k]
         if isinstance(patch.get("push"), dict):
@@ -150,6 +151,49 @@ def _ensure_pushed_loaded():
     _pushed = {}
     for conv_id, ids in (state.get("pushed") or {}).items():
         _pushed[conv_id] = set(ids or [])
+
+
+def list_commands():
+    """读取指令列表（返回副本）。"""
+    with _lock:
+        return list(get_config().get("commands") or [])
+
+
+def upsert_command(index, entry):
+    """新增或更新一条指令。
+
+    index 为 None 时追加；否则替换该下标的指令（用于「修改」）。
+    @param index 指令下标或 None
+    @param entry 指令对象 {name, label, selector, page_url}
+    @returns 更新后的完整指令列表
+    """
+    with _lock:
+        cfg = get_config()
+        cmds = list(cfg.get("commands") or [])
+        if index is None:
+            cmds.append(entry)
+        elif 0 <= index < len(cmds):
+            cmds[index] = entry
+        else:
+            raise IndexError("指令下标越界")
+        cfg["commands"] = cmds
+        _write_yaml(cfg)
+        _CONFIG = cfg
+        return list(cmds)
+
+
+def remove_command(index):
+    """按下标删除一条指令，返回更新后的列表。"""
+    with _lock:
+        cfg = get_config()
+        cmds = list(cfg.get("commands") or [])
+        if not (0 <= index < len(cmds)):
+            raise IndexError("指令下标越界")
+        cmds.pop(index)
+        cfg["commands"] = cmds
+        _write_yaml(cfg)
+        _CONFIG = cfg
+        return list(cmds)
 
 
 def get_pushed_set(conv_id):

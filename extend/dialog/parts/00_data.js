@@ -193,8 +193,8 @@ window.AIMirrorDialog = (function () {
       bridgeOpen: false,
       bridgeEnabled: false,
       bridgeConnected: false,
-      bridgeAppId: '',
-      bridgeAppSecret: '',
+      bridgeAppId: '', bridgeAppSecret: '',
+      bridgePublicBase: '',  // 公网地址，截屏发图用
       bridgePush: { user: true, tool: true, ai: true, thinking: false },
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态

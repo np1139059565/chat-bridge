@@ -71,6 +71,14 @@
           placeholder: '开放平台应用的 AppSecret',
           onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
         })]),
+        // 公网地址：截屏要发到 QQ 时必需——QQ 服务器要主动来取图，
+        // 本地 127.0.0.1 它够不着。留空则截屏仅回文件路径。
+        h('label', ['公网地址（截屏发图用，可留空）', h('input', {
+          type: 'text',
+          value: ctx.bridgePublicBase,
+          placeholder: '如 https://your-domain.com',
+          onInput: (e) => { ctx.bridgePublicBase = e.target.value; }
+        })]),
         h('div', [
           h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
           h('span', { class: 'hint' }, '保存后自动重建 QQ 长连接')
@@ -113,8 +121,12 @@
             : h('span', { class: 'hint' }, '点「选择元素」后，在页面上点击要触发的元素'),
           h('button', {
             disabled: !ctx.bridgePicked || !ctx.bridgeNewCmdName || !ctx.bridgeNewCmdLabel,
-            onClick: () => ctx.addBridgeCommand()
-          }, '添加')
+            onClick: () => ctx.saveBridgeCommand()
+          }, ctx.bridgeEditIdx === null ? '添加' : '保存修改'),
+          // 编辑中时提供取消按钮，避免误存
+          ctx.bridgeEditIdx !== null
+            ? h('button', { onClick: () => ctx.cancelEditBridgeCommand() }, '取消')
+            : null
         ]),
         ctx.bridgeCommands.length
           ? h('div', { class: 'bridge-cmd-list' }, ctx.bridgeCommands.map((c, i) =>
@@ -124,8 +136,8 @@
               h('span', { class: 'bridge-cmd-sel', title: c.selector || '' },
                 c.selector ? ('点击 ' + c.selector) : ''),
               h('button', {
-                onClick: () => ctx.editBridgeCommandSelector(i)
-              }, '改选择器'),
+                onClick: () => ctx.editBridgeCommand(i)
+              }, '编辑'),
               h('button', {
                 class: 'danger',
                 onClick: () => ctx.removeBridgeCommand(i)

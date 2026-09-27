@@ -43,7 +43,11 @@ BUILTIN = {
     "/stime": "切换自动回传开关",
     "/sessions": "列出会话列表",
     "/ss": "按序号切换会话（如 /ss 1）",
-    "/screenshot": "截取浏览器屏幕",
+    "/screenshot": "截取浏览器屏幕（同 /sp）",
+    "/sp": "截取浏览器屏幕（/screenshot 快捷）",
+    "/copy": "复制最新卡片结果并回传 AI",
+    "/reparse": "重新解析当前网页对话",
+    "/rerun": "重新执行最新卡片并回传",
     "/help": "显示指令列表",
 }
 
@@ -178,8 +182,20 @@ def handle_command(qq_client, openid, msg_id, text):
         _dispatch("switch_session", {"index": idx})
         _reply(qq_client, openid, "已下发：切换会话 #%d" % idx)
         return True
-    if cmd == "/screenshot":
+    if cmd == "/screenshot" or cmd == "/sp":
         _dispatch_with_result("screenshot", {}, openid)
+        return True
+    if cmd == "/copy":
+        _dispatch("copy_latest", {})
+        _reply(qq_client, openid, "已下发：复制最新结果并回传")
+        return True
+    if cmd == "/reparse":
+        _dispatch("reparse", {})
+        _reply(qq_client, openid, "已下发：重新解析对话")
+        return True
+    if cmd == "/rerun":
+        _dispatch("rerun_latest", {})
+        _reply(qq_client, openid, "已下发：重新执行最新卡片")
         return True
     if cmd == "/csp":
         _dispatch("copy_system_prompt")
