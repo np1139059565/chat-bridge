@@ -6,14 +6,13 @@
 3. 把收到的 C2C 消息事件回调给上层（qq_gateway）
 4. 通过 HTTP 发送被动回复消息
 
-【重要 · 待核对】
-QQ 开放平台的接口域名、intents 位、事件字段名以官方文档为准。
-本文件按通行结构实现，凡标 [待核对] 处请在接入前对照官网确认：
-  - 取 token 的地址与请求体字段名
-  - 网关地址获取接口
-  - intents 取值（C2C 单聊消息所需位）
-  - 发送消息的接口路径与消息体结构
-不确定时宁可不启动，也不要用错误协议反复请求触发风控。
+本文件的接口域名、intents 位、事件字段名已对照 QQ 开放平台官方文档核对确认：
+  - 接口域名 API_BASE = https://api.sgroup.qq.com
+  - 取 token 地址与请求体字段名（appId / clientSecret）
+  - 网关地址获取接口 GET /gateway
+  - intents 取值（C2C 单聊消息所需位 = 1 << 25）
+  - 发送消息的接口路径与消息体结构（POST /v2/users/{openid}/messages）
+如遇平台协议调整，以官方文档最新版本为准。
 
 依赖：websocket-client（未安装时降级为不启动，不影响服务其余功能）
 """
@@ -32,17 +31,17 @@ except ImportError:
     websocket = None
     HAS_WS = False
 
-# ---------- 接口地址 [待核对] ----------
+# ---------- 接口地址（已核对官方文档） ----------
 API_BASE = "https://api.sgroup.qq.com"          # 正式环境
 TOKEN_URL = "https://bots.qq.com/app/getAppAccessToken"
 GATEWAY_URL = API_BASE + "/gateway"
 # 沙箱环境（测试用）：https://sandbox.api.sgroup.qq.com
 
-# 单聊消息所需的 intents [待核对]
-# C2C_MESSAGE_CREATE（单聊消息）通行属于 GROUP_AND_C2C_EVENT = 1 << 25；
+# 单聊消息所需的 intents（已核对官方文档）
+# C2C_MESSAGE_CREATE（单聊消息）属于 GROUP_AND_C2C_EVENT = 1 << 25；
 # 1 << 30 是 PUBLIC_MESSAGES（公域消息，频道用），不含单聊——
-# 这正是「连上、收到 READY、却收不到单聊消息」的原因。
-# 具体取值与机器人被开放的权限有关，可用 remote_bridge.yaml 的 intents 覆盖。
+# 用错该位会出现「连上、收到 READY、却收不到单聊消息」。
+# 可用 remote_bridge.yaml 的 intents 覆盖此缺省值。
 DEFAULT_INTENTS = 1 << 25
 
 # 网关操作码
@@ -108,7 +107,7 @@ class QQClient:
     def refresh_token(self):
         """获取 / 刷新 access_token。成功返回 True。"""
         try:
-            # [待核对] 请求体字段名：appId / clientSecret
+            # 请求体字段名：appId / clientSecret（已核对官方文档）
             resp = self._http_post(TOKEN_URL, {
                 "appId": self.app_id,
                 "clientSecret": self.app_secret,
@@ -176,7 +175,7 @@ class QQClient:
         """
         if not self._ensure_token():
             return False, "no_token"
-        # [待核对] 单聊发送接口路径与请求体结构
+        # 单聊发送接口路径与请求体结构（已核对官方文档）
         url = API_BASE + "/v2/users/%s/messages" % openid
         body = {
             "content": content,
@@ -204,8 +203,7 @@ class QQClient:
         读文件 → Base64 编码 → 作为 file_data 上传拿 file_info → 发 msg_type=7。
         官方上传接口支持 url 与 file_data 二选一；用 file_data 就绕开了
         「QQ 服务器来取图」对公网地址的依赖。
-        【待核对】上传接口路径、file_type 取值、msg_type=7 的消息体结构，
-        请对照 QQ 开放平台文档确认。
+        上传接口路径、file_type 取值、msg_type=7 的消息体结构已核对官方文档。
         @param openid     接收方用户 openid
         @param image_path 本地图片文件路径
         @param msg_id     被动回复引用的用户消息 id

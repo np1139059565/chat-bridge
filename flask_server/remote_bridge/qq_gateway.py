@@ -29,12 +29,12 @@ def _extract(d):
 
     @return (openid, content, msg_id)；缺字段时对应值为空串
     """
-    # [待核对] 用户 openid 的字段位置：通行结构为 author.user_openid
+    # 单聊事件的用户标识位于 author.user_openid（群聊场景则为 member_openid）
     author = d.get("author") or {}
-    openid = author.get("user_openid") or author.get("id") or d.get("openid") or ""
+    openid = author.get("user_openid") or ""
     content = d.get("content") or ""
-    # 消息 id：被动回复要引用它
-    msg_id = d.get("id") or d.get("msg_id") or ""
+    # 消息 id：被动回复要引用它，事件体顶层字段名为 id
+    msg_id = d.get("id") or ""
     return openid, str(content).strip(), msg_id
 
 

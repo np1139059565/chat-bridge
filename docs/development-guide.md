@@ -134,6 +134,19 @@ python flask_server/_smoke_ct.py
 
 ## 六、验证脚本
 
+> 代码走查结论与待办清单见 `docs/code-review-report.md`。
+
 - `flask_server/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
 - `_verify_fixes.py`：验证必填参数校验与 `/config` 端口变更 `requireRestart` 两项修复。
 - `scripts/check_quality.py`：行数 / 圈复杂度 / 重复块质量扫描。
+
+### pre-commit 钩子
+
+`.pre-commit-config.yaml` 以本地钩子（`repo: local`）挂载两项检查，提交时自动运行：
+
+- `scripts/hooks/check_syntax.py`：校验本次改动文件的语法（py / js / json / yaml）。
+  PyYAML 或 node 缺失时跳过，不把环境缺失误判为代码错误。
+- `scripts/hooks/check_hygiene.py`：拦截临时备份文件（`*.bak`、`*~` 等）与超过 450 行的源码。
+  第三方库（`vendor/`）、压缩产物与锁文件豁免行数检查。
+
+安装一次即可：`pre-commit install`；手动全量运行：`pre-commit run --all-files`。

@@ -96,6 +96,61 @@ def _classify(m):
     return "user"
 
 
+# ---------- 单个消息块 → 文本 ----------
+# 每种块类型一个处理函数，签名统一为 (block, push_thinking) → 文本片段；
+# 返回空串表示该块不产出内容（由调用方过滤）。
+
+def _block_thinking(b, push_thinking):
+    """思考块：默认不推，push_thinking 为真时加 [思考] 前缀。"""
+    if not push_thinking:
+        return ""
+    return "[思考] " + str(b.get("text") or "")
+
+
+def _block_code(b, push_thinking):
+    """代码块：工具调用只摘出工具名与参数，其余原样包裹在围栏里。"""
+    import json
+    code = str(b.get("code") or "")
+    try:
+        obj = json.loads(code.strip())
+        if obj.get("type") == "bridge-chat-call":
+            return "[工具调用] %s 参数=%s" % (
+                obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False))
+    except Exception:
+        pass
+    return "```\n" + code + "\n```"
+
+
+def _block_text(b, push_thinking):
+    """纯文本块：段落 / 标题 / 引用共用同一取文本方式。"""
+    return str(b.get("text") or "")
+
+
+def _block_list(b, push_thinking):
+    """列表块：每个元素前置「- 」并换行拼接。"""
+    items = b.get("items") or []
+    return "\n".join("- " + str(x) for x in items)
+
+
+def _block_table(b, push_thinking):
+    """表格块：单元格以「 | 」相连，逐行换行拼接。"""
+    rows = b.get("rows") or []
+    return "\n".join(" | ".join(str(c) for c in row) for row in rows)
+
+
+# 块类型 → 处理函数。新增块类型时在此登记即可，无需改动主流程。
+# 未登记的类型不产出文本（与旧实现的「无匹配分支则不 append」语义一致）。
+_BLOCK_HANDLERS = {
+    "thinking": _block_thinking,
+    "code": _block_code,
+    "paragraph": _block_text,
+    "heading": _block_text,
+    "quote": _block_text,
+    "list": _block_list,
+    "table": _block_table,
+}
+
+
 def _blocks_to_text(m, push_thinking):
     """把一条消息的块合并成一段文本。
 
@@ -103,37 +158,20 @@ def _blocks_to_text(m, push_thinking):
     - 思考过程：默认不推，push_thinking 为真时推
     - 正文（段落 / 标题 / 列表 / 引用 / 表格）：推
     - 代码块（含工具调用）：推；工具调用只推工具名与参数
+
+    各类块的具体取法见 _BLOCK_HANDLERS 中的处理函数。
     """
     parts = []
     for b in (m.get("blocks") or []):
         if not b:
             continue
-        t = b.get("type")
-        if t == "thinking":
-            if push_thinking:
-                parts.append("[思考] " + str(b.get("text") or ""))
-        elif t == "code":
-            code = str(b.get("code") or "")
-            # 工具调用块：只摘出工具名与参数，不推完整 JSON
-            try:
-                import json
-                obj = json.loads(code.strip())
-                if obj.get("type") == "bridge-chat-call":
-                    parts.append("[工具调用] %s 参数=%s" % (
-                        obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False)))
-                    continue
-            except Exception:
-                pass
-            parts.append("```\n" + code + "\n```")
-        elif t in ("paragraph", "heading", "quote"):
-            parts.append(str(b.get("text") or ""))
-        elif t == "list":
-            items = b.get("items") or []
-            parts.append("\n".join("- " + str(x) for x in items))
-        elif t == "table":
-            rows = b.get("rows") or []
-            parts.append("\n".join(" | ".join(str(c) for c in row) for row in rows))
-    return "\n".join(p for p in parts if p).strip()
+        fn = _BLOCK_HANDLERS.get(b.get("type"))
+        if not fn:
+            continue
+        text = fn(b, push_thinking)
+        if text:
+            parts.append(text)
+    return "\n".join(parts).strip()
 
 
 def _remember_window(openid, msg_id):

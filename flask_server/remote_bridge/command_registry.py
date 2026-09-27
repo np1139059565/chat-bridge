@@ -1,0 +1,154 @@
+"""远程桥接 —— 指令表、别名、校验与指令面板注册
+
+本模块只承载「指令是什么」的静态知识，不涉及「指令怎么执行」：
+- BUILTIN          内置指令表（完整命令名 → 说明 + 快捷键）
+- resolve_cmd      别名 → 主命令名
+- validate_command 自定义指令的合法性校验
+- help_text        指令列表文本（/help 的回复内容）
+- register_panel   把指令注册到 QQ 指令面板
+
+指令的实际执行（下发抽屉命令、重启服务、组合指令）在 command_panel.py。
+两模块单向依赖：command_panel 引用本模块，本模块不反向引用。
+
+指令面板与自定义菜单的接口路径、请求体结构已对照 QQ 开放平台官方文档核对：
+- 创建指令面板：POST /v2/panels，请求体含 scope（c2c/group）与 panel.items
+- 修改指令面板：PUT /v2/panels/{panel_id}
+- 自定义菜单：GET /v2/menu 查询、PUT /v2/menu 修改
+面板元素 type 固定为 command，name 与 desc 需符合平台长度限制。
+"""
+import json
+
+from . import bridge_store
+
+
+def log(*args):
+    """统一前缀打印。"""
+    print("[bridge][command]", *args)
+
+
+# 内置指令表：完整命令名 → { desc 说明, aliases 快捷键列表 }
+#
+# 命名规则：主命令用完整英文名（如 /clear-sessions），快捷键作别名（如 /css）。
+# 展示格式统一为「快捷键 — 描述（完整名）」，见 help_text。
+BUILTIN = {
+    "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"]},
+    "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"]},
+    "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"]},
+    "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"]},
+    "/switch-auto": {"desc": "自动回传开关（/sa on|off，不带则切换）", "aliases": ["/sa"]},
+    "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"]},
+    "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"]},
+    "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"]},
+    "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"]},
+    "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"]},
+    "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"]},
+    "/restart": {"desc": "重启服务端", "aliases": ["/rs"]},
+    "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"]},
+    "/help": {"desc": "显示指令列表", "aliases": ["/h"]},
+}
+
+# 别名 → 主命令 的反查表：一次构建，之后直接查
+_ALIAS_MAP = {}
+for _main, _info in BUILTIN.items():
+    for _a in _info.get("aliases") or []:
+        _ALIAS_MAP[_a] = _main
+
+
+def resolve_cmd(cmd):
+    """把别名解析为主命令名；非别名原样返回。"""
+    if cmd in BUILTIN:
+        return cmd
+    return _ALIAS_MAP.get(cmd, cmd)
+
+
+def validate_command(entry, index=None):
+    """校验一条自定义指令能否保存。返回错误文本；合法返回空串。
+
+    校验项：
+      1. 命令名格式：以 / 开头
+      2. 命令名重复：与内置指令、其它自定义指令（含别名）冲突
+      3. 组合指令的子指令必须存在（内置或其它自定义指令）
+    @param entry 待保存的指令对象
+    @param index 修改时的下标（用于排除自身）；新增传 None
+    """
+    name = (entry.get("name") or "").strip()
+    if not name.startswith("/"):
+        return "命令名需以 / 开头"
+    low = name.lower()
+    # 与内置指令（含别名）冲突
+    if resolve_cmd(low) in BUILTIN:
+        return "命令名 %s 与内置指令冲突" % name
+    # 与其它自定义指令（含别名）冲突
+    customs = bridge_store.get_config().get("commands") or []
+    for i, c in enumerate(customs):
+        if i == index:
+            continue
+        names = [c.get("name") or ""] + (c.get("aliases") or [])
+        if low in [str(n).lower() for n in names if n]:
+            return "命令名 %s 已存在" % name
+    # 组合指令：子指令必须存在
+    steps = entry.get("steps") or []
+    if steps:
+        # 可用的子指令集合：内置（含别名）+ 其它自定义（含别名）
+        available = set(BUILTIN.keys()) | set(_ALIAS_MAP.keys())
+        for i, c in enumerate(customs):
+            if i == index:
+                continue
+            available.add((c.get("name") or "").lower())
+            for a in (c.get("aliases") or []):
+                available.add(str(a).lower())
+        for s in steps:
+            sub = str(s).strip().split(None, 1)[0].lower()
+            if not sub:
+                continue
+            if resolve_cmd(sub) not in BUILTIN and sub not in available:
+                return "子指令 %s 不存在" % sub
+    return ""
+
+
+def help_text():
+    """组装指令列表文本。格式统一为「快捷键 — 描述（完整名）」。
+
+    每个指令都有快捷键（aliases）。若某指令没有别名，就直接显示完整名。
+    """
+    lines = ["可用指令："]
+    for name, info in BUILTIN.items():
+        al = info.get("aliases") or []
+        short = al[0] if al else name          # 取首个快捷键作为展示主键
+        if short != name:
+            lines.append("%s — %s（%s）" % (short, info.get("desc", ""), name))
+        else:
+            lines.append("%s — %s" % (name, info.get("desc", "")))
+    customs = bridge_store.get_config().get("commands") or []
+    if customs:
+        lines.append("")
+        lines.append("自定义指令：")
+        for c in customs:
+            tag = "[组合] " if c.get("steps") else ""
+            lines.append("%s — %s%s" % (c.get("name", ""), tag, c.get("label", "")))
+            # 组合指令：逐条展开子指令，让用户看清它到底按什么顺序做什么
+            for i, s in enumerate(c.get("steps") or []):
+                lines.append("    %d. %s" % (i + 1, s))
+    return "\n".join(lines)
+
+
+def register_panel(qq_client):
+    """把配置的指令注册到 QQ 指令面板 / 自定义菜单。
+
+    目标接口：创建面板 POST /v2/panels（scope=c2c）、修改菜单 PUT /v2/menu。
+    本函数在桥接启动时调用；失败仅记录，不影响消息收发。
+    """
+    cfg = bridge_store.get_config()
+    commands = []
+    # 内置：只注册主命令，别名不重复占位（QQ 面板最多 20 个元素）
+    for name, info in BUILTIN.items():
+        commands.append({"name": name, "desc": info.get("desc", "")})
+    # 自定义：组合与点击指令一并注册
+    for c in (cfg.get("commands") or []):
+        tag = "[组合] " if (c.get("steps") or []) else ""
+        commands.append({"name": c.get("name", ""), "desc": tag + (c.get("label") or "")})
+    if not commands:
+        return
+    # 注册接口：POST /v2/panels 创建面板、PUT /v2/menu 修改自定义菜单，
+    # 需携带 access_token；当前仅打印待注册内容，接入时替换为真实 HTTP 调用
+    log("待注册指令面板：", json.dumps(commands, ensure_ascii=False))

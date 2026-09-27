@@ -1,18 +1,23 @@
-"""远程桥接 —— QQ 指令处理与指令面板注册
+"""远程桥接 —— QQ 指令处理与执行
 
 职责：
 1. 处理以「/」开头的 QQ 消息
 2. 内置指令：通过卡片总线下发到抽屉执行
-   （清空会话 / 消息、复制 System Prompt、设置回传延迟）
-3. 自定义指令：点击用户预先选定的网页元素
+   （清空会话 / 消息、复制 System Prompt、设置回传延迟等）
+3. 自定义指令：点击用户预先选定的网页元素，或按序执行组合指令
+4. 需要回传结果的指令（列会话 / 截屏）：登记待回传请求，
+   等浏览器 POST 回来后再转发到 QQ
 
 设计说明：
 - 指令的「执行」都在浏览器侧完成——会话数据、System Prompt、
   网页元素都在抽屉与页面里，后端只负责识别指令、下发命令。
 - 下发通道复用卡片总线：创建一张 type=drawer-command 的卡片，
   抽屉轮询取到后按 action 执行，而非发送给网页 AI。
+- 指令表、别名解析、合法性校验与面板注册在 command_registry.py；
+  本模块只负责「指令怎么执行」。
 
-【待核对】指令面板与自定义菜单的接口路径、请求体结构以官方文档为准。
+内置指令采用表驱动：命令名 → 处理函数，见 _BUILTIN_HANDLERS。
+新增内置指令只需写一个处理函数并登记到表中，无需改动分发逻辑。
 """
 import json
 import os
@@ -21,6 +26,11 @@ import time
 import uuid
 
 from . import bridge_store, message_router
+# 指令表与静态知识来自 command_registry；register_panel / validate_command
+# 在此重导出，保持 __init__.py 与 routes/bridge.py 的既有引用不变。
+from .command_registry import (
+    BUILTIN, resolve_cmd, help_text, register_panel, validate_command,
+)
 
 # 待回传请求表：{ request_id: {openid, expire} }
 # 有些指令（列会话 / 截屏）需要浏览器执行后把结果回传，再转发到 QQ。
@@ -33,41 +43,6 @@ PENDING_TTL = 60  # 请求有效期（秒），超时未回传则丢弃
 def log(*args):
     """统一前缀打印。"""
     print("[bridge][command]", *args)
-
-
-# 内置指令表：完整命令名 → { desc 说明, aliases 快捷键列表 }
-#
-# 命名规则：主命令用完整英文名（如 /clear-sessions），快捷键作别名（如 /css）。
-# 展示格式统一为「快捷键 — 描述（完整名）」，见 _help_text。
-BUILTIN = {
-    "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"]},
-    "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"]},
-    "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"]},
-    "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"]},
-    "/switch-auto": {"desc": "自动回传开关（/sa on|off，不带则切换）", "aliases": ["/sa"]},
-    "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"]},
-    "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"]},
-    "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"]},
-    "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"]},
-    "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"]},
-    "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"]},
-    "/restart": {"desc": "重启服务端", "aliases": ["/rs"]},
-    "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"]},
-    "/help": {"desc": "显示指令列表", "aliases": ["/h"]},
-}
-
-# 别名 → 主命令 的反查表：一次构建，之后直接查
-_ALIAS_MAP = {}
-for _main, _info in BUILTIN.items():
-    for _a in _info.get("aliases") or []:
-        _ALIAS_MAP[_a] = _main
-
-
-def resolve_cmd(cmd):
-    """把别名解析为主命令名；非别名原样返回。"""
-    if cmd in BUILTIN:
-        return cmd
-    return _ALIAS_MAP.get(cmd, cmd)
 
 
 # 线程局部标记：组合指令执行期间的中间步骤，回复会被抑制，避免刷屏。
@@ -99,7 +74,7 @@ def _dispatch(action, params=None):
     卡片类型为 drawer-command：抽屉轮询取到后按 action 执行本地动作，
     不发送给网页 AI。
     @param action 动作名：clear_all_sessions / clear_messages /
-                  copy_system_prompt / toggle_auto_send / set_delay / click_element
+                  copy_system_prompt / toggle_auto_send / set_delay 等
     @param params 动作参数
     """
     import card_bus
@@ -194,7 +169,7 @@ def _restart_server(delay=3.0):
 
 
 def _run_combo(qq_client, openid, msg_id, entry):
-    """执行一条组合指令：按顺序逐条执行 steps，每条间隔 1 秒。
+    """执行一条组合指令：按顺序逐条执行 steps，每条间隔若干秒。
 
     中间步骤的回复被抑制（_reply_ctx.suppress），只在开头与结尾各回一条，
     避免多条指令叠加后把 QQ 刷屏。执行放在后台线程，不阻塞 WebSocket 回调。
@@ -237,179 +212,173 @@ def _run_combo(qq_client, openid, msg_id, entry):
     threading.Thread(target=_worker, daemon=True).start()
 
 
-def validate_command(entry, index=None):
-    """校验一条自定义指令能否保存。返回错误文本；合法返回空串。
+# ---------- 内置指令处理函数 ----------
+# 每个函数对应一条内置指令，签名统一为 (qq_client, openid, arg, msg_id)。
+# 返回 None 即可；需要即时回执的自行调用 _reply。
 
-    校验项：
-      1. 命令名格式：以 / 开头
-      2. 命令名重复：与内置指令、其它自定义指令（含别名）冲突
-      3. 组合指令的子指令必须存在（内置或其它自定义指令）
-    @param entry 待保存的指令对象
-    @param index 修改时的下标（用于排除自身）；新增传 None
+def _h_clear_sessions(qq_client, openid, arg, msg_id):
+    """清空所有会话。"""
+    _dispatch("clear_all_sessions")
+    _reply(qq_client, openid, "已下发：清空所有会话")
+
+
+def _h_clear_messages(qq_client, openid, arg, msg_id):
+    """清空当前会话的消息列表。"""
+    _dispatch("clear_messages")
+    _reply(qq_client, openid, "已下发：清空当前会话的消息列表")
+
+
+def _h_copy_system_prompt(qq_client, openid, arg, msg_id):
+    """复制 System Prompt 并发送给 AI。"""
+    _dispatch("copy_system_prompt")
+    _reply(qq_client, openid, "已下发：复制 System Prompt 并发送给 AI")
+
+
+def _h_switch_auto(qq_client, openid, arg, msg_id):
+    """自动回传开关：/sa on、/sa off，不带参数则切换。
+
+    显式形式在组合指令里更可靠——切换执行两次等于没执行，
+    而 on/off 是幂等的，重跑结果一致。
     """
-    name = (entry.get("name") or "").strip()
-    if not name.startswith("/"):
-        return "命令名需以 / 开头"
-    low = name.lower()
-    # 与内置指令（含别名）冲突
-    if resolve_cmd(low) in BUILTIN:
-        return "命令名 %s 与内置指令冲突" % name
-    # 与其它自定义指令（含别名）冲突
-    customs = bridge_store.get_config().get("commands") or []
-    for i, c in enumerate(customs):
-        if i == index:
-            continue
-        names = [c.get("name") or ""] + (c.get("aliases") or [])
-        if low in [str(n).lower() for n in names if n]:
-            return "命令名 %s 已存在" % name
-    # 组合指令：子指令必须存在
-    steps = entry.get("steps") or []
-    if steps:
-        # 可用的子指令集合：内置（含别名）+ 其它自定义（含别名）
-        available = set(BUILTIN.keys()) | set(_ALIAS_MAP.keys())
-        for i, c in enumerate(customs):
-            if i == index:
-                continue
-            available.add((c.get("name") or "").lower())
-            for a in (c.get("aliases") or []):
-                available.add(str(a).lower())
-        for s in steps:
-            sub = str(s).strip().split(None, 1)[0].lower()
-            if not sub:
-                continue
-            if resolve_cmd(sub) not in BUILTIN and sub not in available:
-                return "子指令 %s 不存在" % sub
-    return ""
+    a = (arg or "").strip().lower()
+    if a in ("on", "1", "true", "开", "开启"):
+        _dispatch("set_auto_send", {"on": True})
+        _reply(qq_client, openid, "已下发：开启自动回传")
+    elif a in ("off", "0", "false", "关", "关闭"):
+        _dispatch("set_auto_send", {"on": False})
+        _reply(qq_client, openid, "已下发：关闭自动回传")
+    elif a == "":
+        _dispatch("toggle_auto_send")
+        _reply(qq_client, openid, "已下发：切换自动回传开关")
+    else:
+        _reply(qq_client, openid, "用法：/sa [on|off]，不带参数则切换")
 
 
-def _help_text():
-    """组装指令列表文本。格式统一为「快捷键 — 描述（完整名）」。
+def _h_re_time(qq_client, openid, arg, msg_id):
+    """设置自动回传延迟（秒）。"""
+    if not arg:
+        _reply(qq_client, openid, "用法：/rt 秒数（如 /rt 5）")
+        return
+    try:
+        secs = float(arg)
+    except ValueError:
+        _reply(qq_client, openid, "秒数必须是数字")
+        return
+    if secs <= 0:
+        _reply(qq_client, openid, "秒数必须大于 0")
+        return
+    _dispatch("set_delay", {"seconds": secs})
+    _reply(qq_client, openid, "已下发：设置自动回传延迟 %s 秒" % secs)
 
-    每个指令都有快捷键（aliases）。若某指令没有别名，就直接显示完整名。
+
+def _h_sessions(qq_client, openid, arg, msg_id):
+    """列出会话列表（需浏览器回传结果）。"""
+    _dispatch_with_result("list_sessions", {}, openid)
+
+
+def _h_switch_session(qq_client, openid, arg, msg_id):
+    """按序号切换会话（如 /ss 1）。"""
+    if not arg:
+        _reply(qq_client, openid, "用法：/ss 序号（序号来自 /sessions）")
+        return
+    try:
+        idx = int(arg.strip())
+    except ValueError:
+        _reply(qq_client, openid, "序号必须是整数")
+        return
+    if idx <= 0:
+        _reply(qq_client, openid, "序号必须大于 0")
+        return
+    _dispatch("switch_session", {"index": idx})
+    _reply(qq_client, openid, "已下发：切换会话 #%d" % idx)
+
+
+def _h_screenshot(qq_client, openid, arg, msg_id):
+    """截取浏览器屏幕（需浏览器回传结果）。"""
+    _dispatch_with_result("screenshot", {}, openid)
+
+
+def _h_copy(qq_client, openid, arg, msg_id):
+    """复制最新卡片结果并回传 AI。"""
+    _dispatch("copy_latest", {})
+    _reply(qq_client, openid, "已下发：复制最新结果并回传")
+
+
+def _h_reparse(qq_client, openid, arg, msg_id):
+    """重新解析当前网页对话。"""
+    _dispatch("reparse", {})
+    _reply(qq_client, openid, "已下发：重新解析对话")
+
+
+def _h_rerun(qq_client, openid, arg, msg_id):
+    """重新执行最新卡片并回传。"""
+    _dispatch("rerun_latest", {})
+    _reply(qq_client, openid, "已下发：重新执行最新卡片")
+
+
+def _h_restart(qq_client, openid, arg, msg_id):
+    """重启服务端：先回执再重启（进程随后退出）。"""
+    _reply(qq_client, openid, "正在重启服务端…")
+    _restart_server()
+
+
+def _h_refush(qq_client, openid, arg, msg_id):
+    """刷新浏览器并打开抽屉。"""
+    _dispatch("refresh_page", {})
+    _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
+
+
+def _h_help(qq_client, openid, arg, msg_id):
+    """显示指令列表。"""
+    _reply(qq_client, openid, help_text())
+
+
+# 内置指令分发表：主命令名 → 处理函数。
+# 命令名与说明集中在 command_registry.BUILTIN，此处只登记执行入口，
+# 两张表的键必须一致（由 _check_handler_table 在导入时自检）。
+_BUILTIN_HANDLERS = {
+    "/clear-sessions": _h_clear_sessions,
+    "/clear-messages": _h_clear_messages,
+    "/copy-system-prompt": _h_copy_system_prompt,
+    "/re-time": _h_re_time,
+    "/switch-auto": _h_switch_auto,
+    "/sessions": _h_sessions,
+    "/switch-session": _h_switch_session,
+    "/screenshot": _h_screenshot,
+    "/copy": _h_copy,
+    "/reparse": _h_reparse,
+    "/rerun": _h_rerun,
+    "/restart": _h_restart,
+    "/refush": _h_refush,
+    "/help": _h_help,
+}
+
+
+def _check_handler_table():
+    """导入时自检：指令表与处理函数表的命令名必须一一对应。
+
+    两张表分离后，新增指令若只改了一处就会「可见但不可用」（或反之），
+    这种错配在运行时才暴露会很难查，故在导入期直接报错拦住。
     """
-    lines = ["可用指令："]
-    for name, info in BUILTIN.items():
-        al = info.get("aliases") or []
-        short = al[0] if al else name          # 取首个快捷键作为展示主键
-        if short != name:
-            lines.append("%s — %s（%s）" % (short, info.get("desc", ""), name))
-        else:
-            lines.append("%s — %s" % (name, info.get("desc", "")))
-    customs = bridge_store.get_config().get("commands") or []
-    if customs:
-        lines.append("")
-        lines.append("自定义指令：")
-        for c in customs:
-            tag = "[组合] " if c.get("steps") else ""
-            lines.append("%s — %s%s" % (c.get("name", ""), tag, c.get("label", "")))
-            # 组合指令：逐条展开子指令，让用户看清它到底按什么顺序做什么
-            for i, s in enumerate(c.get("steps") or []):
-                lines.append("    %d. %s" % (i + 1, s))
-    return "\n".join(lines)
+    missing = sorted(set(BUILTIN) - set(_BUILTIN_HANDLERS))
+    extra = sorted(set(_BUILTIN_HANDLERS) - set(BUILTIN))
+    if missing or extra:
+        raise RuntimeError(
+            "内置指令表与处理函数表不一致：缺少处理函数 %s；多余处理函数 %s"
+            % (missing or "无", extra or "无")
+        )
 
 
-def handle_command(qq_client, openid, msg_id, text):
-    """处理一条指令消息。返回 True 表示已处理（不再当普通消息投递）。"""
-    parts = text.strip().split(None, 1)
-    # 先解析别名：/sp → /screenshot、/ls → /sessions 等，
-    # 之后的分支一律按主命令名判断。
-    cmd = resolve_cmd(parts[0].lower())
-    arg = parts[1] if len(parts) > 1 else ""
+_check_handler_table()
 
-    if cmd == "/clear-sessions":
-        _dispatch("clear_all_sessions")
-        _reply(qq_client, openid, "已下发：清空所有会话")
-        return True
-    if cmd == "/clear-messages":
-        _dispatch("clear_messages")
-        _reply(qq_client, openid, "已下发：清空当前会话的消息列表")
-        return True
-    if cmd == "/switch-auto":
-        # 支持显式指定开关：/sa on、/sa off；不带参数则切换。
-        # 显式形式在组合指令里更可靠——切换执行两次等于没执行，
-        # 而 on/off 是幂等的，重跑结果一致。
-        a = (arg or "").strip().lower()
-        if a in ("on", "1", "true", "开", "开启"):
-            _dispatch("set_auto_send", {"on": True})
-            _reply(qq_client, openid, "已下发：开启自动回传")
-        elif a in ("off", "0", "false", "关", "关闭"):
-            _dispatch("set_auto_send", {"on": False})
-            _reply(qq_client, openid, "已下发：关闭自动回传")
-        elif a == "":
-            _dispatch("toggle_auto_send")
-            _reply(qq_client, openid, "已下发：切换自动回传开关")
-        else:
-            _reply(qq_client, openid, "用法：/sa [on|off]，不带参数则切换")
-        return True
-    if cmd == "/sessions":
-        _dispatch_with_result("list_sessions", {}, openid)
-        return True
-    if cmd == "/switch-session":
-        if not arg:
-            _reply(qq_client, openid, "用法：/ss 序号（序号来自 /sessions）")
-            return True
-        try:
-            idx = int(arg.strip())
-        except ValueError:
-            _reply(qq_client, openid, "序号必须是整数")
-            return True
-        if idx <= 0:
-            _reply(qq_client, openid, "序号必须大于 0")
-            return True
-        _dispatch("switch_session", {"index": idx})
-        _reply(qq_client, openid, "已下发：切换会话 #%d" % idx)
-        return True
-    if cmd == "/screenshot":
-        # 别名 /sp 已在入口经 resolve_cmd 归一为此命令
-        _dispatch_with_result("screenshot", {}, openid)
-        return True
-    if cmd == "/copy":
-        _dispatch("copy_latest", {})
-        _reply(qq_client, openid, "已下发：复制最新结果并回传")
-        return True
-    if cmd == "/reparse":
-        _dispatch("reparse", {})
-        _reply(qq_client, openid, "已下发：重新解析对话")
-        return True
-    if cmd == "/rerun":
-        _dispatch("rerun_latest", {})
-        _reply(qq_client, openid, "已下发：重新执行最新卡片")
-        return True
-    if cmd == "/restart":
-        _reply(qq_client, openid, "正在重启服务端…")
-        _restart_server()
-        return True
-    if cmd == "/refush":
-        _dispatch("refresh_page", {})
-        _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
-        return True
-    if cmd == "/copy-system-prompt":
-        _dispatch("copy_system_prompt")
-        _reply(qq_client, openid, "已下发：复制 System Prompt 并发送给 AI")
-        return True
-    if cmd == "/re-time":
-        if not arg:
-            _reply(qq_client, openid, "用法：/rt 秒数（如 /rt 5）")
-            return True
-        try:
-            secs = float(arg)
-        except ValueError:
-            _reply(qq_client, openid, "秒数必须是数字")
-            return True
-        if secs <= 0:
-            _reply(qq_client, openid, "秒数必须大于 0")
-            return True
-        _dispatch("set_delay", {"seconds": secs})
-        _reply(qq_client, openid, "已下发：设置自动回传延迟 %s 秒" % secs)
-        return True
-    if cmd == "/help":
-        _reply(qq_client, openid, _help_text())
-        return True
 
-    # 自定义指令：按命令名或别名匹配。
-    # 两类：
-    #  · 组合指令（含 steps）：逐条执行其指令列表，间隔 1 秒；
-    #  · 点击指令：下发「点击元素」，失败时在 QQ 里提示。
+def _handle_custom(qq_client, openid, msg_id, cmd):
+    """按命令名或别名匹配自定义指令。命中返回 True，未命中返回 False。
+
+    两类自定义指令：
+    - 组合指令（含 steps）：逐条执行其指令列表；
+    - 点击指令：下发「点击元素」。
+    """
     for c in (bridge_store.get_config().get("commands") or []):
         names = [c.get("name") or ""] + (c.get("aliases") or [])
         if cmd not in [str(n).lower() for n in names if n]:
@@ -423,27 +392,21 @@ def handle_command(qq_client, openid, msg_id, text):
                 "page_url": c.get("page_url", ""),
             }, openid)
         return True
-
-    # 未命中任何指令：交还调用方当普通消息处理
     return False
 
 
-def register_panel(qq_client):
-    """把配置的指令注册到 QQ 指令面板 / 自定义菜单。
+def handle_command(qq_client, openid, msg_id, text):
+    """处理一条指令消息。返回 True 表示已处理（不再当普通消息投递）。
 
-    【待核对】接口路径与请求体以官方文档为准。
-    本函数在桥接启动时调用；失败仅记录，不影响消息收发。
+    流程：解析出命令名与参数 → 先查内置指令表 → 再查自定义指令。
+    别名（/sp → /screenshot 等）在解析阶段归一为主命令名。
     """
-    cfg = bridge_store.get_config()
-    commands = []
-    # 内置：只注册主命令，别名不重复占位（QQ 面板最多 20 个元素）
-    for name, info in BUILTIN.items():
-        commands.append({"name": name, "desc": info.get("desc", "")})
-    # 自定义：组合与点击指令一并注册
-    for c in (cfg.get("commands") or []):
-        tag = "[组合] " if (c.get("steps") or []) else ""
-        commands.append({"name": c.get("name", ""), "desc": tag + (c.get("label") or "")})
-    if not commands:
-        return
-    # [待核对] 注册接口：此处仅打印待注册内容，接入时替换为真实 HTTP 调用
-    log("待注册指令面板：", json.dumps(commands, ensure_ascii=False))
+    parts = text.strip().split(None, 1)
+    cmd = resolve_cmd(parts[0].lower())
+    arg = parts[1] if len(parts) > 1 else ""
+    fn = _BUILTIN_HANDLERS.get(cmd)
+    if fn:
+        fn(qq_client, openid, arg, msg_id)
+        return True
+    # 未命中内置指令：尝试自定义指令；仍未命中则交还调用方当普通消息处理
+    return _handle_custom(qq_client, openid, msg_id, cmd)
