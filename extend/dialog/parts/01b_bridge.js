@@ -25,9 +25,15 @@
       this.bridgeEnabled = !!cfg.enabled;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
-      this.bridgeMdSelector = cfg.md_copy_selector || '';
       this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false }, cfg.push || {});
+      // 先把指令列表读进来，再从里面找采集指令——顺序不能反，
+      // 否则查找时 bridgeCommands 还是旧值 / 空数组。
       this.bridgeCommands = cfg.commands || [];
+      // 采集用选择器：从自定义指令里找带 collect 标记的那条取。
+      // 它就是一条标准自定义指令（存于 commands，可在设置页编辑），
+      // 而不是独立的配置字段——用户改选择器、删指令都在指令体系里完成。
+      const mdCmd = this.bridgeCommands.find((c) => c && c.collect);
+      this.bridgeMdSelector = (mdCmd && mdCmd.selector) || '';
       this.bridgeConnected = !!st.connected;
     } catch (e) {
       // 桥接未启用 / 后端不可达：保持默认值，不打扰用户
@@ -87,7 +93,6 @@
           enabled: this.bridgeEnabled,
           app_id: this.bridgeAppId,
           app_secret: this.bridgeAppSecret,
-          md_copy_selector: this.bridgeMdSelector,
           push: this.bridgePush
         }
       });
@@ -248,6 +253,35 @@
       this.toast('正在刷新页面…');
       return;
     }
+    if (action === 'collect_md') {
+      // 手动采集：点按钮取 Markdown，挂到最新 AI 消息上。
+      // 自动采集由 reportToBridgeWithMd 在生成结束时触发，
+      // 这里是用户主动发指令时的入口。
+      this._bridgeCollectMd(params.selector || '');
+      return;
+    }
+  };
+
+  /**
+   * 手动采集 Markdown：点复制按钮，内容挂到最新 AI 消息上。
+   * @param {string} selector 复制按钮选择器
+   */
+  M._bridgeCollectMd = function (selector) {
+    if (!selector) { this.toast('该采集指令没有绑定选择器'); return; }
+    const conv = this.curConv || {};
+    const tree = conv.msgTree || {};
+    const keys = conv.visibleKeys || [];
+    let lastId = '';
+    for (let i = keys.length - 1; i >= 0; i--) {
+      const node = tree[keys[i]];
+      if (node && node.role === 'assistant') {
+        lastId = window.AIMirrorDomUtils.messageFingerprint(node);
+        break;
+      }
+    }
+    if (!lastId) { this.toast('没有可采集的 AI 回复'); return; }
+    this.bridgeMdSelector = selector;   // 手动采集用指令里的选择器
+    this.captureMarkdown(lastId);
   };
 
   /**

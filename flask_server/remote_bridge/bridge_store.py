@@ -35,16 +35,25 @@ def _default_config():
         "app_id": "",                  # QQ 机器人 AppID
         "app_secret": "",              # QQ 机器人 AppSecret
         "intents": 0,                 # 订阅的事件位；0 表示用代码里的默认值（单聊）
-        # Markdown 复制按钮选择器：AI 回复完成后点它，截获带格式的原文，
-        # 推送 QQ 时优先用它。留空则关闭该增强，退回纯文本。
-        "md_copy_selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
         "push": {
             "user": True,              # 是否推送用户消息
             "tool": True,              # 是否推送工具消息
             "ai": True,                # 是否推送 AI 消息
             "thinking": False,         # 是否推送思考过程（默认不推）
         },
-        "commands": [],                # 指令列表：{name, label, action, arg}
+        # 指令列表：{name, label, selector, page_url} 或组合指令 {name, label, steps, interval}。
+        # 内置一条「采集 Markdown」：AI 回复完成后点它，截获带格式的原文，
+        # 推送 QQ 时优先使用。它就是一条普通的点击类自定义指令，
+        # 在设置页可见、可编辑、可删除——选择器失效时改它即可。
+        "commands": [
+            {
+                "name": "/md",
+                "label": "采集 Markdown 原文",
+                "selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
+                "page_url": "",
+                "collect": True,
+            }
+        ],
     }
 
 
@@ -84,13 +93,26 @@ def load_config():
         raw = _read_yaml()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents", "md_copy_selector"):
+        for k in ("enabled", "app_id", "app_secret", "intents"):
             if k in raw:
                 cfg[k] = raw[k]
         if isinstance(raw.get("push"), dict):
             cfg["push"].update(raw["push"])
         if isinstance(raw.get("commands"), list):
-            cfg["commands"] = raw["commands"]
+            # 按命令名合并：文件里的指令优先，默认指令里未出现的补进来。
+            # 直接用文件列表覆盖会让默认的 /md 被空列表清掉；
+            # 用户删掉某条默认指令后又会「复活」——因此以文件为准，
+            # 只补从未在文件里出现过的默认项。
+            user = raw["commands"]
+            seen = set()
+            for c in user:
+                if isinstance(c, dict) and c.get("name"):
+                    seen.add(str(c["name"]).lower())
+            merged = list(user)
+            for d in cfg.get("commands") or []:
+                if str(d.get("name", "")).lower() not in seen:
+                    merged.append(d)
+            cfg["commands"] = merged
         _CONFIG = cfg
         return cfg
 
@@ -107,7 +129,7 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents", "md_copy_selector"):
+        for k in ("enabled", "app_id", "app_secret", "intents"):
             if k in patch:
                 cfg[k] = patch[k]
         if isinstance(patch.get("push"), dict):

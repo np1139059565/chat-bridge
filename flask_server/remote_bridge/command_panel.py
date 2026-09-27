@@ -394,9 +394,19 @@ def _match_custom(cmd):
 
 
 def _run_custom(qq_client, openid, msg_id, entry):
-    """执行一条自定义指令：组合指令逐条执行，点击指令下发点击元素。"""
+    """执行一条自定义指令：组合 / 采集 / 点击三类。
+
+    - 组合（含 steps）：逐条执行其指令列表
+    - 采集（collect 为真）：点按钮取 Markdown，挂到最新 AI 消息上
+    - 点击：下发点击元素，并把结果回传 QQ
+    """
     if entry.get("steps"):
         _run_combo(qq_client, openid, msg_id, entry)
+        return
+    if entry.get("collect"):
+        # 采集类：点按钮取 Markdown，内容留给后续推送用，不回传 QQ
+        _dispatch("collect_md", {"selector": entry.get("selector", "")})
+        _reply(qq_client, openid, "已下发：采集 Markdown 原文")
         return
     _dispatch_with_result("click_element", {
         "selector": entry.get("selector", ""),

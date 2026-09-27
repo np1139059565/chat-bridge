@@ -31,6 +31,7 @@
     this.bridgePicked = null;
     this.bridgeEditIdx = null;
     this.bridgeNewCmdIsCombo = false;
+    this.bridgeNewCmdCollect = false;
     this.bridgeNewCmdSteps = '';
     this.bridgeNewCmdInterval = '1';
   };
@@ -43,10 +44,11 @@
     const name = (this.bridgeNewCmdName || '').trim();
     const label = (this.bridgeNewCmdLabel || '').trim();
     const isCombo = !!this.bridgeNewCmdIsCombo;
+    const isCollect = !!this.bridgeNewCmdCollect;
     const picked = this.bridgePicked;
     if (!name || !label) { this.toast('命令名与显示名必填'); return; }
     if (!name.startsWith('/')) { this.toast('命令名需以 / 开头'); return; }
-    // 两种类型各自的必填项：组合要步骤，点击要选择器
+    // 三类指令各自的必填项：组合要步骤，采集/点击要选择器
     let steps = [];
     if (isCombo) {
       steps = (this.bridgeNewCmdSteps || '').split('\n')
@@ -58,15 +60,24 @@
     }
     // 命令名去重与子指令校验统一交给后端（validate_command），
     // 前端不重复实现，避免两处规则不一致。
-    // 组合指令：存 steps 与间隔；点击指令：存 selector。二者互斥，避免残留字段混淆。
+    // 三类互斥：组合存 steps；采集存 selector+collect；点击存 selector。
     let interval = parseFloat(this.bridgeNewCmdInterval);
     if (!(interval > 0)) interval = 1;
-    const entry = isCombo
-      ? { name: name, label: label, steps: steps, interval: interval }
-      : {
+    let entry;
+    if (isCombo) {
+      entry = { name: name, label: label, steps: steps, interval: interval };
+    } else if (isCollect) {
+      entry = {
+        name: name, label: label,
+        selector: picked.selector, page_url: picked.page_url || '',
+        collect: true
+      };
+    } else {
+      entry = {
         name: name, label: label,
         selector: picked.selector, page_url: picked.page_url || ''
       };
+    }
     try {
       const data = await D.apiFetch(this, '/api/bridge/commands', {
         method: 'POST',
@@ -91,9 +102,11 @@
     this.bridgeEditIdx = idx;
     this.bridgeNewCmdName = c.name || '';
     this.bridgeNewCmdLabel = c.label || '';
-    // 组合指令：勾上类型并回填步骤；点击指令：回填选择器
+    // 三类分别回填：组合填步骤、采集勾上采集标记、点击填选择器
     const isCombo = !!(c.steps && c.steps.length);
+    const isCollect = !!c.collect;
     this.bridgeNewCmdIsCombo = isCombo;
+    this.bridgeNewCmdCollect = isCollect;
     this.bridgeNewCmdSteps = isCombo ? (c.steps || []).join('\n') : '';
     this.bridgeNewCmdInterval = isCombo ? String(c.interval || 1) : '1';
     this.bridgePicked = isCombo

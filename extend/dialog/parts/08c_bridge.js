@@ -71,18 +71,6 @@
           placeholder: '开放平台应用的 AppSecret',
           onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
         })]),
-        // Markdown 复制按钮选择器：AI 回复完成后点它，取带格式的原文。
-        // 留空则关闭该增强，退回按 DOM 块拼的纯文本。
-        h('label', ['Markdown 复制按钮选择器（留空则关闭格式增强）', h('input', {
-          type: 'text', class: 'bridge-sel-input',
-          value: ctx.bridgeMdSelector,
-          placeholder: '如 .ds-virtual-list--printable ... :has(.ds-cross-fade)',
-          onInput: (e) => { ctx.bridgeMdSelector = e.target.value; }
-        })]),
-        h('div', { class: 'bridge-pick-row' }, [
-          h('button', { onClick: () => ctx.testMdSelector() }, '采集测试'),
-          h('span', { class: 'hint' }, '点一下：用当前选择器试采一次，看能否取到内容')
-        ]),
         h('div', [
           h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
           h('span', { class: 'hint' }, '保存后自动重建 QQ 长连接')
@@ -116,15 +104,29 @@
             onInput: (e) => { ctx.bridgeNewCmdLabel = e.target.value; }
           })
         ]),
-        // 类型切换：点击元素 / 组合指令
+        // 类型切换：点击元素 / 组合指令 / 采集 Markdown（三者互斥）
         h('div', { class: 'bridge-type-row' }, [
           h('label', { class: 'bridge-toggle' }, [
             h('input', {
               type: 'checkbox',
               checked: ctx.bridgeNewCmdIsCombo,
-              onChange: (e) => { ctx.bridgeNewCmdIsCombo = e.target.checked; }
+              onChange: (e) => {
+                ctx.bridgeNewCmdIsCombo = e.target.checked;
+                if (e.target.checked) ctx.bridgeNewCmdCollect = false;
+              }
             }),
-            '组合指令（按顺序执行多条指令）'
+            '组合指令'
+          ]),
+          h('label', { class: 'bridge-toggle' }, [
+            h('input', {
+              type: 'checkbox',
+              checked: ctx.bridgeNewCmdCollect,
+              onChange: (e) => {
+                ctx.bridgeNewCmdCollect = e.target.checked;
+                if (e.target.checked) ctx.bridgeNewCmdIsCombo = false;
+              }
+            }),
+            '采集 Markdown'
           ])
         ]),
         // 组合指令：步骤列表（每行一条）。仅组合类型显示。
@@ -194,7 +196,9 @@
               h('span', { class: 'bridge-cmd-sel', title: c.selector || '' },
                 (c.steps && c.steps.length)
                   ? ('组合 ' + c.steps.length + ' 步：' + c.steps.join(' → '))
-                  : (c.selector ? ('点击 ' + c.selector) : '')),
+                  : (c.collect
+                    ? ('采集 Markdown：' + (c.selector || ''))
+                    : (c.selector ? ('点击 ' + c.selector) : ''))),
               h('button', {
                 onClick: () => ctx.editBridgeCommand(i)
               }, '编辑'),
