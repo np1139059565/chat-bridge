@@ -61,6 +61,59 @@ def resolve_cmd(cmd):
     return _ALIAS_MAP.get(cmd, cmd)
 
 
+def _custom_names(c):
+    """取一条自定义指令的全部可用名（主名 + 别名），统一转小写并滤掉空值。
+
+    用于重名比对与子指令存在性判定，两处口径必须一致，故集中在此。
+    """
+    names = [c.get("name") or ""] + (c.get("aliases") or [])
+    return [str(n).lower() for n in names if n]
+
+
+def _check_name_free(name, index, customs):
+    """校验命令名未被占用：不与内置指令（含别名）或其它自定义指令冲突。
+
+    @param index 修改时的下标（排除自身）；新增传 None
+    @return 错误文本；合法返回空串
+    """
+    low = name.lower()
+    # 与内置指令（含别名）冲突
+    if resolve_cmd(low) in BUILTIN:
+        return "命令名 %s 与内置指令冲突" % name
+    # 与其它自定义指令（含别名）冲突
+    for i, c in enumerate(customs):
+        if i == index:
+            continue
+        if low in _custom_names(c):
+            return "命令名 %s 已存在" % name
+    return ""
+
+
+def _available_subcommands(index, customs):
+    """收集可用的子指令名集合：内置（含别名）+ 其它自定义指令（含别名）。"""
+    available = set(BUILTIN.keys()) | set(_ALIAS_MAP.keys())
+    for i, c in enumerate(customs):
+        if i == index:
+            continue
+        available.update(_custom_names(c))
+    return available
+
+
+def _check_steps_exist(steps, index, customs):
+    """校验组合指令的每条子指令都存在（内置或其它自定义指令）。
+
+    @return 错误文本；全部存在返回空串
+    """
+    available = _available_subcommands(index, customs)
+    for s in steps:
+        sub = str(s).strip().split(None, 1)[0].lower()
+        if not sub:
+            continue
+        if resolve_cmd(sub) not in BUILTIN and sub not in available:
+            return "子指令 %s 不存在" % sub
+    return ""
+
+
 def validate_command(entry, index=None):
     """校验一条自定义指令能否保存。返回错误文本；合法返回空串。
 
@@ -74,44 +127,22 @@ def validate_command(entry, index=None):
     name = (entry.get("name") or "").strip()
     if not name.startswith("/"):
         return "命令名需以 / 开头"
-    low = name.lower()
-    # 与内置指令（含别名）冲突
-    if resolve_cmd(low) in BUILTIN:
-        return "命令名 %s 与内置指令冲突" % name
-    # 与其它自定义指令（含别名）冲突
     customs = bridge_store.get_config().get("commands") or []
-    for i, c in enumerate(customs):
-        if i == index:
-            continue
-        names = [c.get("name") or ""] + (c.get("aliases") or [])
-        if low in [str(n).lower() for n in names if n]:
-            return "命令名 %s 已存在" % name
-    # 组合指令：子指令必须存在
+    err = _check_name_free(name, index, customs)
+    if err:
+        return err
     steps = entry.get("steps") or []
     if steps:
-        # 可用的子指令集合：内置（含别名）+ 其它自定义（含别名）
-        available = set(BUILTIN.keys()) | set(_ALIAS_MAP.keys())
-        for i, c in enumerate(customs):
-            if i == index:
-                continue
-            available.add((c.get("name") or "").lower())
-            for a in (c.get("aliases") or []):
-                available.add(str(a).lower())
-        for s in steps:
-            sub = str(s).strip().split(None, 1)[0].lower()
-            if not sub:
-                continue
-            if resolve_cmd(sub) not in BUILTIN and sub not in available:
-                return "子指令 %s 不存在" % sub
+        return _check_steps_exist(steps, index, customs)
     return ""
 
 
-def help_text():
-    """组装指令列表文本。格式统一为「快捷键 — 描述（完整名）」。
+def _help_builtin_lines():
+    """内置指令的展示行：格式为「快捷键 — 描述（完整名）」。
 
-    每个指令都有快捷键（aliases）。若某指令没有别名，就直接显示完整名。
+    每个内置指令都有快捷键（aliases）；没有别名时直接显示完整名。
     """
-    lines = ["可用指令："]
+    lines = []
     for name, info in BUILTIN.items():
         al = info.get("aliases") or []
         short = al[0] if al else name          # 取首个快捷键作为展示主键
@@ -119,16 +150,29 @@ def help_text():
             lines.append("%s — %s（%s）" % (short, info.get("desc", ""), name))
         else:
             lines.append("%s — %s" % (name, info.get("desc", "")))
-    customs = bridge_store.get_config().get("commands") or []
-    if customs:
-        lines.append("")
-        lines.append("自定义指令：")
-        for c in customs:
-            tag = "[组合] " if c.get("steps") else ""
-            lines.append("%s — %s%s" % (c.get("name", ""), tag, c.get("label", "")))
-            # 组合指令：逐条展开子指令，让用户看清它到底按什么顺序做什么
-            for i, s in enumerate(c.get("steps") or []):
-                lines.append("    %d. %s" % (i + 1, s))
+    return lines
+
+
+def _help_custom_lines(customs):
+    """自定义指令的展示行：组合指令额外逐条展开子指令。
+
+    展开子指令是为了让用户看清它到底按什么顺序做什么。
+    """
+    if not customs:
+        return []
+    lines = ["", "自定义指令："]
+    for c in customs:
+        tag = "[组合] " if c.get("steps") else ""
+        lines.append("%s — %s%s" % (c.get("name", ""), tag, c.get("label", "")))
+        for i, s in enumerate(c.get("steps") or []):
+            lines.append("    %d. %s" % (i + 1, s))
+    return lines
+
+
+def help_text():
+    """组装指令列表文本：先内置指令，再自定义指令。"""
+    lines = ["可用指令："] + _help_builtin_lines()
+    lines += _help_custom_lines(bridge_store.get_config().get("commands") or [])
     return "\n".join(lines)
 
 

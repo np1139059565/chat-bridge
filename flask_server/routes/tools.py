@@ -79,6 +79,20 @@ def _validate_external_params(name, ctool, params):
     ), 200
 
 
+def _external_error(name, error, errorType, hint):
+    """构造外部工具的环境类错误响应（HTTP 200，错误在 body）。
+
+    外部工具的失败多与环境有关（提供方未声明、执行方未及时取走），
+    统一归类为 environment，提示调用方检查环境而非改参数。
+    """
+    return jsonify(
+        success=False, tool=name,
+        error=error, errorType=errorType, origin="environment",
+        originLabel=runtime.ORIGIN_LABEL.get("environment", "environment"),
+        hint=hint,
+    ), 200
+
+
 def _call_external(name, ctool, params, page_url=""):
     """转发给外部提供方并等待回传。
 
@@ -91,23 +105,15 @@ def _call_external(name, ctool, params, page_url=""):
         return param_err
     provider = (ctool.get("provider") or "").strip()
     if not provider:
-        return jsonify(
-            success=False, tool=name,
-            error="外部工具未声明提供方: %s" % name,
-            errorType="ProviderMissing", origin="environment",
-            originLabel=runtime.ORIGIN_LABEL.get("environment", "environment"),
-            hint="该外部工具缺少 provider 声明，无法确定执行方。",
-        ), 200
+        return _external_error(
+            name, "外部工具未声明提供方: %s" % name, "ProviderMissing",
+            "该外部工具缺少 provider 声明，无法确定执行方。")
     silent = bool(ctool.get("silent"))
     ok, data = external_tools.hub.dispatch(provider, name, params, silent=silent, page_url=page_url)
     if not ok:
-        return jsonify(
-            success=False, tool=name,
-            error="外部工具未在等待时限内被执行: %s" % name,
-            errorType="ForwardTimeout", origin="environment",
-            originLabel=runtime.ORIGIN_LABEL.get("environment", "environment"),
-            hint="请求已排队但执行方未在时限内取走。请确认调试扩展已打开并停留在目标页面。",
-        ), 200
+        return _external_error(
+            name, "外部工具未在等待时限内被执行: %s" % name, "ForwardTimeout",
+            "请求已排队但执行方未在时限内取走。请确认调试扩展已打开并停留在目标页面。")
     # silent 仅随结果回传，供前端决定不在抽屉生成工具卡片；结果本身照常回传。
     return jsonify(success=True, tool=name, result=data, silent=silent)
 

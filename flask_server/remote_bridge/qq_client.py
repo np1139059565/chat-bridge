@@ -162,6 +162,17 @@ class QQClient:
             return ""
 
     # ---------- 发送消息 ----------
+    @staticmethod
+    def _http_error_detail(e):
+        """提取 HTTPError 的响应体详情（服务端返回的错误说明）。
+
+        读取失败不抛错，返回空串：诊断信息缺失不应盖过「请求失败」这个主结果。
+        """
+        try:
+            return e.read().decode("utf-8")
+        except Exception:
+            return ""
+
     def send_c2c(self, openid, content, msg_id="", msg_seq=1):
         """发送单聊被动回复。
 
@@ -187,59 +198,38 @@ class QQClient:
             resp = self._http_post(url, body, self._auth_header())
             return True, resp
         except urllib.error.HTTPError as e:
-            detail = ""
-            try:
-                detail = e.read().decode("utf-8")
-            except Exception:
-                pass
-            return False, "HTTP %s %s" % (e.code, detail)
+            return False, "HTTP %s %s" % (e.code, self._http_error_detail(e))
         except Exception as e:
             return False, str(e)
 
-    def send_c2c_image(self, openid, image_path, msg_id="", msg_seq=1):
-        """发送单聊图片（富媒体）。
+    @staticmethod
+    def _read_file_b64(path):
+        """读取本地文件并 Base64 编码为 ASCII 字符串；失败由调用方捕获。"""
+        with open(path, "rb") as f:
+            return base64.b64encode(f.read()).decode("ascii")
 
-        用本地文件直接上传，无需公网地址：
-        读文件 → Base64 编码 → 作为 file_data 上传拿 file_info → 发 msg_type=7。
-        官方上传接口支持 url 与 file_data 二选一；用 file_data 就绕开了
-        「QQ 服务器来取图」对公网地址的依赖。
-        上传接口路径、file_type 取值、msg_type=7 的消息体结构已核对官方文档。
-        @param openid     接收方用户 openid
-        @param image_path 本地图片文件路径
-        @param msg_id     被动回复引用的用户消息 id
-        @param msg_seq    同一 msg_id 下的序号
-        @returns (ok, data_or_error)
+    def _upload_image(self, openid, b64):
+        """上传图片富媒体，返回 (file_info, error)。
+
+        上传接口支持 url 与 file_data 二选一；用 file_data 传本地内容，
+        就绕开了「QQ 服务器来取图」对公网地址的依赖。
+        file_type=1 表示图片；srv_send_msg=False 表示只返回 file_info、不自动发送。
         """
-        if not self._ensure_token():
-            return False, "no_token"
-        # 读文件并 Base64 编码
+        url = API_BASE + "/v2/users/%s/files" % openid
         try:
-            with open(image_path, "rb") as f:
-                raw = f.read()
-        except Exception as e:
-            return False, "read_file_failed: %s" % e
-        b64 = base64.b64encode(raw).decode("ascii")
-        # 第一步：上传富媒体，拿 file_info
-        upload_url = API_BASE + "/v2/users/%s/files" % openid
-        try:
-            up = self._http_post(upload_url, {
-                "file_type": 1,          # 1 = 图片
-                "file_data": b64,        # 本地文件内容，免公网地址
-                "srv_send_msg": False,   # 不自动发送，只返回 file_info
+            up = self._http_post(url, {
+                "file_type": 1,
+                "file_data": b64,
+                "srv_send_msg": False,
             }, self._auth_header())
         except urllib.error.HTTPError as e:
-            detail = ""
-            try:
-                detail = e.read().decode("utf-8")
-            except Exception:
-                pass
-            return False, "upload HTTP %s %s" % (e.code, detail)
+            return "", "upload HTTP %s %s" % (e.code, self._http_error_detail(e))
         except Exception as e:
-            return False, str(e)
-        file_info = (up or {}).get("file_info") or ""
-        if not file_info:
-            return False, "no_file_info"
-        # 第二步：发送富媒体消息
+            return "", str(e)
+        return (up or {}).get("file_info") or "", ""
+
+    def _send_media(self, openid, file_info, msg_id, msg_seq):
+        """发送富媒体消息（msg_type=7），返回 (ok, data_or_error)。"""
         url = API_BASE + "/v2/users/%s/messages" % openid
         body = {
             "content": "",
@@ -252,14 +242,36 @@ class QQClient:
             resp = self._http_post(url, body, self._auth_header())
             return True, resp
         except urllib.error.HTTPError as e:
-            detail = ""
-            try:
-                detail = e.read().decode("utf-8")
-            except Exception:
-                pass
-            return False, "send HTTP %s %s" % (e.code, detail)
+            return False, "send HTTP %s %s" % (e.code, self._http_error_detail(e))
         except Exception as e:
             return False, str(e)
+
+    def send_c2c_image(self, openid, image_path, msg_id="", msg_seq=1):
+        """发送单聊图片（富媒体）。
+
+        用本地文件直接上传，无需公网地址：
+        读文件 → Base64 编码 → 作为 file_data 上传拿 file_info → 发 msg_type=7。
+        上传接口路径、file_type 取值、msg_type=7 的消息体结构已核对官方文档。
+        @param openid     接收方用户 openid
+        @param image_path 本地图片文件路径
+        @param msg_id     被动回复引用的用户消息 id
+        @param msg_seq    同一 msg_id 下的序号
+        @returns (ok, data_or_error)
+        """
+        if not self._ensure_token():
+            return False, "no_token"
+        try:
+            b64 = self._read_file_b64(image_path)
+        except Exception as e:
+            return False, "read_file_failed: %s" % e
+        # 第一步：上传富媒体，拿 file_info
+        file_info, err = self._upload_image(openid, b64)
+        if err:
+            return False, err
+        if not file_info:
+            return False, "no_file_info"
+        # 第二步：发送富媒体消息
+        return self._send_media(openid, file_info, msg_id, msg_seq)
 
     # ---------- WebSocket ----------
     def start(self):
@@ -324,51 +336,71 @@ class QQClient:
         }
         ws.send(json.dumps(payload))
 
+    def _close_ws(self, ws):
+        """关闭连接，忽略关闭过程中的异常。"""
+        try:
+            ws.close()
+        except Exception:
+            pass
+
+    def _op_hello(self, ws, msg):
+        """握手：按服务端给的心跳间隔启动心跳线程。"""
+        interval = (msg.get("d") or {}).get("heartbeat_interval", 30000) / 1000.0
+        self._start_heartbeat(ws, interval)
+
+    def _op_reconnect(self, ws, msg):
+        """服务端要求重连：关闭当前连接，交由连接循环重连。"""
+        log("服务端要求重连")
+        self._close_ws(ws)
+
+    def _op_invalid(self, ws, msg):
+        """鉴权失败：清空 token 后关闭连接，下次会重新获取 token。"""
+        log("鉴权失败，刷新 token 后重连")
+        self._token = ""
+        self._close_ws(ws)
+
+    def _op_dispatch(self, ws, msg):
+        """事件派发：更新序号与最近事件类型，交给上层 on_event 处理。"""
+        self._seq = msg.get("s") or self._seq
+        t = msg.get("t") or ""
+        d = msg.get("d") or {}
+        # 记录最近事件类型：诊断「事件是否下发」的关键线索。
+        # 若这里始终为空，说明网关没把事件推来（多半是 intents 或鉴权问题）。
+        self._last_event = t
+        log("收到事件", t)
+        try:
+            self.on_event(t, d)
+        except Exception as e:
+            log("事件处理异常：", e)
+
+    # op → 处理函数。心跳确认（OP_HEARTBEAT_ACK）无需动作，不登记即为忽略。
+    _OP_HANDLERS = None  # 见 __init__ 之后的 _bind_op_handlers：需绑定实例方法，故延迟构建
+
+    def _op_heartbeat_ack(self, ws, msg):
+        """心跳确认：无需动作。"""
+
     def _on_message(self, ws, raw):
-        """处理服务端下行数据。"""
+        """处理服务端下行数据：解析后按 op 查表分派。"""
         try:
             msg = json.loads(raw)
         except Exception:
             return
-        op = msg.get("op")
-        # 握手：返回心跳间隔，启动心跳线程
-        if op == OP_HELLO:
-            interval = (msg.get("d") or {}).get("heartbeat_interval", 30000) / 1000.0
-            self._start_heartbeat(ws, interval)
-            return
-        # 心跳确认
-        if op == OP_HEARTBEAT_ACK:
-            return
-        # 服务端要求重连
-        if op == OP_RECONNECT:
-            log("服务端要求重连")
-            try:
-                ws.close()
-            except Exception:
-                pass
-            return
-        # 鉴权失败
-        if op == OP_INVALID:
-            log("鉴权失败，刷新 token 后重连")
-            self._token = ""
-            try:
-                ws.close()
-            except Exception:
-                pass
-            return
-        # 事件派发
-        if op == OP_DISPATCH:
-            self._seq = msg.get("s") or self._seq
-            t = msg.get("t") or ""
-            d = msg.get("d") or {}
-            # 记录最近事件类型：诊断「事件是否下发」的关键线索。
-            # 若这里始终为空，说明网关没把事件推来（多半是 intents 或鉴权问题）。
-            self._last_event = t
-            log("收到事件", t)
-            try:
-                self.on_event(t, d)
-            except Exception as e:
-                log("事件处理异常：", e)
+        handlers = self._op_handler_table()
+        fn = handlers.get(msg.get("op"))
+        if fn:
+            fn(ws, msg)
+
+    def _op_handler_table(self):
+        """构建 op → 绑定方法的映射表（首次调用时构建并缓存）。"""
+        if self._OP_HANDLERS is None:
+            self._OP_HANDLERS = {
+                OP_HELLO: self._op_hello,
+                OP_HEARTBEAT_ACK: self._op_heartbeat_ack,
+                OP_RECONNECT: self._op_reconnect,
+                OP_INVALID: self._op_invalid,
+                OP_DISPATCH: self._op_dispatch,
+            }
+        return self._OP_HANDLERS
 
     def _start_heartbeat(self, ws, interval):
         """启动心跳线程：按服务端给的时间间隔发送心跳包。"""

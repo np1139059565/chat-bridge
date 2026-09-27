@@ -59,6 +59,24 @@ def count_lines(path):
         return -1
 
 
+def _check_one(path):
+    """检查单个文件。
+
+    返回 (bad_name, too_long)：路径为临时/备份文件时 bad_name 为 True；
+    源码且超过行数上限时 too_long 为 (path, 行数)；其余情况均为 False/None。
+    临时文件与超大文件互斥：临时文件直接拦截，不再做行数统计。
+    """
+    if is_bad_name(path):
+        return True, None
+    # 超大文件：仅对源码、且非豁免路径生效
+    if not path.lower().endswith(SOURCE_EXTS) or is_exempt(path):
+        return False, None
+    n = count_lines(path)
+    if n > LINE_LIMIT:
+        return False, (path, n)
+    return False, None
+
+
 def main(argv):
     """入口：检查文件卫生与行数，收集全部违规项后统一输出。"""
     bad_names = []
@@ -66,16 +84,11 @@ def main(argv):
     for path in argv:
         if not os.path.isfile(path):
             continue
-        # 1) 临时 / 备份文件：一律拦截
-        if is_bad_name(path):
+        bad_name, over = _check_one(path)
+        if bad_name:
             bad_names.append(path)
-            continue
-        # 2) 超大文件：仅对源码、且非豁免路径生效
-        if not path.lower().endswith(SOURCE_EXTS) or is_exempt(path):
-            continue
-        n = count_lines(path)
-        if n > LINE_LIMIT:
-            too_long.append((path, n))
+        if over:
+            too_long.append(over)
 
     if not bad_names and not too_long:
         return 0

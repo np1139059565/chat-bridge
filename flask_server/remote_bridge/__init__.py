@@ -25,21 +25,40 @@ class RemoteBridge:
         self.client = None
         self.gateway = qq_gateway.QqGateway(on_command=command_panel.handle_command)
 
-    def start(self):
-        """按配置启动桥接。已启动则先停再起（配置可能变了）。"""
-        cfg = bridge_store.get_config()
+    def _check_startable(self, cfg):
+        """启动前置检查：开关打开、凭证齐全、依赖已装。
+
+        返回 (app_id, app_secret)；任一条件不满足返回 (None, None)。
+        分成独立函数是为了让 start 只表达「怎么起」，不掺杂「能不能起」的分支。
+        """
         if not cfg.get("enabled"):
             log("桥接未启用，跳过启动")
-            return False
+            return None, None
         app_id = cfg.get("app_id") or ""
         app_secret = cfg.get("app_secret") or ""
         if not app_id or not app_secret:
             log("缺少 AppID / AppSecret，无法启动")
-            return False
-        from .qq_client import QQClient, HAS_WS
+            return None, None
+        from .qq_client import HAS_WS
         if not HAS_WS:
             log("未安装 websocket-client，无法启动。请 pip install websocket-client")
+            return None, None
+        return app_id, app_secret
+
+    def _try_register_panel(self):
+        """启动后尝试注册指令面板；失败不影响消息收发，故只记录。"""
+        try:
+            command_panel.register_panel(self.client)
+        except Exception as e:
+            log("注册指令面板失败：", e)
+
+    def start(self):
+        """按配置启动桥接。已启动则先停再起（配置可能变了）。"""
+        cfg = bridge_store.get_config()
+        app_id, app_secret = self._check_startable(cfg)
+        if not app_id:
             return False
+        from .qq_client import QQClient
         self.stop()
         # intents：配置里为正数则用它，否则让客户端用默认值（单聊消息）
         intents = cfg.get("intents") or None
@@ -47,11 +66,7 @@ class RemoteBridge:
         self.gateway.qq_client = self.client
         ok = self.client.start()
         if ok:
-            # 启动后尝试注册指令面板（失败不影响收发）
-            try:
-                command_panel.register_panel(self.client)
-            except Exception as e:
-                log("注册指令面板失败：", e)
+            self._try_register_panel()
         return ok
 
     def stop(self):

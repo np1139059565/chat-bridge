@@ -168,6 +168,39 @@ def _restart_server(delay=3.0):
     os._exit(0)
 
 
+def _combo_interval(entry):
+    """取组合指令的步骤间隔（秒）。
+
+    读 entry.interval，未配置或非法时用默认 1 秒；下限 0.2 秒，
+    避免配置成 0 导致步骤挤在一起、抽屉来不及响应。
+    """
+    try:
+        interval = float(entry.get("interval", 1.0))
+    except (TypeError, ValueError):
+        interval = 1.0
+    return max(0.2, interval)
+
+
+def _run_combo_steps(qq_client, openid, msg_id, steps, interval):
+    """在抑制回复的状态下逐步执行组合指令，返回成功步数。"""
+    _reply_ctx.suppress = True
+    ok = 0
+    try:
+        for i, s in enumerate(steps):
+            try:
+                # 递归复用统一的指令处理；组合中不再嵌套组合（避免递归失控）
+                handle_command(qq_client, openid, msg_id, str(s).strip())
+                ok += 1
+            except Exception as e:
+                log("组合步骤失败：", s, e)
+            # 最后一步不必再等
+            if i < len(steps) - 1:
+                time.sleep(interval)
+    finally:
+        _reply_ctx.suppress = False
+    return ok
+
+
 def _run_combo(qq_client, openid, msg_id, entry):
     """执行一条组合指令：按顺序逐条执行 steps，每条间隔若干秒。
 
@@ -180,33 +213,12 @@ def _run_combo(qq_client, openid, msg_id, entry):
     if not steps:
         _reply(qq_client, openid, "组合指令「%s」没有步骤" % label)
         return
-    # 间隔可配置：读 entry.interval（秒），未配置或非法时用默认 1 秒。
-    # 下限 0.2 秒，避免配置成 0 导致步骤挤在一起、抽屉来不及响应。
-    try:
-        interval = float(entry.get("interval", 1.0))
-    except (TypeError, ValueError):
-        interval = 1.0
-    if interval < 0.2:
-        interval = 0.2
+    interval = _combo_interval(entry)
     _reply(qq_client, openid, "开始执行「%s」，共 %d 步，间隔 %.1f 秒"
            % (label, len(steps), interval))
 
     def _worker():
-        _reply_ctx.suppress = True
-        ok = 0
-        try:
-            for i, s in enumerate(steps):
-                try:
-                    # 递归复用统一的指令处理；组合中不再嵌套组合（避免递归失控）
-                    handle_command(qq_client, openid, msg_id, str(s).strip())
-                    ok += 1
-                except Exception as e:
-                    log("组合步骤失败：", s, e)
-                # 最后一步不必再等
-                if i < len(steps) - 1:
-                    time.sleep(interval)
-        finally:
-            _reply_ctx.suppress = False
+        ok = _run_combo_steps(qq_client, openid, msg_id, steps, interval)
         _reply(qq_client, openid, "「%s」执行完毕（%d/%d 步）" % (label, ok, len(steps)))
 
     threading.Thread(target=_worker, daemon=True).start()
@@ -372,27 +384,33 @@ def _check_handler_table():
 _check_handler_table()
 
 
-def _handle_custom(qq_client, openid, msg_id, cmd):
-    """按命令名或别名匹配自定义指令。命中返回 True，未命中返回 False。
-
-    两类自定义指令：
-    - 组合指令（含 steps）：逐条执行其指令列表；
-    - 点击指令：下发「点击元素」。
-    """
+def _match_custom(cmd):
+    """按命令名或别名查找自定义指令；未命中返回 None。"""
     for c in (bridge_store.get_config().get("commands") or []):
         names = [c.get("name") or ""] + (c.get("aliases") or [])
-        if cmd not in [str(n).lower() for n in names if n]:
-            continue
-        steps = c.get("steps") or []
-        if steps:
-            _run_combo(qq_client, openid, msg_id, c)
-        else:
-            _dispatch_with_result("click_element", {
-                "selector": c.get("selector", ""),
-                "page_url": c.get("page_url", ""),
-            }, openid)
-        return True
-    return False
+        if cmd in [str(n).lower() for n in names if n]:
+            return c
+    return None
+
+
+def _run_custom(qq_client, openid, msg_id, entry):
+    """执行一条自定义指令：组合指令逐条执行，点击指令下发点击元素。"""
+    if entry.get("steps"):
+        _run_combo(qq_client, openid, msg_id, entry)
+        return
+    _dispatch_with_result("click_element", {
+        "selector": entry.get("selector", ""),
+        "page_url": entry.get("page_url", ""),
+    }, openid)
+
+
+def _handle_custom(qq_client, openid, msg_id, cmd):
+    """按命令名或别名匹配自定义指令。命中返回 True，未命中返回 False。"""
+    entry = _match_custom(cmd)
+    if not entry:
+        return False
+    _run_custom(qq_client, openid, msg_id, entry)
+    return True
 
 
 def handle_command(qq_client, openid, msg_id, text):

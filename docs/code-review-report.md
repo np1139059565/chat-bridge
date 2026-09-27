@@ -77,16 +77,29 @@
 
 `scripts/check_quality.py` 扫描的超标函数数量：
 
-| 指标 | 修复前 | 修复后 |
-|---|---|---|
-| 超标函数数 | 19 | 18 |
-| `handle_command` | 118 行 / cc37 | 已消除 |
-| `_blocks_to_text` | 38 行 / cc24 | 已消除 |
-| `command_panel.py` 行数 | 449 | 412 |
-| 超大文件（>450 行） | 无 | 无 |
+| 指标 | 修复前 | 首轮后 | 最终 |
+|---|---|---|---|
+| 超标函数数 | 19 | 18 | 0 |
+| 超大文件（>450 行） | 无 | 无 | 无 |
 
-新增超标项中，`validate_command`（cc23）与 `help_text`（cc11）由原 `command_panel.py`
-迁入 `command_registry.py`，属位置变化而非新增复杂度。
+分两轮推进：首轮处理圈复杂度最高、影响面最大的三处；
+后续轮次把其余超标函数逐一拆分，直至扫描报告「超长 / 高圈复杂度函数」为空。
+
+各函数采用的拆分手法：
+
+| 位置 | 修复前 | 手法 |
+|---|---|---|
+| `command_panel.handle_command` | 118 行 / cc37 | 指令表驱动，主流程改为查表调用 |
+| `message_router._blocks_to_text` | cc24 | 块类型 → 处理函数的映射表 |
+| `command_registry.validate_command` | cc23 | 拆出名称冲突、子指令存在性校验 |
+| `qq_client.send_c2c_image` / `_on_message` | cc18 | 上传与发送分离；下行按 op 查表分派 |
+| `routes/bridge.bridge_result` | cc18 | 取上下文、送达结果、发送图片各成一函数 |
+| `external_tools.poll` / `dispatch` | cc12 / cc11 | 页面状态登记、命令筛选、超时撤回分离 |
+| `message_router.handle_report` | cc20 | 筛选新消息、判定推送、推送单条分离 |
+| 其余（`prompt_sections` / `tools_impl` / `__init__` / 钩子等） | cc10–11 | 按职责抽出子函数 |
+
+拆分只移动代码位置、不改变行为；每轮结束后跑 `_smoke_ct.py` 与 `_verify_fixes.py` 回归，
+最终两者均通过（`SMOKE OK` / `ALL OK`）。
 
 ---
 

@@ -293,6 +293,42 @@ def t_read_rule(p):
     return {"name": name, "content": content}
 
 
+def _builtin_params(tid):
+    """取内置工具的参数定义；不是内置工具返回 None。"""
+    if tid not in TOOLS:
+        return None
+    entry = TOOLS[tid]
+    resp = {"tool": tid, "description": entry["description"], "parameters": entry["parameters"]}
+    if tid == "run_command":
+        resp["languages"] = _load_run_command_languages()
+        resp["note"] = "language 参数只接受上述 languages 列表中的值；command 内容按所选语言执行。"
+    return resp
+
+
+def _custom_params(tid):
+    """取自定义 / 外部工具（来自 skill 的 tool.json）的参数定义；不是则返回 None。"""
+    import custom_tools as ct
+    ctool = ct.get_tool(tid)
+    if not ctool:
+        return None
+    return {
+        "tool": tid,
+        "description": ctool.get("description") or "",
+        "parameters": ctool.get("parameters") or [],
+        "executor": ctool.get("executor") or "script",
+        "provider": ctool.get("provider") or "",
+    }
+
+
+def _unknown_tool_params(tid):
+    """未知工具 id：返回可用清单（合并内置 + 自定义），便于调用方更正。"""
+    import custom_tools as ct
+    available = sorted(set(
+        list(TOOLS.keys()) + [t["name"] for t in ct.all_meta_full()]
+    ))
+    return {"error": "未知工具 id", "available": available}
+
+
 def t_get_tool_params(p):
     """按工具 id 返回其参数定义。
 
@@ -302,30 +338,7 @@ def t_get_tool_params(p):
     与设置页显示「已安装且在线」相互矛盾。
     """
     tid = p.get("tool_id") or p.get("tool")
-    # 1) 内置工具
-    if tid in TOOLS:
-        entry = TOOLS[tid]
-        resp = {"tool": tid, "description": entry["description"], "parameters": entry["parameters"]}
-        if tid == "run_command":
-            resp["languages"] = _load_run_command_languages()
-            resp["note"] = "language 参数只接受上述 languages 列表中的值；command 内容按所选语言执行。"
-        return resp
-    # 2) 自定义 / 外部工具（来自标准 skill 的 tool.json）
-    import custom_tools as ct
-    ctool = ct.get_tool(tid)
-    if ctool:
-        return {
-            "tool": tid,
-            "description": ctool.get("description") or "",
-            "parameters": ctool.get("parameters") or [],
-            "executor": ctool.get("executor") or "script",
-            "provider": ctool.get("provider") or "",
-        }
-    # 3) 都查不到：可用清单同样合并三类，避免提示信息与实际可调用范围不符
-    available = sorted(set(
-        list(TOOLS.keys()) + [t["name"] for t in ct.all_meta_full()]
-    ))
-    return {"error": "未知工具 id", "available": available}
+    return (_builtin_params(tid) or _custom_params(tid) or _unknown_tool_params(tid))
 
 
 # 工具名 → 实现函数的派发表

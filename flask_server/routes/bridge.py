@@ -61,6 +61,67 @@ def bridge_report():
         return jsonify(success=False, error=str(e)), 200
 
 
+def _try_send_image(client, openid, image):
+    """尝试把 dataURL 截屏发到 QQ。
+
+    成功返回 None；失败返回应回退发送的提示文本（含本地路径），
+    让用户至少知道图存在哪，而不是只看到一句「发送失败」。
+    """
+    saved = _save_data_url(image)
+    if not saved:
+        return "截屏已收到，但保存失败"
+    # 直接读本地文件上传（Base64），无需公网地址
+    msg_id, seq = message_router.next_seq(openid)
+    if not msg_id:
+        return "截屏已保存，但回复窗口已关闭\n路径：%s" % saved["path"]
+    ok, err = client.send_c2c_image(openid, saved["path"], msg_id=msg_id, msg_seq=seq)
+    if ok:
+        return None
+    return "截屏已保存，但发送图片失败：%s\n路径：%s" % (err, saved["path"])
+
+
+def _send_text(client, openid, text):
+    """向 QQ 发送一条文本；窗口已关闭时静默跳过。"""
+    msg_id, seq = message_router.next_seq(openid)
+    if msg_id:
+        client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq)
+
+
+def _take_result_context(data):
+    """取出待回传请求并确认桥接在线。
+
+    返回 (client, openid, err_resp)：出错时 client 为 None、err_resp 为响应；
+    成功时 err_resp 为 None。请求不存在或已过期属正常情况，返回提示而非报错
+    （可能用户已离开或重复回传）。
+    """
+    rid = data.get("request_id") or ""
+    item = command_panel.take_pending(rid) if rid else None
+    if not item:
+        return None, "", jsonify(success=False, error="pending_not_found")
+    client = bridge.client
+    if not client:
+        return None, "", jsonify(success=False, error="bridge_offline")
+    return client, item.get("openid") or "", None
+
+
+def _deliver_result(client, openid, data):
+    """把回传结果送达 QQ：优先按图片发送，失败则转为文本回退。
+
+    返回成功响应；无内容可发时也返回成功（回传本身已确认接收）。
+    """
+    text = data.get("text") or ""
+    image = data.get("image") or ""
+    # 截屏且无文本：优先按图片发送；失败则把错误信息转为文本回退发送
+    if image and not text:
+        fallback = _try_send_image(client, openid, image)
+        if fallback is None:
+            return jsonify(success=True, sent="image")
+        text = fallback
+    if openid and text:
+        _send_text(client, openid, text)
+    return jsonify(success=True)
+
+
 @bp.route("/api/bridge/result", methods=["POST", "OPTIONS"])
 def bridge_result():
     """接收抽屉回传的指令执行结果，转发到 QQ。
@@ -71,37 +132,10 @@ def bridge_result():
     if request.method == "OPTIONS":
         return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
-    rid = data.get("request_id") or ""
-    item = command_panel.take_pending(rid) if rid else None
-    if not item:
-        # 请求不存在或已过期：正常返回，不报错（可能用户已离开或重复回传）
-        return jsonify(success=False, error="pending_not_found")
-    client = bridge.client
-    if not client:
-        return jsonify(success=False, error="bridge_offline")
-    openid = item.get("openid") or ""
-    text = data.get("text") or ""
-    image = data.get("image") or ""
-    # 截屏：先落盘拿到文件名。若配置了公网地址，就把图片发到 QQ；
-    # 否则回退为回复文件路径（QQ 取不到本机 127.0.0.1 的图）。
-    if image and not text:
-        saved = _save_data_url(image)
-        if not saved:
-            text = "截屏已收到，但保存失败"
-        else:
-            # 直接读本地文件上传（Base64），无需公网地址
-            msg_id, seq = message_router.next_seq(openid)
-            ok, err = (False, "no_window")
-            if msg_id:
-                ok, err = client.send_c2c_image(openid, saved["path"], msg_id=msg_id, msg_seq=seq)
-            if ok:
-                return jsonify(success=True, sent="image")
-            text = "截屏已保存，但发送图片失败：%s\n路径：%s" % (err, saved["path"])
-    if openid and text:
-        msg_id, seq = message_router.next_seq(openid)
-        if msg_id:
-            client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq)
-    return jsonify(success=True)
+    client, openid, err = _take_result_context(data)
+    if err is not None:
+        return err
+    return _deliver_result(client, openid, data)
 
 
 def _save_data_url(data_url):
@@ -135,6 +169,23 @@ def _save_data_url(data_url):
         return None
 
 
+def _cmd_upsert(data):
+    """新增或修改一条指令（index 为 null 时新增，否则修改该下标）。"""
+    entry = data.get("entry") or {}
+    idx = data.get("index")
+    # 保存前校验：命令名格式 / 重复、组合子指令是否存在。
+    # 放在后端做，前端绕过也拦得住。
+    err = command_panel.validate_command(entry, idx)
+    if err:
+        return jsonify(success=False, error=err)
+    return jsonify(success=True, commands=bridge_store.upsert_command(idx, entry))
+
+
+def _cmd_remove(data):
+    """删除指定下标的指令。"""
+    return jsonify(success=True, commands=bridge_store.remove_command(int(data.get("index"))))
+
+
 @bp.route("/api/bridge/commands", methods=["GET", "POST", "DELETE", "OPTIONS"])
 def bridge_commands():
     """指令的增删改：独立接口，避免与 saveBridge 的全量覆盖互相干扰。
@@ -150,21 +201,10 @@ def bridge_commands():
     data = request.get_json(force=True, silent=True) or {}
     try:
         if request.method == "POST":
-            entry = data.get("entry") or {}
-            idx = data.get("index")
-            # 保存前校验：命令名格式 / 重复、组合子指令是否存在。
-            # 放在后端做，前端绕过也拦得住。
-            err = command_panel.validate_command(entry, idx)
-            if err:
-                return jsonify(success=False, error=err)
-            cmds = bridge_store.upsert_command(idx, entry)
-            return jsonify(success=True, commands=cmds)
-        # DELETE
-        cmds = bridge_store.remove_command(int(data.get("index")))
-        return jsonify(success=True, commands=cmds)
-    except IndexError as e:
-        return jsonify(success=False, error=str(e))
+            return _cmd_upsert(data)
+        return _cmd_remove(data)
     except Exception as e:
+        # IndexError（下标越界）与其它异常统一回传错误文本，由前端提示
         return jsonify(success=False, error=str(e))
 
 

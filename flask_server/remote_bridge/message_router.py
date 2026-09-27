@@ -34,6 +34,59 @@ _windows = {}
 _last_openid = ""
 
 
+def _merge_nested_envelope(obj):
+    """把嵌套信封的内层字段并入外层。
+
+    obj 的 request 字段若是字符串且本身又是一段 JSON，说明这是两层结构；
+    内层补 source / openid 等字段，外层字段优先（update 顺序即优先级）。
+    穿透失败时原样返回 obj。
+    """
+    import json
+    req = obj.get("request")
+    if not (isinstance(req, str) and req.strip().startswith("{")):
+        return obj
+    try:
+        inner = json.loads(req)
+    except Exception:
+        return obj
+    if not isinstance(inner, dict):
+        return obj
+    merged = dict(inner)
+    merged.update(obj)
+    merged["request"] = inner.get("request", req)
+    return merged
+
+
+def _block_text_of(b):
+    """取块的文本内容：优先 code 字段，其次 text 字段，均无则返回空串。"""
+    b = b or {}
+    src = b.get("code")
+    if not src:
+        src = b.get("text")
+    return str(src or "").strip()
+
+
+def _load_json_block(b):
+    """取块的文本内容并尝试解析为 JSON 对象；不是 JSON 对象返回 None。"""
+    import json
+    src = _block_text_of(b)
+    if not src or src[0] != "{":
+        return None
+    try:
+        obj = json.loads(src)
+    except Exception:
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def _parse_block_envelope(b):
+    """尝试把单个消息块解析为外部调用信封；不是信封返回 None。"""
+    obj = _load_json_block(b)
+    if obj is None or obj.get("type") != "external-call":
+        return None
+    return _merge_nested_envelope(obj)
+
+
 def _parse_envelope(m):
     """解析一条消息里的外部调用信封，穿透嵌套。
 
@@ -45,31 +98,10 @@ def _parse_envelope(m):
     @param m 消息对象
     @returns 解析出的信封 dict；解析不出返回 None
     """
-    import json
     for b in (m.get("blocks") or []):
-        src = str((b or {}).get("code") or (b or {}).get("text") or "").strip()
-        if not src or src[0] != "{":
-            continue
-        try:
-            obj = json.loads(src)
-        except Exception:
-            continue
-        if not isinstance(obj, dict) or obj.get("type") != "external-call":
-            continue
-        # 内层：request 是字符串且本身又是一个 JSON，穿透解析
-        req = obj.get("request")
-        if isinstance(req, str) and req.strip().startswith("{"):
-            try:
-                inner = json.loads(req)
-                if isinstance(inner, dict):
-                    # 合并：外层字段优先，内层补充 source / openid 等
-                    merged = dict(inner)
-                    merged.update(obj)
-                    merged["request"] = inner.get("request", req)
-                    return merged
-            except Exception:
-                pass
-        return obj
+        obj = _parse_block_envelope(b)
+        if obj is not None:
+            return obj
     return None
 
 
@@ -244,6 +276,51 @@ def push_text(qq_client, openid, text):
     return ok
 
 
+def _unpushed_messages(messages, pushed):
+    """从上报的全量消息里筛出尚未推送过的（有 id 且不在已推送集合中）。"""
+    out = []
+    for m in messages:
+        mid = m.get("id") or ""
+        if not mid or mid in pushed:
+            continue
+        out.append(m)
+    return out
+
+
+def _should_push(m, push):
+    """判断一条消息是否应当推送：类型开关打开，且不是 QQ 自己发来的。"""
+    kind = _classify(m)
+    # 推送开关：三类（user / tool / ai）各自控制
+    if not push.get(kind, True):
+        return False
+    # 去重：QQ 自己发来的消息不回推，避免把用户刚说的话复读回去
+    return not _has_qq_source(m)
+
+
+def _push_one(qq_client, openid, m, push):
+    """推送一条消息到 QQ。成功返回 True，不满足推送条件或内容为空返回 False。"""
+    if not _should_push(m, push):
+        return False
+    text = _blocks_to_text(m, push.get("thinking", False))
+    if not text:
+        return False
+    kind = _classify(m)
+    body = "%s\n%s" % (PREFIX.get(kind, kind), text)
+    # seq 由 push_text 内部统一分配，不能在此自行编号：
+    # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
+    return push_text(qq_client, openid, body)
+
+
+def _resolve_openid(payload):
+    """确定推送目标 openid：优先用上报值，回退到「最近发消息的人」。"""
+    return payload.get("openid") or _last_openid or ""
+
+
+def _message_ids(messages):
+    """取消息列表里全部有 id 的项，用于标记已推送。"""
+    return [m.get("id") for m in messages if m.get("id")]
+
+
 def handle_report(qq_client, payload):
     """处理抽屉上报：diff 出新增消息并推送。
 
@@ -254,42 +331,15 @@ def handle_report(qq_client, payload):
     if not qq_client:
         return 0
     conv_id = payload.get("conversationId") or "__default__"
-    # openid 优先用上报值；抽屉不知道它，回退到「最近发消息的人」
-    openid = payload.get("openid") or _last_openid or ""
+    openid = _resolve_openid(payload)
     messages = payload.get("messages") or []
     if not openid or not messages:
         return 0
 
-    cfg = bridge_store.get_config()
-    push = cfg.get("push") or {}
-    pushed = bridge_store.get_pushed_set(conv_id)
-
-    sent = 0
-    newly = []
-    for m in messages:
-        mid = m.get("id") or ""
-        if not mid or mid in pushed:
-            continue
-        newly.append(m)
-
-    for m in newly:
-        kind = _classify(m)
-        # 推送开关：三类各自控制
-        if not push.get(kind, True):
-            continue
-        # 去重：QQ 自己发来的消息不回推
-        if _has_qq_source(m):
-            continue
-        text = _blocks_to_text(m, push.get("thinking", False))
-        if not text:
-            continue
-        body = "%s\n%s" % (PREFIX.get(kind, kind), text)
-        # seq 由 push_text 内部统一分配，不能在此自行编号：
-        # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
-        if push_text(qq_client, openid, body):
-            sent += 1
+    push = bridge_store.get_config().get("push") or {}
+    newly = _unpushed_messages(messages, bridge_store.get_pushed_set(conv_id))
+    sent = sum(1 for m in newly if _push_one(qq_client, openid, m, push))
 
     # 无论是否推送成功，都把本轮全部消息 id 记为已见，避免重复处理
-    all_ids = [m.get("id") for m in messages if m.get("id")]
-    bridge_store.mark_pushed(conv_id, all_ids)
+    bridge_store.mark_pushed(conv_id, _message_ids(messages))
     return sent

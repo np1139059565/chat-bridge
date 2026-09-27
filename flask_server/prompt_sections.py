@@ -64,16 +64,12 @@ def _skill_dirs():
     return out
 
 
-def skills_manage():
-    """技能管理视图，供设置页「技能」区块渲染。
+def _manage_tools_by_skill():
+    """按技能归集【全部】工具定义（含已下线）：{ skill_name: [工具完整信息, ...] }。
 
-    与 skills() 的区别：
-    - 覆盖 skills 根目录下的全部技能，而非只含带说明文档的；
-    - 每个技能附带其包含的完整工具定义（含 enabled 与来源信息），
-      便于界面直接渲染工具行与一键上下线开关；
-    - 附带文档路径约定，供界面编辑 SKILL.md。
+    与 _tools_by_skill() 的区别：此处不过滤 enabled，因为设置页需要
+    展示并操作下线中的工具。
     """
-    # 按技能归集工具定义：{ skill_name: [工具完整信息, ...] }
     by_skill = {}
     for t in ct.load_tools().values():
         name = t.get("skill_name") or ""
@@ -87,19 +83,33 @@ def skills_manage():
             "executor": t.get("executor", "script"),
             "parameters": t.get("parameters") or [],
         })
+    return by_skill
+
+
+def _manage_row(name, tools, summaries):
+    """组装设置页单个技能的行：摘要、工具列表与上下线计数。"""
+    tools = sorted(tools, key=lambda x: x.get("name") or "")
+    return {
+        "name": name,
+        "summary": summaries.get(name, ""),
+        "tools": tools,
+        "tool_count": len(tools),
+        "enabled_count": sum(1 for x in tools if x.get("enabled")),
+        "doc_file": "SKILL.md",
+    }
+
+
+def skills_manage():
+    """技能管理视图，供设置页「技能」区块渲染。
+
+    与 skills() 的区别：
+    - 覆盖 skills 根目录下的全部技能，而非只含带说明文档的；
+    - 每个技能附带其包含的完整工具定义（含 enabled 与来源信息），
+      便于界面直接渲染工具行与一键上下线开关；
+    - 附带文档路径约定，供界面编辑 SKILL.md。
+    """
+    by_skill = _manage_tools_by_skill()
     # 技能摘要：优先取 SKILL.md / README.md 首行
     summaries = {s["name"]: s["summary"] for s in list_skills()}
-    names = set(_skill_dirs()) | set(by_skill.keys())
-    out = []
-    for name in sorted(names):
-        tools = sorted(by_skill.get(name, []), key=lambda x: x.get("name") or "")
-        enabled_count = sum(1 for x in tools if x.get("enabled"))
-        out.append({
-            "name": name,
-            "summary": summaries.get(name, ""),
-            "tools": tools,
-            "tool_count": len(tools),
-            "enabled_count": enabled_count,
-            "doc_file": "SKILL.md",
-        })
-    return out
+    names = sorted(set(_skill_dirs()) | set(by_skill.keys()))
+    return [_manage_row(n, by_skill.get(n, []), summaries) for n in names]

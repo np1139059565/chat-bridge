@@ -171,6 +171,55 @@ class ProviderHub:
         return True
 
     # ---------- 轮询与命令队列 ----------
+    def _set_page_open(self, provider, target, is_open, now):
+        """登记 / 注销某页面的工具打开状态（调用方须已持锁）。
+
+        关闭即注销：属于该页面的命令立刻失去归属，可被其他页面代收。
+        """
+        if not target:
+            return
+        pages = self._open_pages.setdefault(provider, {})
+        if is_open:
+            pages[target] = now
+        else:
+            pages.pop(target, None)
+
+    def _take_mine(self, provider, c, target, now):
+        """判断一条命令是否归本页面执行（调用方须已持锁）。
+
+        取走规则：
+          1. 目标就是本页面 —— 优先取走；
+          2. 无目标页面 —— 公开命令，任何页面可取；
+          3. 目标页面的工具没打开 —— 逸散，本页面代收。
+        返回 True 表示取走。目标页面工具开着时不打印（每次轮询都会重扫，
+        逐条打印会刷屏），真正的取件动作在取走分支里已记。
+        """
+        c_url = normalize_url(c.get("page_url") or "")
+        cid = (c.get("request_id") or "")[:8]
+        if not c_url:
+            log("取走公开命令", c.get("tool"), "id=" + cid)
+            return True
+        if c_url == target:
+            log("取走本页面命令", c.get("tool"), "id=" + cid)
+            return True
+        if not self._page_open_locked(provider, c_url, now):
+            log("代收命令（目标页面工具未开）", c.get("tool"),
+                "目标=" + c_url, "由=" + (target or "(未知)"), "id=" + cid)
+            return True
+        return False
+
+    def _pick_commands_locked(self, provider, target, now):
+        """按归属规则把队列拆为「本页面取走」与「留给别人」两部分（调用方须已持锁）。
+
+        取走后把剩余队列写回，保证未被取走的命令留在原处等它的目标页面。
+        """
+        queue = self._queues.get(provider, [])
+        mine, rest = [], []
+        for c in queue:
+            (mine if self._take_mine(provider, c, target, now) else rest).append(c)
+        self._queues[provider] = rest
+        return mine
+
     def poll(self, provider, page_url="", is_open=True):
         """记录心跳与工具开关状态，并按「同页面优先、目标没开就逸散」取走命令。
 
@@ -191,44 +240,13 @@ class ProviderHub:
         now = time.time()
         with self._lock:
             self._last_poll[provider] = now
-            # 登记 / 注销本页面的工具打开状态：关闭即注销，命令不再等它。
-            if target:
-                pages = self._open_pages.setdefault(provider, {})
-                if is_open:
-                    pages[target] = now
-                else:
-                    pages.pop(target, None)
-            queue = self._queues.get(provider, [])
-            mine, rest = [], []
+            self._set_page_open(provider, target, is_open, now)
             # 本页面工具已关闭：本次只注销登记，不取任何命令。
             # 否则「关闭时上报」这一次调用会顺手把属于本页面的命令取走并丢弃，
             # 命令被白白消耗，其他页面再也等不到它。
             if not is_open:
-                self._queues[provider] = queue
                 return []
-            for c in queue:
-                c_url = normalize_url(c.get("page_url") or "")
-                cid = (c.get("request_id") or "")[:8]
-                if not c_url:
-                    # 无目标页面：公开命令，任何页面都可取
-                    mine.append(c)
-                    log("取走公开命令", c.get("tool"), "id=" + cid)
-                elif c_url == target:
-                    # 目标就是本页面：优先取走
-                    mine.append(c)
-                    log("取走本页面命令", c.get("tool"), "id=" + cid)
-                elif not self._page_open_locked(provider, c_url, now):
-                    # 目标页面的工具没打开：直接逸散，本页面代收
-                    mine.append(c)
-                    log("代收命令（目标页面工具未开）", c.get("tool"),
-                        "目标=" + c_url, "由=" + (target or "(未知)"), "id=" + cid)
-                else:
-                    # 目标页面的工具开着：留给它。
-                    # 这里刻意不打印：每次轮询都会重扫队列，逐条打印会刷屏，
-                    # 真正的取件动作在取走分支里已经记了。
-                    rest.append(c)
-            self._queues[provider] = rest
-        return mine
+            return self._pick_commands_locked(provider, target, now)
 
     def push_command(self, provider, command):
         """把一条命令追加到该提供方的队列。
@@ -239,6 +257,19 @@ class ProviderHub:
             self._queues.setdefault(provider, []).append(command)
 
     # ---------- 工具调用转发与等待 ----------
+    def _abort_request(self, provider, request_id):
+        """超时善后：注销等待事件，并从队列撤回尚未被取走的命令（调用方须已持锁）。
+
+        撤回是必要的：否则该命令会留在队列里，被提供方在下一次 poll 时
+        当作新任务取走执行，而它对应的等待方早已超时离场，形成
+        「执行了一个没人要的任务、真正的新任务却被排在后面」的错位。
+        """
+        self._events.pop(request_id, None)
+        queue = self._queues.get(provider)
+        if queue:
+            self._queues[provider] = [c for c in queue
+                                      if c.get("request_id") != request_id]
+
     def dispatch(self, provider, tool, params, silent=False, page_url=""):
         """把一次工具调用入队，并阻塞等待提供方回传结果。
 
@@ -264,15 +295,7 @@ class ProviderHub:
         log("命令入队", tool, "目标页面=" + (normalize_url(page_url) or "(公开)"), "id=" + request_id[:8])
         if not event.wait(timeout=FORWARD_TIMEOUT):
             with self._lock:
-                self._events.pop(request_id, None)
-                # 同时撤回队列中未被取走的命令：
-                # 否则该命令会留在队列里，被提供方在下一次 poll 时当作新任务取走执行，
-                # 而它对应的等待方早已超时离场，形成「执行了一个没人要的任务、
-                # 真正的新任务却被排在后面」的错位。
-                queue = self._queues.get(provider)
-                if queue:
-                    self._queues[provider] = [c for c in queue
-                                              if c.get("request_id") != request_id]
+                self._abort_request(provider, request_id)
             return False, "FORWARD_TIMEOUT"
         with self._lock:
             result = self._results.pop(request_id, None)
