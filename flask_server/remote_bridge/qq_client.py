@@ -136,10 +136,26 @@ class QQClient:
 
     # ---------- 网关地址 ----------
     def _get_gateway(self):
-        """取 WebSocket 网关地址；失败返回空串。"""
+        """取 WebSocket 网关地址；失败返回空串。
+
+        关键：取网关前必须先确保 token 有效。
+        token 有效期约 2 小时，而断线重连循环只调本函数、不调 start()，
+        若不在此刷新，就会带着过期 token 反复取网关、永远 401，
+        陷入「每 5 秒重试一次、始终连不上」的死循环。
+        """
+        if not self._ensure_token():
+            return ""
         try:
             resp = self._http_get(GATEWAY_URL, self._auth_header())
             return resp.get("url") or ""
+        except urllib.error.HTTPError as e:
+            # 401：token 可能被服务端提前作废。清空它，
+            # 下次 _ensure_token 会重新获取，避免一直用废 token 重试。
+            if e.code == 401:
+                log("取网关 401，清空 token 待重新获取")
+                self._token = ""
+            log("取网关地址失败：", e)
+            return ""
         except Exception as e:
             log("取网关地址失败：", e)
             return ""
