@@ -44,6 +44,7 @@ BUILTIN = {
     "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"]},
     "/restart": {"desc": "重启服务端", "aliases": ["/rs"]},
     "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"]},
+    "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": []},
     "/help": {"desc": "显示指令列表", "aliases": ["/h"]},
 }
 

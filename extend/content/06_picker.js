@@ -171,23 +171,10 @@
    * @param {string} selector CSS 选择器
    * @returns {Object} { ok, reason, count }
    */
-  /**
-   * 注入主世界 hook 脚本（截获页面写入剪贴板的内容）。
-   *
-   * 为什么用 script 标签注入：内容脚本运行在隔离世界，patch 不到页面的
-   * navigator.clipboard；只有注入到主世界（MAIN）才能截获。
-   * 只注入一次（打标记防重复）。
-   */
-  A.injectClipboardHook = function () {
-    try {
-      if (document.getElementById('ai-mirror-clip-hook')) return;
-      const s = document.createElement('script');
-      s.id = 'ai-mirror-clip-hook';
-      s.src = chrome.runtime.getURL('content/injected_clipboard.js');
-      (document.head || document.documentElement).appendChild(s);
-      s.onload = function () { if (s.parentNode) s.parentNode.removeChild(s); };
-    } catch (e) { /* 忽略 */ }
-  };
+  // 主世界 hook（injected_clipboard.js）由 manifest 以 world:MAIN 声明式注入，
+  // 在 document_start 就跑，早于页面自身脚本。
+  // 注意：不要改回用 script 标签注入——那会被页面 CSP 拦掉，
+  // hook 装不上，剪贴板内容就永远截获不到。
 
   // 接收主世界 hook 回传的剪贴板内容：{
   //   source:'ai-mirror-clip', type:'copied', text }
@@ -207,7 +194,6 @@
    * @returns {boolean} 是否找到按钮并点击
    */
   A.clickCopyButton = function (selector) {
-    A.injectClipboardHook();
     if (!selector) return false;
     let el = null;
     try { el = document.querySelector(selector); } catch (e) { return false; }

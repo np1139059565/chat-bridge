@@ -26,14 +26,10 @@
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
       this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false }, cfg.push || {});
-      // 先把指令列表读进来，再从里面找采集指令——顺序不能反，
-      // 否则查找时 bridgeCommands 还是旧值 / 空数组。
       this.bridgeCommands = cfg.commands || [];
-      // 采集用选择器：从自定义指令里找带 collect 标记的那条取。
-      // 它就是一条标准自定义指令（存于 commands，可在设置页编辑），
-      // 而不是独立的配置字段——用户改选择器、删指令都在指令体系里完成。
-      const mdCmd = this.bridgeCommands.find((c) => c && c.collect);
-      this.bridgeMdSelector = (mdCmd && mdCmd.selector) || '';
+      // Markdown 采集选择器：来自配置（对应内置指令 /md）。
+      // 它是配置项而非自定义指令——内置指令本就不可由用户增删。
+      this.bridgeMdSelector = cfg.md_selector || '';
       this.bridgeConnected = !!st.connected;
     } catch (e) {
       // 桥接未启用 / 后端不可达：保持默认值，不打扰用户
@@ -93,6 +89,7 @@
           enabled: this.bridgeEnabled,
           app_id: this.bridgeAppId,
           app_secret: this.bridgeAppSecret,
+          md_selector: this.bridgeMdSelector,
           push: this.bridgePush
         }
       });

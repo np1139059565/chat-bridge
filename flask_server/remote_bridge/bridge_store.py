@@ -41,19 +41,12 @@ def _default_config():
             "ai": True,                # 是否推送 AI 消息
             "thinking": False,         # 是否推送思考过程（默认不推）
         },
-        # 指令列表：{name, label, selector, page_url} 或组合指令 {name, label, steps, interval}。
-        # 内置一条「采集 Markdown」：AI 回复完成后点它，截获带格式的原文，
-        # 推送 QQ 时优先使用。它就是一条普通的点击类自定义指令，
-        # 在设置页可见、可编辑、可删除——选择器失效时改它即可。
-        "commands": [
-            {
-                "name": "/md",
-                "label": "采集 Markdown 原文",
-                "selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
-                "page_url": "",
-                "collect": True,
-            }
-        ],
+        # Markdown 复制按钮选择器：AI 回复完成后点它，截获带格式的原文，
+        # 推送 QQ 时优先使用。留空则关闭格式增强，退回纯文本。
+        # 对应内置指令 /md（可手动触发一次采集）。
+        "md_selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
+        # 指令列表：{name, label, selector, page_url} 或组合指令 {name, label, steps, interval}
+        "commands": [],
     }
 
 
@@ -93,7 +86,7 @@ def load_config():
         raw = _read_yaml()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
             if k in raw:
                 cfg[k] = raw[k]
         if isinstance(raw.get("push"), dict):
@@ -129,7 +122,7 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
             if k in patch:
                 cfg[k] = patch[k]
         if isinstance(patch.get("push"), dict):

@@ -334,6 +334,15 @@ def _h_restart(qq_client, openid, arg, msg_id):
     _restart_server()
 
 
+def _h_md(qq_client, openid, arg, msg_id):
+    """采集当前 AI 回复的 Markdown 原文（手动触发一次）。"""
+    sel = bridge_store.get_config().get("md_selector") or ""
+    if not sel:
+        _reply(qq_client, openid, "未配置 Markdown 选择器（设置页可填）"); return
+    _dispatch("collect_md", {"selector": sel})
+    _reply(qq_client, openid, "已下发：采集 Markdown")
+
+
 def _h_refush(qq_client, openid, arg, msg_id):
     """刷新浏览器并打开抽屉。"""
     _dispatch("refresh_page", {})
@@ -362,6 +371,7 @@ _BUILTIN_HANDLERS = {
     "/rerun": _h_rerun,
     "/restart": _h_restart,
     "/refush": _h_refush,
+    "/md": _h_md,
     "/help": _h_help,
 }
 

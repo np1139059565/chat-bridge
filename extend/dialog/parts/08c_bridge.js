@@ -71,6 +71,18 @@
           placeholder: '开放平台应用的 AppSecret',
           onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
         })]),
+        // Markdown 复制按钮选择器：内置指令 /md 使用它采集带格式原文。
+        // 推送 QQ 时优先用采集到的 Markdown，没有则退回纯文本。留空则关闭。
+        h('label', ['Markdown 复制按钮选择器（对应内置指令 /md，留空则关闭）', h('input', {
+          type: 'text', class: 'bridge-sel-input',
+          value: ctx.bridgeMdSelector,
+          placeholder: '如 .ds-virtual-list--printable ... :has(.ds-cross-fade)',
+          onInput: (e) => { ctx.bridgeMdSelector = e.target.value; }
+        })]),
+        h('div', { class: 'bridge-pick-row' }, [
+          h('button', { onClick: () => ctx.testMdSelector() }, '采集测试'),
+          h('span', { class: 'hint' }, '用当前选择器试采一次，看能否取到内容')
+        ]),
         h('div', [
           h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
           h('span', { class: 'hint' }, '保存后自动重建 QQ 长连接')
