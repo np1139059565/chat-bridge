@@ -5,11 +5,17 @@
 (function () {
   'use strict';
   const A = window.AIMirrorContent;
+  // 启动标记：确认页面里跑的是含采集分支的新版内容脚本。
+  // 若控制台没有这行，说明页面未刷新、跑的还是旧版。
+  A.log('内容脚本已加载（含 bridge_copy_md 采集分支）');
 
   // 来自对话框（iframe）的消息
   window.addEventListener('message', function (e) {
     const d = e.data;
     if (!d || !d.type) return;
+    // 兜底日志：内容脚本收到的每条消息都记一笔，便于确认消息是否真的到达。
+    // 若抽屉已发出消息、这里却没有任何输出，说明扩展未重载或消息没到。
+    A.log('收到消息 type=' + d.type);
     if (d.type === 'request_page') A.sendPage(true, 'manual');
     else if (d.type === 'auto_send') A.pasteToWebpageAI(d.text || '');
     else if (d.type === 'request_theme') {
