@@ -173,27 +173,40 @@ class QQClient:
         except Exception:
             return ""
 
-    def send_c2c(self, openid, content, msg_id="", msg_seq=1):
+    def send_c2c(self, openid, content, msg_id="", msg_seq=1, markdown=False):
         """发送单聊被动回复。
 
         被动回复必须携带 msg_id（即收到的那条用户消息的 id），
         且需在收到后的一段时间内发出（窗口约 60 分钟）。
-        @param openid  接收方用户 openid
-        @param content 消息文本
-        @param msg_id  被动回复所引用的用户消息 id
-        @param msg_seq 同一 msg_id 下的消息序号，多条回复需递增
+        @param openid   接收方用户 openid
+        @param content  消息文本
+        @param msg_id   被动回复所引用的用户消息 id
+        @param msg_seq  同一 msg_id 下的消息序号，多条回复需递增
+        @param markdown 是否按 Markdown 消息发送：真走 msg_type=2，假走 msg_type=0
         @returns (ok, data_or_error)
         """
         if not self._ensure_token():
             return False, "no_token"
-        # 单聊发送接口路径与请求体结构（已核对官方文档）
+        # 单聊发送接口路径（两种消息类型共用同一路径）
         url = API_BASE + "/v2/users/%s/messages" % openid
-        body = {
-            "content": content,
-            "msg_type": 0,            # 0 文本；2 为 Markdown（需平台开通）
-            "msg_id": msg_id,         # 被动回复引用的用户消息 id
-            "msg_seq": msg_seq,       # 同 msg_id 下的去重序号
-        }
+        if markdown:
+            # Markdown 消息：msg_type=2，正文放进 markdown.content；
+            # 官方要求此模式下 content 必须为空字符串，否则请求体不合法。
+            body = {
+                "msg_type": 2,                          # 2 = Markdown
+                "markdown": {"content": content},      # Markdown 正文
+                "content": "",                         # 此模式下必须留空
+                "msg_id": msg_id,                       # 被动回复引用的用户消息 id
+                "msg_seq": msg_seq,                     # 同 msg_id 下的去重序号
+            }
+        else:
+            # 纯文本消息：msg_type=0，正文直接放在 content
+            body = {
+                "content": content,
+                "msg_type": 0,            # 0 = 文本
+                "msg_id": msg_id,         # 被动回复引用的用户消息 id
+                "msg_seq": msg_seq,       # 同 msg_id 下的去重序号
+            }
         try:
             resp = self._http_post(url, body, self._auth_header())
             return True, resp

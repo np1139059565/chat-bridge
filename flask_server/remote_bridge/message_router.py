@@ -259,18 +259,19 @@ def note_incoming(openid, msg_id):
     _remember_window(openid, msg_id)
 
 
-def push_text(qq_client, openid, text):
+def push_text(qq_client, openid, text, markdown=False):
     """把一段文本推送到 QQ。使用当前窗口的最新 msg_id 作被动回复。
 
     msg_seq 由 next_seq 统一分配：同一 msg_id 内唯一递增，
     避免 (msg_id, msg_seq) 重复导致消息被 QQ 判重丢弃。
+    markdown 为真时按 Markdown 消息发送（msg_type=2），否则按纯文本。
     """
     msg_id, seq = next_seq(openid)
     if not msg_id:
         # 窗口关闭：无处可推，静默丢弃（设计上等待用户下次发消息唤醒）
         print("[bridge][router] 窗口已关闭，暂不推送")
         return False
-    ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq)
+    ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq, markdown=markdown)
     if not ok:
         print("[bridge][router] 推送失败：", data)
     return ok
@@ -301,18 +302,19 @@ def _push_one(qq_client, openid, m, push):
     """推送一条消息到 QQ。成功返回 True，不满足推送条件或内容为空返回 False。"""
     if not _should_push(m, push):
         return False
-    # 优先用 AI 回复的 Markdown 原文（由页面复制按钮采集而来），保格式；
-    # 没有（未采集 / 非 AI 消息 / 采集失败）才退回 blocks 拼的纯文本。
-    text = str(m.get("md") or "").strip()
-    if not text:
-        text = _blocks_to_text(m, push.get("thinking", False))
+    # 节点上的 md 字段是 /md 采集来的 Markdown 原文，有它说明这条回复带格式。
+    # 有 md → 走 Markdown 通道（msg_type=2），QQ 端才会渲染标题、加粗等语法；
+    # 没有（未采集 / 非 AI 消息 / 采集失败）→ 退回 blocks 拼的纯文本，走文本通道。
+    raw_md = str(m.get("md") or "").strip()
+    is_markdown = bool(raw_md)
+    text = raw_md or _blocks_to_text(m, push.get("thinking", False))
     if not text:
         return False
     kind = _classify(m)
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
-    return push_text(qq_client, openid, body)
+    return push_text(qq_client, openid, body, markdown=is_markdown)
 
 
 def _resolve_openid(payload):
