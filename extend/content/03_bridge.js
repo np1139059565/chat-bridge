@@ -97,7 +97,16 @@
     // 内容未变化且非强制推送时直接返回：滚动期间会反复触发，去重可省下大量解析与消息投递
     if (!force && !convChanged && key === A.state.lastPageKey) return;
     A.state.lastPageKey = key;
-    A.log('sendPage: 推送结构化对话 force=' + !!force, '会话=' + convId, '消息数=' + messages.length);
+    // 逐条算消息指纹并打印：与 dialog 侧的 msgId 同源，便于对齐两边日志、
+    // 区分「同一会话的多次推送」（仅凭消息条数无法分辨）。
+    const fpList = messages.map(function (m) {
+      return window.AIMirrorDomUtils.messageFingerprint(m);
+    });
+    // 视口是否停在最新处：仅滚动轮次的自动执行复检需要，其余来源仅作日志
+    const atBottom = A.isAtBottom();
+    A.log('sendPage: 推送结构化对话 force=' + !!force, '会话=' + convId,
+      '消息数=' + messages.length, 'ids=' + JSON.stringify(fpList),
+      'atBottom=' + atBottom);
     A.post({
       type: 'page_blocks',
       messages: messages,
@@ -106,7 +115,8 @@
       profileId: A.state.profileId,
       conversationId: convId,
       conversationTitle: A.getConversationTitle(),
-      reason: reason || 'manual'   // 触发来源标签，供消费端分流
+      reason: reason || 'manual',  // 触发来源标签，供消费端分流
+      atBottom: atBottom           // 视口是否在底部（滚动轮次自动执行复检用）
     });
   };
 

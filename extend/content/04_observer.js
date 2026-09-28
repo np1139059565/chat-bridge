@@ -193,6 +193,25 @@
   };
 
   /**
+   * 判断当前视口是否停在对话最新处（底部）。
+   * 原理：站点用「滚动到底部」按钮的显隐表达该状态——向上翻看历史时按钮出现，
+   * 已回到最新时隐藏。故「按站点规则查不到该按钮」即视为已在底部。
+   * 站点未配置 scrollToBottomButton 时保守返回 false：宁可不让滚动轮次自动执行，
+   * 也不能因判定缺失而误执行历史卡片。
+   * @returns {boolean} 是否已在底部
+   */
+  A.isAtBottom = function () {
+    const P = A.activeProfile();
+    const sels = P && P.scrollToBottomButton;
+    if (!sels || !sels.length) return false;   // 未配置：保守判定为「不在底部」
+    for (let i = 0; i < sels.length; i++) {
+      // 任一选择器命中即表示按钮存在 = 用户不在底部
+      if (document.querySelector(sels[i])) return false;
+    }
+    return true;
+  };
+
+  /**
    * 生成结束后触发解析：以 generate 来源推送一次。
    * generate 是「AI 新增对话」的正式来源，会为本轮最新卡片安排自动执行。
    */

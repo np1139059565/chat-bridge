@@ -46,6 +46,15 @@
         isTool
           ? h('span', { class: 'toolname' }, '工具调用 · ' + card.tool)
           : h('span', { class: 'lang' }, String(block.lang || 'code').toUpperCase()),
+        // 卡片门牌号：紧跟工具名显示该卡片的 id，点击即复制。
+        // 展开卡片后一眼可见，便于排查卡片重复 / 定位到具体哪张卡。
+        (isTool && card.id)
+          ? h('span', {
+              class: 'card-id',
+              title: '卡片 id：' + card.id + '（点击复制）',
+              onClick: () => ctx.copy(card.id)
+            }, card.id)
+          : null,
         h('span', { class: 'head-controls' }, [
           // 跳过的卡片状态独立显示：status 仍为 pending，直接用 statusText 会误显示「待执行」
           isTool

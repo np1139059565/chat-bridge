@@ -157,6 +157,23 @@
   opacity: 1;
 }
 
+/* 卡片门牌号：跟在「工具调用 · 工具名」后显示的卡片 id。
+   等宽小字、浅底胶囊，悬停变主色，点击复制，便于排查卡片重复 / 定位具体哪张卡。 */
+.card-id {
+  flex: 0 0 auto;
+  font-family: var(--cb-font-mono, monospace);
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted);
+  background: var(--cb-bg-subtle, rgba(127, 127, 127, .12));
+  border-radius: 3px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.card-id:hover {
+  color: var(--cb-primary);
+}
+
 /* 条目预览：只占剩余空间，过长省略，不挤掉右侧状态徽标 */
 .conv-meta {
   flex: 1 1 auto;

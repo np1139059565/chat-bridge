@@ -1,6 +1,7 @@
 // 模块：extend/dialog/parts/05_messages.js
 // 用途：消息接收与消息树核心：工具列表拉取、网页消息接收与解析、
-//       分支组装、自动执行候选收集、助手回复质量检测。
+//       分支组装、自动执行候选收集。
+//       消息解析辅助（工具调用/外部信封/质量检测）在 05a_parse.js；
 //       消息树写入口 upsertTree 在 05b_tree.js。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 //
@@ -85,66 +86,10 @@
       // 先取历史（读 storage），拿到后再用切片处理
       this.applyConversation(d.conversationId, d.conversationTitle, d.page_url, (ok) => {
         if (!ok) return;
-        this.ingestMessages(d.messages, d.reason);
+        // atBottom：内容脚本算好的「视口是否在底部」，供滚动轮次自动执行复检
+        this.ingestMessages(d.messages, d.reason, { atBottom: !!d.atBottom });
       });
     }
-  };
-
-  /** 判断某工具是否为 silent（仅不在抽屉生成工具卡片；结果照常回传）。 */
-  M.toolSilent = function (name) {
-    const t = (this.tools || []).find((x) => x.name === name);
-    return !!(t && t.silent);
-  };
-
-  /**
-   * 判断代码块是否为一次工具调用：内容是 { tool, parameters } 且带 bridge-chat-call 即算。
-   * 安全性由调用方保证：只有「助手消息」里的代码块才会被判为工具调用。
-   */
-  M.parseToolCall = function (block) {
-    if (!block || block.type !== 'code') return null;
-    const src = String(block.code || '').trim();
-    if (!src || src.charAt(0) !== '{') return null; // 快速排除非 JSON
-    try {
-      const obj = JSON.parse(src);
-      if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
-        return { tool: String(obj.tool), parameters: obj.parameters || {} };
-      }
-    } catch (e) { /* 不是工具调用，按普通代码块渲染 */ }
-    return null;
-  };
-
-  /**
-   * 判断一条消息是否为外部调用信封（external-call）。
-   * 外部卡片发送到网页后，会以一条 user 消息落在对话里；这条消息即卡片的
-   * 本体，用于在镜像区还原为卡片、在列表里做颜色标记。
-   * 信封可能被解析成 code 或 text 两种块形态，两者都识别。
-   * @param {Object} m 消息对象
-   * @returns {Object|null} { nonce, request }；非外部调用返回 null
-   */
-  M.parseExternalCall = function (m) {
-    if (!m || m.role !== 'user') return null;
-    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      if (!b) continue;
-      const src = String(b.code || b.text || '').trim();
-      if (!src || src.charAt(0) !== '{') continue;
-      try {
-        const obj = JSON.parse(src);
-        if (obj && typeof obj === 'object' && obj.type === 'external-call') {
-          return {
-            nonce: obj.nonce || '',
-            request: obj.request || ''
-          };
-        }
-      } catch (e) { /* 非信封内容，继续找下一个块 */ }
-    }
-    return null;
-  };
-
-  /** 消息 id：直接复用内容指纹。指纹以 'm' 开头、不含分隔符 '-'。 */
-  M.msgId = function (m) {
-    return this.messageFingerprint(m);
   };
 
   // ============================ 消息树 ============================
@@ -227,10 +172,14 @@
    * 顺序：写消息树 → 记录可见区 key → 组装分支 → 为代码块建卡 → 自动执行 / 冲突回报 → 落盘。
    * @param {Array} messages 本次网页推送的消息（有序）
    * @param {string} [reason] 触发来源：'generate' / 'scroll' / 'switch' / 'manual'
+   * @param {Object} [opts] 附加信息
+   * @param {boolean} [opts.atBottom] 视口是否停在网页对话最新处（内容脚本算好传来）
    */
-  M.ingestMessages = function (messages, reason) {
+  M.ingestMessages = function (messages, reason, opts) {
     const conv = this.curConv;
     const scrollOnly = reason === 'scroll';
+    // 滚动轮次是否停在底部：自动执行复检的条件之一，其余来源不看它
+    const atBottom = !!(opts && opts.atBottom);
     // 块列表归一化：非数组统一转成数组，避免后续遍历抛错
     (messages || []).forEach((m) => {
       if (!m) return;
@@ -243,8 +192,10 @@
       log('ingestMessages：切片为空，忽略');
       return;
     }
+    // 打印过滤后各条指纹：与 sendPage 的 ids 同源，便于两边逐条比对。
     log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
-      + '，来源=' + (reason || 'generate') + '）');
+      + '，来源=' + (reason || 'generate')
+      + '，ids=' + JSON.stringify(incoming.map((m) => this.msgId(m))) + '）');
 
     // 1) 写入消息树
     const up = this.upsertTree(conv, incoming, reason);
@@ -270,6 +221,8 @@
     //   不入树的消息：卡片直接写在切片消息上（供手动操作）。
     //   检测出的问题（多调用冲突 / 回复质量）不另立流程，直接作为该条卡片的结果。
     const autoCandidates = [];
+    // 滚动轮次里被「上膛」的那张最新卡片（仅最后一条消息上的），供底部复检使用
+    let armedLast = null;
     incoming.forEach((m, mi) => {
       const key = this.keyOfId(conv.msgTree, this.msgId(m));
       const node = conv.msgTree[key];
@@ -340,7 +293,11 @@
         if (call) {
           if (scrollOnly) {
             // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行。
-            if (mi === incoming.length - 1) card.autoArmed = true;
+            // 记下这张卡片的响应式代理：复检通过后要执行的是界面真正监听的那份。
+            if (mi === incoming.length - 1) {
+              card.autoArmed = true;
+              armedLast = holder.cards[b.id];
+            }
           } else {
             // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
             // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象，
@@ -351,12 +308,28 @@
       });
     });
 
-    // 5) 自动执行：仅本轮最新的一张；滚动轮次与不入树切片绝不自动执行
+    // 5) 自动执行：仅本轮最新的一张；不入树切片绝不自动执行。
     const runnable = autoCandidates.filter((c) => c && !c.skipped);
-    if (!scrollOnly && !notInTree && this.autoSendEnabled && runnable.length) {
-      // 候选按本轮建卡顺序追加，末位即最新
-      const newest = runnable[runnable.length - 1];
-      if (newest && !newest.skipped) this.scheduleExecute(newest);
+    if (!notInTree && this.autoSendEnabled) {
+      if (!scrollOnly && runnable.length) {
+        // 非滚动轮次：候选按本轮建卡顺序追加，末位即最新
+        const newest = runnable[runnable.length - 1];
+        if (newest && !newest.skipped) this.scheduleExecute(newest);
+      } else if (scrollOnly) {
+        // 滚动轮次：原本一律不自动执行，以免回滚历史时把旧卡片误当最新触发。
+        // 这里补三道复检，确认「视口就停在最新处」后才放行——回滚误触发的前提即不成立：
+        //   1) 自动开关已打开；
+        //   2) 视口在底部（内容脚本按「滚动到底部按钮」是否存在判定，随推送传来）；
+        //   3) 上膛的是最后一条消息上的卡片，且仍是待执行态（未执行 / 未跳过 / 未在倒计时）。
+        const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
+          && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
+        const pass = atBottom && armedOk;
+        // 进入该分支即打印一行，便于核对判定过程（后续可在此补充更多诊断）
+        console.log('[AI-Mirror][dialog][scroll复检] 自动=' + this.autoSendEnabled
+          + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
+          + ' → ' + (pass ? '放行自动执行' : '保持待执行'));
+        if (pass) this.scheduleExecute(armedLast);
+      }
     }
     // 预备标记只生效一次
     autoCandidates.forEach((c) => { if (c) c.autoArmed = false; });
@@ -378,48 +351,5 @@
       holder.nonce = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
     }
     return holder.nonce;
-  };
-
-  /**
-   * 判定一条助手消息的质量问题。返回 null 表示无问题，否则返回问题描述。
-   * @param {Object} m 消息对象
-   * @returns {Object|null} { error, message }
-   */
-  M.assistantQualityIssue = function (m) {
-    if (!m || m.role !== 'assistant') return null;
-    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    if (!blocks.length) return null;
-    // 问题一：只有代码块，没有任何文字说明
-    const hasCode = blocks.some((b) => b && b.type === 'code');
-    const hasText = blocks.some((b) => {
-      if (!b || b.type === 'code' || b.type === 'thinking') return false;
-      let s = '';
-      if (b.text != null) s = String(b.text);
-      else if (b.items) s = window.AIMirrorDomUtils.toArray(b.items).join(' ');
-      else if (b.rows) s = JSON.stringify(b.rows);
-      return s.trim().length > 0;
-    });
-    if (hasCode && !hasText) {
-      return {
-        error: 'code_only_reply',
-        message: '本条回复只包含代码块，缺少文字说明，无法监控流程。'
-          + '请在代码块之外补充说明再重新生成。'
-      };
-    }
-    // 问题二：思考内容大段英文
-    const think = blocks.find((b) => b && b.type === 'thinking');
-    if (think) {
-      const t = String(think.text || '');
-      const letters = (t.match(/[A-Za-z]/g) || []).length;
-      const total = t.replace(/\s/g, '').length;
-      if (total > 200 && letters / total > 0.8) {
-        return {
-          error: 'thinking_english',
-          message: '本条回复的思考内容以英文为主（约 ' + Math.round(letters / total * 100)
-            + '% 为英文字符），无法监控流程。请用中文重新生成。'
-        };
-      }
-    }
-    return null;
   };
 })();

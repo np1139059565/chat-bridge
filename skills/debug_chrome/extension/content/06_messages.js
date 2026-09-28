@@ -5,7 +5,16 @@
 
   function onMouseOver(e) {
     if (!state.selectMode) return;
+    // 记录鼠标位置：方向键在尚未悬停到元素时，用它反查起点元素
+    state.lastMouseX = e.clientX;
+    state.lastMouseY = e.clientY;
     if (A.isInsideDrawer(e.target)) return;
+    // 冻结锁定期间不改高亮：此时标签栏停在被选元素上，按鼠标命中改写高亮
+    // 会造成来回漂移、按钮点不准；点标签栏的 ✕ 解锁后恢复悬停选元素。
+    if (A.isSelectFrozen()) return;
+    // 鼠标落在高亮层自身（尺寸标签栏与钻取按钮）上时，保持当前高亮不动：
+    // 否则悬停会把高亮框挪到按钮上，用户根本点不到按钮。
+    if (state.highlightLayer && state.highlightLayer.contains(e.target)) return;
     // iframe 是替换元素：顶层的 mouseover 只能把 iframe 本身当作目标，
     // 鼠标一旦进入子文档，顶层不再收到事件，若此时画顶层高亮框，
     // 它会一直停在 iframe 这一层（且 z-index 高于子文档内补丁画的虚线框），
@@ -21,6 +30,10 @@
   function onMouseOut(e) {
     if (!state.selectMode) return;
     if (A.isInsideDrawer(e.relatedTarget)) return;
+    // 冻结锁定期间不隐藏高亮：此时高亮稳定停在被选元素上，隐藏会闪断、按钮点不到
+    if (A.isSelectFrozen()) return;
+    // 鼠标移入高亮层（标签栏 / 按钮）时不算离开，保持高亮可点
+    if (state.highlightLayer && state.highlightLayer.contains(e.relatedTarget)) return;
     A.hideHighlight();
   }
 
@@ -32,11 +45,19 @@
     if (!state.selectMode) return;
     if (e.button !== 1) return;   // 只处理中键
     if (A.isInsideDrawer(e.target)) return;
+    // 中键落在高亮层自身（标签栏 / 钻取按钮）上时忽略：
+    // 否则会把扩展自己的按钮当作页面元素选中。
+    if (state.highlightLayer && state.highlightLayer.contains(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
-
+    // 冻结锁定期间，高亮与信息条展示的是 state.highlightTarget，
+    // 若仍按鼠标下的 e.target 选中，用户看到的元素与实际选中的会不一致。
+    // 因此锁定后一律选中锁定目标，保证「所见即所选」。
+    const target = (state.selectFrozen && state.highlightTarget && state.highlightTarget.isConnected)
+      ? state.highlightTarget
+      : e.target;
     // 统一入口：生成选择器、构建数据、入列三步收敛在 A.selectElement
-    A.selectElement(e.target);
+    A.selectElement(target);
   }
 
   // 选择模式下拦截「中键 mousedown」的默认行为：
@@ -155,20 +176,59 @@
     // 抽屉关闭后页面上不留任何本扩展的交互监听。
   };
 
-  /** Esc 退出选择模式：作为右键退出之外的兜底，保证用户总能退出。 */
+  /**
+   * 选择模式下的键盘操作：
+   *  - Esc：仅解除冻结锁定；未冻结时完全不拦截，让页面正常使用 Esc
+   *  - ↑ / ↓：高亮上钻父元素 / 下钻第一个子元素
+   *  - ← / →：高亮在同级兄弟元素间前后切换
+   * 键盘导航不依赖鼠标位置，避免「鼠标一动高亮就变」导致按钮点不中；
+   * 每次导航都会自动进入冻结锁定，高亮稳定停在被选元素上。
+   */
   function onKeyDown(e) {
     if (!state.selectMode) return;
-    if (e.key !== 'Escape' && e.keyCode !== 27) return;
+    const key = e.key;
+    if (key === 'Escape' || e.keyCode === 27) {
+      // Esc 只解除冻结，不退出选择模式；未冻结时直接放行，页面可正常使用 Esc
+      if (A.isSelectFrozen()) {
+        e.preventDefault();
+        e.stopPropagation();
+        A.setSelectFrozen(false);
+      }
+      return;
+    }
+    // 方向键做层级导航：先确保有高亮目标，再交给统一的钻取入口
+    let dir = '';
+    if (key === 'ArrowUp') dir = 'up';
+    else if (key === 'ArrowDown') dir = 'down';
+    else if (key === 'ArrowLeft') dir = 'sibling-prev';
+    else if (key === 'ArrowRight') dir = 'sibling';
+    if (!dir) return;
     e.preventDefault();
     e.stopPropagation();
-    A.toggleSelectMode(false);
-    A.postToDrawer({ type: 'ai-debug-select-cancelled' });
-    A.showToast('已退出元素选择模式');
+    // 还没有高亮目标时，用鼠标当前位置反查元素作为起点：
+    // 进入选择模式后即使没悬停过，也能直接按方向键进入锁定导航。
+    if (!state.highlightTarget) {
+      let startEl = null;
+      if (state.lastMouseX !== null && state.lastMouseY !== null) {
+        try { startEl = document.elementFromPoint(state.lastMouseX, state.lastMouseY); } catch (err) { startEl = null; }
+      }
+      if (!startEl || startEl.nodeType !== 1) {
+        A.showToast('请先把鼠标移到某个元素上，再用方向键导航');
+        return;
+      }
+      // 起点是浮层自身时忽略，避免把扩展界面当页面元素
+      if (state.highlightLayer && state.highlightLayer.contains(startEl)) {
+        A.showToast('请先把鼠标移到页面元素上，再用方向键导航');
+        return;
+      }
+      A.updateHighlight(startEl);
+    }
+    A.drillHighlight(dir);
   }
 
   /**
    * 绑定页面级交互监听：抽屉打开时调用。
-   * 包含元素选择相关（中键选择 / 右键退出 / 高亮）与 Esc 兜底。
+   * 包含元素选择相关（中键选择 / 右键退出 / 高亮）与键盘层级导航。
    * 这些监听只在抽屉存在时才有意义，关闭后必须解绑，不在宿主页面留痕。
    */
   A.attachPageListeners = function () {

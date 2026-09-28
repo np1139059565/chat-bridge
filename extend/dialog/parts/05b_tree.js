@@ -8,12 +8,38 @@
   const M = D.methods;
 
   /**
+   * 判断切片能否从树中已有节点往下延伸接上。
+   * 条件：切片首条已在树中，且其余节点都还不在树里。此时整片是「从某个
+   * 已知节点长出的新内容」，无论该节点是叶子还是已有子节点，都能安全接上：
+   *   - 叶子情形（末节点纯追加）：把当前末端往下延伸；
+   *   - 非叶子情形（新开分支，如重新生成 / 切换回复版本）：给该节点补一条
+   *     新出边，消息树由此分叉。
+   * 回看历史不会误触发：往回滚时切片要么首条不在树里（更早的内容），
+   * 要么其后继边早已在树里（走命中边分支），都不会落进这个判据。
+   * @param {Object} tree 消息树
+   * @param {Array<string>} ids 切片各条消息 id（有序）
+   * @returns {boolean} 是否可从已有节点接上
+   */
+  M.isAppendableFromExisting = function (tree, ids) {
+    if (!ids || ids.length < 2) return false;
+    // 首条必须已在树中，作为接入点
+    if (!this.keyOfId(tree, ids[0])) return false;
+    // 其余节点都不得已在树中，避免与既有节点 / 分支碰撞
+    for (let i = 1; i < ids.length; i++) {
+      if (this.keyOfId(tree, ids[i])) return false;
+    }
+    return true;
+  };
+
+  /**
    * 把一批（有序）消息并入消息树。
    *
    * 对比单位是「边」：切片内相邻两条构成 '父id-子id'，拿去树里比对。
    *   1) 树为空            → 整片作为新树
    *   2) 切片不足两条      → 报错忽略
-   *   3) 命中边为空        → 生产轮次回退为「从已知节点按顺序接上」；否则仅展示不入树
+   *   3) 命中边为空        → 可回退时从已知节点接上（来源为 generate，
+   *                          或切片首条在树、其余都不在树：叶子末端追加，
+   *                          或非叶子新开分支）；否则仅展示不入树
    *   4) 命中边不连续      → 判定碰撞，整片不入树
    *   5) 命中的是前缀一节  → 向后追加新节点
    *   6) 命中的是后缀一节  → 向前补接新节点（根随之变更）
@@ -59,7 +85,14 @@
 
     // 4) 完全无交集：生产轮次回退为「从已知节点按顺序接上」；否则仅展示不入树
     if (!matched.length) {
-      if (reason === 'generate') {
+      // 允许按节点回退接上的两种情形：
+      //  1) 来源是 generate：AI 刚说完新话，切片首条边的另一端天然不在树里；
+      //  2) 切片可从树中已有节点往下延伸：首条已在树、其余都不在树。
+      //     该节点是叶子时为末端追加，已有子节点时为新开分支（如重新生成）。
+      //     回看类来源（scroll / switch / manual）只在情形 2 下放行，
+      //     这样既能稳定接上真正的末端追加与新分支，又不会把往回滚的历史误接到末端。
+      const canAppend = reason === 'generate' || this.isAppendableFromExisting(tree, ids);
+      if (canAppend) {
         // 新消息的第一条边天然不在树里，故按节点定位：
         // 找到切片中最后一个已在树的节点，把其后按顺序接上。
         let baseIdx = -1;
@@ -72,7 +105,7 @@
             if (!tree[key]) tree[key] = this.makeNode(list[i]);
           }
           conv.orphanSlice = [];
-          log('upsertTree：生产场景无命中边，从第 ' + baseIdx + ' 条后接上，节点=' + Object.keys(tree).length);
+          log('upsertTree：无命中边，从第 ' + baseIdx + ' 条后接上（来源=' + (reason || 'generate') + '），节点=' + Object.keys(tree).length);
           return { mode: 'append' };
         }
       }

@@ -40,7 +40,15 @@ window.AIStyleDebug = (function () {
     drawerIframe: null,
     selectMode: false,
     highlightBox: null,
-    highlightTag: null,     // 高亮框上方的尺寸标签
+    highlightTag: null,     // 高亮框上方的尺寸标签栏（含钻取按钮）
+    highlightBar: null,           // 尺寸标签栏容器（文字 + 钻取按钮）
+    highlightTagText: null,       // 尺寸标签栏内的文字节点
+    highlightTarget: null,        // 当前高亮的元素，钻取按钮据此上下移动
+    selectFrozen: false,          // 悬停选元素是否冻结：钻取后锁定，点标签栏的 ✕ 解除
+    highlightInfo: null,          // 标签栏内的信息节点（选择器、源码字符数等）
+    highlightBtns: null,          // 标签栏内的按钮引用，用于按可用性显隐
+    lastMouseX: null,             // 最近一次鼠标位置 x，供方向键在无高亮时确定起点
+    lastMouseY: null,             // 最近一次鼠标位置 y
     highlightLayer: null,   // 承载高亮框的层（直接挂在顶层文档）
     connected: false,
     screenshotEnabled: false,

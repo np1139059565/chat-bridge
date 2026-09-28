@@ -116,6 +116,14 @@ window.AIMirrorContent = (function () {
       // querySelector 只取第一个，于是轮询长期读错元素、永远判定不出生成态翻转，
       // 导致 generate 来源永不触发、最新卡片停在待执行。
       sendButton: 'div[role="button"].ds-button--primary.ds-button--circle',
+      // 「滚动到底部」按钮：用户向上翻看历史时出现，点它回到最新；已在底部时隐藏。
+      // 用途：滚动轮次里判断视口是否停在最新消息处，作为「回滚误触发」的排除条件。
+      // 两个选择器均经页面验证有效，逐条匹配、任一命中即算「按钮存在」。
+      // 语义约定：按钮存在 = 不在底部；按钮不存在 = 已在底部。
+      scrollToBottomButton: [
+        'div[role="button"].ds-button--circle.ds-button--outlinedNeutral.ds-button--floating',
+        'div[role="button"].ds-button--floating'
+      ],
       // 生成中（AI 说话）时按钮换成「停止」方块图标，其 path 以此片段开头；
       // 空闲时为发送箭头。用它直接判定生成中，避免依赖「首帧恰为空闲」这一假设。
       sendButtonStopMark: 'M2 4.88C2 3.68009'

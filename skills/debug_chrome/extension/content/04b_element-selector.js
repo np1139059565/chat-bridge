@@ -1,21 +1,31 @@
-// 元素选择器（续）：选择模式、高亮层、已选元素管理与统一选中入口
+// 模块：元素选择器（续）：选择模式、已选元素管理与统一选中入口
+// 用途：元素选择模式开关、iframe 广播、已选元素的去重/压缩/增删，
+//       以及所有「选中」路径收敛到的统一入口 selectElement。
+// 依赖：content/00_namespace.js（命名空间 A 与共享状态 state）
+// 说明：高亮浮层与层级导航见 content/04c_highlight.js。
 (function () {
   const A = window.AIStyleDebug;
   const state = A.state;
 
-
+  /** 判断某元素是否位于调试抽屉 iframe 内（抽屉自身不算页面元素）。 */
   A.isInsideDrawer = function (el) {
     const frame = document.getElementById(A.DRAWER_IFRAME_ID);
     if (!frame) return false;
     return frame === el || frame.contains(el);
   };
 
+  /**
+   * 开关元素选择模式：进入时给 body 加类并提示，退出时移除类并隐藏高亮。
+   * @param {boolean} active 是否进入选择模式
+   */
   A.toggleSelectMode = function (active) {
     state.selectMode = active;
     if (state.selectMode) {
+      // 进入：加类便于用 CSS 提示，并在页面内广播，让 iframe 内的补丁同步启用
       document.body.classList.add('ai-style-select-mode');
       A.showToast('已进入元素选择模式，鼠标中键（滚轮键）点击页面元素即可连续多选；右键单击或按 Esc 退出');
     } else {
+      // 退出：移除类并清掉高亮，避免残留浮层
       document.body.classList.remove('ai-style-select-mode');
       A.hideHighlight();
     }
@@ -39,66 +49,6 @@
     }
   };
 
-  // 高亮层：直接挂在顶层文档，用一个零尺寸容器承载高亮框与尺寸标签。
-  // 关键属性一律带 !important，尽量压过宿主网页的全局 CSS（如通配选择器、
-  // transition、transform 等），保证高亮框始终可控、可见。
-  A.getHighlightLayer = function () {
-    if (state.highlightLayer && state.highlightLayer.isConnected) return state.highlightLayer;
-    const host = document.createElement('div');
-    host.id = 'ai-style-highlight-host';
-    // 宿主本身不占位、不拦截事件；层级取上限，确保浮于页面之上
-    host.style.cssText = 'position:fixed !important;top:0 !important;left:0 !important;'
-      + 'width:0 !important;height:0 !important;z-index:2147483647 !important;pointer-events:none !important;';
-    document.documentElement.appendChild(host);
-
-    // 高亮框：实线双层描边 + 半透明填充，选择范围一目了然
-    const box = document.createElement('div');
-    box.className = 'ai-style-highlight-box';
-    box.style.cssText = 'position:fixed !important;pointer-events:none !important;box-sizing:border-box !important;'
-      + 'border:2px solid #1890ff !important;background:rgba(24,144,255,0.18) !important;'
-      + 'box-shadow:0 0 0 1px rgba(255,255,255,0.9), 0 0 6px rgba(24,144,255,0.6) !important;'
-      + 'border-radius:2px !important;transition:none !important;margin:0 !important;padding:0 !important;';
-
-    // 尺寸标签：显示当前元素的宽高，进一步确认选择范围
-    const tag = document.createElement('div');
-    tag.className = 'ai-style-highlight-tag';
-    tag.style.cssText = 'position:fixed !important;pointer-events:none !important;background:#1890ff !important;color:#fff !important;'
-      + 'font:11px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif !important;'
-      + 'padding:1px 6px !important;border-radius:3px !important;white-space:nowrap !important;box-shadow:0 1px 3px rgba(0,0,0,0.3) !important;'
-      + 'margin:0 !important;';
-
-    host.appendChild(box);
-    host.appendChild(tag);
-    state.highlightLayer = host;
-    state.highlightBox = box;
-    state.highlightTag = tag;
-    return host;
-  };
-
-  A.updateHighlight = function (el) {
-    A.getHighlightLayer();
-    const rect = el.getBoundingClientRect();
-    const box = state.highlightBox;
-    box.style.left = rect.left + 'px';
-    box.style.top = rect.top + 'px';
-    box.style.width = rect.width + 'px';
-    box.style.height = rect.height + 'px';
-    box.style.display = 'block';
-
-    // 标签贴在元素左上角上方；靠近视口顶部时改放到元素内侧，避免被裁掉
-    const tag = state.highlightTag;
-    tag.textContent = el.tagName.toLowerCase() + ' '
-      + Math.round(rect.width) + '×' + Math.round(rect.height);
-    tag.style.display = 'block';
-    tag.style.left = rect.left + 'px';
-    tag.style.top = (rect.top >= 20 ? rect.top - 18 : rect.top) + 'px';
-  };
-
-  A.hideHighlight = function () {
-    if (state.highlightBox) state.highlightBox.style.display = 'none';
-    if (state.highlightTag) state.highlightTag.style.display = 'none';
-  };
-
   // 给每个已选元素分配唯一 selId：抽屉与内容脚本据此增删，
   // 避免用下标定位元素带来的错位。
   let _selSeq = 0;
@@ -117,6 +67,12 @@
     return String(data.page_url || '') + '\u0000' + sig;
   }
 
+  /**
+   * 把一个已选元素加入列表并回传抽屉；重复元素只回传最新列表、不入列。
+   * @param {Object} elementData 元素数据
+   * @param {string} [screenshot] 截图 dataURL（可选）
+   * @returns {boolean} 是否真正入列
+   */
   A.pushSelected = function (elementData, screenshot) {
     if (screenshot) elementData.screenshot = screenshot;
     const key = selectedKey(elementData);
@@ -181,6 +137,13 @@
     return flags;
   };
 
+  /**
+   * 以 baseDom 为基准压缩 dom：把按顺序能对上的公共 token 段用省略标记代替，
+   * 差异部分原样保留。
+   * @param {string} baseDom 基准 DOM 字符串
+   * @param {string} dom 待压缩 DOM 字符串
+   * @returns {string} 压缩后的 DOM 字符串
+   */
   A.compactDomAgainst = function (baseDom, dom) {
     if (!baseDom || !dom || baseDom === dom) return dom;
     // 按 '<' 边界切分为 token。
@@ -224,7 +187,7 @@
     return out.join('');
   };
 
-  // 对某元素执行去重：以同选择器的首个元素为基准。
+  /** 对某元素执行去重：以同选择器的首个元素为基准。 */
   A.dedupElementById = function (selId) {
     const idx = state.selectedElements.findIndex((el) => el.selId === selId);
     if (idx < 0) return;
@@ -243,7 +206,7 @@
     A.showToast('已与首个同选择器元素对比去重');
   };
 
-  // 还原某元素为完整 DOM
+  /** 还原某元素为完整 DOM。 */
   A.restoreElementById = function (selId) {
     const idx = state.selectedElements.findIndex((el) => el.selId === selId);
     if (idx < 0) return;
@@ -256,13 +219,14 @@
     A.showToast('已还原为完整 DOM');
   };
 
-  // 按 selId 移除单个元素，回传最新列表
+  /** 按 selId 移除单个元素，回传最新列表。 */
   A.removeElementById = function (selId) {
     const idx = state.selectedElements.findIndex((el) => el.selId === selId);
     if (idx >= 0) state.selectedElements.splice(idx, 1);
     A.postToDrawer({ type: 'elements-updated', elements: state.selectedElements });
   };
 
+  /** 按下标移除单个元素，回传最新列表。 */
   A.removeElementAt = function (index) {
     if (index >= 0 && index < state.selectedElements.length) {
       state.selectedElements.splice(index, 1);
@@ -270,6 +234,7 @@
     A.postToDrawer({ type: 'elements-updated', elements: state.selectedElements });
   };
 
+  /** 清空全部已选元素，回传空列表。 */
   A.clearElements = function () {
     state.selectedElements.length = 0;
     A.postToDrawer({ type: 'elements-updated', elements: state.selectedElements });

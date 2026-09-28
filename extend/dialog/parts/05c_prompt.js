@@ -95,6 +95,9 @@
           if (b.type === 'thinking') return null;   // 思考过程不导出
           const base = { type: b.type };
           if (b.type === 'code') {
+            // 卡片 id：代码块自身带的稳定 id，即卡片门牌号。
+            // 导出时带上它，复制出的 JSON 里才能对应到具体是哪张卡片。
+            base.cardId = b.id || '';
             base.language = b.lang;
             base.code = b.code;
             const c = (node.cards || {})[b.id];
