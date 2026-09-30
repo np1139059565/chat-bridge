@@ -98,7 +98,14 @@
       cb(true);
       return;
     }
-    // 切换到新会话：先建立会话对象，再从 storage 读历史
+    // 切换到新会话：先关掉自动开关，再建立会话对象、读历史。
+    // 为什么必须关：自动开关开着时，新会话里一旦出现待执行卡片，
+    // 会被自动倒计时执行并回传——用户此刻只是切了会话，并非要执行它，
+    // 属于误执行。关开关同时会清掉已排的倒计时（见 setAutoSendEnabled）。
+    // 仅在「从某个已就绪会话切到另一个会话」时触发，避免首次加载误报 toast。
+    if (this.autoSendEnabled && this.activeConv && this.activeConv !== id) {
+      this.setAutoSendEnabled(false);
+    }
     this.activeConv = id;
     const conv = this.ensureConv(id);
     if (title) conv.title = title;

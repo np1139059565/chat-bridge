@@ -7,4 +7,32 @@ push:
   thinking: false
 md_selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
   div[role="button"]:has(.ds-cross-fade)
-commands: []
+commands:
+- name: /new
+  label: 开启新对话
+  selector: div._5a8ac7a.a084f19e
+  page_url: ''
+- name: /new1
+  label: 新建1
+  steps:
+  - /new
+  - /csp
+  - /sa on
+  interval: 2
+- name: /crp
+  label: 清空消息记录并重新解析
+  steps:
+  - /cms
+  - /rp
+  interval: 1
+- name: /rall
+  label: 重启前后端并刷新
+  steps:
+  - /rf
+  - /rs
+  interval: 5
+- name: /reall
+  label: 重新生成
+  selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
+    [role="button"][aria-disabled="false"]
+  page_url: ''

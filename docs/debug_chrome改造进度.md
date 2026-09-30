@@ -164,6 +164,16 @@ routes/tools.py、.gitignore、docs/development-guide.md
 flask_server/remote_bridge/message_router.py、
 skills/debug_chrome/extension/drawer/03_ui-chat.js
 
+### 阶段 9：切换会话时关闭自动开关（task 8）
+
+- [x] 切换会话时，若自动开关开着，自动关掉它（同时清掉已排的倒计时），
+      避免新会话里一旦出现待执行卡片就被自动执行——用户此刻只是切了会话，
+      并非要执行它，属于误执行。
+      改动位置：04_sessions.js 的 applyConversation（所有会话切换的收敛点）。
+      仅在「从某个已就绪会话切到另一个会话」时触发，首次加载不误报提示。
+
+**改动文件**：extend/dialog/parts/04_sessions.js
+
 ## 已知遗留（未处理，供后续决定）
 
 - `skills/debug_chrome/extension/content/05_tool-handlers.js` 的 `A.downscaleImage`
