@@ -1,6 +1,6 @@
 // 模块：extend/dialog/parts/05d_memory.js
-// 用途：工作记忆检查：检测到用户发言后启动计数，AI 连续多轮未写记忆时
-//       产出与「回复质量检查」同形态的提醒，随卡片结果回传给 AI。
+// 用途：工作记忆检查：检测到用户发言后开始数 AI 的发言轮次，
+//       连续多轮未写记忆时产出与「回复质量检查」同形态的提醒，随卡片结果回传给 AI。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 //
 // 「是否写了记忆」如何判定：不扫描工具调用参数，而是比较 memory 目录的
@@ -8,6 +8,13 @@
 //   - 只看参数会把「读取」误判为「写入」；
 //   - AI 可能用变量拼接路径，字符串匹配防不住；
 //   - 读不改变内容、写必改变内容，指纹能准确区分，且不受路径写法影响。
+//
+// 计数语义（关键）：
+//   - 用户发言 = 打开一个计数窗口（重置计数），此后开始数 AI 的发言轮次；
+//   - 窗口内每轮 AI 生成都计数（写了记忆则计数归零）；
+//   - 一个窗口内最多提醒一次（notified 标记）：提醒后不再重复打扰，
+//     直到用户下一次发言才重开窗口。这样用户停止说话、AI 一直跑工具时，
+//     不会被反复提醒。
 //
 // 时序说明：AI 写记忆通过卡片执行完成，而卡片执行发生在本轮入库之后；
 // 因此本次采样与上次的差值反映「上一轮」的执行结果，检测有一轮滞后。
@@ -22,6 +29,14 @@
   const MEMORY_IDLE_LIMIT = 3;
   // 指纹采样超时（毫秒）：后端不可达时不能让入库流程卡死
   const FP_TIMEOUT_MS = 2000;
+
+  /** 初始化记忆检查状态（不存在时）。 */
+  M._ensureMemoryState = function () {
+    if (!this.memoryCheck) {
+      this.memoryCheck = { armed: false, idle: 0, lastFp: null, lastUserId: '', notified: false };
+    }
+    return this.memoryCheck;
+  };
 
   /**
    * 采样 memory 目录的内容指纹。
@@ -55,17 +70,43 @@
     return wrote;
   };
 
-  /** 检测到新用户发言：启动记忆检查（幂等，已在检查中不重置计数）。 */
-  M.armMemoryCheck = function () {
-    if (!this.memoryCheck) {
-      this.memoryCheck = { armed: false, idle: 0, lastFp: null };
+  /**
+   * 取切片里最后一条「真实用户发言」的消息 id；没有则返回空串。
+   * 工具结果回传（bridge-chat-res）虽以 user 角色落地，但被 isRealUserMessage
+   * 判否，故不会误当作真实发言。
+   * @param {Array} incoming 本轮消息切片
+   * @returns {string} 消息 id（内容指纹）或空串
+   */
+  M._lastRealUserId = function (incoming) {
+    const list = incoming || [];
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i];
+      if (m && m.role === 'user' && this.isRealUserMessage(m)) {
+        return this.msgId(m);
+      }
     }
-    if (!this.memoryCheck.armed) {
-      this.memoryCheck.armed = true;
-      this.memoryCheck.idle = 0;
-      this.memoryCheck.lastFp = null;
-      log('记忆检查：已启动（检测到新用户发言）');
-    }
+    return '';
+  };
+
+  /**
+   * 处理本轮的用户发言：若出现「新的」真实用户发言，则打开一个新计数窗口。
+   * 幂等：同一用户发言重复出现时不会重复重置；工具轮（无真实发言）直接跳过。
+   * @param {Array} incoming 本轮消息切片
+   * @returns {boolean} 本轮是否打开了新窗口
+   */
+  M.noteUserTurn = function (incoming) {
+    const st = this._ensureMemoryState();
+    const uid = this._lastRealUserId(incoming);
+    if (!uid) return false;                       // 本轮无真实用户发言
+    if (uid === st.lastUserId) return false;      // 与上一条相同，非新发言
+    // 新的用户发言：打开新计数窗口
+    st.armed = true;
+    st.idle = 0;
+    st.lastFp = null;
+    st.lastUserId = uid;
+    st.notified = false;
+    log('记忆检查：检测到新用户发言，打开计数窗口');
+    return true;
   };
 
   /**
@@ -110,6 +151,7 @@
   /**
    * 整轮记忆检查：仅在本轮为 generate 时判定。
    * 每轮采样指纹并推进计数；达到阈值且本轮有可承载提醒的卡片时才产出提醒。
+   * 一个窗口内最多提醒一次（notified 标记），避免用户没说话时反复打扰。
    * @param {Array} incoming 本轮消息切片
    * @param {string} reason 触发来源
    * @returns {Promise<Object|null>} { error, message } 或 null
@@ -117,15 +159,15 @@
   M.memoryIssueForRound = async function (incoming, reason) {
     if (reason !== 'generate') return null;
     if (!this.memoryCheck || !this.memoryCheck.armed) return null;
-    // 计数对象是「AI 的发言轮次」：只要已上膛（用户开过口），之后每轮 AI 生成
-    // （generate）都推进一次计数，不再逐轮要求「本轮又有新用户发言」。
-    // 用户发言只负责上膛（见 armMemoryCheck），不参与计数。
+    // 一个窗口内最多提醒一次：提醒过就跳过，等用户下次发言再重开窗口
+    if (this.memoryCheck.notified) return null;
     const wrote = await this.resolveMemoryWrote();
     this.tickMemoryCheck(wrote);
     if (this.memoryCheck.idle < MEMORY_IDLE_LIMIT) return null;
     if (!this.hasDeliverableToolCard(incoming)) return null;
-    // 已产出提醒：计数清零，若 AI 仍不写，三轮后再次提醒
+    // 已产出提醒：计数清零并置 notified，本轮窗口不再重复提醒
     this.memoryCheck.idle = 0;
+    this.memoryCheck.notified = true;
     log('记忆检查：连续多轮未写记忆，触发提醒');
     return {
       error: 'memory_stale',

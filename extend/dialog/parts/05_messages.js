@@ -192,8 +192,9 @@
       log('ingestMessages：切片为空，忽略');
       return;
     }
-    // 记忆检查：检测到用户真实发言即启动（工具结果回传、外部卡片信封不算用户发言）
-    if (incoming.some((m) => this.isRealUserMessage(m))) this.armMemoryCheck();
+    // 记忆检查：出现「新的」真实用户发言则打开计数窗口（工具结果回传不算用户发言，
+    // 同一用户发言重复出现不会重复开窗）。窗口内由 memoryIssueForRound 数 AI 发言轮次。
+    this.noteUserTurn(incoming);
     // 打印过滤后各条指纹：与 sendPage 的 ids 同源，便于两边逐条比对。
     log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
       + '，来源=' + (reason || 'generate')
