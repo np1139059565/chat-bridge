@@ -231,7 +231,7 @@
    * @param {Object} [opts] 附加信息
    * @param {boolean} [opts.atBottom] 视口是否停在网页对话最新处（内容脚本算好传来）
    */
-  M.ingestMessages = function (messages, reason, opts) {
+  M.ingestMessages = async function (messages, reason, opts) {
     const conv = this.curConv;
     const scrollOnly = reason === 'scroll';
     // 滚动轮次是否停在底部：自动执行复检的条件之一，其余来源不看它
@@ -274,8 +274,9 @@
     // 3) 组装分支：以切片末条为最新
     conv.branchKeys = this.assembleBranchKeys(conv, incoming);
 
-    // 记忆检查：仅在本轮为 generate 且存在可回传工具卡片时判定（细节见 05d_memory.js）
-    const memoryIssue = this.memoryIssueForRound(incoming, reason);
+    // 记忆检查：采样 memory 目录指纹并推进计数（细节见 05d_memory.js）。
+    // 异步：需等后端指纹返回；带超时保护，后端不可达时不阻塞入库。
+    const memoryIssue = await this.memoryIssueForRound(incoming, reason);
 
     // 4) 为代码块建卡，并收集自动执行候选。
     //   入树的消息：卡片写在节点上，并与切片消息共享同一份卡片表；

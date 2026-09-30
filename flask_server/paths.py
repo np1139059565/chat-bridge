@@ -42,6 +42,8 @@ BRIDGE_STATE_PATH = DATA_DIR / "remote_bridge_state.json"
 # ---------- 工程级目录 ----------
 RULES_DIR = PROJECT_ROOT / "rules"
 SKILLS_ROOT = PROJECT_ROOT / "skills"
+# 工作记忆目录：AI 按日期写入进度文件；指纹用于判断是否真有写入
+MEMORY_DIR = PROJECT_ROOT / "memory"
 
 # 供错误定位做前缀匹配用（字符串形式）
 APP_DIR_STR = str(APP_DIR)

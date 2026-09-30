@@ -22,6 +22,7 @@ from routes.rules import bp as rules_bp
 from routes.cards import bp as cards_bp
 from routes.ext import bp as ext_bp
 from routes.bridge import bp as bridge_bp
+from routes.memory import bp as memory_bp
 
 
 def _register_blueprints(app):
@@ -34,6 +35,7 @@ def _register_blueprints(app):
     app.register_blueprint(cards_bp)
     app.register_blueprint(ext_bp)
     app.register_blueprint(bridge_bp)
+    app.register_blueprint(memory_bp)
 
 
 def _register_cors(app):

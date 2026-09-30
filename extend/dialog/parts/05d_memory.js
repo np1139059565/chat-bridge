@@ -3,9 +3,15 @@
 //       产出与「回复质量检查」同形态的提醒，随卡片结果回传给 AI。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 //
-// 背景：AI 应把用户提出的重要信息与当前进度实时写入 memory/ 下的当日文件，
-// 但可能遗忘。这里做兜底：用户发言后开始计数，连续 MEMORY_IDLE_LIMIT 轮
-// AI 输出都没有写记忆，就在最新一条助手输出上贴提醒，强制其补记。
+// 「是否写了记忆」如何判定：不扫描工具调用参数，而是比较 memory 目录的
+// 内容指纹（后端 /memory/fingerprint）。原因：
+//   - 只看参数会把「读取」误判为「写入」；
+//   - AI 可能用变量拼接路径，字符串匹配防不住；
+//   - 读不改变内容、写必改变内容，指纹能准确区分，且不受路径写法影响。
+//
+// 时序说明：AI 写记忆通过卡片执行完成，而卡片执行发生在本轮入库之后；
+// 因此本次采样与上次的差值反映「上一轮」的执行结果，检测有一轮滞后。
+// 对三轮阈值而言，该滞后无实质影响。
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
@@ -14,39 +20,52 @@
 
   // 连续多少轮 AI 输出未写记忆即触发提醒
   const MEMORY_IDLE_LIMIT = 3;
+  // 指纹采样超时（毫秒）：后端不可达时不能让入库流程卡死
+  const FP_TIMEOUT_MS = 2000;
 
   /**
-   * 判断一次工具调用的参数里是否涉及 memory 目录下的文件。
-   * 不限定工具名：只要任一字符串参数指向 memory 目录下的文件即算，
-   * 避免 AI 换用其它工具写入时被漏判。
-   * @param {Object} params 调用参数
-   * @returns {boolean}
+   * 采样 memory 目录的内容指纹。
+   * 带超时保护：超时或失败一律返回 null（视为「未知」，不误判为写入）。
+   * @returns {Promise<string|null>} 指纹字符串或 null
    */
-  M.isMemoryPath = function (params) {
-    if (!params || typeof params !== 'object') return false;
-    return Object.keys(params).some((k) => {
-      const v = params[k];
-      if (typeof v !== 'string') return false;
-      // 统一分隔符后判断：路径含 memory/ 目录段，且指向 .md 文件
-      const s = v.replace(/\\/g, '/');
-      return /(^|\/)memory\//.test(s) && s.indexOf('.md') >= 0;
+  M.sampleMemoryFp = function () {
+    const req = D.apiFetch(this, '/memory/fingerprint').then((data) => {
+      return (data && typeof data.fingerprint === 'string') ? data.fingerprint : null;
+    }).catch((e) => {
+      log('记忆指纹采样失败：' + e);
+      return null;
     });
+    const timeout = new Promise((resolve) => { setTimeout(() => resolve(null), FP_TIMEOUT_MS); });
+    return Promise.race([req, timeout]);
   };
 
   /**
-   * 判断一组消息块中是否包含「写记忆」调用。
-   * @param {Array} blocks 消息块数组
-   * @returns {boolean}
+   * 采样指纹并与上次比较，判断「上一轮」是否写入了记忆。
+   * @returns {Promise<boolean>} 上一轮是否写入记忆
    */
-  M.hasMemoryWrite = function (blocks) {
-    const list = window.AIMirrorDomUtils.toArray(blocks);
-    for (let i = 0; i < list.length; i++) {
-      const b = list[i];
-      if (!b || b.type !== 'code' || !b.id) continue;
-      const call = this.parseToolCall(b);
-      if (call && this.isMemoryPath(call.parameters)) return true;
+  M.resolveMemoryWrote = async function () {
+    const fp = await this.sampleMemoryFp();
+    if (fp === null) return false;              // 采样失败：不判为写入
+    if (this.memoryCheck.lastFp === null) {     // 首轮：仅建立基线
+      this.memoryCheck.lastFp = fp;
+      return false;
     }
-    return false;
+    const wrote = fp !== this.memoryCheck.lastFp;
+    this.memoryCheck.lastFp = fp;
+    return wrote;
+  };
+
+  /** 检测到用户发言：启动记忆检查（幂等，已在检查中不重置计数）。 */
+  M.armMemoryCheck = function () {
+    if (!this.memoryCheck) {
+      this.memoryCheck = { armed: false, idle: 0, lastFp: null };
+    }
+    if (!this.memoryCheck.armed) {
+      this.memoryCheck.armed = true;
+      this.memoryCheck.idle = 0;
+      this.memoryCheck.lastFp = null;
+      log('记忆检查：已启动（检测到用户发言）');
+    }
   };
 
   /**
@@ -68,56 +87,42 @@
     return true;
   };
 
-  /** 检测到用户发言：启动记忆检查（幂等，已在检查中不重置计数）。 */
-  M.armMemoryCheck = function () {
-    if (!this.memoryCheck) this.memoryCheck = { armed: false, idle: 0 };
-    if (!this.memoryCheck.armed) {
-      this.memoryCheck.armed = true;
-      this.memoryCheck.idle = 0;
-      log('记忆检查：已启动（检测到用户发言）');
-    }
-  };
-
   /**
-   * 推进一轮计数。
+   * 推进一轮计数：写入记忆则清零，否则累加。
    * @param {boolean} wroteMemory 本轮是否写了记忆
-   * @returns {boolean} 是否应触发提醒
    */
   M.tickMemoryCheck = function (wroteMemory) {
-    if (!this.memoryCheck || !this.memoryCheck.armed) return false;
-    if (wroteMemory) {
-      this.memoryCheck.idle = 0;
-      return false;
-    }
-    if (this.memoryCheck.idle >= MEMORY_IDLE_LIMIT) return true;
-    this.memoryCheck.idle += 1;
-    return this.memoryCheck.idle >= MEMORY_IDLE_LIMIT;
+    if (!this.memoryCheck || !this.memoryCheck.armed) return;
+    if (wroteMemory) this.memoryCheck.idle = 0;
+    else this.memoryCheck.idle += 1;
   };
 
   /**
-   * 整轮记忆检查：仅在本轮为 generate 且存在可回传的工具卡片时判定。
-   * 提醒需依附工具卡片回传，本轮若无工具调用卡片则无法送达，此时不消耗计数。
+   * 本轮是否存在可承载提醒的工具卡片。提醒依附卡片回传，没有卡片就无法送达。
+   * @param {Array} incoming 本轮消息切片
+   * @returns {boolean}
+   */
+  M.hasDeliverableToolCard = function (incoming) {
+    return incoming.some((m) => m.role === 'assistant'
+      && window.AIMirrorDomUtils.toArray(m.blocks).some((b) => b && b.type === 'code' && b.id && this.parseToolCall(b)));
+  };
+
+  /**
+   * 整轮记忆检查：仅在本轮为 generate 时判定。
+   * 每轮采样指纹并推进计数；达到阈值且本轮有可承载提醒的卡片时才产出提醒。
    * @param {Array} incoming 本轮消息切片
    * @param {string} reason 触发来源
-   * @returns {Object|null} { error, message } 或 null
+   * @returns {Promise<Object|null>} { error, message } 或 null
    */
-  M.memoryIssueForRound = function (incoming, reason) {
+  M.memoryIssueForRound = async function (incoming, reason) {
     if (reason !== 'generate') return null;
-    const hasToolCard = incoming.some((m) => m.role === 'assistant'
-      && window.AIMirrorDomUtils.toArray(m.blocks).some((b) => b && b.type === 'code' && b.id && this.parseToolCall(b)));
-    if (!hasToolCard) return null;
-    const wrote = incoming.some((m) => m.role === 'assistant' && this.hasMemoryWrite(m.blocks));
-    return this.memoryIssueIfStale(wrote);
-  };
-
-  /**
-   * 记忆检查：若连续多轮未写记忆，返回一条提醒（与回复质量检查同形态）。
-   * @param {boolean} wroteMemory 本轮是否写了记忆
-   * @returns {Object|null} { error, message } 或 null
-   */
-  M.memoryIssueIfStale = function (wroteMemory) {
     if (!this.memoryCheck || !this.memoryCheck.armed) return null;
-    if (!this.tickMemoryCheck(wroteMemory)) return null;
+    const wrote = await this.resolveMemoryWrote();
+    this.tickMemoryCheck(wrote);
+    if (this.memoryCheck.idle < MEMORY_IDLE_LIMIT) return null;
+    if (!this.hasDeliverableToolCard(incoming)) return null;
+    // 已产出提醒：计数清零，若 AI 仍不写，三轮后再次提醒
+    this.memoryCheck.idle = 0;
     log('记忆检查：连续多轮未写记忆，触发提醒');
     return {
       error: 'memory_stale',
