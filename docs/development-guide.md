@@ -187,7 +187,6 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 > 代码走查结论与待办清单见 `docs/code-review-report.md`。
 
 - `flask_server/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
-- `_verify_fixes.py`：验证必填参数校验与 `/config` 端口变更 `requireRestart` 两项修复。
 - `scripts/check_quality.py`：行数 / 圈复杂度 / 重复块质量扫描。
 
 ### pre-commit 钩子

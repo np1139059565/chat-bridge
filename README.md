@@ -66,8 +66,7 @@ chat-bridge-main/
 │   └── hooks/                 # pre-commit 本地钩子
 │       ├── check_syntax.py    # 语法校验（py / js / json / yaml）
 │       └── check_hygiene.py   # 拦截临时备份文件与超 450 行源码
-├── .pre-commit-config.yaml    # pre-commit 钩子配置（全部本地钩子）
-└── _verify_fixes.py           # 根级校验脚本
+└── .pre-commit-config.yaml    # pre-commit 钩子配置（全部本地钩子）
 ```
 
 ## 安装与运行
@@ -120,7 +119,6 @@ python server.py
 ## 开发
 
 - **冒烟测试**：`python flask_server/_smoke_ct.py`。
-- **修复验证**：`python _verify_fixes.py`。
 - **质量扫描**：`python scripts/check_quality.py`（行数 / 圈复杂度 / 重复块）。
 - **提交钩子**：`pre-commit install` 安装一次；提交时自动做语法校验（py / js / json / yaml）
   与仓库卫生检查（拦截 `*.bak` 等临时残留、超过 450 行的源码）。
