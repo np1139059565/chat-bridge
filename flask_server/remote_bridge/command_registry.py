@@ -211,7 +211,7 @@ def register_panel(qq_client):
     """
     cfg = bridge_store.get_config()
     commands = []
-    # 内置：只注册主命令，别名不重复占位（QQ 面板最多 20 个元素）
+    # 内置：只注册主命令，别名不重复占位
     for name, info in BUILTIN.items():
         commands.append({"name": name, "desc": info.get("desc", "")})
     # 自定义：组合与点击指令一并注册
