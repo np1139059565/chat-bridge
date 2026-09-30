@@ -254,6 +254,20 @@ class ProviderHub:
         self._queues[provider] = rest
         return mine
 
+    def _pick_wakeup_locked(self, provider):
+        """抽屉关闭时，只取走唤醒类命令（wakeup=true），其余留在原处（调用方须已持锁）。
+
+        这是「打开抽屉」类命令的唯一送达路径：抽屉关闭时不再轮询取命令，
+        若不放行唤醒类命令，open_drawer 永远无人执行，形成死锁。
+        仅取唤醒类，避免顺带误取并丢弃属于其他页面的普通命令。
+        """
+        queue = self._queues.get(provider, [])
+        mine, rest = [], []
+        for c in queue:
+            (mine if c.get("wakeup") else rest).append(c)
+        self._queues[provider] = rest
+        return mine
+
     def poll(self, provider, page_url="", is_open=True):
         """记录心跳与工具开关状态，并按「目标页独占 → 逸散」取走命令。
 
@@ -273,11 +287,11 @@ class ProviderHub:
         with self._lock:
             self._last_poll[provider] = now
             self._set_page_open(provider, target, is_open, now)
-            # 本页面工具已关闭：本次只注销登记，不取任何命令。
-            # 否则「关闭时上报」这一次调用会顺手把属于本页面的命令取走并丢弃，
-            # 命令被白白消耗，其他页面再也等不到它。
+            # 本页面工具已关闭：仍取走唤醒类命令（如 open_drawer），
+            # 否则「打开抽屉」的命令永远无人执行，形成死锁；
+            # 其余命令不取，避免「关闭时上报」这次调用误取并丢弃别人的命令。
             if not is_open:
-                return []
+                return self._pick_wakeup_locked(provider)
             return self._pick_commands_locked(provider, target, now)
 
     def push_command(self, provider, command):
@@ -313,11 +327,16 @@ class ProviderHub:
         返回 (ok, data_or_error)。
         """
         request_id = str(uuid.uuid4())
+        # 唤醒类工具（如 open_drawer）允许在抽屉关闭时被待命轮询取走，
+        # 因此把该标记随命令下发；其余工具仅在抽屉打开时可取。
+        _, tdef = self.find_tool(tool)
+        wakeup = bool(tdef.get("wakeup")) if isinstance(tdef, dict) else False
         command = {
             "request_id": request_id,
             "tool": tool,
             "params": params or {},
             "silent": bool(silent),
+            "wakeup": wakeup,
             "page_url": page_url or "",              # 目标页面：独占窗口内优先由它执行
             "host_page_url": host_page_url or "",    # 本页面：逸散阶段优先回投给它
             "created_at": time.time(),               # 入队时刻：用于计算目标页独占窗口

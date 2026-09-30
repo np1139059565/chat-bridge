@@ -30,4 +30,10 @@
   A.loadConfig().then(() => {
     chrome.storage.onChanged.addListener(() => A.loadConfig());
   });
+
+  // 待命轮询：页面加载后即常驻运行，抽屉关闭时也不停。
+  // 目的：抽屉关闭时仍能收到「唤醒类」命令（如 open_drawer），
+  // 否则「打开抽屉」需要一个已打开的抽屉来接，形成死锁。
+  // 上报的 is_open 由抽屉是否存在自动判定（见 doHeartbeat）。
+  A.startPolling();
 })();

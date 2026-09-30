@@ -30,6 +30,9 @@ def external_providers():
         }
         if t.get("silent"):
             entry["silent"] = True
+        # wakeup：唤醒类工具随命令透传给 hub，供 poll 在抽屉关闭时放行
+        if t.get("wakeup"):
+            entry["wakeup"] = True
         groups.setdefault(provider, []).append(entry)
     return groups
 

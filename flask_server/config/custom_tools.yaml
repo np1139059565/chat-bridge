@@ -151,6 +151,7 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
+    wakeup: true
     enabled: true
   - name: "close_drawer"
     description: "关闭调试抽屉（已关闭则视为成功）。"

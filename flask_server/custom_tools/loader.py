@@ -139,9 +139,11 @@ def _dump_tool_entry(t):
     for key in _TOOL_STR_FIELDS:
         if t.get(key) not in (None, ""):
             out.append("    %s: %s" % (key, quote(t[key])))
-    # silent 为布尔标记，仅在为真时写出
+    # silent / wakeup 为布尔标记，仅在为真时写出
     if t.get("silent"):
         out.append("    silent: true")
+    if t.get("wakeup"):
+        out.append("    wakeup: true")
     out.append("    enabled: %s" % ("true" if t.get("enabled") else "false"))
     out += _dump_fixed_args(t.get("fixed_args") or [])
     out += _dump_params(t.get("parameters") or [])
@@ -350,6 +352,9 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen):
         "provider": (raw.get("provider") or provider),
         # silent：仅在界面（抽屉 / 卡片区）不生成工具卡片（如推送消息）；结果照常回传。
         "silent": bool(raw.get("silent")),
+        # wakeup：唤醒类工具（如 open_drawer），允许在「抽屉关闭」时由待命轮询取走执行。
+        # 普通工具只在抽屉打开时可被取走，唤醒类工具打破该限制。
+        "wakeup": bool(raw.get("wakeup")),
         "enabled": False,
     }
 

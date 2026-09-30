@@ -92,7 +92,9 @@
     // 先向后端上报「工具已关闭」：注销本页面的打开登记，
     // 属于本页面的命令随即可以逸散到其他页面，无需等僵尸登记超期。
     A.reportClosed();
-    A.stopPolling();              // 再停轮询，避免移除过程中又取到新命令
+    // 不再停轮询：保留待命轮询，抽屉关闭后仍能收到「唤醒类」命令
+    // （如 open_drawer），否则抽屉关着就永远没人来开。上报的 is_open
+    // 会随之为 false，后端据此只放行唤醒类命令、不放行普通命令。
     if (state.drawerWatchdogTimer) {
       clearTimeout(state.drawerWatchdogTimer);
       state.drawerWatchdogTimer = null;
