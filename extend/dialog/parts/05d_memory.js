@@ -16,16 +16,21 @@
   const MEMORY_IDLE_LIMIT = 3;
 
   /**
-   * 判断一次工具调用是否为「写记忆」操作。
-   * 依据：工具为 write_to_file / replace_in_file，且路径指向 memory 目录。
-   * @param {string} tool 工具名
+   * 判断一次工具调用的参数里是否涉及 memory 目录下的文件。
+   * 不限定工具名：只要任一字符串参数指向 memory 目录下的文件即算，
+   * 避免 AI 换用其它工具写入时被漏判。
    * @param {Object} params 调用参数
    * @returns {boolean}
    */
-  M.isMemoryWriteTool = function (tool, params) {
-    if (tool !== 'write_to_file' && tool !== 'replace_in_file') return false;
-    const p = String((params && params.filePath) || '');
-    return p.indexOf('memory') >= 0 && p.indexOf('.md') >= 0;
+  M.isMemoryPath = function (params) {
+    if (!params || typeof params !== 'object') return false;
+    return Object.keys(params).some((k) => {
+      const v = params[k];
+      if (typeof v !== 'string') return false;
+      // 统一分隔符后判断：路径含 memory/ 目录段，且指向 .md 文件
+      const s = v.replace(/\\/g, '/');
+      return /(^|\/)memory\//.test(s) && s.indexOf('.md') >= 0;
+    });
   };
 
   /**
@@ -39,21 +44,20 @@
       const b = list[i];
       if (!b || b.type !== 'code' || !b.id) continue;
       const call = this.parseToolCall(b);
-      if (call && this.isMemoryWriteTool(call.tool, call.parameters)) return true;
+      if (call && this.isMemoryPath(call.parameters)) return true;
     }
     return false;
   };
 
   /**
-   * 判断一条消息是否为「用户真实发言」。
-   * 排除两类：外部卡片信封（external-call）、工具结果回传（bridge-chat-res）——
-   * 二者虽以 user 消息落入对话，但都不是用户本人说的话。
+   * 判断一条消息是否为「用户发言」。
+   * 仅排除工具结果回传（bridge-chat-res）：那是工具产物，不是用户说的话。
+   * 外部卡片（QQ 消息等）由用户发出，算用户发言，不排除。
    * @param {Object} m 消息对象
    * @returns {boolean}
    */
   M.isRealUserMessage = function (m) {
     if (!m || m.role !== 'user') return false;
-    if (this.parseExternalCall(m)) return false;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i];
