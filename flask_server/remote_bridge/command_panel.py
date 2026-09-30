@@ -49,12 +49,13 @@ def log(*args):
 _reply_ctx = threading.local()
 
 
-def _reply(qq_client, openid, text):
+def _reply(qq_client, openid, text, markdown=False):
     """用当前窗口回复一条文本。
 
     msg_seq 通过 message_router.next_seq 统一分配：
     与推送路径共用同一个计数器，避免 (msg_id, msg_seq) 重复被 QQ 判重丢弃。
     组合指令执行期间（_reply_ctx.suppress 为真）静默跳过，只由组合层统一回执。
+    markdown 为真时按 Markdown 消息发送（msg_type=2），供 /help 等富文本回执。
     """
     if getattr(_reply_ctx, "suppress", False):
         return False
@@ -62,7 +63,7 @@ def _reply(qq_client, openid, text):
     if not msg_id:
         log("窗口已关闭，无法回复")
         return False
-    ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq)
+    ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq, markdown=markdown)
     if not ok:
         log("回复失败：", data)
     return ok
@@ -349,9 +350,45 @@ def _h_refush(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
 
 
+def _h_side(qq_client, openid, arg, msg_id):
+    """抽屉在左 / 右之间切换。"""
+    _dispatch("switch_side", {})
+    _reply(qq_client, openid, "已下发：切换抽屉位置")
+
+
+def _h_settings(qq_client, openid, arg, msg_id):
+    """打开设置面板。"""
+    _dispatch("open_settings", {})
+    _reply(qq_client, openid, "已下发：打开设置面板")
+
+
+def _h_back(qq_client, openid, arg, msg_id):
+    """从设置返回对话镜像。"""
+    _dispatch("close_settings", {})
+    _reply(qq_client, openid, "已下发：返回对话镜像")
+
+
+def _h_reconnect(qq_client, openid, arg, msg_id):
+    """重新发现并连接后端。"""
+    _dispatch("reconnect_backend", {})
+    _reply(qq_client, openid, "已下发：重新连接后端")
+
+
+def _h_copy_json(qq_client, openid, arg, msg_id):
+    """复制当前会话 JSON。"""
+    _dispatch("copy_conversation_json", {})
+    _reply(qq_client, openid, "已下发：复制当前会话 JSON")
+
+
+def _h_skip(qq_client, openid, arg, msg_id):
+    """跳过最新一张卡片。"""
+    _dispatch("skip_latest", {})
+    _reply(qq_client, openid, "已下发：跳过最新卡片")
+
+
 def _h_help(qq_client, openid, arg, msg_id):
-    """显示指令列表。"""
-    _reply(qq_client, openid, help_text())
+    """显示指令列表：按 Markdown 发送，QQ 端才渲染分组与代码高亮。"""
+    _reply(qq_client, openid, help_text(), markdown=True)
 
 
 # 内置指令分发表：主命令名 → 处理函数。
@@ -372,6 +409,12 @@ _BUILTIN_HANDLERS = {
     "/restart": _h_restart,
     "/refush": _h_refush,
     "/md": _h_md,
+    "/side": _h_side,
+    "/settings": _h_settings,
+    "/back": _h_back,
+    "/reconnect": _h_reconnect,
+    "/copy-json": _h_copy_json,
+    "/skip": _h_skip,
     "/help": _h_help,
 }
 

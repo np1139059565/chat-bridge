@@ -285,6 +285,9 @@
     const autoCandidates = [];
     // 滚动轮次里被「上膛」的那张最新卡片（仅最后一条消息上的），供底部复检使用
     let armedLast = null;
+    // 重复卡片重跑候选：仅当「来源=generate 且本轮最新卡片此前已执行」时被赋值。
+    // 它是一个严格受限的旁路，其它任何来源 / 任何位置的卡片都不会写入这里。
+    let rerunCard = null;
     incoming.forEach((m, mi) => {
       const key = this.keyOfId(conv.msgTree, this.msgId(m));
       const node = conv.msgTree[key];
@@ -325,6 +328,13 @@
           // 已有卡片：补记问题、按需纳入自动候选
           if (exist.isTool && issue && !exist.preIssue) exist.preIssue = issue;
           if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
+          // 重复卡片重跑：仅当三者同时成立才登记——来源=generate、该卡片位于
+          // 本轮最新消息上、且此前已执行过。这是重跑的唯一入口，条件放宽
+          // 会让回看 / 切换等场景误触发，故在此严格收口。
+          if (reason === 'generate' && mi === incoming.length - 1
+              && exist.isTool && exist.executed) {
+            rerunCard = exist;
+          }
           return;
         }
         // 只把「助手回答」里的代码块当成可执行的工具调用（用户消息里的示例块不建卡）
@@ -377,6 +387,25 @@
         }
       });
     });
+
+    // 4.5) 重复卡片重跑：严格受限的旁路，与下面的常规自动执行互不重叠。
+    // 触发条件三者缺一不可：来源=generate、卡片在本轮最新消息上、且此前已执行过。
+    // 命中后把该卡片重置为待执行态并重新调度，使「AI 重新生成、调用块重复」时
+    // 不再因为卡片已执行而停摆。其它任何来源 / 位置的卡片都不会进入这里。
+    if (rerunCard && !notInTree && this.autoSendEnabled) {
+      // 重置为待执行态：清掉已执行标记与上一轮结果，回到可被调度的初始状态
+      rerunCard.executed = false;
+      rerunCard.skipped = false;
+      rerunCard.status = 'pending';
+      rerunCard.error = null;
+      rerunCard.phase = '';
+      rerunCard.countdown = 0;
+      if (rerunCard._cdTimer) { clearTimeout(rerunCard._cdTimer); rerunCard._cdTimer = null; }
+      log('重复卡片重跑：来源=generate 且最新卡片已执行，重置后重新执行 '
+        + (rerunCard.tool || rerunCard.id || ''));
+      this.toast('检测到重复卡片，已重新执行最新卡片');
+      this.scheduleExecute(rerunCard);
+    }
 
     // 5) 自动执行：仅本轮最新的一张；不入树切片绝不自动执行。
     const runnable = autoCandidates.filter((c) => c && !c.skipped);

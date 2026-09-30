@@ -51,7 +51,10 @@
       card.errorType = '';
       card.executed = true;
       if (this._persist) this._persist();
-      if (isAuto && this.autoSendEnabled && !card.noReply) this.scheduleAutoSend(card);
+      // 质量问题的回传不受 noReply 约束：noReply 的本意是「成功结果不必回传」，
+      // 而质量不合格（多调用冲突 / 思考非中文等）必须让 AI 知道并修正，
+      // 否则卡片看似完成、AI 却永远收不到反馈，形成假死。
+      if (isAuto && this.autoSendEnabled) this.scheduleAutoSend(card);
       return;
     }
     // 执行前校验：卡片必须仍存在于「网页对话镜像」中。
@@ -122,7 +125,10 @@
     // 自动回传仅在「自动流程」触发时进行：用户手动点击执行 / 重新执行时，
     // 只执行、不回传，避免误把结果写回网页 AI 并触发发送。
     // noReply：调用方声明不需要结果回传，执行完即结束，不再唤醒网页 AI。
-    if (isAuto && this.autoSendEnabled && !card.noReply) this.scheduleAutoSend(card);
+    // noReply 只豁免成功结果：执行失败必须回传，让 AI 知道工具没跑成，
+    // 否则卡片标红、AI 却收不到任何反馈，形成假死。
+    const mustReply = !card.noReply || card.status === 'error';
+    if (isAuto && this.autoSendEnabled && mustReply) this.scheduleAutoSend(card);
   };
 
   /**

@@ -75,6 +75,15 @@
       // 桥接未启用 / 后端不可达：保持默认值，不打扰用户
       this.bridgeConnected = false;
     }
+    // 指令说明文本从后端拉取（与 /h 同源），避免设置页手写说明与指令表漂移。
+    try {
+      const hd = await D.apiFetch(this, '/api/bridge/help', {
+        headers: { 'Accept': 'application/json' }
+      });
+      this.bridgeHelpText = (hd && hd.help) || '';
+    } catch (e) {
+      this.bridgeHelpText = '';
+    }
   };
 
   /**
@@ -287,6 +296,38 @@
     if (action === 'reparse') {
       // 重新解析当前网页对话
       this.reparse();
+      return;
+    }
+    if (action === 'switch_side') {
+      // 抽屉左右切换：复用界面现成的 switchPanelSide（外框位置由内容脚本负责）
+      this.switchPanelSide();
+      return;
+    }
+    if (action === 'open_settings') {
+      // 打开设置面板：置位界面开关即可
+      this.settingsOpen = true;
+      return;
+    }
+    if (action === 'close_settings') {
+      // 从设置返回对话镜像
+      this.settingsOpen = false;
+      return;
+    }
+    if (action === 'reconnect_backend') {
+      // 重新发现并连接后端（等价界面「重新连接后端」按钮）
+      this.initBackend();
+      return;
+    }
+    if (action === 'copy_conversation_json') {
+      // 复制当前会话 JSON（等价镜像区「复制」按钮）
+      this.copyConversationJson();
+      return;
+    }
+    if (action === 'skip_latest') {
+      // 跳过最新一张卡片：取最新卡片后复用现成的 skipCard
+      const card = this._latestCard();
+      if (!card) { this.toast('没有可跳过的卡片'); return; }
+      this.skipCard(card);
       return;
     }
     if (action === 'refresh_page') {

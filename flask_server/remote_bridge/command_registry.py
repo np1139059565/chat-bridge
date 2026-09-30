@@ -31,21 +31,34 @@ def log(*args):
 # 命名规则：主命令用完整英文名（如 /clear-sessions），快捷键作别名（如 /css）。
 # 展示格式统一为「快捷键 — 描述（完整名）」，见 help_text。
 BUILTIN = {
-    "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"]},
-    "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"]},
-    "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"]},
-    "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"]},
-    "/switch-auto": {"desc": "自动回传开关（/sa on|off，不带则切换）", "aliases": ["/sa"]},
-    "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"]},
-    "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"]},
-    "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"]},
-    "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"]},
-    "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"]},
-    "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"]},
-    "/restart": {"desc": "重启服务端", "aliases": ["/rs"]},
-    "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"]},
-    "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": []},
-    "/help": {"desc": "显示指令列表", "aliases": ["/h"]},
+    # —— 抽屉外观 ——
+    "/side": {"desc": "抽屉在左/右之间切换", "aliases": ["/sd"], "group": "抽屉外观"},
+    "/settings": {"desc": "打开设置面板", "aliases": [], "group": "抽屉外观"},
+    "/back": {"desc": "从设置返回对话镜像", "aliases": [], "group": "抽屉外观"},
+    # —— 会话管理 ——
+    "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"], "group": "会话管理"},
+    "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"], "group": "会话管理"},
+    "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"], "group": "会话管理"},
+    "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"], "group": "会话管理"},
+    "/copy-json": {"desc": "复制当前会话 JSON", "aliases": [], "group": "会话管理"},
+    "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"], "group": "会话管理"},
+    # —— 卡片与结果 ——
+    "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"], "group": "卡片与结果"},
+    "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"], "group": "卡片与结果"},
+    "/skip": {"desc": "跳过最新一张卡片", "aliases": [], "group": "卡片与结果"},
+    # —— 自动回传 ——
+    "/switch-auto": {"desc": "自动回传开关（/sa on|off，不带则切换）", "aliases": ["/sa"], "group": "自动回传"},
+    "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"], "group": "自动回传"},
+    # —— 页面与服务 ——
+    "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"], "group": "页面与服务"},
+    "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"], "group": "页面与服务"},
+    "/restart": {"desc": "重启服务端", "aliases": ["/rs"], "group": "页面与服务"},
+    "/reconnect": {"desc": "重新连接后端", "aliases": [], "group": "页面与服务"},
+    # —— 内容采集 ——
+    "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"], "group": "内容采集"},
+    "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": [], "group": "内容采集"},
+    # —— 帮助 ——
+    "/help": {"desc": "显示指令列表", "aliases": ["/h"], "group": "帮助"},
 }
 
 # 别名 → 主命令 的反查表：一次构建，之后直接查
@@ -139,18 +152,29 @@ def validate_command(entry, index=None):
 
 
 def _help_builtin_lines():
-    """内置指令的展示行：格式为「快捷键 — 描述（完整名）」。
+    """内置指令的展示行：按 group 分组，输出 Markdown。
 
-    每个内置指令都有快捷键（aliases）；没有别名时直接显示完整名。
+    每组一个二级标题，组内每条一行：快捷键、描述、完整名。
+    分组让相似指令靠在一起，Markdown 让 QQ 端渲染得友好。
     """
     lines = []
+    groups = []
     for name, info in BUILTIN.items():
-        al = info.get("aliases") or []
-        short = al[0] if al else name          # 取首个快捷键作为展示主键
-        if short != name:
-            lines.append("%s — %s（%s）" % (short, info.get("desc", ""), name))
-        else:
-            lines.append("%s — %s" % (name, info.get("desc", "")))
+        g = info.get("group") or "其它"
+        if g not in groups:
+            groups.append(g)
+    for g in groups:
+        lines.append("")
+        lines.append("**%s**" % g)
+        for name, info in BUILTIN.items():
+            if (info.get("group") or "其它") != g:
+                continue
+            al = info.get("aliases") or []
+            short = al[0] if al else name
+            if short != name:
+                lines.append("- `%s` %s（%s）" % (short, info.get("desc", ""), name))
+            else:
+                lines.append("- `%s` %s" % (name, info.get("desc", "")))
     return lines
 
 

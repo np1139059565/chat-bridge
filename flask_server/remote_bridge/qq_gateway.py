@@ -64,11 +64,37 @@ class QqGateway:
 
         # 指令：以「/」开头，交给指令处理器
         if content.startswith("/"):
-            if self.on_command and self.on_command(self.qq_client, openid, msg_id, content):
-                return
+            handled = bool(self.on_command
+                           and self.on_command(self.qq_client, openid, msg_id, content))
+            if not handled:
+                # 指令通道与聊天通道彻底分离：以 / 开头却无人认领的命令，
+                # 只回机器人一句提示，绝不当作普通消息投给网页 AI。
+                self._reply_unknown(openid, content)
+            return
 
         # 普通消息：包装成外部卡片，投给卡片总线
         self._deliver_as_card(openid, content, msg_id)
+
+    def _reply_unknown(self, openid, content):
+        """未知指令：只回机器人一句提示，绝不投给网页 AI。
+
+        指令通道与聊天通道分离的守门人：以 / 开头却没被任何处理器认领，
+        说明用户在试图控制插件、但命令名写错或该指令不存在。此时应当
+        告诉他指令无效，而不是把这条控制意图当聊天内容转给 AI。
+        """
+        client = self.qq_client
+        if not client:
+            log("QQ 客户端未就绪，无法回复未知指令")
+            return
+        cmd = str(content).strip().split(None, 1)[0]
+        text = "未知指令：%s\n发送 /help 查看可用指令" % cmd
+        msg_id, seq = message_router.next_seq(openid)
+        if not msg_id:
+            log("窗口已关闭，无法回复未知指令")
+            return
+        ok, data = client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq)
+        if not ok:
+            log("回复未知指令失败：", data)
 
     def _deliver_as_card(self, openid, content, msg_id):
         """把 QQ 消息包装成 external-call 卡片，登记到卡片总线。

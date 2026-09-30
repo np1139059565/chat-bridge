@@ -165,6 +165,14 @@ def _cmd_remove(data):
     return jsonify(success=True, commands=bridge_store.remove_command(int(data.get("index"))))
 
 
+@bp.route("/api/bridge/help", methods=["GET", "OPTIONS"])
+def bridge_help():
+    """返回指令说明文本（与 /h 同源），供设置页展示，避免两处手写漂移。"""
+    if request.method == "OPTIONS":
+        return ("", 204)
+    return jsonify(success=True, help=command_panel.help_text())
+
+
 @bp.route("/api/bridge/commands", methods=["GET", "POST", "DELETE", "OPTIONS"])
 def bridge_commands():
     """指令的增删改：独立接口，避免与 saveBridge 的全量覆盖互相干扰。

@@ -175,6 +175,8 @@ window.AIMirrorDialog = (function () {
       convListWidth: 180,
       convScanned: {},
       settingsOpen: false,
+      // 指令说明文本：从后端 /api/bridge/help 拉取，与 /h 同源
+      bridgeHelpText: '',
       panelSide: 'right',
       theme: 'light',
       _extTimer: null,

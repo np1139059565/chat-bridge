@@ -97,12 +97,9 @@
         h('br'),
         // 指令列表：内置指令说明 + 自定义指令编辑器
         h('div', { class: 'card-head' }, [h('span', 'QQ 指令')]),
-        h('div', { class: 'hint' },
-          '内置（快捷键 — 作用）：/css 清空所有会话、/cms 清空当前会话消息、'
-          + '/csp 复制 System Prompt 并发送、/rt 秒数 设置回传延迟、'
-          + '/sa on|off 自动回传开关、/ls 会话列表、/ss 序号 切换会话、'
-          + '/sp 截屏、/cp 复制结果、/rp 重新解析、/rr 重新执行、'
-          + '/rs 重启服务、/rf 刷新页面、/h 指令列表'),
+        // 指令说明从后端拉取（与 /h 同源），不再手写，避免与指令表漂移
+        h('div', { class: 'hint' }, '内置指令（与 /h 同源）：'),
+        h('pre', { class: 'bridge-help' }, ctx.bridgeHelpText || '（未加载，检查后端连接）'),
         // 自定义指令：命令名 + 显示名 + 类型（点击元素 / 组合指令）
         h('div', { class: 'bridge-cmd-new' }, [
           h('input', {

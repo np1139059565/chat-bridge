@@ -29,6 +29,7 @@ commands:
   label: 重启前后端并刷新
   steps:
   - /rf
+  - /sa on
   - /rs
   interval: 5
 - name: /reai

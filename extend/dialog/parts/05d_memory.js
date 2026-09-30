@@ -55,7 +55,31 @@
     return wrote;
   };
 
-  /** 检测到用户发言：启动记忆检查（幂等，已在检查中不重置计数）。 */
+  /**
+   * 判定本轮是否出现「新的用户发言」，并记下最新一条的 id。
+   *
+   * 为什么需要它：ingestMessages 收到的 incoming 是全量可见切片，里面几乎
+   * 总能看到历史用户发言，若只用「有没有用户发言」判断，工具结果回传、AI
+   * 再次生成等每一轮都会被当成有效输入，导致计数被推满、提前弹提醒。
+   * 这里改用「最新一条用户发言的 id 是否变化」作为唯一判据：只有用户真的
+   * 说了新话，id 才会变，才算一轮。工具结果轮、重复生成轮都不变，故不计。
+   * @param {Array} incoming 本轮消息切片（全量可见）
+   * @returns {boolean} 本轮是否出现了新的用户发言
+   */
+  M.noteUserTurn = function (incoming) {
+    const list = incoming || [];
+    // 取切片里最后一条 user 消息，判断它是否为真正的用户发言。
+    // 工具结果回传（bridge-chat-res）也以 user 消息落地，且总排在真实用户发言
+    // 之后，因此它是「工具结果轮」时，最后一条 user 消息会被 isRealUserMessage
+    // 判否；只有用户真的说了新话，末条 user 消息才是真实发言。
+    for (let i = list.length - 1; i >= 0; i--) {
+      const m = list[i];
+      if (m && m.role === 'user') return this.isRealUserMessage(m);
+    }
+    return false;
+  };
+
+  /** 检测到新用户发言：启动记忆检查（幂等，已在检查中不重置计数）。 */
   M.armMemoryCheck = function () {
     if (!this.memoryCheck) {
       this.memoryCheck = { armed: false, idle: 0, lastFp: null };
@@ -64,7 +88,7 @@
       this.memoryCheck.armed = true;
       this.memoryCheck.idle = 0;
       this.memoryCheck.lastFp = null;
-      log('记忆检查：已启动（检测到用户发言）');
+      log('记忆检查：已启动（检测到新用户发言）');
     }
   };
 
@@ -117,6 +141,13 @@
   M.memoryIssueForRound = async function (incoming, reason) {
     if (reason !== 'generate') return null;
     if (!this.memoryCheck || !this.memoryCheck.armed) return null;
+    // 只有用户真的说了新话，才算一轮有效输入并推进计数；
+    // 工具结果回传、AI 重复生成等没有新用户发言的轮次直接跳过，
+    // 既不采样指纹也不累加 idle，从根本上消除「工具结果也触发提醒」。
+    if (!this.noteUserTurn(incoming)) {
+      log('记忆检查：本轮无新用户发言，跳过计数');
+      return null;
+    }
     const wrote = await this.resolveMemoryWrote();
     this.tickMemoryCheck(wrote);
     if (this.memoryCheck.idle < MEMORY_IDLE_LIMIT) return null;

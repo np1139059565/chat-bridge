@@ -180,11 +180,14 @@
       }
       const url = params.page_url || '';
       if (url && A.normalizeUrl(url) !== A.normalizeUrl(location.href)) {
+        // 与 FRAME_NOT_FOUND 保持一致：带 available 列出所有可路由文档，
+        // 调用方据此直接改用顶层文档地址重试，无需再猜。
         return {
           success: false,
           error: 'EXEC_JS_TOP_ONLY',
           page_url: url,
-          hint: 'exec_js 目前仅支持顶层文档主世界；请传入顶层页面的 URL。',
+          available: A.frameUrls(),
+          hint: 'exec_js 目前仅支持顶层文档主世界；请传入顶层页面的 URL（见 available 列表）。',
         };
       }
       return await A.execJs(code);
