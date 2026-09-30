@@ -319,7 +319,13 @@
             // page_url 记录该回复来自哪个页面（内容脚本 postToDrawer 时自动带上），
             // 便于多页面同时调试时区分消息来源。
             D.dedupPush(messages, [
-              { id: d.id || D.generateId(), role: 'assistant', text: d.text || '', page_url: d.page_url || '', timestamp: d.timestamp || Date.now() },
+              {
+                id: d.id || D.generateId(),
+                role: 'assistant',
+                text: d.text || '',
+                page_url: d.page_url || '',
+                timestamp: d.timestamp || Date.now()
+              },
             ]);
             scrollToBottom();
           }

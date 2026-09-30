@@ -54,97 +54,13 @@
     // 是否正处于「回传倒计时」：是则把倒计时显示在「复制结果」按钮上，
     // 且该按钮此时点击 = 跳过等待、立即回传。
     const sending = isTool && !readonly && card.phase === 'send' && card.countdown > 0;
-    const kids = [
-      h('div', { class: 'code-head' }, [
-        isTool
-          ? h('span', { class: 'toolname' }, '工具调用 · ' + card.tool)
-          : h('span', { class: 'lang' }, String(block.lang || 'code').toUpperCase()),
-        // 卡片门牌号：紧跟工具名显示该卡片的 id，点击即复制。
-        // 展开卡片后一眼可见，便于排查卡片重复 / 定位到具体哪张卡。
-        (isTool && card.id)
-          ? h('span', {
-              class: 'card-id',
-              title: '卡片 id：' + card.id + '（点击复制）',
-              onClick: () => ctx.copy(card.id)
-            }, card.id)
-          : null,
-        h('span', { class: 'head-controls' }, [
-          // 跳过的卡片状态独立显示：status 仍为 pending，直接用 statusText 会误显示「待执行」
-          isTool
-            ? h('span', { class: 'badge ' + (card.skipped ? 'skipped' : card.status) },
-              card.skipped ? '已跳过' : ctx.statusText(card.status))
-            : null,
-          // 自动流程的倒计时统一写在按钮文案里（执行按钮 / 复制结果按钮），
-          // 卡片头部不再单独显示一份，避免同一件事重复呈现。
-          // 带问题的卡片同样提供「自动」开关：它仍会进入自动执行候选，隐藏开关只会造成界面与实际行为不一致。
-          (isTool && !readonly) ? D.renderAutoSwitch(ctx) : null
-        ])
-      ])
-    ];
+    const kids = [D._renderCardHead(ctx, block, card, isTool, readonly)];
     if (isTool) {
-      // 质量问题不再单独用警示横幅显示：它已作为正常结果返回（见 executeCard），
+      // 质量问题不单独用警示横幅显示：它已作为正常结果返回（见 executeCard），
       // 由下方结果区统一呈现，避免同一内容重复两处。
       kids.push(h('pre', { class: 'params-json' }, JSON.stringify(card.parameters, null, 2)));
-      // 操作行仅在非只读模式渲染
-      if (!readonly) {
-        kids.push(h('div', { class: 'row' }, [
-          h('button', {
-            onClick: () => ctx.onExecuteClick(card),
-            disabled: card.status === 'running'
-          }, ctx.execButtonLabel(card)),
-          // 跳过：取消该卡片的倒计时与自动回传，用户可自行决定不执行
-          (!card.skipped && !card.executed) ? h('button', { class: 'secondary', onClick: () => ctx.skipCard(card) }, '跳过') : null,
-          card.skipped ? h('span', { class: 'hint' }, '已跳过') : null,
-          // 「复制结果」按钮：有结果时显示；自动回传倒计时中也显示，
-          // 并在按钮上显示剩余秒数。倒计时期间点击 = 跳过等待立即回传。
-          ((card.result != null || card.error) || sending)
-            ? h('button', {
-              onClick: () => ctx.onResultClick(card)
-            }, '复制结果' + (sending ? card.countdown + 's' : ''))
-            : null
-        ]));
-      } else if (card.skipped) {
-        // 只读模式没有按钮行，跳过状态改为独立提示，避免状态信息丢失
-        kids.push(h('div', { class: 'hint' }, '已跳过'));
-      }
-      if (card.status === 'done') {
-        // 结果是截图时，渲染等比缩放的图片；否则仍以文本展示结果。
-        const shot = D.extractScreenshot(card.result);
-        if (shot) {
-          kids.push(h('img', {
-            class: 'result-shot',
-            src: shot,
-            alt: '页面截图',
-            style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
-          }));
-        } else {
-          kids.push(h('pre', { class: 'result' }, ctx.fmt(card.result)));
-        }
-      }
-      if (card.status === 'error') {
-        kids.push(h('pre', { class: 'error' }, card.error || ctx.fmt(card.result)));
-        if (card.origin) {
-          kids.push(h('div', { class: 'origin-line' },
-            '错误分类：' + card.origin +
-            (card.origin === 'tool_internal'
-              ? ' — 本地工具代码缺陷，改参数无效，需检查工具实现'
-              : '')));
-        }
-        if (card.stack) {
-          // 只读模式直接把堆栈展开：没有展开按钮，若仍按折叠逻辑渲染，
-          // 堆栈内容将永远无法看到，而它正是留档时最需要的信息。
-          if (readonly) {
-            kids.push(h('pre', { class: 'stack' }, card.stack));
-          } else {
-            const open = !!ctx.stackOpen[card.id];
-            kids.push(h('div', { class: 'row' }, [
-              h('button', { onClick: () => { ctx.stackOpen[card.id] = !open; } },
-                open ? '收起堆栈' : '查看完整堆栈')
-            ]));
-            if (open) kids.push(h('pre', { class: 'stack' }, card.stack));
-          }
-        }
-      }
+      D._renderCardActions(ctx, card, readonly, sending, kids);
+      D._renderToolResult(ctx, card, readonly, kids);
     } else {
       kids.push(h('pre', { class: 'code-body' }, block.code));
       if (!readonly) {
@@ -154,6 +70,127 @@
       }
     }
     return h('div', { class: 'code-card', key: block.id }, kids);
+  };
+
+  /**
+   * 渲染卡片头部：工具名 / 语言标签、卡片 id（可点击复制）、状态徽标与自动开关。
+   * @param {Object} ctx Vue 实例
+   * @param {Object} block 代码块
+   * @param {Object} card 卡片状态
+   * @param {boolean} isTool 是否工具卡片
+   * @param {boolean} readonly 是否只读模式
+   * @returns {VNode} 头部节点
+   */
+  D._renderCardHead = function (ctx, block, card, isTool, readonly) {
+    return h('div', { class: 'code-head' }, [
+      isTool
+        ? h('span', { class: 'toolname' }, '工具调用 · ' + card.tool)
+        : h('span', { class: 'lang' }, String(block.lang || 'code').toUpperCase()),
+      // 卡片门牌号：紧跟工具名显示该卡片的 id，点击即复制。
+      (isTool && card.id)
+        ? h('span', {
+            class: 'card-id',
+            title: '卡片 id：' + card.id + '（点击复制）',
+            onClick: () => ctx.copy(card.id)
+          }, card.id)
+        : null,
+      h('span', { class: 'head-controls' }, [
+        // 跳过的卡片状态独立显示：status 仍为 pending，直接用 statusText 会误显示「待执行」
+        isTool
+          ? h('span', { class: 'badge ' + (card.skipped ? 'skipped' : card.status) },
+            card.skipped ? '已跳过' : ctx.statusText(card.status))
+          : null,
+        // 倒计时统一写在按钮文案里，头部不再单独显示；带问题的卡片同样提供自动开关
+        (isTool && !readonly) ? D.renderAutoSwitch(ctx) : null
+      ])
+    ]);
+  };
+
+  /**
+   * 渲染工具卡片的操作行（执行 / 跳过 / 复制结果按钮）。
+   * @param {Object} ctx Vue 实例
+   * @param {Object} card 卡片状态
+   * @param {boolean} readonly 是否只读模式
+   * @param {boolean} sending 是否处于回传倒计时
+   * @param {Array} kids 目标子节点数组（就地追加）
+   */
+  D._renderCardActions = function (ctx, card, readonly, sending, kids) {
+    if (!readonly) {
+      kids.push(h('div', { class: 'row' }, [
+        h('button', {
+          onClick: () => ctx.onExecuteClick(card),
+          disabled: card.status === 'running'
+        }, ctx.execButtonLabel(card)),
+        // 跳过：取消该卡片的倒计时与自动回传，用户可自行决定不执行
+        (!card.skipped && !card.executed) ? h('button', { class: 'secondary', onClick: () => ctx.skipCard(card) }, '跳过') : null,
+        card.skipped ? h('span', { class: 'hint' }, '已跳过') : null,
+        // 「复制结果」按钮：有结果或倒计时中显示；倒计时期间点击 = 跳过等待立即回传
+        ((card.result != null || card.error) || sending)
+          ? h('button', {
+            onClick: () => ctx.onResultClick(card)
+          }, '复制结果' + (sending ? card.countdown + 's' : ''))
+          : null
+      ]));
+    } else if (card.skipped) {
+      // 只读模式没有按钮行，跳过状态改为独立提示，避免状态信息丢失
+      kids.push(h('div', { class: 'hint' }, '已跳过'));
+    }
+  };
+
+  /**
+   * 渲染工具卡片的结果区：完成态显示结果（截图或文本），失败态显示错误与堆栈。
+   * @param {Object} ctx Vue 实例
+   * @param {Object} card 卡片状态
+   * @param {boolean} readonly 是否只读模式
+   * @param {Array} kids 目标子节点数组（就地追加）
+   */
+  D._renderToolResult = function (ctx, card, readonly, kids) {
+    if (card.status === 'done') {
+      // 结果是截图时，渲染等比缩放的图片；否则仍以文本展示结果。
+      const shot = D.extractScreenshot(card.result);
+      if (shot) {
+        kids.push(h('img', {
+          class: 'result-shot',
+          src: shot,
+          alt: '页面截图',
+          style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
+        }));
+      } else {
+        kids.push(h('pre', { class: 'result' }, ctx.fmt(card.result)));
+      }
+    }
+    if (card.status === 'error') D._renderToolError(ctx, card, readonly, kids);
+  };
+
+  /**
+   * 渲染工具卡片的失败信息：错误正文、错误分类与堆栈（可折叠）。
+   * @param {Object} ctx Vue 实例
+   * @param {Object} card 卡片状态
+   * @param {boolean} readonly 是否只读模式
+   * @param {Array} kids 目标子节点数组（就地追加）
+   */
+  D._renderToolError = function (ctx, card, readonly, kids) {
+    kids.push(h('pre', { class: 'error' }, card.error || ctx.fmt(card.result)));
+    if (card.origin) {
+      kids.push(h('div', { class: 'origin-line' },
+        '错误分类：' + card.origin +
+        (card.origin === 'tool_internal'
+          ? ' — 本地工具代码缺陷，改参数无效，需检查工具实现'
+          : '')));
+    }
+    if (card.stack) {
+      // 只读模式直接把堆栈展开：没有展开按钮，若仍按折叠逻辑渲染，堆栈将永远看不到
+      if (readonly) {
+        kids.push(h('pre', { class: 'stack' }, card.stack));
+      } else {
+        const open = !!ctx.stackOpen[card.id];
+        kids.push(h('div', { class: 'row' }, [
+          h('button', { onClick: () => { ctx.stackOpen[card.id] = !open; } },
+            open ? '收起堆栈' : '查看完整堆栈')
+        ]));
+        if (open) kids.push(h('pre', { class: 'stack' }, card.stack));
+      }
+    }
   };
 
   /**

@@ -72,139 +72,140 @@
     return fnTop();
   }
 
+  // 工具处理函数表：工具名 → 处理函数（签名统一为 (params) => result）。
+  // 新增工具只需写一个处理函数并登记到表里，不必改分发逻辑。
+  A.TOOL_HANDLERS = {
+    get_element_style: (params) => A._toolGetElementStyle(params),
+    get_page_snapshot: (params) => A._toolSnapshot(params),
+    get_console_logs: (params) => A._toolConsoleLogs(params),
+    get_network_logs: (params) => A._toolNetworkLogs(params),
+    exec_js: (params) => A._toolExecJs(params),
+    push_message: (params) => A._toolPushMessage(params),
+  };
+
   A.handleToolRequest = async function (detail) {
-    const tool = detail.tool;
-    const params = detail.params || {};
+    const fn = A.TOOL_HANDLERS[detail.tool];
+    if (!fn) return { success: false, error: 'UNKNOWN_TOOL', tool: detail.tool };
+    return await fn(detail.params || {});
+  };
 
-    if (tool === 'get_element_style') {
-      const selector = params.selector;
-      // 该工具的职责就是采集样式，故默认强制采集（不再受「采集样式列表」全局开关限制）；
-      // 允许用 properties 精确指定要看的属性，或 include_all=true 取全量。
-      const properties = Array.isArray(params.properties) ? params.properties : null;
-      const includeAll = params.include_all === true;
-      const wantStyle = true;
-      const styleFilter = includeAll ? null : (properties || A.DEFAULT_STYLE_PROPS);
-      // 顶层文档直接查询
-      const queryTop = () => {
-        const matches = selector ? document.querySelectorAll(selector) : null;
-        if (!matches || matches.length === 0) {
-          return { success: false, error: 'ELEMENT_NOT_FOUND', selector, frames: A.frameUrls() };
-        }
-        if (matches.length > 1) {
-          return { success: false, error: 'ELEMENT_NOT_UNIQUE', selector, count: matches.length };
-        }
-        return { success: true, data: A.buildElementData(matches[0], A.generateSelector(matches[0]), true, styleFilter) };
-      };
-      // 子页面：交给点选补丁代答
-      const queryFrame = async (frame) => {
-        try {
-          const res = await A.queryFrame(frame, {
-            type: 'query-element',
-            selector: selector,
-            wantStyle: wantStyle,
-            includeAll: includeAll,
-            properties: properties,
-          }, 4000);
-          return res.result;
-        } catch (e) {
-          return {
-            success: false,
-            error: e.message || 'FRAME_QUERY_FAILED',
-            selector,
-            page_url: params.page_url || '',
-            hint: '目标页面内需已安装「iframe 点选补丁」才能查询子页面元素。请在调试抽屉设置页复制补丁，'
-              + '并粘贴到该 iframe 的控制台执行，然后请用户确认后重试。'
-          };
-        }
-      };
-      return runInTargetPage(params, queryTop, queryFrame);
-    }
-
-    if (tool === 'get_page_snapshot') {
-      // 只做可见区域截图，链路与 QQ 指令「/sp」一致：
-      // 后台 captureVisibleTab 直接取图，回传原图，不做缩放、不读 DOM。
-      // 读整页 outerHTML 会把大段字符串经回传链路搬运、在卡片里渲染，
-      // 页面一大就卡；截图链路短、开销小，保留它。
+  /** 工具 get_element_style：采集元素样式（顶层直接查，子页面交给点选补丁代答）。 */
+  A._toolGetElementStyle = function (params) {
+    const selector = params.selector;
+    // 该工具的职责就是采集样式，故默认强制采集（不再受「采集样式列表」全局开关限制）；
+    // 允许用 properties 精确指定要看的属性，或 include_all=true 取全量。
+    const properties = Array.isArray(params.properties) ? params.properties : null;
+    const includeAll = params.include_all === true;
+    const styleFilter = includeAll ? null : (properties || A.DEFAULT_STYLE_PROPS);
+    // 顶层文档直接查询
+    const queryTop = () => {
+      const matches = selector ? document.querySelectorAll(selector) : null;
+      if (!matches || matches.length === 0) {
+        return { success: false, error: 'ELEMENT_NOT_FOUND', selector, frames: A.frameUrls() };
+      }
+      if (matches.length > 1) {
+        return { success: false, error: 'ELEMENT_NOT_UNIQUE', selector, count: matches.length };
+      }
+      return { success: true, data: A.buildElementData(matches[0], A.generateSelector(matches[0]), true, styleFilter) };
+    };
+    // 子页面：交给点选补丁代答
+    const queryFrame = async (frame) => {
       try {
-        const shot = await A.requestScreenshot();
-        return { success: true, data: { screenshot: shot } };
-      } catch (err) {
-        return { success: false, error: 'SNAPSHOT_FAILED', message: err.message };
-      }
-    }
-
-    if (tool === 'get_console_logs') {
-      // console 记录由主世界脚本 hook 捕获，存在页面内存里，
-      // 这里用 exec_js 通道把它读回来。
-      const limit = typeof params.limit === 'number' ? params.limit : 500;
-      const level = params.level || '';
-      // exec_js 的代码由 async 函数包裹，必须以 return 交出结果；
-      // 若写成自执行函数（无 return），返回的是 undefined，会被误判为空。
-      const code = 'return (window.__AI_DEBUG_CONSOLE_LOGS || []);';
-      const res = await A.execJs(code);
-      if (!res || !res.success) return { success: false, error: (res && res.error) || 'EXEC_JS_ERROR' };
-      let logs = Array.isArray(res.result) ? res.result : [];
-      // 按级别过滤（level 为空则全部）
-      if (level) logs = logs.filter((x) => x && x.level === level);
-      // 只取最近 limit 条
-      logs = logs.slice(-limit);
-      return { success: true, data: { count: logs.length, logs: logs } };
-    }
-
-    if (tool === 'get_network_logs') {
-      // 网络记录由 devtools.js 采集、service_worker 缓存。
-      // 需该页 DevTools 打开过，否则缓存为空。
-      const limit = typeof params.limit === 'number' ? params.limit : 300;
-      return await new Promise((resolve) => {
-        try {
-          chrome.runtime.sendMessage({ type: 'get-devtools-network', limit: limit }, (resp) => {
-            if (!resp || !resp.ok) {
-              resolve({ success: false, error: 'NETWORK_UNAVAILABLE', hint: '请先在该页面打开 DevTools 面板，网络记录才会被采集。' });
-              return;
-            }
-            resolve({ success: true, data: { count: (resp.entries || []).length, entries: resp.entries || [] } });
-          });
-        } catch (e) {
-          resolve({ success: false, error: String(e) });
-        }
-      });
-    }
-
-    if (tool === 'exec_js') {
-      // 在目标页面主世界执行任意 JS。
-      // 主世界脚本（08_injected_main.js）只注入顶层文档，
-      // 因此目前仅支持顶层页面；子页面（iframe）暂不路由。
-      const code = params.code;
-      if (typeof code !== 'string' || code.trim() === '') {
-        return { success: false, error: 'MISSING_CODE', hint: 'exec_js 需要非空的 code 参数。' };
-      }
-      const url = params.page_url || '';
-      if (url && A.normalizeUrl(url) !== A.normalizeUrl(location.href)) {
-        // 与 FRAME_NOT_FOUND 保持一致：带 available 列出所有可路由文档，
-        // 调用方据此直接改用顶层文档地址重试，无需再猜。
+        const res = await A.queryFrame(frame, {
+          type: 'query-element', selector: selector, wantStyle: true,
+          includeAll: includeAll, properties: properties,
+        }, 4000);
+        return res.result;
+      } catch (e) {
         return {
           success: false,
-          error: 'EXEC_JS_TOP_ONLY',
-          page_url: url,
-          available: A.frameUrls(),
-          hint: 'exec_js 目前仅支持顶层文档主世界；请传入顶层页面的 URL（见 available 列表）。',
+          error: e.message || 'FRAME_QUERY_FAILED',
+          selector,
+          page_url: params.page_url || '',
+          hint: '目标页面内需已安装「iframe 点选补丁」才能查询子页面元素。请在调试抽屉设置页复制补丁，'
+            + '并粘贴到该 iframe 的控制台执行，然后请用户确认后重试。'
         };
       }
-      return await A.execJs(code);
-    }
+    };
+    return runInTargetPage(params, queryTop, queryFrame);
+  };
 
-    if (tool === 'push_message') {
-      // 参数名为 message；为空时显式报错，避免推送空内容后仍返回成功（静默失败）。
-      const message = params.message;
-      const title = params.title || '';
-      if (typeof message !== 'string' || message.trim() === '') {
-        return { success: false, error: 'MISSING_MESSAGE', hint: 'push_message 需要非空的 message 参数（推送正文）。' };
+  /** 工具 get_page_snapshot：只做可见区域截图，链路与 QQ 指令「/sp」一致。 */
+  A._toolSnapshot = async function () {
+    // 后台 captureVisibleTab 直接取图，回传原图，不做缩放、不读 DOM。
+    // 读整页 outerHTML 会把大段字符串经回传链路搬运、在卡片里渲染，页面一大就卡。
+    try {
+      const shot = await A.requestScreenshot();
+      return { success: true, data: { screenshot: shot } };
+    } catch (err) {
+      return { success: false, error: 'SNAPSHOT_FAILED', message: err.message };
+    }
+  };
+
+  /** 工具 get_console_logs：读取主世界脚本 hook 捕获的 console 记录。 */
+  A._toolConsoleLogs = async function (params) {
+    const limit = typeof params.limit === 'number' ? params.limit : 500;
+    const level = params.level || '';
+    // exec_js 的代码由 async 函数包裹，必须以 return 交出结果；写成自执行函数会返回 undefined
+    const res = await A.execJs('return (window.__AI_DEBUG_CONSOLE_LOGS || []);');
+    if (!res || !res.success) return { success: false, error: (res && res.error) || 'EXEC_JS_ERROR' };
+    let logs = Array.isArray(res.result) ? res.result : [];
+    if (level) logs = logs.filter((x) => x && x.level === level);   // 按级别过滤
+    logs = logs.slice(-limit);                                      // 只取最近 limit 条
+    return { success: true, data: { count: logs.length, logs: logs } };
+  };
+
+  /** 工具 get_network_logs：读取 DevTools 采集、service worker 缓存的网络记录。 */
+  A._toolNetworkLogs = function (params) {
+    const limit = typeof params.limit === 'number' ? params.limit : 300;
+    // 需该页 DevTools 打开过，否则缓存为空
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ type: 'get-devtools-network', limit: limit }, (resp) => {
+          if (!resp || !resp.ok) {
+            resolve({ success: false, error: 'NETWORK_UNAVAILABLE', hint: '请先在该页面打开 DevTools 面板，网络记录才会被采集。' });
+            return;
+          }
+          resolve({ success: true, data: { count: (resp.entries || []).length, entries: resp.entries || [] } });
+        });
+      } catch (e) {
+        resolve({ success: false, error: String(e) });
       }
-      A.postToDrawer({ type: 'append-reply', id: A.generateId ? A.generateId() : String(Date.now()), text: (title ? ('【' + title + '】') : '') + message, timestamp: Date.now() });
-      return { success: true, data: { pushed: true } };
-    }
+    });
+  };
 
-    return { success: false, error: 'UNKNOWN_TOOL', tool };
+  /** 工具 exec_js：在目标页面主世界执行任意 JS（当前仅支持顶层文档）。 */
+  A._toolExecJs = async function (params) {
+    const code = params.code;
+    if (typeof code !== 'string' || code.trim() === '') {
+      return { success: false, error: 'MISSING_CODE', hint: 'exec_js 需要非空的 code 参数。' };
+    }
+    const url = params.page_url || '';
+    if (url && A.normalizeUrl(url) !== A.normalizeUrl(location.href)) {
+      // 与 FRAME_NOT_FOUND 保持一致：带 available 列出所有可路由文档，调用方据此改用顶层地址重试
+      return {
+        success: false, error: 'EXEC_JS_TOP_ONLY', page_url: url, available: A.frameUrls(),
+        hint: 'exec_js 目前仅支持顶层文档主世界；请传入顶层页面的 URL（见 available 列表）。',
+      };
+    }
+    return await A.execJs(code);
+  };
+
+  /** 工具 push_message：把一段文字推送到调试抽屉。 */
+  A._toolPushMessage = function (params) {
+    // 参数名为 message；为空时显式报错，避免推送空内容后仍返回成功（静默失败）。
+    const message = params.message;
+    const title = params.title || '';
+    if (typeof message !== 'string' || message.trim() === '') {
+      return { success: false, error: 'MISSING_MESSAGE', hint: 'push_message 需要非空的 message 参数（推送正文）。' };
+    }
+    A.postToDrawer({
+      type: 'append-reply',
+      id: A.generateId ? A.generateId() : String(Date.now()),
+      text: (title ? ('【' + title + '】') : '') + message,
+      timestamp: Date.now()
+    });
+    return { success: true, data: { pushed: true } };
   };
 
   // exec_js 的等待上限（毫秒）：主世界执行可能陷入长循环或死等，

@@ -84,12 +84,21 @@
   }
 
   A.initEventListeners = function () {
+    A._bindRuntimeMessages();
+    A._bindMainWorldMessages();
+    A._bindIframeMessages();
+    A._bindDrawerMessages();
+    // 页面级鼠标 / 键盘监听不在此绑定：它们随抽屉开关 attach / detach，
+    // 抽屉关闭后页面上不留任何本扩展的交互监听。
+  };
+
+  /** 绑定扩展运行时消息：插件图标点击（开关抽屉）、请求进入选择模式。 */
+  A._bindRuntimeMessages = function () {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const { type } = message || {};
       if (type === 'ai-debug-toggle-from-action') {
-        // 插件图标：抽屉存在则关闭，不存在则打开。
-        // 开关由内容脚本直接掌控，不再绕经抽屉转发，
-        // 这样抽屉被移除后图标仍能把它重新打开。
+        // 插件图标：抽屉存在则关闭，不存在则打开。开关由内容脚本直接掌控，
+        // 不再绕经抽屉转发，这样抽屉被移除后图标仍能把它重新打开。
         A.log('插件图标被点击：抽屉当前' + (state.drawerIframe ? '已打开 → 关闭' : '已关闭 → 打开'));
         if (state.drawerIframe) A.closeDrawer();
         else A.openDrawer();
@@ -102,10 +111,14 @@
       }
       return false;
     });
+  };
 
-    // 主世界脚本投递的「按标记选中」请求：
-    // 主世界无法直接传元素引用过来，只能给元素打标记；这里按标记跨文档找回元素，
-    // 完成选中后立即清除标记，不给页面留痕。
+  /**
+   * 绑定主世界脚本的「按标记选中」请求。
+   * 主世界无法直接传元素引用过来，只能给元素打标记；这里按标记跨文档找回元素，
+   * 完成选中后立即清除标记，不给页面留痕。
+   */
+  A._bindMainWorldMessages = function () {
     window.addEventListener('message', (ev) => {
       const d = ev.data;
       if (!d || d.source !== 'ai-debug-main' || d.type !== 'select-by-mark') return;
@@ -120,28 +133,30 @@
       }
       A.selectElement(el);
     });
+  };
 
-    // iframe 补丁回传的元素 / 就绪消息：转交给抽屉
+  /** 绑定 iframe 补丁回传的元素 / 就绪消息，转交给抽屉。 */
+  A._bindIframeMessages = function () {
     window.addEventListener('message', (ev) => {
       const d = ev.data;
-      if (!d) return;
-      if (d.source === 'ai-debug-iframe') {
-        if (d.type === 'element-selected') {
-          // 走统一入口：既更新内容脚本的已选列表，也通知抽屉，
-          // 保证两条选择路径（页面直接双击 / iframe 补丁双击）状态一致
-          A.pushSelected(d.element);
-        } else if (d.type === 'select-cancelled') {
-          // iframe 内右键退出选择：同步顶层状态与抽屉按钮，避免状态不一致
-          A.toggleSelectMode(false);
-          A.postToDrawer({ type: 'ai-debug-select-cancelled' });
-          A.showToast('已退出元素选择模式');
-        } else if (d.type === 'patch-ready') {
-          A.showToast('iframe 点选补丁已就绪：' + (d.frameUrl || ''));
-        }
-        return;
+      if (!d || d.source !== 'ai-debug-iframe') return;
+      if (d.type === 'element-selected') {
+        // 走统一入口：既更新内容脚本的已选列表，也通知抽屉，
+        // 保证两条选择路径（页面直接双击 / iframe 补丁双击）状态一致
+        A.pushSelected(d.element);
+      } else if (d.type === 'select-cancelled') {
+        // iframe 内右键退出选择：同步顶层状态与抽屉按钮，避免状态不一致
+        A.toggleSelectMode(false);
+        A.postToDrawer({ type: 'ai-debug-select-cancelled' });
+        A.showToast('已退出元素选择模式');
+      } else if (d.type === 'patch-ready') {
+        A.showToast('iframe 点选补丁已就绪：' + (d.frameUrl || ''));
       }
     });
+  };
 
+  /** 绑定抽屉发来的指令：选择开关、元素增删改、就绪握手、关闭、侧栏设置等。 */
+  A._bindDrawerMessages = function () {
     window.addEventListener('message', (ev) => {
       const d = ev.data;
       if (!d || d.source !== 'ai-debug-drawer') return;
@@ -171,9 +186,6 @@
         A.setDrawerSide(d.side);
       }
     });
-
-    // 页面级鼠标 / 键盘监听不在此绑定：它们随抽屉开关attach / detach，
-    // 抽屉关闭后页面上不留任何本扩展的交互监听。
   };
 
   /**

@@ -70,11 +70,32 @@ def check_python(path):
         return str(e)
 
 
+def _find_node():
+    """查找可用的 node 可执行文件。
+
+    顺序：环境变量 NODE_BIN → PATH → 本地便携安装目录。
+    本工程允许把 node 便携版解压到 D:\\mydata\\tools 下而不进系统 PATH，
+    故补充目录探测，避免「装了 node 却仍被跳过」。
+    """
+    import glob
+    env = os.environ.get("NODE_BIN")
+    if env and os.path.isfile(env):
+        return env
+    found = shutil.which("node")
+    if found:
+        return found
+    candidates = []
+    for base in (r"D:\mydata\tools", os.path.join(os.path.expanduser("~"), "nodejs")):
+        candidates += glob.glob(os.path.join(base, "node-*", "node.exe"))
+    return sorted(candidates)[-1] if candidates else None
+
+
 def check_js(path):
     """校验 JS 文件语法（node --check）；node 不可用时跳过（返回 None）。"""
-    if not shutil.which("node"):
+    node = _find_node()
+    if not node:
         return None
-    proc = subprocess.run(["node", "--check", path], capture_output=True)
+    proc = subprocess.run([node, "--check", path], capture_output=True)
     if proc.returncode == 0:
         return None
     out = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip()

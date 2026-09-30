@@ -189,7 +189,7 @@ class ProviderHub:
         else:
             pages.pop(target, None)
 
-    def _escape_take(self, provider, h_url, target, now, cid, tool, why):
+    def _escape_take(self, provider, h_url, target, now, tag):
         """逸散阶段的取件判断（调用方须已持锁）。
 
         逸散优先级：
@@ -198,18 +198,19 @@ class ProviderHub:
           3. 本页面没开 —— 其他页面可随机取走（谁先轮询谁得）。
         @param h_url 本页面地址（规整后）
         @param target 当前轮询页地址（规整后）
+        @param tag 日志标签（已含原因 / 工具名 / 请求 id，避免参数过多）
         @returns 是否取走
         """
         # 1. 当前轮询页就是本页面 → 优先取走
         if h_url and h_url == target:
-            log("逸散取走（本页面）", why, tool, "id=" + cid)
+            log("逸散取走（本页面）", tag)
             return True
         # 2. 本页面开着 debug-chrome → 留给它
         if h_url and self._page_open_locked(provider, h_url, now):
             return False
         # 3. 本页面没开 → 其他页面随机取走
-        log("逸散取走（其他页面）", why, tool,
-            "本页面=" + (h_url or "(无)"), "由=" + (target or "(未知)"), "id=" + cid)
+        log("逸散取走（其他页面）", tag,
+            "本页面=" + (h_url or "(无)"), "由=" + (target or "(未知)"))
         return True
 
     def _take_mine(self, provider, c, target, now):
@@ -230,7 +231,7 @@ class ProviderHub:
 
         # 规则 1：无目标页 → 直接逸散
         if not c_url:
-            return self._escape_take(provider, h_url, target, now, cid, tool, "公开命令")
+            return self._escape_take(provider, h_url, target, now, "公开命令 %s id=%s" % (tool, cid))
         # 规则 2：目标就是本页 → 取走
         if c_url == target:
             log("取走本页面命令", tool, "id=" + cid)
@@ -239,7 +240,7 @@ class ProviderHub:
         if (now - created) < TARGET_HOLD:
             return False
         # 规则 4：窗口已过 → 逸散
-        return self._escape_take(provider, h_url, target, now, cid, tool, "窗口超时逸散")
+        return self._escape_take(provider, h_url, target, now, "窗口超时逸散 %s id=%s" % (tool, cid))
 
     def _pick_commands_locked(self, provider, target, now):
         """按归属规则把队列拆为「本页面取走」与「留给别人」两部分（调用方须已持锁）。

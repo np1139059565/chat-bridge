@@ -85,18 +85,7 @@
       this.reportToBridge(reason);
       return;
     }
-    const conv = this.curConv || {};
-    const tree = conv.msgTree || {};
-    const keys = conv.visibleKeys || [];
-    // 找最后一条 assistant 消息（最新回复）
-    let lastId = '';
-    for (let i = keys.length - 1; i >= 0; i--) {
-      const node = tree[keys[i]];
-      if (node && node.role === 'assistant') {
-        lastId = window.AIMirrorDomUtils.messageFingerprint(node);
-        break;
-      }
-    }
+    const lastId = this._lastAssistantId();
     if (!lastId) { this.reportToBridge(reason); return; }
     const self = this;
     // 采集完成后执行；执行前先清掉，保证只跑一次

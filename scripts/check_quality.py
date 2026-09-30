@@ -16,14 +16,14 @@ import os
 import re
 import sys
 
-# 扫描时跳过的目录：第三方依赖、构建产物、缓存
-SKIP_DIRS = {"__pycache__", "node_modules", ".git", "dist", "build", "out", "coverage", "vendor"}
-# 参与扫描的源码扩展名
-SOURCE_EXTS = (".py", ".js", ".css", ".html")
-# 参与「重复代码」检测的扩展名：只针对代码。
-# 原因：CSS 的属性组合在样式表中天然会重复（如不同作用域下的按钮基础样式），
-# 这不构成「重复实现」缺陷；强行合并会改变层叠与作用域语义。
-DUP_EXTS = (".py", ".js")
+# 复用公共基础函数（iter_files / read_lines / is_comment_or_blank / cyclomatic），
+# 避免与 qcommon.py 各存一份实现而触发「重复代码」检查。
+import qcommon
+
+# 常量与基础函数统一来自 qcommon，避免两处各存一份实现。
+SKIP_DIRS = qcommon.SKIP_DIRS
+SOURCE_EXTS = qcommon.SOURCE_EXTS
+DUP_EXTS = qcommon.DUP_EXTS
 # 行数阈值：文件超过此值列入清单
 FILE_LINE_LIMIT = 450
 # 函数体行数阈值（不含空行与注释）
@@ -59,32 +59,11 @@ def is_boilerplate(line):
     return line in BOILERPLATE_LINES
 
 
-def iter_files(root, exts=None):
-    """遍历工程内源码文件，跳过 SKIP_DIRS。
-
-    @param exts 限定扩展名元组；缺省用 SOURCE_EXTS（全部源码）
-    """
-    wanted = exts or SOURCE_EXTS
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for f in filenames:
-            if f.endswith(wanted):
-                yield os.path.join(dirpath, f)
-
-
-def read_lines(path):
-    """读取文件全部行；读取失败返回空列表。"""
-    try:
-        with open(path, "r", encoding="utf-8", errors="ignore") as fh:
-            return fh.read().splitlines()
-    except Exception:
-        return []
-
-
-def is_comment_or_blank(s):
-    """判断一行是否为空行或纯注释行。"""
-    t = s.strip()
-    return (not t) or t.startswith("#") or t.startswith("//") or t.startswith("*") or t.startswith("/*")
+# 基础函数统一来自 qcommon；此处取局部别名，保持文件内调用写法不变。
+iter_files = qcommon.iter_files
+read_lines = qcommon.read_lines
+is_comment_or_blank = qcommon.is_comment_or_blank
+cyclomatic = qcommon.cyclomatic
 
 
 def check_large_files(root):
@@ -95,21 +74,6 @@ def check_large_files(root):
         if len(lines) > FILE_LINE_LIMIT:
             out.append((os.path.relpath(p, root), len(lines)))
     return sorted(out, key=lambda x: -x[1])
-
-
-def cyclomatic(node):
-    """计算 Python AST 节点的圈复杂度（分支 / 循环 / 布尔运算 / 异常处理各计 1）。"""
-    n = 1
-    for ch in ast.walk(node):
-        if isinstance(ch, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.ExceptHandler, ast.With, ast.AsyncWith, ast.IfExp, ast.Try)):
-            n += 1
-        elif isinstance(ch, ast.BoolOp):
-            n += len(ch.values) - 1
-        elif isinstance(ch, ast.comprehension):
-            n += 1 + len(ch.ifs)
-        elif isinstance(ch, ast.Match):
-            n += len(ch.cases)
-    return n
 
 
 def _scan_py_file(p, root, out):

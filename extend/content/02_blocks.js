@@ -87,7 +87,9 @@
 
       const codeHost = A.findCodeRoot(el);
       if (codeHost) {
-        const inner = codeHost.matches('pre') ? codeHost : (codeHost.querySelector('pre code') || codeHost.querySelector('code') || codeHost);
+        const inner = codeHost.matches('pre')
+          ? codeHost
+          : (codeHost.querySelector('pre code') || codeHost.querySelector('code') || codeHost);
         const lang = A.codeLangOf(codeHost) || '';
         const code = A.textOf(inner);
         out.push({ type: 'code', lang: lang, code: code, id: 'c' + A.hashStr(lang + '|' + code) });

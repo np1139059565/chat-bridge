@@ -17,144 +17,185 @@
     const allList = ctx.sessionEntries || [];
     // 应用 id 搜索过滤：只影响展示，不影响导出范围（导出按勾选态决定）。
     const list = ctx.filteredSessionEntries || allList;
-    // 展示倒序：最新条目排在最上，与网页对话镜像的排列一致。
-    // 只在渲染层反转，sessionEntries 本身保持时间正序，
-    // 导出 JSON 与勾选范围不受展示顺序影响。
-    const ordered = list.slice().reverse();
-    const checkedCount = ctx.checkedEntryKeys.length;
-    /** 条目类型 → 展示用标签。只显示角色（用户/AI），省略块数以节省横向空间。 */
-    const kindLabel = (e) => {
-      if (e.kind === 'message') {
-        return e.role === 'user' ? '用户' : 'AI';
-      }
-      return e.label || '';
-    };
     return h('div', { class: 'sp-block conv-split' }, [
-      // 左：会话列表栏。宽度由 convListWidth 控制，可拖动分隔条调节；
-      // 点某项即切换会话，网页端切换会话时 activeConv 变化，高亮自动跟随。
-      h('div', {
-        class: 'conv-list-pane',
-        style: { width: (ctx.convListWidth || 180) + 'px' }
-      }, [
-        h('div', { class: 'conv-list-head' }, [
-          h('span', '会话（' + (ctx.convList || []).length + '）'),
-          h('button', {
-            class: 'danger',
-            disabled: !(ctx.convList || []).length,
-            title: '清空全部会话的聊天记录与卡片',
-            onClick: () => ctx.clearAllConversations()
-          }, '清空')
-        ]),
-        h('div', { class: 'conv-list' },
-          (ctx.convList || []).map((c) => h('div', {
-            class: 'conv-list-item' + (c.id === ctx.activeConv ? ' active' : ''),
-            key: c.id,
-            title: c.title,
-            onClick: () => ctx.selectConversation(c.id)
-          }, [
-            h('span', { class: 'conv-list-title' }, c.title),
-            h('span', { class: 'conv-list-meta' }, [
-              h('span', { class: 'conv-list-count', title: '该会话消息树中的消息总数' },
-                (c.msgCount || 0) + ' 条'),
-              h('span', { class: 'conv-list-date' },
-                c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '')
-            ])
-          ])))
-      ]),
+      renderConvListPane(ctx),
       // 中：可拖动分隔条，左右调节两栏宽度
       h('div', {
         class: 'conv-resizer',
         title: '拖动调节宽度',
         onPointerdown: (e) => ctx.startConvResize(e)
       }),
-      // 右：消息（原有内容整体移入本容器）
+      // 右：消息记录栏
       h('div', { class: 'conv-record-pane' }, [
-      h('div', { class: 'card-head' }, [
-        h('span', '消息（' + allList.length + '）'),
-        h('span', { class: 'head-actions' }, [
-          h('button', {
-            disabled: !allList.length,
-            onClick: () => ctx.clearSession()
-          }, '清空'),
-          h('button', {
-            onClick: () => ctx.exportSessionJson()
-          }, checkedCount ? ('复制 JSON（' + checkedCount + '）') : '复制')
-        ])
-      ]),
-      // id 搜索框：按条目 id（消息指纹 / 卡片 id）或 key 过滤展示。
-      // 用于排查幽灵卡片 / 快速定位某张卡片的记录。
-      h('div', { class: 'conv-search' }, [
-        h('input', {
-          type: 'text',
-          placeholder: '按 id 搜索条目（消息指纹 / 卡片 id）',
-          value: ctx.sessionSearch,
-          onInput: (e) => { ctx.sessionSearch = e.target.value; }
-        }),
-        ctx.sessionSearch
-          ? h('button', { class: 'h-del', title: '清除搜索', onClick: () => { ctx.sessionSearch = ''; } }, '✕')
-          : null
-      ]),
-      list.length
-        ? h('div', { class: 'history-list' },
-          [
-            // 范围说明行：不提供全选，仅提示当前勾选数量
-            h('div', { class: 'conv-head', key: 'entry-head' }, [
-              h('span', { class: 'conv-hint' }, checkedCount ? ('已选 ' + checkedCount + ' 项') : '未勾选，将复制全部')
-            ]),
-          ].concat(ordered.map((e) => {
-            const isCard = e.kind !== 'message';
-            const open = !!ctx.entryOpen[e.key];
-            // 条目样式类：外部卡片与分支父节点各加一个标记类，便于着色区分。
-            const entryCls = 'conv-entry'
-              + (isCard ? ' is-external' : '')
-              + (e.isExternalCall ? ' is-external-call' : '')
-              + (e.isBranchParent ? ' is-branch-parent' : '');
-            return h('div', {
-              class: entryCls,
-              key: e.key,
-              'data-entry-key': e.key   // 供镜像区点击 pid-id 时定位到本条目
-            }, [
-              h('div', { class: 'history-item conv-item' }, [
-                h('label', { class: 'conv-check' }, [
-                  h('input', {
-                    type: 'checkbox',
-                    checked: !!ctx.entryChecked[e.key],
-                    onChange: () => ctx.toggleEntryChecked(e.key)
-                  })
-                ]),
-                // 展开 / 收起：与镜像区「思考过程」同一交互，箭头指示折叠态
-                h('button', {
-                  class: 'h-toggle',
-                  title: open ? '收起' : '展开查看',
-                  onClick: () => { ctx.entryOpen[e.key] = !open; }
-                }, open ? '▾' : '▸'),
-                h('span', { class: 'conv-title', title: e.preview || kindLabel(e) },
-                  kindLabel(e)),
-                // 条目 id：内容指纹 / 卡片 id，按原样显示。
-                // 悬浮显示完整 key，点击复制 key，便于排查父子关系与幽灵卡片。
-                h('span', {
-                  class: 'conv-id',
-                  title: 'key：' + e.key + '（点击复制）',
-                  onClick: () => ctx.copy(e.key)
-                }, e.id),
-                e.kind === 'message' && e.preview && !open
-                  ? h('span', { class: 'conv-meta', title: e.preview }, e.preview)
-                  : null,
-                h('button', {
-                  class: 'h-del',
-                  title: '删除该卡片',
-                  onClick: () => ctx.removeEntry(e.key)
-                }, '✕')
-              ]),
-              // 展开区：复用镜像区已有的块渲染与卡片渲染，
-              // 保证同一内容在两处的呈现完全一致。
-              open ? h('div', { class: 'conv-body' }, D.renderEntryBody(ctx, e)) : null
-            ]);
-          })))
-        : h('div', { class: 'empty' }, allList.length ? '（没有匹配该 id 的条目）' : '（当前会话暂无内容）')
-      ])   // 关闭右侧「消息」容器
-    ]);    // 关闭会话分栏容器
+        renderRecordHead(ctx, allList, list),
+        renderSearchBox(ctx),
+        renderEntryList(ctx, list, allList)
+      ])
+    ]);
   };
+
+  /**
+   * 渲染左栏会话列表：标题行 + 各项（标题、消息数、更新时间）。
+   * 宽度由 convListWidth 控制，可拖动分隔条调节；点某项即切换会话。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 左栏节点
+   */
+  function renderConvListPane(ctx) {
+    return h('div', {
+      class: 'conv-list-pane',
+      style: { width: (ctx.convListWidth || 180) + 'px' }
+    }, [
+      h('div', { class: 'conv-list-head' }, [
+        h('span', '会话（' + (ctx.convList || []).length + '）'),
+        h('button', {
+          class: 'danger',
+          disabled: !(ctx.convList || []).length,
+          title: '清空全部会话的聊天记录与卡片',
+          onClick: () => ctx.clearAllConversations()
+        }, '清空')
+      ]),
+      h('div', { class: 'conv-list' },
+        (ctx.convList || []).map((c) => h('div', {
+          class: 'conv-list-item' + (c.id === ctx.activeConv ? ' active' : ''),
+          key: c.id,
+          title: c.title,
+          onClick: () => ctx.selectConversation(c.id)
+        }, [
+          h('span', { class: 'conv-list-title' }, c.title),
+          h('span', { class: 'conv-list-meta' }, [
+            h('span', { class: 'conv-list-count', title: '该会话消息树中的消息总数' },
+              (c.msgCount || 0) + ' 条'),
+            h('span', { class: 'conv-list-date' },
+              c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : '')
+          ])
+        ])))
+    ]);
+  }
+
+  /**
+   * 渲染右栏头部：消息总数 + 清空 / 复制 JSON 按钮。
+   * @param {Object} ctx Vue 实例
+   * @param {Array} allList 全部条目
+   * @param {Array} list 过滤后的条目（供按钮计数）
+   * @returns {VNode} 头部节点
+   */
+  function renderRecordHead(ctx, allList, list) {
+    const checkedCount = ctx.checkedEntryKeys.length;
+    return h('div', { class: 'card-head' }, [
+      h('span', '消息（' + allList.length + '）'),
+      h('span', { class: 'head-actions' }, [
+        h('button', {
+          disabled: !allList.length,
+          onClick: () => ctx.clearSession()
+        }, '清空'),
+        h('button', {
+          onClick: () => ctx.exportSessionJson()
+        }, checkedCount ? ('复制 JSON（' + checkedCount + '）') : '复制')
+      ])
+    ]);
+  }
+
+  /**
+   * 渲染按 id 搜索的搜索框（带清除按钮）。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 搜索框节点
+   */
+  function renderSearchBox(ctx) {
+    return h('div', { class: 'conv-search' }, [
+      h('input', {
+        type: 'text',
+        placeholder: '按 id 搜索条目（消息指纹 / 卡片 id）',
+        value: ctx.sessionSearch,
+        onInput: (e) => { ctx.sessionSearch = e.target.value; }
+      }),
+      ctx.sessionSearch
+        ? h('button', { class: 'h-del', title: '清除搜索', onClick: () => { ctx.sessionSearch = ''; } }, '✕')
+        : null
+    ]);
+  }
+
+  /**
+   * 渲染条目列表（倒序）：勾选提示行 + 每条记录。
+   * 展示倒序只在渲染层反转，sessionEntries 本身保持时间正序，导出与勾选不受影响。
+   * @param {Object} ctx Vue 实例
+   * @param {Array} list 过滤后的条目
+   * @param {Array} allList 全部条目
+   * @returns {VNode} 列表节点
+   */
+  function renderEntryList(ctx, list, allList) {
+    if (!list.length) {
+      return h('div', { class: 'empty' },
+        allList.length ? '（没有匹配该 id 的条目）' : '（当前会话暂无内容）');
+    }
+    const checkedCount = ctx.checkedEntryKeys.length;
+    const ordered = list.slice().reverse();
+    const head = h('div', { class: 'conv-head', key: 'entry-head' }, [
+      h('span', { class: 'conv-hint' },
+        checkedCount ? ('已选 ' + checkedCount + ' 项') : '未勾选，将复制全部')
+    ]);
+    return h('div', { class: 'history-list' }, [head].concat(ordered.map((e) => renderEntryRow(ctx, e))));
+  }
+
+  /**
+   * 渲染单条会话记录：复选框、展开开关、标题、id、删除按钮，展开态附内容。
+   * @param {Object} ctx Vue 实例
+   * @param {Object} e 条目
+   * @returns {VNode} 条目节点
+   */
+  function renderEntryRow(ctx, e) {
+    const isCard = e.kind !== 'message';
+    const open = !!ctx.entryOpen[e.key];
+    // 条目样式类：外部卡片与分支父节点各加一个标记类，便于着色区分。
+    const entryCls = 'conv-entry'
+      + (isCard ? ' is-external' : '')
+      + (e.isExternalCall ? ' is-external-call' : '')
+      + (e.isBranchParent ? ' is-branch-parent' : '');
+    return h('div', {
+      class: entryCls,
+      key: e.key,
+      'data-entry-key': e.key   // 供镜像区点击 pid-id 时定位到本条目
+    }, [
+      h('div', { class: 'history-item conv-item' }, [
+        h('label', { class: 'conv-check' }, [
+          h('input', {
+            type: 'checkbox',
+            checked: !!ctx.entryChecked[e.key],
+            onChange: () => ctx.toggleEntryChecked(e.key)
+          })
+        ]),
+        // 展开 / 收起：与镜像区「思考过程」同一交互，箭头指示折叠态
+        h('button', {
+          class: 'h-toggle',
+          title: open ? '收起' : '展开查看',
+          onClick: () => { ctx.entryOpen[e.key] = !open; }
+        }, open ? '▾' : '▸'),
+        h('span', { class: 'conv-title', title: e.preview || kindLabel(e) }, kindLabel(e)),
+        // 条目 id：内容指纹 / 卡片 id，按原样显示。
+        // 悬浮显示完整 key，点击复制 key，便于排查父子关系与幽灵卡片。
+        h('span', {
+          class: 'conv-id',
+          title: 'key：' + e.key + '（点击复制）',
+          onClick: () => ctx.copy(e.key)
+        }, e.id),
+        e.kind === 'message' && e.preview && !open
+          ? h('span', { class: 'conv-meta', title: e.preview }, e.preview)
+          : null,
+        h('button', {
+          class: 'h-del',
+          title: '删除该卡片',
+          onClick: () => ctx.removeEntry(e.key)
+        }, '✕')
+      ]),
+      // 展开区：复用镜像区已有的块渲染与卡片渲染，保证两处呈现一致。
+      open ? h('div', { class: 'conv-body' }, D.renderEntryBody(ctx, e)) : null
+    ]);
+  }
+
+  /** 条目类型 → 展示用标签。只显示角色（用户/AI），省略块数以节省横向空间。 */
+  function kindLabel(e) {
+    if (e.kind === 'message') return e.role === 'user' ? '用户' : 'AI';
+    return e.label || '';
+  }
 
   /**
    * 渲染一个会话记录条目的完整内容（展开态）。

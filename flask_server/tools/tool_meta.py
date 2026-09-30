@@ -126,7 +126,11 @@ TOOLS = {
     "run_command": {
         "description": "执行本地命令（按指定脚本语言选择解释器；支持的语言由后端配置决定）",
         "parameters": [
-            {"name": "language", "type": "string", "required": True, "description": "脚本语言类型，如 python / shell / cmd / powershell / git 等（以 get_tool_params 返回的支持列表为准）"},
+            {
+                "name": "language", "type": "string", "required": True,
+                "description": "脚本语言类型，如 python / shell / cmd / powershell / git 等"
+                               "（以 get_tool_params 返回的支持列表为准）",
+            },
             {"name": "command", "type": "string", "required": True, "description": "要执行的命令或代码块内容"},
             {"name": "cwd", "type": "string", "required": False, "description": "工作目录，默认使用当前工程目录"},
             {"name": "timeout", "type": "integer", "required": False, "description": "超时秒数，默认 60 秒"},

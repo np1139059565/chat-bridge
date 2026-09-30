@@ -91,62 +91,6 @@
     }
   };
 
-  /** 判断某工具是否为 silent（仅不在抽屉生成工具卡片；结果照常回传）。 */
-  M.toolSilent = function (name) {
-    const t = (this.tools || []).find((x) => x.name === name);
-    return !!(t && t.silent);
-  };
-
-  /**
-   * 判断代码块是否为一次工具调用：内容是 { tool, parameters } 且带 bridge-chat-call 即算。
-   * 安全性由调用方保证：只有「助手消息」里的代码块才会被判为工具调用。
-   */
-  M.parseToolCall = function (block) {
-    if (!block || block.type !== 'code') return null;
-    const src = String(block.code || '').trim();
-    if (!src || src.charAt(0) !== '{') return null; // 快速排除非 JSON
-    try {
-      const obj = JSON.parse(src);
-      if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
-        return { tool: String(obj.tool), parameters: obj.parameters || {} };
-      }
-    } catch (e) { /* 不是工具调用，按普通代码块渲染 */ }
-    return null;
-  };
-
-  /**
-   * 判断一条消息是否为外部调用信封（external-call）。
-   * 外部卡片发送到网页后，会以一条 user 消息落在对话里；这条消息即卡片的
-   * 本体，用于在镜像区还原为卡片、在列表里做颜色标记。
-   * 信封可能被解析成 code 或 text 两种块形态，两者都识别。
-   * @param {Object} m 消息对象
-   * @returns {Object|null} { nonce, request }；非外部调用返回 null
-   */
-  M.parseExternalCall = function (m) {
-    if (!m || m.role !== 'user') return null;
-    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      if (!b) continue;
-      const src = String(b.code || b.text || '').trim();
-      if (!src || src.charAt(0) !== '{') continue;
-      try {
-        const obj = JSON.parse(src);
-        if (obj && typeof obj === 'object' && obj.type === 'external-call') {
-          return {
-            nonce: obj.nonce || '',
-            request: obj.request || ''
-          };
-        }
-      } catch (e) { /* 非信封内容，继续找下一个块 */ }
-    }
-    return null;
-  };
-
-  /** 消息 id：直接复用内容指纹。指纹以 'm' 开头、不含分隔符 '-'。 */
-  M.msgId = function (m) {
-    return this.messageFingerprint(m);
-  };
 
   // ============================ 消息树 ============================
 
@@ -278,16 +222,31 @@
     // 异步：需等后端指纹返回；带超时保护，后端不可达时不阻塞入库。
     const memoryIssue = await this.memoryIssueForRound(incoming, reason);
 
-    // 4) 为代码块建卡，并收集自动执行候选。
-    //   入树的消息：卡片写在节点上，并与切片消息共享同一份卡片表；
-    //   不入树的消息：卡片直接写在切片消息上（供手动操作）。
-    //   检测出的问题（多调用冲突 / 回复质量 / 记忆滞后）不另立流程，直接作为该条卡片的结果。
+    // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见两个辅助方法）
+    const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly);
+    this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom);
+
+    log('本轮处理完成：消息=' + incoming.length
+      + '，可见=' + conv.visibleKeys.length
+      + '，分支=' + conv.branchKeys.length
+      + '，自动候选=' + autoCandidates.length);
+    if (this._persist) this._persist();
+    // 上报给远程桥接层：仅 generate 来源（AI 刚说完新话）。
+    // 走 WithMd 版本：先点复制按钮取带格式的 Markdown，再上报，
+    // 这样推送到 QQ 的内容才保得住格式。
+    this.reportToBridgeWithMd(reason);
+  };
+
+  /**
+   * 为切片的代码块建卡，并收集自动执行候选与重跑候选。
+   * 入树的消息：卡片写在节点上，与切片消息共享同一份卡片表；
+   * 不入树的消息：卡片直接写在切片消息上（供手动操作）。
+   * @returns {Object} { autoCandidates, armedLast, rerunCard }
+   */
+  M._buildCardsForIncoming = function (conv, incoming, reason, memoryIssue, scrollOnly) {
     const autoCandidates = [];
-    // 滚动轮次里被「上膛」的那张最新卡片（仅最后一条消息上的），供底部复检使用
-    let armedLast = null;
-    // 重复卡片重跑候选：仅当「来源=generate 且本轮最新卡片此前已执行」时被赋值。
-    // 它是一个严格受限的旁路，其它任何来源 / 任何位置的卡片都不会写入这里。
-    let rerunCard = null;
+    let armedLast = null;   // 滚动轮次里被「上膛」的最新卡片（仅最后一条消息上的）
+    let rerunCard = null;   // 重复卡片重跑候选（严格受限旁路，见下方判定）
     incoming.forEach((m, mi) => {
       const key = this.keyOfId(conv.msgTree, this.msgId(m));
       const node = conv.msgTree[key];
@@ -295,103 +254,118 @@
       holder.cards = holder.cards || {};
       if (node) m.cards = holder.cards;
       const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-      // 统计本条助手消息内的工具调用块数量：一次回复出现多个调用块属非法用法。
-      let toolCallCount = 0;
-      if (m.role === 'assistant') {
-        blocks.forEach((b) => {
-          if (b && b.type === 'code' && b.id && this.parseToolCall(b)) toolCallCount += 1;
-        });
-      }
-      // 本条消息的问题：多调用冲突优先，其次回复质量。二者都作为卡片的结果。
-      // 只在 AI 生产结束场景检测：其它场景要么是回看历史，要么是切换 / 手动解析，
-      // 都不该给已有卡片贴问题标签。
-      let issue = null;
-      if (reason === 'generate') {
-        if (toolCallCount > 1) {
-          issue = {
-            error: 'multiple_tool_calls',
-            message: '本条回复包含多个工具调用代码块（共 ' + toolCallCount + ' 个）。'
-              + '请一次只返回一个调用块，收到结果后再决定下一步。'
-          };
-        } else if (m.role === 'assistant') {
-          issue = this.assistantQualityIssue(m);
-        }
-        // 记忆滞后提醒：仅贴在本轮最后一条助手输出上（更早的消息已无提醒意义）
-        if (!issue && m.role === 'assistant' && mi === incoming.length - 1 && memoryIssue) {
-          issue = memoryIssue;
-        }
-      }
+      const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks);
       blocks.forEach((b) => {
         if (!b || b.type !== 'code' || !b.id) return;
         const exist = holder.cards[b.id];
         if (exist) {
-          // 已有卡片：补记问题、按需纳入自动候选
           if (exist.isTool && issue && !exist.preIssue) exist.preIssue = issue;
           if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
-          // 重复卡片重跑：仅当三者同时成立才登记——来源=generate、该卡片位于
-          // 本轮最新消息上、且此前已执行过。这是重跑的唯一入口，条件放宽
-          // 会让回看 / 切换等场景误触发，故在此严格收口。
+          // 重复卡片重跑：来源=generate、卡片在本轮最新消息上、且此前已执行过，三者缺一不可
           if (reason === 'generate' && mi === incoming.length - 1
               && exist.isTool && exist.executed) {
             rerunCard = exist;
           }
           return;
         }
-        // 只把「助手回答」里的代码块当成可执行的工具调用（用户消息里的示例块不建卡）
+        // 只把「助手回答」里的代码块当成可执行工具调用（用户消息里的示例块不建卡）
         const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
-        const silent = !!(call && this.toolSilent(call.tool));
-        const card = {
-          id: b.id,
-          lang: b.lang || '',
-          phase: '',
-          code: b.code || '',
-          isTool: !!call,
-          silent: silent,
-          // noReply：调用方显式声明「不需要结果回传」。
-          noReply: !!(call && call.parameters && call.parameters.no_reply === true),
-          tool: call ? call.tool : '',
-          parameters: call ? call.parameters : {},
-          status: 'pending',
-          result: null,
-          error: null,
-          executed: false,
-          // preIssue：建卡阶段检测出的问题。执行时直接作为结果，不去调工具。
-          preIssue: (call && issue) ? issue : null,
-          autoArmed: false,
-          stack: null,
-          errorType: '',
-          origin: '',
-          location: null,
-          hint: '',
-          nonce: '',
-          // hostPageUrl：承载本对话的顶层页面地址（chat-bridge 所在页，如 chat.deepseek.com/xxx）。
-          // 命令在目标页超时逸散时，后端据此优先回投本页面；
-          // 缺这个字段时，后端只能随机投给其他页面，出现「发给 B 却落到 C」。
-          hostPageUrl: this.page_url || ''
-        };
-        holder.cards[b.id] = card;
-        if (call) {
-          if (scrollOnly) {
-            // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行。
-            // 记下这张卡片的响应式代理：复检通过后要执行的是界面真正监听的那份。
-            if (mi === incoming.length - 1) {
-              card.autoArmed = true;
-              armedLast = holder.cards[b.id];
-            }
-          } else {
-            // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
-            // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象，
-            // 导致倒计时数字不刷新而执行仍照常发生。
-            this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
+        holder.cards[b.id] = this._makeCard(b, call, issue);
+        if (!call) return;
+        if (scrollOnly) {
+          // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行
+          if (mi === incoming.length - 1) {
+            holder.cards[b.id].autoArmed = true;
+            armedLast = holder.cards[b.id];
           }
+        } else {
+          // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
+          // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
+          this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
         }
       });
     });
+    return { autoCandidates: autoCandidates, armedLast: armedLast, rerunCard: rerunCard };
+  };
 
-    // 4.5) 重复卡片重跑：严格受限的旁路，与下面的常规自动执行互不重叠。
-    // 触发条件三者缺一不可：来源=generate、卡片在本轮最新消息上、且此前已执行过。
-    // 命中后把该卡片重置为待执行态并重新调度，使「AI 重新生成、调用块重复」时
-    // 不再因为卡片已执行而停摆。其它任何来源 / 位置的卡片都不会进入这里。
+  /**
+   * 计算某条消息在建卡阶段要贴的问题：多调用冲突优先，其次回复质量与记忆滞后。
+   * 只在 AI 生产结束（generate）场景检测，其它场景不该给已有卡片贴问题标签。
+   * @returns {Object|null} { error, message } 或 null
+   */
+  M._messageIssue = function (m, mi, total, reason, memoryIssue, blocks) {
+    if (reason !== 'generate') return null;
+    let toolCallCount = 0;
+    if (m.role === 'assistant') {
+      blocks.forEach((b) => {
+        if (b && b.type === 'code' && b.id && this.parseToolCall(b)) toolCallCount += 1;
+      });
+    }
+    if (toolCallCount > 1) {
+      return {
+        error: 'multiple_tool_calls',
+        message: '本条回复包含多个工具调用代码块（共 ' + toolCallCount + ' 个）。'
+          + '请一次只返回一个调用块，收到结果后再决定下一步。'
+      };
+    }
+    if (m.role === 'assistant') {
+      const issue = this.assistantQualityIssue(m);
+      if (issue) return issue;
+      // 记忆滞后提醒：仅贴在本轮最后一条助手输出上（更早的消息已无提醒意义）
+      if (mi === total - 1 && memoryIssue) return memoryIssue;
+    }
+    return null;
+  };
+
+  /**
+   * 构造一张代码块卡片的状态对象。
+   * @param {Object} b 代码块
+   * @param {Object|null} call 解析出的工具调用（非工具块为 null）
+   * @param {Object|null} issue 建卡阶段检测出的问题
+   * @returns {Object} 卡片对象
+   */
+  M._makeCard = function (b, call, issue) {
+    return {
+      id: b.id,
+      lang: b.lang || '',
+      phase: '',
+      code: b.code || '',
+      isTool: !!call,
+      silent: !!(call && this.toolSilent(call.tool)),
+      // noReply：调用方显式声明「不需要结果回传」。
+      noReply: !!(call && call.parameters && call.parameters.no_reply === true),
+      tool: call ? call.tool : '',
+      parameters: call ? call.parameters : {},
+      status: 'pending',
+      result: null,
+      error: null,
+      executed: false,
+      // preIssue：建卡阶段检测出的问题。执行时直接作为结果，不去调工具。
+      preIssue: (call && issue) ? issue : null,
+      autoArmed: false,
+      stack: null,
+      errorType: '',
+      origin: '',
+      location: null,
+      hint: '',
+      nonce: '',
+      // hostPageUrl：承载本对话的顶层页面地址；命令超时逸散时后端据此优先回投本页面。
+      // 缺这个字段时，后端只能随机投给其他页面，出现「发给 B 却落到 C」。
+      hostPageUrl: this.page_url || ''
+    };
+  };
+
+  /**
+   * 收尾：处理重复卡片重跑与「仅最新一张」的自动执行。
+   * @param {Object} collected _buildCardsForIncoming 的返回
+   * @param {boolean} notInTree 本轮是否不入树（不入树绝不自动执行）
+   * @param {boolean} scrollOnly 是否滚动轮次
+   * @param {boolean} atBottom 视口是否在底部
+   */
+  M._finalizeAutoExec = function (collected, notInTree, scrollOnly, atBottom) {
+    const autoCandidates = collected.autoCandidates;
+    // 4.5) 重复卡片重跑：严格受限的旁路，与常规自动执行互不重叠
+    const rerunCard = collected.rerunCard;
     if (rerunCard && !notInTree && this.autoSendEnabled) {
       // 重置为待执行态：清掉已执行标记与上一轮结果，回到可被调度的初始状态
       rerunCard.executed = false;
@@ -415,33 +389,28 @@
         const newest = runnable[runnable.length - 1];
         if (newest && !newest.skipped) this.scheduleExecute(newest);
       } else if (scrollOnly) {
-        // 滚动轮次：原本一律不自动执行，以免回滚历史时把旧卡片误当最新触发。
-        // 这里补三道复检，确认「视口就停在最新处」后才放行——回滚误触发的前提即不成立：
-        //   1) 自动开关已打开；
-        //   2) 视口在底部（内容脚本按「滚动到底部按钮」是否存在判定，随推送传来）；
-        //   3) 上膛的是最后一条消息上的卡片，且仍是待执行态（未执行 / 未跳过 / 未在倒计时）。
-        const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
-          && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
-        const pass = atBottom && armedOk;
-        // 进入该分支即打印一行，便于核对判定过程（后续可在此补充更多诊断）
-        console.log('[AI-Mirror][dialog][scroll复检] 自动=' + this.autoSendEnabled
-          + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
-          + ' → ' + (pass ? '放行自动执行' : '保持待执行'));
-        if (pass) this.scheduleExecute(armedLast);
+        this._maybeAutoExecOnScroll(collected.armedLast, atBottom);
       }
     }
     // 预备标记只生效一次
     autoCandidates.forEach((c) => { if (c) c.autoArmed = false; });
+  };
 
-    log('本轮处理完成：消息=' + incoming.length
-      + '，可见=' + conv.visibleKeys.length
-      + '，分支=' + conv.branchKeys.length
-      + '，自动候选=' + autoCandidates.length);
-    if (this._persist) this._persist();
-    // 上报给远程桥接层：仅 generate 来源（AI 刚说完新话）。
-    // 走 WithMd 版本：先点复制按钮取带格式的 Markdown，再上报，
-    // 这样推送到 QQ 的内容才保得住格式。
-    this.reportToBridgeWithMd(reason);
+  /**
+   * 滚动轮次的自动执行复检：确认「视口就停在最新处」后才放行。
+   * 需三道同时成立：自动开关已开、视口在底部、上膛的是最后一条消息上的卡片
+   * 且仍是待执行态（未执行 / 未跳过 / 未在倒计时）。
+   * @param {Object} armedLast 上膛的最新卡片
+   * @param {boolean} atBottom 视口是否在底部
+   */
+  M._maybeAutoExecOnScroll = function (armedLast, atBottom) {
+    const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
+      && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
+    const pass = atBottom && armedOk;
+    console.log('[AI-Mirror][dialog][scroll复检] 自动=' + this.autoSendEnabled
+      + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
+      + ' → ' + (pass ? '放行自动执行' : '保持待执行'));
+    if (pass) this.scheduleExecute(armedLast);
   };
 
   /** 保证卡片拥有唯一标记，供回传与复制共用同一份文本。 */

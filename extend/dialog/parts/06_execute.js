@@ -36,30 +36,9 @@
    */
   M.executeCard = async function (card, isAuto) {
     log('执行工具卡片', card.tool || '(非工具)', '方式=' + (isAuto ? '自动' : '手动'));
-    // 建卡阶段已检测出问题（多调用冲突 / 回复质量）：直接作为本卡片的结果，
-    // 不去调用本地工具，随后照常回传。
-    if (card.preIssue) {
-      // 回复质量问题（多调用冲突 / 思考非中文等）不是工具执行失败，
-      // 而是一条正常的反馈：作为结果返回，卡片显示为完成态，不标红报错。
-      // 问题详情放进 result，随结果一并回传给网页 AI。
-      card.status = 'done';
-      card.result = {
-        issue: card.preIssue.error,
-        message: card.preIssue.message
-      };
-      card.error = null;
-      card.errorType = '';
-      card.executed = true;
-      if (this._persist) this._persist();
-      // 质量问题的回传不受 noReply 约束：noReply 的本意是「成功结果不必回传」，
-      // 而质量不合格（多调用冲突 / 思考非中文等）必须让 AI 知道并修正，
-      // 否则卡片看似完成、AI 却永远收不到反馈，形成假死。
-      if (isAuto && this.autoSendEnabled) this.scheduleAutoSend(card);
-      return;
-    }
-    // 执行前校验：卡片必须仍存在于「网页对话镜像」中。
-    // 镜像里已不存在的卡片视为幽灵卡片，一律不执行，避免在界面上
-    // 看不到、会话记录里也搜不到的情况下被自动触发。
+    // 建卡阶段已检测出问题：直接作为结果，不调用本地工具
+    if (card.preIssue) { this._applyPreIssue(card, isAuto); return; }
+    // 执行前校验：卡片必须仍存在于镜像中（幽灵卡片一律不执行）
     if (!this.cardInMirror(card)) {
       log('已拦截不在镜像中的卡片', card.tool || card.id || '');
       card.status = 'pending';
@@ -67,22 +46,66 @@
       return;
     }
     card.status = 'running';
+    this._resetCardDiagnostics(card);
+    await this._callTool(card);
+    // 结果概览：只记一行，避免把大段 result 打进控制台
+    log('工具执行结束', card.tool || '(非工具)', '状态=' + card.status,
+      card.error ? ('错误=' + card.error) : '');
+    // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
+    card.executed = true;
+    if (this._persist) this._persist();
+    // 上报一次：工具结果此时才产生，不上报的话 QQ 端只看得到工具调用、
+    // 看不到结果。以 'tool' 来源上报，后端据此放行（不按普通回看丢弃）。
+    if (this.reportToBridge) this.reportToBridge('tool');
+    // 自动回传仅在「自动流程」触发时进行；noReply 只豁免成功结果：
+    // 执行失败必须回传，让 AI 知道工具没跑成，否则卡片标红、AI 收不到反馈。
+    const mustReply = !card.noReply || card.status === 'error';
+    if (isAuto && this.autoSendEnabled && mustReply) this.scheduleAutoSend(card);
+  };
+
+  /**
+   * 处理建卡阶段已检测出的问题（多调用冲突 / 回复质量）：作为结果直接返回。
+   * 这类问题不是工具执行失败，而是给 AI 的正常反馈，卡片显示为完成态。
+   * @param {Object} card 工具卡片
+   * @param {boolean} isAuto 是否自动流程（自动时才调度回传）
+   */
+  M._applyPreIssue = function (card, isAuto) {
+    card.status = 'done';
+    card.result = { issue: card.preIssue.error, message: card.preIssue.message };
+    card.error = null;
+    card.errorType = '';
+    card.executed = true;
+    if (this._persist) this._persist();
+    // 质量问题回传不受 noReply 约束：noReply 的本意是「成功结果不必回传」，
+    // 而质量不合格必须让 AI 知道并修正，否则卡片看似完成、AI 却收不到反馈。
+    if (isAuto && this.autoSendEnabled) this.scheduleAutoSend(card);
+  };
+
+  /**
+   * 复位卡片的运行状态与失败诊断字段，准备新一轮执行。
+   * @param {Object} card 工具卡片
+   */
+  M._resetCardDiagnostics = function (card) {
     card.error = null;
     card.result = null;
-    // 清空上一轮的失败诊断信息
     card.stack = null;
     card.errorType = '';
     card.origin = '';
     card.location = null;
     card.hint = '';
+  };
+
+  /**
+   * 调用后端 /tool 执行工具，并把结果 / 错误写入卡片。
+   * 失败时留存完整堆栈与错误分类，供 AI 区分「参数写错」与「工具代码缺陷」。
+   * @param {Object} card 工具卡片
+   */
+  M._callTool = async function (card) {
     try {
       const base = this.config.flaskUrl.replace(/\/+$/, '');
-      // 目标页：AI 在参数里指定的页面（如 get_element_style 的 page_url）。
-      // 后端让该页在 5 秒内独占这条命令，超时未取走才逸散。
-      // 工具没有这个参数时（如 push_message）为空，表示直接进入逸散。
+      // 目标页：AI 指定的页面；为空表示直接进入逸散
       const targetUrl = (card.parameters && card.parameters.page_url) || '';
-      // 本页面：承载本对话、把 AI 代码块转成卡片的顶层页面地址（chat-bridge 所在页）。
-      // 逸散阶段后端优先回投本页面；本页面没开 debug-chrome 才随机给其他页面。
+      // 本页面：承载本对话的顶层页面地址；逸散阶段后端优先回投它
       const hostUrl = card.hostPageUrl || this.page_url || '';
       log('提交工具调用：', card.tool, '目标页=', targetUrl || '(无，直接逸散)',
         '本页面=', hostUrl || '(空)');
@@ -100,35 +123,26 @@
       card.status = data.success ? 'done' : 'error';
       card.result = data.success ? data.result : data;
       card.error = data.success ? null : (data.error || '未知错误');
-      if (!data.success) {
-        // 关键：完整堆栈与错误分类必须留存。否则 AI 无法区分「参数写错」与
-        // 「本地工具代码有 bug」，会陷入反复改参却始终失败的死循环。
-        card.stack = data.traceback || null;
-        card.errorType = data.errorType || '';
-        card.origin = data.origin || '';
-        card.location = data.location || null;
-        card.hint = data.hint || '';
-      }
+      if (!data.success) this._recordFailure(card, data);
     } catch (e) {
       card.status = 'error';
       card.error = String(e);
     }
-    // 结果概览：只记一行，避免把大段 result 打进控制台
-    log('工具执行结束', card.tool || '(非工具)', '状态=' + card.status,
-      card.error ? ('错误=' + card.error) : '');
-    // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
-    card.executed = true;
-    if (this._persist) this._persist();
-    // 上报一次：工具结果此时才产生，不上报的话 QQ 端只看得到工具调用、
-    // 看不到结果。以 'tool' 来源上报，后端据此放行（不按普通回看丢弃）。
-    if (this.reportToBridge) this.reportToBridge('tool');
-    // 自动回传仅在「自动流程」触发时进行：用户手动点击执行 / 重新执行时，
-    // 只执行、不回传，避免误把结果写回网页 AI 并触发发送。
-    // noReply：调用方声明不需要结果回传，执行完即结束，不再唤醒网页 AI。
-    // noReply 只豁免成功结果：执行失败必须回传，让 AI 知道工具没跑成，
-    // 否则卡片标红、AI 却收不到任何反馈，形成假死。
-    const mustReply = !card.noReply || card.status === 'error';
-    if (isAuto && this.autoSendEnabled && mustReply) this.scheduleAutoSend(card);
+  };
+
+  /**
+   * 记录工具失败时的诊断信息。
+   * 完整堆栈与错误分类必须留存，否则 AI 无法区分「参数写错」与「工具代码有 bug」，
+   * 会陷入反复改参却始终失败的死循环。
+   * @param {Object} card 工具卡片
+   * @param {Object} data 后端返回的失败对象
+   */
+  M._recordFailure = function (card, data) {
+    card.stack = data.traceback || null;
+    card.errorType = data.errorType || '';
+    card.origin = data.origin || '';
+    card.location = data.location || null;
+    card.hint = data.hint || '';
   };
 
   /**

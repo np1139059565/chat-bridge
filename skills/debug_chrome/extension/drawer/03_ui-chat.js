@@ -160,81 +160,103 @@
         ctx.toast && ctx.toast.value ? h('div', { class: 'toast-tip' }, String(ctx.toast.value)) : null,
 
         h('div', { class: 'tools' }, [
-          h('button', { class: { active: ctx.selecting.value }, onClick: ctx.toggleSelect, title: '无法选中的元素,可以使用 window.selectAiDebugElement 进行js选择' }, ctx.selecting.value ? '退出选择' : '选择元素'),
+          h('button', {
+            class: { active: ctx.selecting.value },
+            onClick: ctx.toggleSelect,
+            title: '无法选中的元素,可以使用 window.selectAiDebugElement 进行js选择'
+          }, ctx.selecting.value ? '退出选择' : '选择元素'),
           ctx.selectedElements.value.length ? h('button', { onClick: ctx.clearElements }, '清空') : null,
         ]),
 
-        ctx.selectedElements.value.length
-          ? h(
-              'div',
-              { class: 'selected-list' },
-              ctx.selectedElements.value.map((el, idx) => {
-                // 是否存在「同选择器的更早元素」：有才允许对比去重
-                const hasBase = ctx.selectedElements.value.some((x, i) => i < idx && x
-                  && x.selector && x.selector === el.selector);
-                const isCompacted = !!el.dom_html_full;
-                return h('div', { class: 'selected-item', key: 'sel-' + (el.selId || idx) }, [
-                  h('div', { class: 'selected-head' }, [
-                    h('span', { class: 'selected-title' }, `${idx + 1}. ${String(el.selector || '').slice(0, 60)}`),
-                    h('button', { class: 'icon-btn', title: '移除该元素', onClick: () => ctx.removeElement(el.selId, idx) }, '✕'),
-                  ]),
-                  h('details', { class: 'selected-detail' }, [
-                    // 「查看详情」一行集中承载：详情开关、DOM 源码字数、去重 / 还原按钮。
-                    // 折叠状态下即可看到字数并直接操作，不必先展开再找。
-                    h('summary', { class: 'detail-summary' }, [
-                      h('span', { class: 'summary-label' }, '查看详情'),
-                      h('span', { class: 'dom-len' }, 'DOM 源码（' + String(el.dom_html || '').length + ' 字符）'),
-                      // 去重 / 还原：仅同选择器才有基准可对比；已压缩的显示还原入口。
-                      // 按钮在 summary 内，必须阻止默认与冒泡，否则点按钮会连带开合详情。
-                      isCompacted
-                        ? h('button', {
-                            class: 'icon-btn',
-                            title: '还原为完整 DOM',
-                            onClick: (e) => { e.preventDefault(); e.stopPropagation(); ctx.restoreElement(el.selId); }
-                          }, '↺')
-                        : (hasBase
-                          ? h('button', {
-                              class: 'icon-btn',
-                              title: '与首个同选择器元素对比去重',
-                              onClick: (e) => { e.preventDefault(); e.stopPropagation(); ctx.dedupElement(el.selId); }
-                            }, '⧉')
-                          : null),
-                    ]),
-                    h('div', [h('strong', '选择器：'), ' ' + String(el.selector || '')]),
-                    el.selector_confidence === 'low'
-                      ? h('div', { class: 'warn' }, '该选择器在当前页面不唯一，定位可能不准')
-                      : null,
-                    h('div', [h('strong', 'URL：'), ' ' + String(el.page_url || '')]),
-                    el.screenshot ? h('img', { src: el.screenshot, alt: '截图' }) : null,
-                    el.computed_style && Object.keys(el.computed_style).length
-                      ? h('pre', D.styleSummary(el.computed_style))
-                      : null,
-                    h('pre', { class: 'dom-code' }, String(el.dom_html || '')),
-                  ]),
-                ]);
-              })
-            )
-          : null,
+        renderSelectedList(),
+        renderInputArea(),
+      ]);
+    }
 
-        h('div', { class: 'input-area' }, [
-          h('textarea', {
-            ref: ctx.inputBox,
-            value: ctx.draft.value,
-            placeholder: '描述你的调试需求...',
-            onInput: (e) => {
-              ctx.draft.value = e.target.value;
-              ctx.resizeInput();
-            },
-            onKeydown: (e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                ctx.send();
-                ctx.resizeInput();
-              }
-            },
-          }),
-          h('button', { onClick: ctx.send, disabled: !ctx.draft.value.trim() }, '发送'),
+    /** 渲染已选元素列表；无已选元素时返回 null。 */
+    function renderSelectedList() {
+      const list = ctx.selectedElements.value;
+      if (!list.length) return null;
+      return h('div', { class: 'selected-list' }, list.map((el, idx) => renderSelectedItem(el, idx, list)));
+    }
+
+    /**
+     * 渲染单个已选元素条目：标题行 + 可折叠详情。
+     * @param {Object} el 元素数据
+     * @param {number} idx 下标
+     * @param {Array} list 全部已选元素（用于判断是否存在同选择器的更早元素）
+     */
+    function renderSelectedItem(el, idx, list) {
+      // 是否存在「同选择器的更早元素」：有才允许对比去重
+      const hasBase = list.some((x, i) => i < idx && x && x.selector && x.selector === el.selector);
+      const isCompacted = !!el.dom_html_full;
+      return h('div', { class: 'selected-item', key: 'sel-' + (el.selId || idx) }, [
+        h('div', { class: 'selected-head' }, [
+          h('span', { class: 'selected-title' }, `${idx + 1}. ${String(el.selector || '').slice(0, 60)}`),
+          h('button', { class: 'icon-btn', title: '移除该元素', onClick: () => ctx.removeElement(el.selId, idx) }, '✕'),
         ]),
+        h('details', { class: 'selected-detail' }, [
+          // 「查看详情」一行集中承载：详情开关、DOM 源码字数、去重 / 还原按钮。
+          h('summary', { class: 'detail-summary' }, [
+            h('span', { class: 'summary-label' }, '查看详情'),
+            h('span', { class: 'dom-len' }, 'DOM 源码（' + String(el.dom_html || '').length + ' 字符）'),
+            renderDedupButton(el, hasBase, isCompacted),
+          ]),
+          h('div', [h('strong', '选择器：'), ' ' + String(el.selector || '')]),
+          el.selector_confidence === 'low'
+            ? h('div', { class: 'warn' }, '该选择器在当前页面不唯一，定位可能不准')
+            : null,
+          h('div', [h('strong', 'URL：'), ' ' + String(el.page_url || '')]),
+          el.screenshot ? h('img', { src: el.screenshot, alt: '截图' }) : null,
+          el.computed_style && Object.keys(el.computed_style).length
+            ? h('pre', D.styleSummary(el.computed_style))
+            : null,
+          h('pre', { class: 'dom-code' }, String(el.dom_html || '')),
+        ]),
+      ]);
+    }
+
+    /**
+     * 渲染详情行里的去重 / 还原按钮。
+     * 按钮在 summary 内，必须阻止默认与冒泡，否则点按钮会连带开合详情。
+     * @param {Object} el 元素数据
+     * @param {boolean} hasBase 是否存在同选择器的更早元素
+     * @param {boolean} isCompacted 是否已被压缩（有完整 DOM 备份）
+     */
+    function renderDedupButton(el, hasBase, isCompacted) {
+      if (isCompacted) {
+        return h('button', {
+          class: 'icon-btn', title: '还原为完整 DOM',
+          onClick: (e) => { e.preventDefault(); e.stopPropagation(); ctx.restoreElement(el.selId); }
+        }, '↺');
+      }
+      if (!hasBase) return null;
+      return h('button', {
+        class: 'icon-btn', title: '与首个同选择器元素对比去重',
+        onClick: (e) => { e.preventDefault(); e.stopPropagation(); ctx.dedupElement(el.selId); }
+      }, '⧉');
+    }
+
+    /** 渲染底部输入区：文本域 + 发送按钮。 */
+    function renderInputArea() {
+      return h('div', { class: 'input-area' }, [
+        h('textarea', {
+          ref: ctx.inputBox,
+          value: ctx.draft.value,
+          placeholder: '描述你的调试需求...',
+          onInput: (e) => {
+            ctx.draft.value = e.target.value;
+            ctx.resizeInput();
+          },
+          onKeydown: (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              ctx.send();
+              ctx.resizeInput();
+            }
+          },
+        }),
+        h('button', { onClick: ctx.send, disabled: !ctx.draft.value.trim() }, '发送'),
       ]);
     }
 

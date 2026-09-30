@@ -43,7 +43,10 @@
           // URL 映射：自动列出当前页面所有 URL（含 iframe），用户只需为每个 URL 填本地路径。
           h('div', { class: 'section' }, [
             h('h3', 'URL 与本地工程映射'),
-            h('p', { class: 'hint-text' }, '已自动列出当前页面所有 URL（去参数，含 iframe）。请为需要调试的 URL 填写本地工程路径，供 AI 定位源码；未填写映射的 URL 仍可正常选择元素，只是 AI 拿不到本地源码路径。'),
+            h('p', { class: 'hint-text' },
+              '已自动列出当前页面所有 URL（去参数，含 iframe）。'
+              + '请为需要调试的 URL 填写本地工程路径，供 AI 定位源码；'
+              + '未填写映射的 URL 仍可正常选择元素，只是 AI 拿不到本地源码路径。'),
             h('div', { class: 'row' }, [
               h('button', { class: 'secondary', onClick: ctx.refreshUrls }, '刷新 URL 列表'),
             ]),

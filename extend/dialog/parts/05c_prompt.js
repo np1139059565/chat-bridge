@@ -91,34 +91,9 @@
         id: mid,
         role: node.role,
         name: node.name,
-        blocks: window.AIMirrorDomUtils.toArray(node.blocks).map((b) => {
-          if (b.type === 'thinking') return null;   // 思考过程不导出
-          const base = { type: b.type };
-          if (b.type === 'code') {
-            base.language = b.lang;
-            base.code = b.code;
-            const c = (node.cards || {})[b.id];
-            if (c && c.isTool) {
-              base.tool = c.tool;
-              base.parameters = c.parameters;
-              base.status = c.status;
-              base.skipped = !!c.skipped;
-              if (c.result != null) base.result = c.result;
-              if (c.error != null) base.error = c.error;
-            }
-          } else if (b.type === 'list') {
-            base.ordered = b.ordered;
-            base.items = b.items;
-          } else if (b.type === 'table') {
-            base.rows = b.rows;
-          } else if (b.type === 'heading') {
-            base.level = b.level;
-            base.text = b.text;
-          } else {
-            base.text = b.text;
-          }
-          return base;
-        }).filter((b) => b !== null)
+        blocks: window.AIMirrorDomUtils.toArray(node.blocks)
+          .map((b) => this._exportBlock(b, node))
+          .filter((b) => b !== null)
       };
       if (!item.blocks.length) return;
       messages.push(item);
@@ -132,6 +107,42 @@
       messageCount: messages.length,
       messages: messages
     };
+  };
+
+  /**
+   * 把单个内容块转成可序列化的导出对象；思考块返回 null（不导出）。
+   * 工具代码块额外附带其卡片状态与结果。
+   * @param {Object} b 内容块
+   * @param {Object} node 该块所属消息节点（用于取卡片表）
+   * @returns {Object|null} 导出块对象；不导出返回 null
+   */
+  M._exportBlock = function (b, node) {
+    if (b.type === 'thinking') return null;   // 思考过程不导出
+    const base = { type: b.type };
+    if (b.type === 'code') {
+      base.language = b.lang;
+      base.code = b.code;
+      const c = (node.cards || {})[b.id];
+      if (c && c.isTool) {
+        base.tool = c.tool;
+        base.parameters = c.parameters;
+        base.status = c.status;
+        base.skipped = !!c.skipped;
+        if (c.result != null) base.result = c.result;
+        if (c.error != null) base.error = c.error;
+      }
+    } else if (b.type === 'list') {
+      base.ordered = b.ordered;
+      base.items = b.items;
+    } else if (b.type === 'table') {
+      base.rows = b.rows;
+    } else if (b.type === 'heading') {
+      base.level = b.level;
+      base.text = b.text;
+    } else {
+      base.text = b.text;
+    }
+    return base;
   };
 
   /**

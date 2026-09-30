@@ -209,7 +209,9 @@
   A.showToast = function (text) {
     const toast = document.createElement('div');
     toast.textContent = text;
-    toast.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 16px;border-radius:4px;font-size:13px;z-index:2147483646;';
+    toast.style.cssText = 'position:fixed;top:16px;left:50%;transform:translateX(-50%);'
+      + 'background:#333;color:#fff;padding:8px 16px;border-radius:4px;'
+      + 'font-size:13px;z-index:2147483646;';
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 2500);
   };
