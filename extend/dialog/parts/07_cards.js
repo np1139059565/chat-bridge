@@ -10,6 +10,19 @@
   const h = Vue.h;
 
   /**
+   * 从工具结果里提取截图 dataURL。
+   * 截图工具（get_page_snapshot）的结果结构：
+   *   { success:true, data:{ screenshot:'data:image/...', saved:{...} } }
+   * @param {Object} result 工具结果
+   * @returns {string} 截图 dataURL；没有则返回空串
+   */
+  D.extractScreenshot = function (result) {
+    if (!result || !result.data || typeof result.data !== 'object') return '';
+    const shot = result.data.screenshot;
+    return (typeof shot === 'string' && shot.indexOf('data:image/') === 0) ? shot : '';
+  };
+
+  /**
    * 渲染「自动」开关：工具卡片与外部卡片共用同一视觉与行为。
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 开关节点
@@ -94,7 +107,20 @@
         // 只读模式没有按钮行，跳过状态改为独立提示，避免状态信息丢失
         kids.push(h('div', { class: 'hint' }, '已跳过'));
       }
-      if (card.status === 'done') kids.push(h('pre', { class: 'result' }, ctx.fmt(card.result)));
+      if (card.status === 'done') {
+        // 结果是截图时，渲染等比缩放的图片；否则仍以文本展示结果。
+        const shot = D.extractScreenshot(card.result);
+        if (shot) {
+          kids.push(h('img', {
+            class: 'result-shot',
+            src: shot,
+            alt: '页面截图',
+            style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
+          }));
+        } else {
+          kids.push(h('pre', { class: 'result' }, ctx.fmt(card.result)));
+        }
+      }
       if (card.status === 'error') {
         kids.push(h('pre', { class: 'error' }, card.error || ctx.fmt(card.result)));
         if (card.origin) {

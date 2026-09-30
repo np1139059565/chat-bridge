@@ -9,9 +9,19 @@ from flask import Blueprint, jsonify, request
 import runtime
 import custom_tools as ct
 import external_tools
+import screenshot_store
 from responses import disabled_resp, tool_error
 
 bp = Blueprint("tools", __name__)
+
+
+def _save_screenshot_data_url(data_url):
+    """把截图 dataURL 保存到本地，返回 {name, path}；失败返回 None。
+
+    存盘实现已抽到公共模块 screenshot_store，与 QQ「/sp」指令共用同一套
+    目录与命名，避免同一目录下两种格式混杂。
+    """
+    return screenshot_store.save_data_url(data_url)
 
 
 @bp.route("/tools", methods=["GET"])
@@ -93,12 +103,14 @@ def _external_error(name, error, errorType, hint):
     ), 200
 
 
-def _call_external(name, ctool, params, page_url=""):
+def _call_external(name, ctool, params, page_url="", host_page_url=""):
     """转发给外部提供方并等待回传。
 
     在线与否只作展示，不参与执行判断：请求一律入队等待，由提供方来取走执行。
     等待上限（FORWARD_TIMEOUT）仅作保险丝，防止提供方始终不来取时无限期挂起。
-    page_url 为发起调用的页面地址，透传给命令队列用于把命令定向到该页面。
+    page_url 为目标页面地址：该页在定向窗口内独占命令，超时未取走才逸散。
+    host_page_url 为本页面地址（承载对话、把 AI 代码块转成卡片的顶层页）：
+    逸散阶段优先回投本页面，本页面没开 debug-chrome 才随机投给其他页面。
     """
     param_err = _validate_external_params(name, ctool, params)
     if param_err is not None:
@@ -109,20 +121,31 @@ def _call_external(name, ctool, params, page_url=""):
             name, "外部工具未声明提供方: %s" % name, "ProviderMissing",
             "该外部工具缺少 provider 声明，无法确定执行方。")
     silent = bool(ctool.get("silent"))
-    ok, data = external_tools.hub.dispatch(provider, name, params, silent=silent, page_url=page_url)
+    ok, data = external_tools.hub.dispatch(
+        provider, name, params, silent=silent,
+        page_url=page_url, host_page_url=host_page_url)
     if not ok:
         return _external_error(
             name, "外部工具未在等待时限内被执行: %s" % name, "ForwardTimeout",
             "请求已排队但执行方未在时限内取走。请确认调试扩展已打开并停留在目标页面。")
+    # 截图类结果：把 dataURL 原图保存到本地，并把落盘信息附回结果。
+    # 保存放后端做（内容脚本无文件系统权限），路径与 QQ「/sp」指令一致，
+    # 均为 flask_server/screenshots/，便于用户统一查找。
+    if isinstance(data, dict) and data.get("data") and isinstance(data["data"], dict):
+        shot = data["data"].get("screenshot")
+        if isinstance(shot, str) and shot.startswith("data:image/"):
+            saved = _save_screenshot_data_url(shot)
+            if saved:
+                data["data"]["saved"] = saved
     # silent 仅随结果回传，供前端决定不在抽屉生成工具卡片；结果本身照常回传。
     return jsonify(success=True, tool=name, result=data, silent=silent)
 
 
-def _call_custom(name, params, page_url=""):
+def _call_custom(name, params, page_url="", host_page_url=""):
     """调用自定义工具（来自标准 skill 的 tool.json）。未注册返回 None。
 
     executor=external 走提供方转发；executor=script 走本地子进程执行。
-    page_url 仅对 external 工具有意义：透传给命令队列用于定向。
+    page_url / host_page_url 仅对 external 工具有意义：透传给命令队列用于定向与逸散。
     """
     ctool = ct.get_tool(name)
     if not ctool:
@@ -130,7 +153,7 @@ def _call_custom(name, params, page_url=""):
     if not ct.is_enabled(name):
         return disabled_resp(name)
     if (ctool.get("executor") or "script") == "external":
-        return _call_external(name, ctool, params, page_url=page_url)
+        return _call_external(name, ctool, params, page_url=page_url, host_page_url=host_page_url)
     try:
         result = ct.run(ctool, params)
         return jsonify(success=True, tool=name, result=result)
@@ -159,16 +182,19 @@ def tool():
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("tool") or data.get("name")
     params = data.get("parameters") or data.get("arguments") or {}
-    # page_url：发起本次调用的页面地址，由对话框执行工具时带上。
-    # 外部工具据此把命令定向回该页面，避免双开时命令串到别的页面。
+    # page_url：本次调用的目标页面地址（AI 在参数里指定的那个页面）。
+    # 后端让该页在定向窗口内独占命令，超时未取走才逸散。
     page_url = data.get("page_url") or ""
+    # host_page_url：本页面地址（承载对话、把 AI 代码块转成卡片的顶层页）。
+    # 逸散阶段优先回投本页面，本页面没开 debug-chrome 才随机投给其他页面。
+    host_page_url = data.get("host_page_url") or ""
 
     # 1) 内置工具
     resp = _call_builtin(name, params)
     if resp is not None:
         return resp
     # 2) 自定义工具
-    resp = _call_custom(name, params, page_url=page_url)
+    resp = _call_custom(name, params, page_url=page_url, host_page_url=host_page_url)
     if resp is not None:
         return resp
     # 3) 未知工具

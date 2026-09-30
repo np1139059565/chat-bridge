@@ -15,10 +15,37 @@
     },
     {
       "name": "get_page_snapshot",
-      "description": "采集页面快照。",
+      "description": "截取目标页面当前可见区域，返回图片并保存到本地。",
       "executor": "external",
       "parameters": [
-        { "name": "snapshot_type", "type": "string", "required": true, "description": "dom 或 screenshot" },
+        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" }
+      ]
+    },
+    {
+      "name": "get_console_logs",
+      "description": "读取目标页面捕获的 console 记录（log/info/warn/error/debug），供故障分析。",
+      "executor": "external",
+      "parameters": [
+        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" },
+        { "name": "limit", "type": "number", "required": false, "description": "最多返回最近多少条，默认全部（上限 500）" },
+        { "name": "level", "type": "string", "required": false, "description": "只看某个级别，如 error；省略则全部" }
+      ]
+    },
+    {
+      "name": "get_network_logs",
+      "description": "读取目标页面在 DevTools 中捕获的网络请求记录（需该页 DevTools 打开过），供故障分析。",
+      "executor": "external",
+      "parameters": [
+        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" },
+        { "name": "limit", "type": "number", "required": false, "description": "最多返回最近多少条，默认全部（上限 300）" }
+      ]
+    },
+    {
+      "name": "exec_js",
+      "description": "在目标页面主世界执行任意 JavaScript，可读写 window / document / localStorage 等，可触发元素点击等操作，支持 await。返回执行结果（复杂对象会做安全序列化）。",
+      "executor": "external",
+      "parameters": [
+        { "name": "code", "type": "string", "required": true, "description": "要执行的 JavaScript 代码；可写多行，可直接使用 await" },
         { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" }
       ]
     },

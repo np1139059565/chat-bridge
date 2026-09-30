@@ -150,11 +150,83 @@
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
       .set.call(ta, value);
     ta.dispatchEvent(new Event('input', { bubbles: true }));
-    // 等框架状态同步后派发回车，触发发送
-    setTimeout(function () {
-      const key = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
-      ta.dispatchEvent(new KeyboardEvent('keydown', key));
-      ta.dispatchEvent(new KeyboardEvent('keyup', key));
-    }, 500);
+    // 两步走：先等发送按钮就绪，再延迟 500ms，然后回车发送。
+    // 就绪信号取发送按钮的 disabled 状态：未就绪时按钮带 ds-button--disabled，
+    // 就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱
+    // （值是用原生 setter 直接写进去的，写入即相等，证明不了框架状态已更新）。
+    A.waitSendReady(function () {
+      setTimeout(function () { A.pressEnter(ta); }, 500);
+    });
+  };
+
+  /**
+   * 轮询等待发送按钮就绪：按钮不再带 disabled 类即回调，超时（3 秒）也回调。
+   *
+   * 就绪信号取站点规则里的 sendButton 元素：未就绪时它带 ds-button--disabled，
+   * 就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱——值是用
+   * 原生 setter 直接写进去的，写入即相等，证明不了框架内部状态已更新。
+   * @param {Function} done 就绪（或超时）后的回调
+   */
+  A.waitSendReady = function (done) {
+    const profile = A.activeProfile();
+    const sel = profile.sendButton;
+    // 站点没配发送按钮选择器：无从判断，直接放行，由后续延时兜底。
+    if (!sel) { done(); return; }
+    const deadline = Date.now() + 3000;
+    (function check() {
+      let btn = null;
+      try { btn = document.querySelector(sel); } catch (e) { btn = null; }
+      // 按钮不存在，或仍带 disabled 类：都视为未就绪，继续等
+      const disabled = !btn || (btn.className && String(btn.className).indexOf('ds-button--disabled') >= 0);
+      if (!disabled || Date.now() > deadline) { done(); return; }
+      setTimeout(check, 100);
+    })();
+  };
+
+  /**
+   * 派发 Enter 键，触发网页 AI 发送。
+   * @param {Element} ta 输入框
+   */
+  A.pressEnter = function (ta) {
+    const key = { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true };
+    ta.dispatchEvent(new KeyboardEvent('keydown', key));
+    ta.dispatchEvent(new KeyboardEvent('keyup', key));
+  };
+
+  /**
+   * 把图片贴进网页 AI 输入框并发送。
+   * 做法：把 dataURL 转成 File，构造带该文件的 DataTransfer，
+   * 再在输入框上派发 paste 事件——多数支持图片上传的输入框会据此接收图片。
+   * 图片写入依赖站点实现，失败时回传提示，由用户手动粘贴。
+   * @param {string} dataUrl 图片 dataURL
+   */
+  A.pasteImageToWebpageAI = function (dataUrl) {
+    const ta = A.findInputBox();
+    if (!ta) {
+      A.warn('pasteImageToWebpageAI: 未找到网页 AI 输入框');
+      A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
+      return;
+    }
+    try {
+      // dataURL → Blob → File
+      const parts = String(dataUrl).split(',');
+      const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/png';
+      const bin = atob(parts[1] || '');
+      const arr = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+      const ext = mime.indexOf('jpeg') >= 0 ? 'jpg' : 'png';
+      const file = new File([arr], 'screenshot.' + ext, { type: mime });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      ta.focus();
+      // 派发带文件的 paste 事件，交给站点自身处理上传与预览
+      ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+      // 等图片上传 / 预览就绪后回车发送；用固定延时兜底（图片上传耗时不可预期）
+      setTimeout(function () { A.pressEnter(ta); }, 1500);
+      A.post({ type: 'auto_send_result', ok: true, msg: '已尝试粘贴图片并发送' });
+    } catch (e) {
+      A.warn('pasteImageToWebpageAI 失败', e && e.message);
+      A.post({ type: 'auto_send_result', ok: false, msg: '粘贴图片失败：' + (e && e.message) });
+    }
   };
 })();

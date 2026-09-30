@@ -74,17 +74,24 @@
     card.hint = '';
     try {
       const base = this.config.flaskUrl.replace(/\/+$/, '');
-      // page_url：本抽屉挂在哪个网页上。随调用一起发给后端，
-      // 外部工具（推消息 / 查样式 / 抓页面）据此把命令定向回本页面，
-      // 避免同时开着多个页面时命令被别的页面抢去执行。
-      const pageUrl = this.page_url || '';
-      // 关键探针：确认命令确实带上了本页面的地址。
-      // 若此值为空，后端无法把命令定向回本页面，双开时就会串到别的页面。
-      log('提交工具调用：', card.tool, '目标页面=', pageUrl || '(空，将作为公开命令)');
+      // 目标页：AI 在参数里指定的页面（如 get_element_style 的 page_url）。
+      // 后端让该页在 5 秒内独占这条命令，超时未取走才逸散。
+      // 工具没有这个参数时（如 push_message）为空，表示直接进入逸散。
+      const targetUrl = (card.parameters && card.parameters.page_url) || '';
+      // 本页面：承载本对话、把 AI 代码块转成卡片的顶层页面地址（chat-bridge 所在页）。
+      // 逸散阶段后端优先回投本页面；本页面没开 debug-chrome 才随机给其他页面。
+      const hostUrl = card.hostPageUrl || this.page_url || '';
+      log('提交工具调用：', card.tool, '目标页=', targetUrl || '(无，直接逸散)',
+        '本页面=', hostUrl || '(空)');
       const resp = await fetch(base + '/tool', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tool: card.tool, parameters: card.parameters, page_url: pageUrl })
+        body: JSON.stringify({
+          tool: card.tool,
+          parameters: card.parameters,
+          page_url: targetUrl,
+          host_page_url: hostUrl
+        })
       });
       const data = await resp.json();
       card.status = data.success ? 'done' : 'error';
@@ -183,11 +190,32 @@
       if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
       card.countdown = 0;
       card.phase = '';
-      window.parent.postMessage({ type: 'auto_send', text: this.resultText(card) }, '*');
+      this.postCardResult(card);
       this.toast('已回传结果到网页 AI');
       return;
     }
+    // 结果是截图时复制图片；否则照常复制结果文本。
+    const shot = D.extractScreenshot(card.result);
+    if (shot) {
+      this.copyImage(shot);
+      return;
+    }
     this.copy(this.resultText(card));
+  };
+
+  /**
+   * 把卡片结果回传到网页 AI：结果是截图时发图片，否则发文本。
+   * 统一入口，供「复制结果」跳过倒计时、自动回传两处共用。
+   * @param {Object} card 工具卡片
+   */
+  M.postCardResult = function (card) {
+    const shot = D.extractScreenshot(card.result);
+    if (shot) {
+      // 图片：交给内容脚本写进输入框并发送
+      window.parent.postMessage({ type: 'auto_send_image', dataUrl: shot }, '*');
+      return;
+    }
+    window.parent.postMessage({ type: 'auto_send', text: this.resultText(card) }, '*');
   };
 
   /** 执行按钮文案：自动倒计时中显示剩余秒数，否则按是否执行过显示。 */
@@ -219,7 +247,7 @@
     log('安排自动回传', card.tool || card.id || '');
     D.startCountdown(this, card, 'send', () => {
       log('执行自动回传', card.tool || card.id || '');
-      window.parent.postMessage({ type: 'auto_send', text: this.resultText(card) }, '*');
+      this.postCardResult(card);
       this.toast('已回传结果到网页 AI');
     });
   };

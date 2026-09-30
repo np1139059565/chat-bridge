@@ -247,24 +247,27 @@
    * @param {string} requestId 待回传请求 id，原样带回给抽屉
    */
   A.captureTab = function (requestId) {
+    // 超时兜底：后台若因 service worker 休眠等原因不回，回调可能永不触发，
+    // 命令会一直挂着。这里 5 秒内没拿到结果就按失败回传，避免卡住。
+    let done = false;
+    const finish = (payload) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      A.post(Object.assign({ type: 'screenshot_result', request_id: requestId || '' }, payload));
+    };
+    const timer = setTimeout(() => finish({ ok: false, error: 'SCREENSHOT_TIMEOUT' }), 5000);
     try {
       chrome.runtime.sendMessage({ type: 'bridge_capture_tab' }, function (resp) {
         const ok = !!(resp && resp.ok);
-        A.post({
-          type: 'screenshot_result',
-          request_id: requestId || '',
+        finish({
           ok: ok,
           dataUrl: (resp && resp.dataUrl) || '',
           error: (resp && resp.error) || ''
         });
       });
     } catch (e) {
-      A.post({
-        type: 'screenshot_result',
-        request_id: requestId || '',
-        ok: false,
-        error: String(e)
-      });
+      finish({ ok: false, error: String(e) });
     }
   };
 })();

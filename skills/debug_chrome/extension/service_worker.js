@@ -20,6 +20,20 @@ async function handleCaptureScreenshot(sender, sendResponse) {
   }
 }
 
+// ============ DevTools 网络记录缓存 ============
+// devtools.js 实时上报网络记录，这里按 tabId 归类缓存，供内容脚本查询。
+// 用内存变量存储：DevTools 打开期间频繁有消息往来，service worker 通常保持活跃。
+// 记录上限与 devtools.js 的环形缓冲一致，防止内存无界增长。
+const NET_MAX = 300;
+const netStore = {};   // tabId -> [entry, ...]
+
+function appendNetwork(tabId, entry) {
+  if (tabId === undefined || tabId === null || !entry) return;
+  const list = netStore[tabId] || (netStore[tabId] = []);
+  list.push(entry);
+  if (list.length > NET_MAX) list.splice(0, list.length - NET_MAX);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type } = message || {};
   if (type === 'capture-visible-tab') {
@@ -28,6 +42,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (type === 'get-tab-id') {
     sendResponse({ tabId: sender.tab ? sender.tab.id : null });
+    return true;
+  }
+  // devtools.js 上报一条网络记录
+  if (type === 'devtools-network-record') {
+    appendNetwork(message.tabId, message.entry);
+    sendResponse({ ok: true });
+    return true;
+  }
+  // 页面导航：清空该标签页旧记录
+  if (type === 'devtools-network-clear') {
+    if (message.tabId !== undefined) delete netStore[message.tabId];
+    sendResponse({ ok: true });
+    return true;
+  }
+  // 内容脚本查询本标签页的网络记录
+  if (type === 'get-devtools-network') {
+    const tabId = sender.tab ? sender.tab.id : null;
+    const list = (tabId !== null && netStore[tabId]) ? netStore[tabId] : [];
+    const limit = typeof message.limit === 'number' ? message.limit : list.length;
+    sendResponse({ ok: true, entries: list.slice(-limit) });
     return true;
   }
   sendResponse({ error: 'UNKNOWN_MESSAGE_TYPE' });

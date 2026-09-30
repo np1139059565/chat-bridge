@@ -17,6 +17,7 @@
   "background": {
     "service_worker": "service_worker.js"
   },
+  "devtools_page": "devtools.html",
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
@@ -28,7 +29,6 @@
         "content/03_heartbeat.js",
         "content/04_element-selector.js",
         "content/04b_element-selector.js",
-        "content/04c_highlight.js",
         "content/05_tool-handlers.js",
         "content/06_messages.js",
         "content/07_index.js"

@@ -95,9 +95,6 @@
           if (b.type === 'thinking') return null;   // 思考过程不导出
           const base = { type: b.type };
           if (b.type === 'code') {
-            // 卡片 id：代码块自身带的稳定 id，即卡片门牌号。
-            // 导出时带上它，复制出的 JSON 里才能对应到具体是哪张卡片。
-            base.cardId = b.id || '';
             base.language = b.lang;
             base.code = b.code;
             const c = (node.cards || {})[b.id];
@@ -201,6 +198,22 @@
       if (card.stack) payload.stack = card.stack;
     }
     return JSON.stringify(payload, null, 2);
+  };
+
+  /**
+   * 复制图片到剪贴板。
+   * 用 ClipboardItem 写二进制；环境不支持时提示用户右键另存。
+   * @param {string} dataUrl 图片 dataURL
+   */
+  M.copyImage = function (dataUrl) {
+    if (typeof ClipboardItem === 'undefined' || !navigator.clipboard || !navigator.clipboard.write) {
+      this.toast('当前环境不支持复制图片，请右键图片另存');
+      return;
+    }
+    fetch(dataUrl).then((r) => r.blob()).then((blob) => {
+      const item = new ClipboardItem({ [blob.type]: blob });
+      return navigator.clipboard.write([item]);
+    }).then(() => this.toast('已复制图片'), () => this.toast('复制图片失败，请右键另存'));
   };
 
   /** 复制文本到剪贴板；不支持时回退到 execCommand 方案。 */

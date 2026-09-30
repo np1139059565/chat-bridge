@@ -121,33 +121,74 @@
     }
 
     if (tool === 'get_page_snapshot') {
-      const snapshotType = params.snapshot_type || 'dom';
-      if (snapshotType === 'dom') {
-        const snapTop = () => {
-          // 整页快照保持完整：截断会让页面结构不完整，影响调试判断。
-          // 只附带长度，便于调用方评估体积。
-          const dom = document.documentElement.outerHTML;
-          return { success: true, data: { dom: dom, dom_length: (dom || '').length } };
-        };
-        const snapFrame = async (frame) => {
-          try {
-            const res = await A.queryFrame(frame, { type: 'query-dom' }, 4000);
-            return res.result;
-          } catch (e) {
-            return { success: false, error: e.message || 'FRAME_QUERY_FAILED', hint: '目标页面内需已安装「iframe 点选补丁」。' };
-          }
-        };
-        return runInTargetPage(params, snapTop, snapFrame);
+      // 只做可见区域截图，链路与 QQ 指令「/sp」一致：
+      // 后台 captureVisibleTab 直接取图，回传原图，不做缩放、不读 DOM。
+      // 读整页 outerHTML 会把大段字符串经回传链路搬运、在卡片里渲染，
+      // 页面一大就卡；截图链路短、开销小，保留它。
+      try {
+        const shot = await A.requestScreenshot();
+        return { success: true, data: { screenshot: shot } };
+      } catch (err) {
+        return { success: false, error: 'SNAPSHOT_FAILED', message: err.message };
       }
-      if (snapshotType === 'screenshot') {
+    }
+
+    if (tool === 'get_console_logs') {
+      // console 记录由主世界脚本 hook 捕获，存在页面内存里，
+      // 这里用 exec_js 通道把它读回来。
+      const limit = typeof params.limit === 'number' ? params.limit : 500;
+      const level = params.level || '';
+      const code = '(function(){'
+        + 'var logs = window.__AI_DEBUG_CONSOLE_LOGS || [];'
+        + 'return logs;'
+        + '})()';
+      const res = await A.execJs(code);
+      if (!res || !res.success) return { success: false, error: (res && res.error) || 'EXEC_JS_ERROR' };
+      let logs = Array.isArray(res.result) ? res.result : [];
+      // 按级别过滤（level 为空则全部）
+      if (level) logs = logs.filter((x) => x && x.level === level);
+      // 只取最近 limit 条
+      logs = logs.slice(-limit);
+      return { success: true, data: { count: logs.length, logs: logs } };
+    }
+
+    if (tool === 'get_network_logs') {
+      // 网络记录由 devtools.js 采集、service_worker 缓存。
+      // 需该页 DevTools 打开过，否则缓存为空。
+      const limit = typeof params.limit === 'number' ? params.limit : 300;
+      return await new Promise((resolve) => {
         try {
-          const shot = await A.requestScreenshot();
-          return { success: true, data: { screenshot: shot } };
-        } catch (err) {
-          return { success: false, error: 'SNAPSHOT_FAILED', message: err.message };
+          chrome.runtime.sendMessage({ type: 'get-devtools-network', limit: limit }, (resp) => {
+            if (!resp || !resp.ok) {
+              resolve({ success: false, error: 'NETWORK_UNAVAILABLE', hint: '请先在该页面打开 DevTools 面板，网络记录才会被采集。' });
+              return;
+            }
+            resolve({ success: true, data: { count: (resp.entries || []).length, entries: resp.entries || [] } });
+          });
+        } catch (e) {
+          resolve({ success: false, error: String(e) });
         }
+      });
+    }
+
+    if (tool === 'exec_js') {
+      // 在目标页面主世界执行任意 JS。
+      // 主世界脚本（08_injected_main.js）只注入顶层文档，
+      // 因此目前仅支持顶层页面；子页面（iframe）暂不路由。
+      const code = params.code;
+      if (typeof code !== 'string' || code.trim() === '') {
+        return { success: false, error: 'MISSING_CODE', hint: 'exec_js 需要非空的 code 参数。' };
       }
-      return { success: false, error: 'INVALID_SNAPSHOT_TYPE' };
+      const url = params.page_url || '';
+      if (url && A.normalizeUrl(url) !== A.normalizeUrl(location.href)) {
+        return {
+          success: false,
+          error: 'EXEC_JS_TOP_ONLY',
+          page_url: url,
+          hint: 'exec_js 目前仅支持顶层文档主世界；请传入顶层页面的 URL。',
+        };
+      }
+      return await A.execJs(code);
     }
 
     if (tool === 'push_message') {
@@ -164,10 +205,47 @@
     return { success: false, error: 'UNKNOWN_TOOL', tool };
   };
 
+  // exec_js 的等待上限（毫秒）：主世界执行可能陷入长循环或死等，
+  // 必须有超时兜底，否则会卡住整个轮询循环。
+  A.EXEC_JS_TIMEOUT_MS = 15000;
+
+  /**
+   * 在页面主世界执行一段 JS，返回 { success, result } 或 { success:false, error }。
+   *
+   * 为什么要绕主世界：内容脚本运行在隔离世界，读到的 window / document / localStorage
+   * 是隔离副本，看不到页面真实内存。主世界脚本（08_injected_main.js）持有真实引用，
+   * 由它执行代码、把结果序列化后回传。
+   * @param {string} code 待执行代码（可含 await）
+   * @returns {Promise<Object>} 执行结果
+   */
+  A.execJs = function (code) {
+    return new Promise((resolve) => {
+      const reqId = 'exec-' + Date.now() + '-' + Math.floor(Math.random() * 1e6);
+      let done = false;
+      const finish = (payload) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        window.removeEventListener('message', listener);
+        resolve(payload);
+      };
+      const listener = (ev) => {
+        const d = ev.data;
+        if (!d || d.source !== 'ai-debug-main' || d.type !== 'exec-js-result' || d.reqId !== reqId) return;
+        if (d.success) finish({ success: true, result: d.result });
+        else finish({ success: false, error: d.error || 'EXEC_JS_ERROR' });
+      };
+      const timer = setTimeout(() => finish({ success: false, error: 'EXEC_JS_TIMEOUT' }), A.EXEC_JS_TIMEOUT_MS);
+      window.addEventListener('message', listener);
+      // 投递给主世界脚本：内容脚本与主世界同窗口，用 postMessage 通信
+      window.postMessage({ source: 'ai-debug-content', type: 'exec-js', reqId: reqId, code: code }, '*');
+    });
+  };
+
   // 截图请求的超时上限（毫秒）：后台若因 service worker 休眠、截图失败丢响应
   // 等原因不回传结果，必须自行超时退出，否则等待方会永久挂起，
   // 进而卡死整个轮询循环（见 03_heartbeat.js 的 state.polling 守卫）。
-  A.SCREENSHOT_TIMEOUT_MS = 8000;
+  A.SCREENSHOT_TIMEOUT_MS = 5000;
 
   A.requestScreenshot = function () {
     return new Promise((resolve, reject) => {
@@ -182,10 +260,10 @@
       const listener = (msg) => {
         if (!msg || msg.type !== 'screenshot-result') return;
         if (msg.success) {
-          // 缩放本身是异步的，完成后才真正结束
-          A.downscaleImage(msg.data.screenshot, A.MAX_SHOT_WIDTH)
-            .then((url) => finish(resolve, url))
-            .catch((e) => finish(reject, e));
+          // 直接用后台返回的原图：不做 canvas 缩放。
+          // 缩放需在页面里解码大图再重绘，图大时会长时间占用主线程、
+          // 表现为页面卡死；卡片的等比缩放交给显示层用 CSS 完成即可。
+          finish(resolve, msg.data.screenshot);
         } else {
           finish(reject, new Error(msg.error || '截图失败'));
         }

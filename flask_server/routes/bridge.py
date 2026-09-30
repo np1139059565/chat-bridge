@@ -9,6 +9,7 @@
 from flask import Blueprint, jsonify, request
 
 import remote_bridge
+import screenshot_store
 from remote_bridge import bridge, bridge_store, command_panel, message_router
 
 bp = Blueprint("bridge", __name__)
@@ -139,34 +140,12 @@ def bridge_result():
 
 
 def _save_data_url(data_url):
-    """把 dataURL 图片保存到本地文件，返回绝对路径；失败返回空串。
+    """把 dataURL 图片保存到本地，返回 {name, path}；失败返回 None。
 
-    截屏存到 flask_server/screenshots/ 下，文件名带时间戳便于分辨。
+    存盘实现已抽到公共模块 screenshot_store，与 debug_chrome 的截图工具
+    共用同一套命名与目录，避免同一目录下两种格式混杂。
     """
-    import base64
-    import os
-    import time
-    try:
-        # dataURL 形如 data:image/png;base64,xxxx
-        if "," not in data_url:
-            return ""
-        head, b64 = data_url.split(",", 1)
-        ext = ".png"
-        if "image/jpeg" in head:
-            ext = ".jpg"
-        raw = base64.b64decode(b64)
-        out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "screenshots")
-        if not os.path.isdir(out_dir):
-            os.makedirs(out_dir)
-        name = "shot_" + time.strftime("%Y%m%d_%H%M%S") + ext
-        path = os.path.join(out_dir, name)
-        with open(path, "wb") as f:
-            f.write(raw)
-        # 同时返回文件名与路径：文件名供拼公网 URL，路径供回退提示
-        return {"name": name, "path": path}
-    except Exception as e:
-        print("[bridge] 保存截屏失败：", e)
-        return None
+    return screenshot_store.save_data_url(data_url)
 
 
 def _cmd_upsert(data):

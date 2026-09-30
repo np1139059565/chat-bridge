@@ -35,6 +35,11 @@ FORWARD_TIMEOUT = 10.0
 # 取值须大于扩展的常规轮询间隔（5 秒），避免正常页面被误清。
 OPEN_WINDOW = 15.0
 
+# 「目标页独占」窗口（秒）：命令带目标页（page_url）时，该页在这段时间内独占命令，
+# 其他页面不得代收；超时仍未被取走（如目标页没打开 debug-chrome），才进入逸散阶段。
+# 取值贴合扩展的常规轮询间隔（5 秒），保证目标页至少有一次轮询机会。
+TARGET_HOLD = 5.0
+
 
 def normalize_url(url):
     """规整页面地址，供「命令目标页面」与「轮询页面」比对。
@@ -184,29 +189,57 @@ class ProviderHub:
         else:
             pages.pop(target, None)
 
+    def _escape_take(self, provider, h_url, target, now, cid, tool, why):
+        """逸散阶段的取件判断（调用方须已持锁）。
+
+        逸散优先级：
+          1. 本页面（host_page_url）就是当前轮询页 —— 取走；
+          2. 本页面当前开着 debug-chrome —— 留给本页面，其他页面不取；
+          3. 本页面没开 —— 其他页面可随机取走（谁先轮询谁得）。
+        @param h_url 本页面地址（规整后）
+        @param target 当前轮询页地址（规整后）
+        @returns 是否取走
+        """
+        # 1. 当前轮询页就是本页面 → 优先取走
+        if h_url and h_url == target:
+            log("逸散取走（本页面）", why, tool, "id=" + cid)
+            return True
+        # 2. 本页面开着 debug-chrome → 留给它
+        if h_url and self._page_open_locked(provider, h_url, now):
+            return False
+        # 3. 本页面没开 → 其他页面随机取走
+        log("逸散取走（其他页面）", why, tool,
+            "本页面=" + (h_url or "(无)"), "由=" + (target or "(未知)"), "id=" + cid)
+        return True
+
     def _take_mine(self, provider, c, target, now):
         """判断一条命令是否归本页面执行（调用方须已持锁）。
 
-        取走规则：
-          1. 目标就是本页面 —— 优先取走；
-          2. 无目标页面 —— 公开命令，任何页面可取；
-          3. 目标页面的工具没打开 —— 逸散，本页面代收。
-        返回 True 表示取走。目标页面工具开着时不打印（每次轮询都会重扫，
-        逐条打印会刷屏），真正的取件动作在取走分支里已记。
+        取走规则（按用户约定）：
+          1. 无目标页（如 push_message）—— 跳过独占，直接进入逸散；
+          2. 目标就是本页面 —— 取走（目标页随时优先）；
+          3. 有目标页且在独占窗口（TARGET_HOLD）内 —— 只有目标页可取，其他页面不取；
+          4. 独占窗口已过 —— 进入逸散：优先本页面，本页面没开才随机给其他页面。
+        返回 True 表示取走。
         """
-        c_url = normalize_url(c.get("page_url") or "")
+        c_url = normalize_url(c.get("page_url") or "")        # 目标页
+        h_url = normalize_url(c.get("host_page_url") or "")   # 本页面
         cid = (c.get("request_id") or "")[:8]
+        tool = c.get("tool")
+        created = c.get("created_at") or 0
+
+        # 规则 1：无目标页 → 直接逸散
         if not c_url:
-            log("取走公开命令", c.get("tool"), "id=" + cid)
-            return True
+            return self._escape_take(provider, h_url, target, now, cid, tool, "公开命令")
+        # 规则 2：目标就是本页 → 取走
         if c_url == target:
-            log("取走本页面命令", c.get("tool"), "id=" + cid)
+            log("取走本页面命令", tool, "id=" + cid)
             return True
-        if not self._page_open_locked(provider, c_url, now):
-            log("代收命令（目标页面工具未开）", c.get("tool"),
-                "目标=" + c_url, "由=" + (target or "(未知)"), "id=" + cid)
-            return True
-        return False
+        # 规则 3：目标页独占窗口内 → 留给目标页
+        if (now - created) < TARGET_HOLD:
+            return False
+        # 规则 4：窗口已过 → 逸散
+        return self._escape_take(provider, h_url, target, now, cid, tool, "窗口超时逸散")
 
     def _pick_commands_locked(self, provider, target, now):
         """按归属规则把队列拆为「本页面取走」与「留给别人」两部分（调用方须已持锁）。
@@ -221,16 +254,14 @@ class ProviderHub:
         return mine
 
     def poll(self, provider, page_url="", is_open=True):
-        """记录心跳与工具开关状态，并按「同页面优先、目标没开就逸散」取走命令。
+        """记录心跳与工具开关状态，并按「目标页独占 → 逸散」取走命令。
 
-        每条命令都带目标页面地址。取命令时的规则：
-          1. 目标页面与本页面一致 —— 直接取走（同页面优先）。
-          2. 命令没有目标页面 —— 视为公开命令，任何页面可取（兼容旧调用）。
-          3. 目标页面是别的页面，但它的工具当前没打开 —— 直接允许本页面代收，
-             不再等待任何时间窗。
-          4. 目标页面是别的页面，且它的工具开着 —— 留给它，不取。
-        判断依据是各页面上报的「工具是否打开」，而非时间猜测，因此目标页面
-        一关，属于它的命令立刻逸散到其他页面。
+        每条命令可带两个地址：目标页（page_url）与本页面（host_page_url）。
+        取命令规则见 _take_mine：
+          1. 无目标页（如 push_message）—— 直接进入逸散。
+          2. 目标页 = 本页 —— 取走。
+          3. 有目标页且在独占窗口（TARGET_HOLD）内 —— 只有目标页可取，其他页面不取。
+          4. 独占窗口已过 —— 逸散：优先本页面，本页面没开才随机给其他页面。
         @param provider 提供方标识
         @param page_url 本页面的地址（来自扩展心跳）
         @param is_open 本页面的工具（抽屉）当前是否打开
@@ -270,7 +301,7 @@ class ProviderHub:
             self._queues[provider] = [c for c in queue
                                       if c.get("request_id") != request_id]
 
-    def dispatch(self, provider, tool, params, silent=False, page_url=""):
+    def dispatch(self, provider, tool, params, silent=False, page_url="", host_page_url=""):
         """把一次工具调用入队，并阻塞等待提供方回传结果。
 
         silent 仅随命令下发，供提供方决定是否在界面生成工具卡片；
@@ -286,7 +317,9 @@ class ProviderHub:
             "tool": tool,
             "params": params or {},
             "silent": bool(silent),
-            "page_url": page_url or "",          # 命令的目标页面：优先由它执行
+            "page_url": page_url or "",              # 目标页面：独占窗口内优先由它执行
+            "host_page_url": host_page_url or "",    # 本页面：逸散阶段优先回投给它
+            "created_at": time.time(),               # 入队时刻：用于计算目标页独占窗口
         }
         event = threading.Event()
         with self._lock:
