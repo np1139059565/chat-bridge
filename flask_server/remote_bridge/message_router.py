@@ -12,6 +12,11 @@ import threading
 import time
 
 from . import bridge_store
+# 消息解析与块文本组装已抽到独立模块 message_parse.py；
+# 此处按原名导入，保持本模块内既有调用不变。
+from .message_parse import (
+    _parse_envelope, _has_qq_source, _tool_result_of, _classify, _blocks_to_text,
+)
 
 # 被动回复窗口时长（秒）：官方为 60 分钟
 WINDOW_SECONDS = 60 * 60
@@ -25,6 +30,12 @@ PREFIX = {
 
 _lock = threading.Lock()
 
+# 推送串行锁：handle_report 的「读已推集合 → 逐条推送 → 写回」
+# 必须整体串行，否则多个上报并发时会：读到同一份集合 → 同一条被推两次（重复）、
+# 推送顺序互相穿插（乱序）。用独立锁，不能复用 _lock——
+# 推送内部会调 next_seq，后者也要 _lock，复用会自锁死。
+_push_lock = threading.Lock()
+
 # 当前活跃的被动回复窗口：{ openid: {"msg_id": ..., "expire": 时间戳} }
 _windows = {}
 
@@ -34,192 +45,6 @@ _windows = {}
 _last_openid = ""
 
 
-def _merge_nested_envelope(obj):
-    """把嵌套信封的内层字段并入外层。
-
-    obj 的 request 字段若是字符串且本身又是一段 JSON，说明这是两层结构；
-    内层补 source / openid 等字段，外层字段优先（update 顺序即优先级）。
-    穿透失败时原样返回 obj。
-    """
-    import json
-    req = obj.get("request")
-    if not (isinstance(req, str) and req.strip().startswith("{")):
-        return obj
-    try:
-        inner = json.loads(req)
-    except Exception:
-        return obj
-    if not isinstance(inner, dict):
-        return obj
-    merged = dict(inner)
-    merged.update(obj)
-    merged["request"] = inner.get("request", req)
-    return merged
-
-
-def _block_text_of(b):
-    """取块的文本内容：优先 code 字段，其次 text 字段，均无则返回空串。"""
-    b = b or {}
-    src = b.get("code")
-    if not src:
-        src = b.get("text")
-    return str(src or "").strip()
-
-
-def _load_json_block(b):
-    """取块的文本内容并尝试解析为 JSON 对象；不是 JSON 对象返回 None。"""
-    import json
-    src = _block_text_of(b)
-    if not src or src[0] != "{":
-        return None
-    try:
-        obj = json.loads(src)
-    except Exception:
-        return None
-    return obj if isinstance(obj, dict) else None
-
-
-def _parse_block_envelope(b):
-    """尝试把单个消息块解析为外部调用信封；不是信封返回 None。"""
-    obj = _load_json_block(b)
-    if obj is None or obj.get("type") != "external-call":
-        return None
-    return _merge_nested_envelope(obj)
-
-
-def _parse_envelope(m):
-    """解析一条消息里的外部调用信封，穿透嵌套。
-
-    为什么要穿透：抽屉的 sendExternalCard 会把卡片 content 放进信封的
-    request 字段再发出，于是网页 AI 收到的结构是两层的——
-    顶层 {type, nonce, request, page_url}，而我们的来源标记藏在 request
-    这个字符串里。只看顶层会漏判。
-
-    @param m 消息对象
-    @returns 解析出的信封 dict；解析不出返回 None
-    """
-    for b in (m.get("blocks") or []):
-        obj = _parse_block_envelope(b)
-        if obj is not None:
-            return obj
-    return None
-
-
-def _has_qq_source(m):
-    """判断一条消息是否来自 QQ（即由本桥接层投递的外部卡片）。
-
-    QQ 发来的消息会以 external-call 信封落在消息树里，来源标记 source:'qq'。
-    信封可能是嵌套结构，故用 _parse_envelope 穿透解析。
-    """
-    obj = _parse_envelope(m)
-    return bool(obj and obj.get("source") == "qq")
-
-
-def _tool_result_of(m):
-    """判断一条消息是否为工具结果回传（bridge-chat-res）。
-
-    工具结果经「回传网页 AI → 成为一条消息 → 镜像抓取」到达这里。
-    它是 JSON 文本，不加处理会以纯文本推送、代码块不渲染，
-    故此处识别出来，交由推送环节按 Markdown 代码块发送。
-    @param m 消息对象
-    @returns 解析出的结果对象；不是工具结果返回 None
-    """
-    for b in (m.get("blocks") or []):
-        obj = _load_json_block(b)
-        if obj and obj.get("type") == "bridge-chat-res":
-            return obj
-    return None
-
-
-def _classify(m):
-    """给一条消息定类：user / tool / ai。
-
-    assistant 一律算 AI；user 角色里凡是 external-call 信封（不论来自 QQ
-    还是调试扩展）都算工具消息；其余算用户消息。
-    """
-    if m.get("role") == "assistant":
-        return "ai"
-    if _parse_envelope(m):
-        return "tool"
-    return "user"
-
-
-# ---------- 单个消息块 → 文本 ----------
-# 每种块类型一个处理函数，签名统一为 (block, push_thinking) → 文本片段；
-# 返回空串表示该块不产出内容（由调用方过滤）。
-
-def _block_thinking(b, push_thinking):
-    """思考块：默认不推，push_thinking 为真时加 [思考] 前缀。"""
-    if not push_thinking:
-        return ""
-    return "[思考] " + str(b.get("text") or "")
-
-
-def _block_code(b, push_thinking):
-    """代码块：工具调用只摘出工具名与参数，其余原样包裹在围栏里。"""
-    import json
-    code = str(b.get("code") or "")
-    try:
-        obj = json.loads(code.strip())
-        if obj.get("type") == "bridge-chat-call":
-            return "[工具调用] %s 参数=%s" % (
-                obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False))
-    except Exception:
-        pass
-    return "```\n" + code + "\n```"
-
-
-def _block_text(b, push_thinking):
-    """纯文本块：段落 / 标题 / 引用共用同一取文本方式。"""
-    return str(b.get("text") or "")
-
-
-def _block_list(b, push_thinking):
-    """列表块：每个元素前置「- 」并换行拼接。"""
-    items = b.get("items") or []
-    return "\n".join("- " + str(x) for x in items)
-
-
-def _block_table(b, push_thinking):
-    """表格块：单元格以「 | 」相连，逐行换行拼接。"""
-    rows = b.get("rows") or []
-    return "\n".join(" | ".join(str(c) for c in row) for row in rows)
-
-
-# 块类型 → 处理函数。新增块类型时在此登记即可，无需改动主流程。
-# 未登记的类型不产出文本（与旧实现的「无匹配分支则不 append」语义一致）。
-_BLOCK_HANDLERS = {
-    "thinking": _block_thinking,
-    "code": _block_code,
-    "paragraph": _block_text,
-    "heading": _block_text,
-    "quote": _block_text,
-    "list": _block_list,
-    "table": _block_table,
-}
-
-
-def _blocks_to_text(m, push_thinking):
-    """把一条消息的块合并成一段文本。
-
-    粒度规则：
-    - 思考过程：默认不推，push_thinking 为真时推
-    - 正文（段落 / 标题 / 列表 / 引用 / 表格）：推
-    - 代码块（含工具调用）：推；工具调用只推工具名与参数
-
-    各类块的具体取法见 _BLOCK_HANDLERS 中的处理函数。
-    """
-    parts = []
-    for b in (m.get("blocks") or []):
-        if not b:
-            continue
-        fn = _BLOCK_HANDLERS.get(b.get("type"))
-        if not fn:
-            continue
-        text = fn(b, push_thinking)
-        if text:
-            parts.append(text)
-    return "\n".join(parts).strip()
 
 
 def _remember_window(openid, msg_id):
@@ -335,9 +160,17 @@ def _should_push(m, push):
 
 
 def _push_one(qq_client, openid, m, push):
-    """推送一条消息到 QQ。成功返回 True，不满足推送条件或内容为空返回 False。"""
+    """尝试推送一条消息到 QQ，返回状态字符串。
+
+    三种结果，供调用方决定是否记账：
+      'skip' —— 本就不该推（类型开关关闭 / QQ 自己发的 / 内容为空）：
+                记入已推集合，之后不再重复评估。
+      'sent' —— 推送成功：记入已推集合。
+      'fail' —— 尝试推送但失败（窗口关闭 / 网络错误）：**不记账**，
+                留待下轮上报重试，避免消息被永久漏掉。
+    """
     if not _should_push(m, push):
-        return False
+        return 'skip'
     # 节点上的 md 字段是 /md 采集来的 Markdown 原文，有它说明这条回复带格式。
     # 有 md → 走 Markdown 通道（msg_type=2），QQ 端才会渲染标题、加粗等语法；
     # 没有（未采集 / 非 AI 消息 / 采集失败）→ 退回 blocks 拼的纯文本，走文本通道。
@@ -351,16 +184,16 @@ def _push_one(qq_client, openid, m, push):
         import json
         text = json.dumps(tr, ensure_ascii=False, indent=2)
         body = "%s\n```json\n%s\n```" % (PREFIX.get(kind, kind), text)
-        return push_text(qq_client, openid, body, markdown=True)
+        return 'sent' if push_text(qq_client, openid, body, markdown=True) else 'fail'
     raw_md = str(m.get("md") or "").strip()
     is_markdown = bool(raw_md)
     text = raw_md or _blocks_to_text(m, push.get("thinking", False))
     if not text:
-        return False
+        return 'skip'
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
-    return push_text(qq_client, openid, body, markdown=is_markdown)
+    return 'sent' if push_text(qq_client, openid, body, markdown=is_markdown) else 'fail'
 
 
 def _resolve_openid(payload):
@@ -405,31 +238,38 @@ def handle_report(qq_client, payload):
         return 0
 
     push = bridge_store.get_config().get("push") or {}
-    pushed = bridge_store.get_pushed_set(conv_id)
-    sent = 0
-    seen_keys = []
+    # 整段「读已推集合 → 逐条推送 → 写回」串行执行：
+    # 否则多个上报并发会读到同一份集合，导致同一条被推两次（重复）、顺序穿插（乱序）。
+    with _push_lock:
+        pushed = bridge_store.get_pushed_set(conv_id)
+        sent = 0
+        seen_keys = []
 
-    for m in messages:
-        mid = m.get("id") or ""
-        # 1) 正文推送：按消息 id 去重。
-        #    工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
-        #    否则「消息已推过」会把后来的结果一并挡掉。
-        if mid and mid not in pushed:
-            if _push_one(qq_client, openid, m, push):
-                sent += 1
-            seen_keys.append(mid)
-        # 2) 卡片结果推送：按「消息id#卡片id」去重，与正文互不影响。
-        for card in (m.get("cardResults") or []):
-            cid = card.get("id") or ""
-            if not cid:
-                continue
-            ckey = (mid + "#" + cid) if mid else cid
-            if ckey in pushed or ckey in seen_keys:
-                continue
-            if _push_card_result(qq_client, openid, card, push):
-                sent += 1
-            seen_keys.append(ckey)
+        for m in messages:
+            mid = m.get("id") or ""
+            # 1) 正文推送：按消息 id 去重。
+            #    工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
+            #    否则「消息已推过」会把后来的结果一并挡掉。
+            if mid and mid not in pushed:
+                status = _push_one(qq_client, openid, m, push)
+                if status == 'sent':
+                    sent += 1
+                # 失败不记账：留待下轮重试，避免消息被永久漏掉
+                if status in ('sent', 'skip'):
+                    seen_keys.append(mid)
+            # 2) 卡片结果推送：按「消息id#卡片id」去重，与正文互不影响。
+            for card in (m.get("cardResults") or []):
+                cid = card.get("id") or ""
+                if not cid:
+                    continue
+                ckey = (mid + "#" + cid) if mid else cid
+                if ckey in pushed or ckey in seen_keys:
+                    continue
+                if _push_card_result(qq_client, openid, card, push):
+                    sent += 1
+                    seen_keys.append(ckey)
+                # 图片推送失败不记账，同样留待重试
 
-    # 只登记本轮新处理的 key；已推过的本就在集合里，无需重复写
-    bridge_store.mark_pushed(conv_id, seen_keys)
-    return sent
+        # 只登记本轮「成功或本就不该推」的 key；失败的不写，下轮会再评估
+        bridge_store.mark_pushed(conv_id, seen_keys)
+        return sent

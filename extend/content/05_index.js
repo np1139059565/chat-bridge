@@ -75,6 +75,9 @@
       // 标记存 sessionStorage：刷新后仍在，关标签页即消失，
       // 这样「刷新后自动开抽屉」只对本次操作生效，不会长期驻留。
       try { sessionStorage.setItem('aiMirrorAutoOpen', '1'); } catch (e) { /* 忽略 */ }
+      // 同时给 debug-chrome 扩展留一个标记：它是独立扩展，刷新后读这个标记
+      // 自动开自己的抽屉。这样 /rf「刷新并打开抽屉」对两个抽屉都生效。
+      try { sessionStorage.setItem('aiDebugAutoOpen', '1'); } catch (e) { /* 忽略 */ }
       location.reload();
     }
   });
