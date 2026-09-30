@@ -81,6 +81,61 @@
     get_network_logs: (params) => A._toolNetworkLogs(params),
     exec_js: (params) => A._toolExecJs(params),
     push_message: (params) => A._toolPushMessage(params),
+    // 抽屉控制类工具：供外部指令（/dbg-* 等）调用，由扩展自己执行
+    open_drawer: (params) => A._toolOpenDrawer(params),
+    close_drawer: (params) => A._toolCloseDrawer(params),
+    switch_drawer_side: (params) => A._toolSwitchSide(params),
+    open_settings: (params) => A._toolOpenSettings(params),
+    close_settings: (params) => A._toolCloseSettings(params),
+  };
+
+  // ---------- 抽屉控制类工具 ----------
+  // 这些工具由外部指令（/dbg-open 等）经工具服务入队、扩展轮询取走后执行，
+  // 宿主全程不碰扩展内部状态。
+
+  /** 打开调试抽屉；已打开视为成功（幂等）。 */
+  A._toolOpenDrawer = function () {
+    if (state.drawerIframe) return { success: true, message: '抽屉已打开' };
+    A.openDrawer();
+    return { success: true, message: '抽屉已打开' };
+  };
+
+  /** 关闭调试抽屉；已关闭视为成功（幂等）。 */
+  A._toolCloseDrawer = function () {
+    if (!state.drawerIframe) return { success: true, message: '抽屉已关闭' };
+    A.closeDrawer();
+    return { success: true, message: '抽屉已关闭' };
+  };
+
+  /** 切换抽屉挂靠侧：参数 side 为 left / right；非法或缺失则在左右之间切换。 */
+  A._toolSwitchSide = function (params) {
+    const want = (params && params.side) || '';
+    const side = (want === 'left' || want === 'right')
+      ? want
+      : (state.drawerSide === 'left' ? 'right' : 'left');
+    A.setDrawerSide(side);
+    return { success: true, side: side };
+  };
+
+  /** 打开设置页：抽屉未开则先开抽屉、并置待切视图；已开则直接切视图。 */
+  A._toolOpenSettings = function () {
+    if (!state.drawerIframe) {
+      // 先记住要切的视图：抽屉就绪时会消费该标记（见 06_messages.js）。
+      state.pendingView = 'settings';
+      A.openDrawer();
+      return { success: true, message: '抽屉已打开并切到设置页' };
+    }
+    A.postToDrawer({ type: 'ai-debug-set-view', view: 'settings' });
+    return { success: true, message: '已切到设置页' };
+  };
+
+  /** 从设置页返回对话视图；抽屉未开时报错。 */
+  A._toolCloseSettings = function () {
+    if (!state.drawerIframe) {
+      return { success: false, error: 'DRAWER_NOT_OPEN', message: '抽屉未打开' };
+    }
+    A.postToDrawer({ type: 'ai-debug-set-view', view: 'chat' });
+    return { success: true, message: '已返回对话' };
   };
 
   A.handleToolRequest = async function (detail) {

@@ -59,6 +59,45 @@
         { "name": "title", "type": "string", "required": false, "description": "可选标题" },
         { "name": "no_reply", "type": "boolean", "required": true, "description": "为 true 时不回传执行结果，仅执行推送。用于最后一次总结性推送，避免结果回传再次唤醒 AI" }
       ]
+    },
+    {
+      "name": "open_drawer",
+      "description": "打开调试抽屉（已打开则视为成功）。",
+      "executor": "external",
+      "parameters": []
+    },
+    {
+      "name": "close_drawer",
+      "description": "关闭调试抽屉（已关闭则视为成功）。",
+      "executor": "external",
+      "parameters": []
+    },
+    {
+      "name": "switch_drawer_side",
+      "description": "切换调试抽屉的挂靠侧（左/右）；不传 side 则在左右之间切换。",
+      "executor": "external",
+      "parameters": [
+        { "name": "side", "type": "string", "required": false, "description": "left 或 right；省略则切换" }
+      ]
+    },
+    {
+      "name": "open_settings",
+      "description": "打开调试抽屉的设置页（抽屉未开则先打开）。",
+      "executor": "external",
+      "parameters": []
+    },
+    {
+      "name": "close_settings",
+      "description": "从设置页返回对话视图。",
+      "executor": "external",
+      "parameters": []
     }
+  ],
+  "commands": [
+    { "name": "/dbg-open", "alias": "/do", "desc": "打开调试抽屉", "tool": "open_drawer", "params": {} },
+    { "name": "/dbg-close", "alias": "/dc", "desc": "关闭调试抽屉", "tool": "close_drawer", "params": {} },
+    { "name": "/dbg-side", "alias": "/dl", "desc": "调试抽屉左右切换", "tool": "switch_drawer_side", "params": {} },
+    { "name": "/dbg-settings", "alias": "/dt", "desc": "打开调试抽屉设置页", "tool": "open_settings", "params": {} },
+    { "name": "/dbg-back", "alias": "/db", "desc": "从设置页返回对话", "tool": "close_settings", "params": {} }
   ]
 }

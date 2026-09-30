@@ -65,6 +65,7 @@ window.AIStyleDebug = (function () {
     drawerWatchdogTimer: null,
     selectedElements: [],
     drawerSide: 'right',   // 抽屉挂靠侧：right / left
+    pendingView: null,     // 打开抽屉后待切换的视图（如 'settings'）；就绪时消费
     themeObserver: null,          // 宿主主题监听器：仅抽屉打开期间存在
     pageListenersAttached: false, // 页面级交互监听是否已绑定：随抽屉开关
   };

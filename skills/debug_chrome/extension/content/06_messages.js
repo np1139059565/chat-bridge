@@ -177,6 +177,12 @@
         A.markDrawerReady();
         A.postToDrawer({ type: 'host-page-url' });
         A.postToDrawer({ type: 'page-urls', urls: A.collectPageUrls() });
+        // 若打开抽屉时带了「待切换视图」（如外部指令要求直达设置页），
+        // 在就绪后补发一次；此时抽屉已挂载，消息不会丢。消费后即清标记。
+        if (state.pendingView) {
+          A.postToDrawer({ type: 'ai-debug-set-view', view: state.pendingView });
+          state.pendingView = null;
+        }
       } else if (d.type === 'ai-debug-close-request') {
         // 抽屉上的「关闭」按钮：彻底关闭抽屉（移除并停轮询）。
         A.closeDrawer();

@@ -37,6 +37,8 @@ from .command_dispatch import (
     log, _reply, _reply_ctx, _pending, _pending_lock, PENDING_TTL,
     _dispatch, _dispatch_with_result, _register_pending, take_pending,
 )
+# 外部指令处理已抽到独立模块（见 command_external.py），此处按名导入
+from .command_external import handle_external
 
 def _restart_server(delay=3.0):
     """延迟 3 秒重启服务（最简实现）。
@@ -417,5 +419,8 @@ def handle_command(qq_client, openid, msg_id, text):
     if fn:
         fn(qq_client, openid, arg, msg_id)
         return True
-    # 未命中内置指令：尝试自定义指令；仍未命中则交还调用方当普通消息处理
+    # 未命中内置指令：尝试外部指令（来自 skill 声明，由扩展自己执行）；
+    # 仍未命中再试自定义指令；都没有则交还调用方当普通消息处理。
+    if handle_external(qq_client, openid, msg_id, parts[0].lower()):
+        return True
     return _handle_custom(qq_client, openid, msg_id, cmd)

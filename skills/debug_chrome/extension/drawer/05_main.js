@@ -312,6 +312,10 @@
             pageUrls.value = Array.isArray(d.urls) ? d.urls : [];
           } else if (d.type === 'tool-card') {
             upsertToolCard(d);
+          } else if (d.type === 'ai-debug-set-view') {
+            // 内容脚本请求切换抽屉视图（chat / settings）：
+            // 外部指令「打开设置页」「返回对话」据此驱动，无需用户手动点齿轮。
+            view.value = d.view === 'settings' ? 'settings' : 'chat';
           } else if (d.type === 'ai-debug-select-cancelled') {
             // 页面按 Esc 退出选择模式：同步抽屉按钮状态，避免按钮停留在「退出选择」
             selecting.value = false;
