@@ -57,6 +57,8 @@ BUILTIN = {
     # —— 内容采集 ——
     "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"], "group": "内容采集"},
     "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": ["/m"], "group": "内容采集"},
+    # —— 工作记忆 ——
+    "/memory": {"desc": "读取最新工作记忆文件并发送", "aliases": ["/mem"], "group": "工作记忆"},
     # —— 帮助 ——
     "/help": {"desc": "显示指令列表", "aliases": ["/h"], "group": "帮助"},
 }

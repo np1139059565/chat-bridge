@@ -291,6 +291,33 @@ def _h_help(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, help_text(), markdown=True)
 
 
+def _h_memory(qq_client, openid, arg, msg_id):
+    """读取 memory 目录下最新的工作记忆文件，把内容发送到 QQ，供用户检查。
+
+    记忆文件按文件名（日期）排序取最新一份；内容过长时截断，
+    避免超过 QQ 单条消息长度上限导致整条发送失败。
+    """
+    import paths
+    mem_dir = paths.MEMORY_DIR
+    if not mem_dir.is_dir():
+        _reply(qq_client, openid, "未找到记忆目录：" + str(mem_dir))
+        return
+    files = sorted(mem_dir.glob("*.md"))
+    if not files:
+        _reply(qq_client, openid, "记忆目录下暂无文件")
+        return
+    latest = files[-1]
+    try:
+        text = latest.read_text(encoding="utf-8")
+    except Exception as e:
+        _reply(qq_client, openid, "读取记忆文件失败：%s" % e)
+        return
+    # 过长截断：QQ 单条文本有长度限制，截断并提示，保证能送达
+    if len(text) > 3000:
+        text = text[:3000] + "\n…（已截断，完整内容见 " + latest.name + "）"
+    _reply(qq_client, openid, "【" + latest.name + "】\n" + text, markdown=True)
+
+
 # 内置指令分发表：主命令名 → 处理函数。
 # 命令名与说明集中在 command_registry.BUILTIN，此处只登记执行入口，
 # 两张表的键必须一致（由 _check_handler_table 在导入时自检）。
@@ -316,6 +343,7 @@ _BUILTIN_HANDLERS = {
     "/copy-json": _h_copy_json,
     "/skip": _h_skip,
     "/help": _h_help,
+    "/memory": _h_memory,
 }
 
 

@@ -229,7 +229,7 @@
     log('本轮处理完成：消息=' + incoming.length
       + '，可见=' + conv.visibleKeys.length
       + '，分支=' + conv.branchKeys.length
-      + '，自动候选=' + autoCandidates.length);
+      + '，自动候选=' + collected.autoCandidates.length);
     if (this._persist) this._persist();
     // 上报给远程桥接层：仅 generate 来源（AI 刚说完新话）。
     // 走 WithMd 版本：先点复制按钮取带格式的 Markdown，再上报，
