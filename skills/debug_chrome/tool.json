@@ -1,6 +1,6 @@
 {
   "provider": "debug_chrome",
-  "prompt": "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。",
+  "prompt": "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。",
   "tools": [
     {
       "name": "get_element_style",

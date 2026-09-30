@@ -89,7 +89,7 @@ POST 请求体示例：
   "sections": [ { "skill": "debug_chrome", "text": "..." } ],
   "skills": [ { "name": "debug_chrome", "summary": "...", "tools": ["get_element_style"] } ],
   "skillsManage": [ { "name": "debug_chrome", "summary": "...", "tools": [ ... ],
-                       "tool_count": 3, "enabled_count": 2, "doc_file": "SKILL.md" } ]
+                       "tool_count": 6, "enabled_count": 2, "doc_file": "SKILL.md" } ]
 }
 ```
 

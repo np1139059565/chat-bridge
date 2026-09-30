@@ -23,7 +23,7 @@ python server.py
 
 ### 调试扩展
 
-1. 先在镜像插件设置页安装并上线 `skills/debug_chrome` 的三个工具。
+1. 先在镜像插件设置页安装并上线 `skills/debug_chrome` 的工具（元素样式、截图、console / network 记录、执行 JS、消息推送）。
 2. 「加载已解压的扩展程序」→ 选择 `skills/debug_chrome/extension/`。
 
 ### 冒烟测试
