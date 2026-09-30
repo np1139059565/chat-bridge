@@ -122,6 +122,48 @@
 
 **改动文件**：content/05_tool-handlers.js、flask_server/custom_tools.yaml
 
+### 阶段 7：配置分离与截图推送 QQ（task 6）
+
+- [x] 配置密钥分离：remote_bridge.yaml 只留 QQ 凭证（gitignore），
+      非密钥配置（指令、开关）拆到 remote_bridge_settings.yaml（入库），
+      bridge_store.py 自动迁移旧文件。解决「换机器丢自定义指令」。
+- [x] 工具结果推送 QQ：前端上报时带上卡片结果（extractCardResults，
+      截图 base64 用 slimCardResult 剥掉、只留本地路径），后端按
+      「消息id#卡片id」独立去重推送——正文与结果各自去重，避免结果被
+      「消息已推过」挡掉。截图发图（push_image），其余按 Markdown 文本
+      （push_text markdown=True，与 AI 回复同通道）。卡片执行完以 'tool'
+      来源触发一次上报（此前不触发，导致结果永不进上报数据）。
+- [x] 文档：development-guide.md 新增 3.6（网络请求走后台）、3.7（配置密钥分离）。
+
+**改动文件**：remote_bridge/bridge_store.py、remote_bridge/message_router.py、
+routes/tools.py、.gitignore、docs/development-guide.md
+
+### 阶段 8：自测与工具结果推送（task 7）
+
+- [x] 工具结果推送 QQ：修正理解——文本结果经「回传网页 AI → 成为一条消息 →
+      镜像抓取」本就能到 QQ，无需另推（原通用推送会导致重复）。真正缺的是截图：
+      它经 auto_send_image 贴进输入框后，镜像只抓文本块、抓不到图片。
+      故 extractCardResults 只提取「含本地图片路径」的截图结果，其余不碰。
+- [x] 工具结果按 Markdown 推送：新增 _tool_result_of 识别 bridge-chat-res 消息，
+      按 json 代码块发送（此前是纯文本，QQ 端不渲染）。
+- [x] 卡片执行后以 'tool' 来源触发上报（此前不触发，结果不进上报数据）。
+- [x] 正文与卡片结果各自去重（消息id / 消息id#卡片id），避免结果被「已推过」挡掉。
+- [x] debug_chrome 抽屉展示：结果文字剥掉截图 base64，改在下方渲染图片。
+
+**自测结果**：
+- 连接状态：✅
+- push_message：✅
+- exec_js：✅
+- get_console_logs：✅
+- get_element_style：✅
+- get_page_snapshot：✅（存盘正常，抽屉显示图片）
+
+**待用户确认**：QQ 端是否收到工具结果（Markdown 格式）与截图（图片）。
+
+**改动文件**：extend/dialog/parts/01b_bridge.js、06_execute.js、
+flask_server/remote_bridge/message_router.py、
+skills/debug_chrome/extension/drawer/03_ui-chat.js
+
 ## 已知遗留（未处理，供后续决定）
 
 - `skills/debug_chrome/extension/content/05_tool-handlers.js` 的 `A.downscaleImage`

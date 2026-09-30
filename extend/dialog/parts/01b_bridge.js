@@ -12,6 +12,46 @@
   const M = D.methods;
 
   /**
+   * 提取卡片结果里的本地图片路径；没有则返回空串。
+   * 截图结果结构：{ data: { screenshot: '...', saved: { name, path } } }
+   * @param {Object} result 卡片结果
+   * @returns {string} 本地路径
+   */
+  function cardImagePath(result) {
+    if (!result || typeof result !== 'object') return '';
+    const d = result.data;
+    if (!d || typeof d !== 'object') return '';
+    const saved = d.saved;
+    if (!saved || typeof saved !== 'object') return '';
+    return saved.path || '';
+  }
+
+  /**
+   * 提取一条消息上「需要额外推送 QQ」的卡片结果。
+   *
+   * 为什么只提截图：文本结果经「回传网页 AI → 成为一条消息 → 镜像抓取」
+   * 本来就能到 QQ，若在此再推一次会重复。而截图经 auto_send_image 贴进
+   * 输入框后，镜像只抓文本块、抓不到图片，必须由这里额外推。
+   * @param {Object} node 消息树节点
+   * @returns {Array} 待推结果 [{id, tool, status, path}]
+   */
+  function extractCardResults(node) {
+    const cards = (node && node.cards) || {};
+    const out = [];
+    Object.keys(cards).forEach((k) => {
+      const c = cards[k];
+      if (!c || !c.isTool) return;
+      // 只推已出结果的卡片；pending / running 尚无结果
+      if (c.status !== 'done' && c.status !== 'error') return;
+      // 只挑出含本地图片路径的结果
+      const path = cardImagePath(c.result);
+      if (!path) return;
+      out.push({ id: c.id || k, tool: c.tool || '', status: c.status, path: path });
+    });
+    return out;
+  }
+
+  /**
    * 加载远程桥接配置与状态。
    * 凭证（AppID / AppSecret）从后端读回，供设置页回填。
    */
@@ -118,13 +158,14 @@
    * 抽屉在这里只是「小喇叭」：把看见的消息喊给桥接层，
    * 分类、去重、往 QQ 推全由桥接层完成。抽屉不用懂 QQ。
    *
-   * 只推 generate 来源：那是「AI 刚说完新话」的时刻；
-   * scroll / switch / manual 都是用户回看历史或切上下文，不该推。
+   * 推送来源：
+   *  - generate：AI 刚说完新话，必推；
+   *  - tool：工具卡片刚出结果，也要推——否则 QQ 端只看得到工具调用、看不到结果；
+   *  - scroll / switch / manual：用户回看历史或切上下文，不推（推了会刷屏）。
    * @param {string} [reason] 触发来源
    */
   M.reportToBridge = function (reason) {
-    // 只推 generate：其余来源是回看 / 切换，推了会刷屏
-    if (reason !== 'generate') return;
+    if (reason !== 'generate' && reason !== 'tool') return;
     // 面板未打开时不推：关闭抽屉就代表用户此刻不需要远程工作
     if (!this.panelVisible) return;
     const conv = this.curConv || {};
@@ -136,7 +177,12 @@
       const id = window.AIMirrorDomUtils.messageFingerprint(node);
       // md：AI 回复的 Markdown 原文（由复制按钮采集而来）。
       // 推送时后端优先用它，保格式；没有则退回 blocks 拼的纯文本。
-      messages.push({ id: id, role: node.role, blocks: node.blocks || [], md: node.md || '' });
+      // cardResults：该消息上工具卡片的执行结果。工具调用块只表达「调了什么」，
+      // 结果存在节点的 cards 里，不上报的话 QQ 端只看得到调用、看不到结果。
+      messages.push({
+        id: id, role: node.role, blocks: node.blocks || [], md: node.md || '',
+        cardResults: extractCardResults(node)
+      });
     });
     if (!messages.length) return;
     // 静默上报：失败不打扰用户，桥接层没开时后端直接返回 0

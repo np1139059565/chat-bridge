@@ -7,6 +7,34 @@
   //            selectedElements, clearHistory, close, toggleSelect,
   //            clearElements, removeElement, send, view
   D.createChatRenderer = function (ctx) {
+    /**
+     * 从工具结果里提取截图 dataURL；没有则返回空串。
+     * 截图结果结构：{ success, data: { screenshot: 'data:image/...' } }
+     * @param {Object} result 工具结果
+     * @returns {string} 截图 dataURL
+     */
+    function extractScreenshot(result) {
+      if (!result || !result.data || typeof result.data !== 'object') return '';
+      const shot = result.data.screenshot;
+      return (typeof shot === 'string' && shot.indexOf('data:image/') === 0) ? shot : '';
+    }
+
+    /**
+     * 生成结果的展示文本：剥掉截图 base64。
+     *
+     * 截图结果里那串 base64 动辄数百 KB，直接 JSON.stringify 会糊满界面、
+     * 人也读不了。这里把它剔除，改由渲染层用图片展示。
+     * @param {Object} result 工具结果
+     * @returns {string} 精简后的 JSON 文本
+     */
+    function resultText(result) {
+      if (!result || typeof result !== 'object') return JSON.stringify(result, null, 2);
+      if (!extractScreenshot(result)) return JSON.stringify(result, null, 2);
+      const copy = Object.assign({}, result, { data: Object.assign({}, result.data) });
+      copy.data.screenshot = '（图片见下方）';
+      return JSON.stringify(copy, null, 2);
+    }
+
     // 工具调用卡片：展示工具名、参数、状态与结果，与 chat-bridge 的工具卡片同构
     function renderToolCard(card) {
       const kids = [
@@ -16,7 +44,18 @@
         ]),
         h('pre', { class: 'params-json' }, JSON.stringify(card.params || {}, null, 2)),
       ];
-      if (card.result) kids.push(h('pre', { class: 'result' }, JSON.stringify(card.result, null, 2)));
+      if (card.result) {
+        kids.push(h('pre', { class: 'result' }, resultText(card.result)));
+        const shot = extractScreenshot(card.result);
+        if (shot) {
+          kids.push(h('img', {
+            class: 'result-shot',
+            src: shot,
+            alt: '截图',
+            style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
+          }));
+        }
+      }
       return h('div', { class: 'tool-card', key: 'tc-' + card.id }, kids);
     }
 

@@ -18,9 +18,18 @@ from pathlib import Path
 
 import runtime
 
-# 桥接配置文件与去重记录文件都放在服务目录下
-BRIDGE_CONFIG_PATH = runtime.APP_DIR / "remote_bridge.yaml"
+# 路径说明（按「是否含密钥」分离，决定谁能入库）：
+#   remote_bridge.yaml          —— 仅存 QQ 凭证（app_id / app_secret），含密钥，不入库
+#   remote_bridge_settings.yaml —— 存开关、指令等非密钥配置，入库，换机器不丢
+#   remote_bridge_state.json    —— 已推送去重记账，运行时产物，不入库
+BRIDGE_SECRETS_PATH = runtime.APP_DIR / "remote_bridge.yaml"
+BRIDGE_SETTINGS_PATH = runtime.APP_DIR / "remote_bridge_settings.yaml"
 BRIDGE_STATE_PATH = runtime.APP_DIR / "remote_bridge_state.json"
+
+# 密钥字段：只写 secrets 文件
+SECRET_KEYS = ("app_id", "app_secret")
+# 非密钥标量字段：只写 settings 文件
+SETTING_SCALAR_KEYS = ("enabled", "intents", "md_selector")
 
 # 用可重入锁：save_config 持锁期间会调用 get_config()，
 # 后者在未初始化时会进入 load_config() 再取同一把锁。
@@ -50,29 +59,63 @@ def _default_config():
     }
 
 
-def _read_yaml():
-    """读取 remote_bridge.yaml；文件不存在或解析失败返回空字典。"""
-    if not BRIDGE_CONFIG_PATH.exists():
+def _read_yaml(path):
+    """读取一个 YAML 文件；不存在或解析失败返回空字典。"""
+    if not path.exists():
         return {}
     try:
         import yaml
-        text = BRIDGE_CONFIG_PATH.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
         return yaml.safe_load(text) or {}
     except Exception as e:
-        print("[bridge] 读取 remote_bridge.yaml 失败：", e)
+        print("[bridge] 读取 %s 失败：%s" % (path.name, e))
         return {}
 
 
-def _write_yaml(cfg):
-    """写回 remote_bridge.yaml；成功返回 True。"""
+def _write_yaml(path, data):
+    """写入一个 YAML 文件；成功返回 True。"""
     try:
         import yaml
-        with open(BRIDGE_CONFIG_PATH, "w", encoding="utf-8") as f:
-            yaml.safe_dump(cfg, f, allow_unicode=True, sort_keys=False)
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
         return True
     except Exception as e:
-        print("[bridge] 写回 remote_bridge.yaml 失败：", e)
+        print("[bridge] 写入 %s 失败：%s" % (path.name, e))
         return False
+
+
+def _read_merged():
+    """读取密钥文件与设置文件并合并为一个配置字典。
+
+    迁移逻辑：旧版本把凭证与指令混存在 remote_bridge.yaml 一个文件里。
+    若发现该文件含非密钥字段（如 commands），把它们搬到设置文件，
+    使换机器时指令不再随密钥一起被排除。
+    """
+    secrets = _read_yaml(BRIDGE_SECRETS_PATH)
+    settings = _read_yaml(BRIDGE_SETTINGS_PATH)
+    migrated = False
+    for k in list(secrets.keys()):
+        if k in SECRET_KEYS:
+            continue
+        if k not in settings:
+            settings[k] = secrets[k]
+        secrets.pop(k, None)
+        migrated = True
+    merged = dict(secrets)
+    merged.update(settings)
+    if migrated:
+        _write_yaml(BRIDGE_SECRETS_PATH, {k: v for k, v in merged.items() if k in SECRET_KEYS})
+        _write_yaml(BRIDGE_SETTINGS_PATH, {k: v for k, v in merged.items() if k not in SECRET_KEYS})
+    return merged
+
+
+def _write_split(cfg):
+    """把配置按「密钥 / 非密钥」分写到两个文件。"""
+    secrets = {k: cfg.get(k, "") for k in SECRET_KEYS}
+    settings = {k: v for k, v in cfg.items() if k not in SECRET_KEYS}
+    ok1 = _write_yaml(BRIDGE_SECRETS_PATH, secrets)
+    ok2 = _write_yaml(BRIDGE_SETTINGS_PATH, settings)
+    return bool(ok1 and ok2)
 
 
 # 内存中的配置缓存：避免每次读盘
@@ -83,7 +126,7 @@ def load_config():
     """读取桥接配置并与默认值合并；结果缓存到内存。"""
     global _CONFIG
     with _lock:
-        raw = _read_yaml()
+        raw = _read_merged()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
         for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
@@ -129,7 +172,8 @@ def save_config(patch):
             cfg["push"].update(patch["push"])
         if isinstance(patch.get("commands"), list):
             cfg["commands"] = patch["commands"]
-        _write_yaml(cfg)
+        # 分写：密钥进密钥文件（不入库），其余进设置文件（入库）
+        _write_split(cfg)
         _CONFIG = cfg
         return cfg
 
@@ -194,7 +238,7 @@ def upsert_command(index, entry):
         else:
             raise IndexError("指令下标越界")
         cfg["commands"] = cmds
-        _write_yaml(cfg)
+        _write_split(cfg)
         _CONFIG = cfg
         return list(cmds)
 
@@ -208,7 +252,7 @@ def remove_command(index):
             raise IndexError("指令下标越界")
         cmds.pop(index)
         cfg["commands"] = cmds
-        _write_yaml(cfg)
+        _write_split(cfg)
         _CONFIG = cfg
         return list(cmds)
 

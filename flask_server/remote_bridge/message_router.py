@@ -115,6 +115,22 @@ def _has_qq_source(m):
     return bool(obj and obj.get("source") == "qq")
 
 
+def _tool_result_of(m):
+    """判断一条消息是否为工具结果回传（bridge-chat-res）。
+
+    工具结果经「回传网页 AI → 成为一条消息 → 镜像抓取」到达这里。
+    它是 JSON 文本，不加处理会以纯文本推送、代码块不渲染，
+    故此处识别出来，交由推送环节按 Markdown 代码块发送。
+    @param m 消息对象
+    @returns 解析出的结果对象；不是工具结果返回 None
+    """
+    for b in (m.get("blocks") or []):
+        obj = _load_json_block(b)
+        if obj and obj.get("type") == "bridge-chat-res":
+            return obj
+    return None
+
+
 def _classify(m):
     """给一条消息定类：user / tool / ai。
 
@@ -227,6 +243,15 @@ def _remember_window(openid, msg_id):
         }
 
 
+def get_last_openid():
+    """取最近发来消息的 openid。
+
+    抽屉上报工具结果时并不知道 openid（那是 QQ 侧的概念），
+    需要推 QQ 图片时用它作推送目标的回退。
+    """
+    return _last_openid
+
+
 def get_window(openid):
     """取某用户当前的窗口信息；无或已过期返回 None。"""
     with _lock:
@@ -277,15 +302,26 @@ def push_text(qq_client, openid, text, markdown=False):
     return ok
 
 
-def _unpushed_messages(messages, pushed):
-    """从上报的全量消息里筛出尚未推送过的（有 id 且不在已推送集合中）。"""
-    out = []
-    for m in messages:
-        mid = m.get("id") or ""
-        if not mid or mid in pushed:
-            continue
-        out.append(m)
-    return out
+def push_image(qq_client, openid, path):
+    """把一张本地图片推送到 QQ（与 /sp 指令同路）。
+
+    使用当前被动回复窗口；窗口关闭时静默跳过（等用户下次发消息再唤醒），
+    与文本推送的策略保持一致。
+    @param qq_client QQClient 实例
+    @param openid 目标用户
+    @param path 本地图片绝对路径
+    @returns 是否发送成功
+    """
+    if not qq_client or not openid or not path:
+        return False
+    msg_id, seq = next_seq(openid)
+    if not msg_id:
+        print("[bridge][router] 窗口已关闭，暂不推送图片")
+        return False
+    ok, data = qq_client.send_c2c_image(openid, path, msg_id=msg_id, msg_seq=seq)
+    if not ok:
+        print("[bridge][router] 推送图片失败：", data)
+    return ok
 
 
 def _should_push(m, push):
@@ -305,12 +341,22 @@ def _push_one(qq_client, openid, m, push):
     # 节点上的 md 字段是 /md 采集来的 Markdown 原文，有它说明这条回复带格式。
     # 有 md → 走 Markdown 通道（msg_type=2），QQ 端才会渲染标题、加粗等语法；
     # 没有（未采集 / 非 AI 消息 / 采集失败）→ 退回 blocks 拼的纯文本，走文本通道。
+    kind = _classify(m)
+    # 工具结果消息（bridge-chat-res）：正文是一段 JSON，
+    # 包进代码块并按 Markdown 发送，QQ 端才会渲染成等宽格式。
+    # 直接用解析出的对象反序列化，不经 _blocks_to_text：
+    # 后者对代码块会自行加围栏，再包一层会形成嵌套围栏、Markdown 渲染破损。
+    tr = _tool_result_of(m)
+    if tr is not None:
+        import json
+        text = json.dumps(tr, ensure_ascii=False, indent=2)
+        body = "%s\n```json\n%s\n```" % (PREFIX.get(kind, kind), text)
+        return push_text(qq_client, openid, body, markdown=True)
     raw_md = str(m.get("md") or "").strip()
     is_markdown = bool(raw_md)
     text = raw_md or _blocks_to_text(m, push.get("thinking", False))
     if not text:
         return False
-    kind = _classify(m)
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
@@ -322,9 +368,25 @@ def _resolve_openid(payload):
     return payload.get("openid") or _last_openid or ""
 
 
-def _message_ids(messages):
-    """取消息列表里全部有 id 的项，用于标记已推送。"""
-    return [m.get("id") for m in messages if m.get("id")]
+def _push_card_result(qq_client, openid, card, push):
+    """推送一条工具卡片结果到 QQ。
+
+    只处理截图类结果（发图片，与 /sp 同路）。文本结果不在此推送：
+    它经「回传网页 AI → 成为一条消息 → 镜像抓取」本来就能到 QQ，
+    在此再推会重复。
+    受 tool 推送开关控制，与正文消息一致。
+    @param qq_client QQClient 实例
+    @param openid 目标用户
+    @param card 卡片结果 {id, tool, status, path}
+    @param push 推送开关字典
+    @returns 是否发送成功
+    """
+    if not push.get("tool", True):
+        return False
+    img_path = card.get("path") or ""
+    if not img_path:
+        return False
+    return push_image(qq_client, openid, img_path)
 
 
 def handle_report(qq_client, payload):
@@ -343,9 +405,31 @@ def handle_report(qq_client, payload):
         return 0
 
     push = bridge_store.get_config().get("push") or {}
-    newly = _unpushed_messages(messages, bridge_store.get_pushed_set(conv_id))
-    sent = sum(1 for m in newly if _push_one(qq_client, openid, m, push))
+    pushed = bridge_store.get_pushed_set(conv_id)
+    sent = 0
+    seen_keys = []
 
-    # 无论是否推送成功，都把本轮全部消息 id 记为已见，避免重复处理
-    bridge_store.mark_pushed(conv_id, _message_ids(messages))
+    for m in messages:
+        mid = m.get("id") or ""
+        # 1) 正文推送：按消息 id 去重。
+        #    工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
+        #    否则「消息已推过」会把后来的结果一并挡掉。
+        if mid and mid not in pushed:
+            if _push_one(qq_client, openid, m, push):
+                sent += 1
+            seen_keys.append(mid)
+        # 2) 卡片结果推送：按「消息id#卡片id」去重，与正文互不影响。
+        for card in (m.get("cardResults") or []):
+            cid = card.get("id") or ""
+            if not cid:
+                continue
+            ckey = (mid + "#" + cid) if mid else cid
+            if ckey in pushed or ckey in seen_keys:
+                continue
+            if _push_card_result(qq_client, openid, card, push):
+                sent += 1
+            seen_keys.append(ckey)
+
+    # 只登记本轮新处理的 key；已推过的本就在集合里，无需重复写
+    bridge_store.mark_pushed(conv_id, seen_keys)
     return sent

@@ -116,6 +116,9 @@
     // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
     card.executed = true;
     if (this._persist) this._persist();
+    // 上报一次：工具结果此时才产生，不上报的话 QQ 端只看得到工具调用、
+    // 看不到结果。以 'tool' 来源上报，后端据此放行（不按普通回看丢弃）。
+    if (this.reportToBridge) this.reportToBridge('tool');
     // 自动回传仅在「自动流程」触发时进行：用户手动点击执行 / 重新执行时，
     // 只执行、不回传，避免误把结果写回网页 AI 并触发发送。
     // noReply：调用方声明不需要结果回传，执行完即结束，不再唤醒网页 AI。

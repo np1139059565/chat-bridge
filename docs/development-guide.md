@@ -87,6 +87,56 @@ python flask_server/_smoke_ct.py
 
 技能数据来自后端 `/prompt_sections`（同时返回 `sections` 与 `skills`）。
 
+### 3.6 扩展的网络请求：一律走后台代发
+
+**约定**：Chrome 扩展的内容脚本（content script）**只做 DOM 操作，不直接发网络请求**；
+所有后端请求统一交给 service worker 代发。
+
+**为什么**：内容脚本运行在页面源下。Chrome 的 Private Network Access 会拦截
+「公网页面 → 本机回环地址（127.0.0.1）」的请求：
+
+```
+Access ... blocked by CORS policy: Permission was denied for this request
+  to access the `loopback` address space.
+```
+
+表现为扩展「一直显示未连接」。service worker 是扩展源，不受此限制。
+
+**做法**（debug_chrome 扩展）：
+- 内容脚本调用 `A.proxyFetch(url, {method, body, timeoutMs})`（定义在 `content/01_config.js`），
+  它经 `chrome.runtime.sendMessage({type:'proxy-fetch'})` 转给 service worker。
+- service worker 里 `proxy-fetch` 分支代发请求并回传结果。
+- **不要**在内容脚本里直接写 `fetch(...)`。新增请求时改走 `proxyFetch`。
+
+**抽屉 iframe 例外**：抽屉挂在 `chrome-extension://` 源下，不受此限制，可直接 fetch。
+chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
+
+**内容脚本里的消息收发注意**：用 `chrome.runtime.sendMessage(msg, callback)` 接收后台的
+`sendResponse`——响应只进这个回调，**不会**作为独立消息触发 `chrome.runtime.onMessage`。
+早先截图超时就是踩了这个坑。
+
+### 3.7 配置文件的密钥分离
+
+**约定**：含密钥的配置与不含密钥的配置**必须分文件存放**，前者 gitignore，后者入库。
+
+**为什么**：远程桥接曾把 QQ 凭证（`app_id`/`app_secret`）与自定义指令（`commands`）
+混在 `remote_bridge.yaml` 一个文件里，而该文件因含密钥被 gitignore 排除——
+结果换机器时指令跟着凭证一起丢失。
+
+**现状**（`flask_server/` 下）：
+
+| 文件 | 内容 | 是否入库 |
+|---|---|---|
+| `remote_bridge.yaml` | 仅 QQ 凭证 | 否（gitignore） |
+| `remote_bridge_settings.yaml` | 开关、指令、选择器等 | 是 |
+| `remote_bridge_state.json` | 已推送去重记账 | 否（运行时产物） |
+
+`bridge_store.py` 的 `_read_merged()` 负责合并读取，并在读到旧格式
+（密钥文件里混有非密钥字段）时**自动迁移**：把非密钥字段搬到设置文件。
+
+**新增配置项时**：先判断它含不含密钥，决定写入哪个文件。
+`SECRET_KEYS` 列出只进密钥文件的字段。
+
 ---
 
 ## 四、常见任务
