@@ -14,21 +14,18 @@ import os
 import re
 from pathlib import Path
 
-# 本文件位于 flask_server/custom_tools/ 下：
-#   parent            = flask_server/custom_tools
-#   parent.parent     = flask_server
-#   parent.parent.parent = 工程根
-APP_DIR = Path(__file__).resolve().parent.parent
-# 工程根目录：skill_dir 与 script 在项目内时以相对该目录的路径存储，
-# 工程迁移/重命名后仍可正常解析；项目外的路径保留绝对形式。
-PROJECT_ROOT = APP_DIR.parent
+import paths
+
+# 服务目录与工程根统一由 paths 提供
+APP_DIR = paths.APP_DIR
+PROJECT_ROOT = paths.PROJECT_ROOT
 
 # custom_tools.yaml 的绝对路径（本机持久化，不存浏览器）。
-# 默认落在服务目录下；测试场景可用环境变量 CHAT_BRIDGE_CUSTOM_TOOLS_YAML
+# 默认落在 config/ 下；测试场景可用环境变量 CHAT_BRIDGE_CUSTOM_TOOLS_YAML
 # 覆盖到临时文件，使测试只操作临时数据、不触碰真实配置。
 _CT_PATH_ENV = "CHAT_BRIDGE_CUSTOM_TOOLS_YAML"
 _ct_override = os.environ.get(_CT_PATH_ENV)
-CT_PATH = Path(_ct_override).resolve() if _ct_override else APP_DIR / "custom_tools.yaml"
+CT_PATH = Path(_ct_override).resolve() if _ct_override else paths.CUSTOM_TOOLS_PATH
 
 # 工具名 / 参数名：仅允许字母、数字、下划线
 NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")

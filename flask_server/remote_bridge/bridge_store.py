@@ -16,15 +16,16 @@ import json
 import threading
 from pathlib import Path
 
+import paths
 import runtime
 
 # 路径说明（按「是否含密钥」分离，决定谁能入库）：
 #   remote_bridge.yaml          —— 仅存 QQ 凭证（app_id / app_secret），含密钥，不入库
 #   remote_bridge_settings.yaml —— 存开关、指令等非密钥配置，入库，换机器不丢
 #   remote_bridge_state.json    —— 已推送去重记账，运行时产物，不入库
-BRIDGE_SECRETS_PATH = runtime.APP_DIR / "remote_bridge.yaml"
-BRIDGE_SETTINGS_PATH = runtime.APP_DIR / "remote_bridge_settings.yaml"
-BRIDGE_STATE_PATH = runtime.APP_DIR / "remote_bridge_state.json"
+BRIDGE_SECRETS_PATH = paths.BRIDGE_SECRETS_PATH
+BRIDGE_SETTINGS_PATH = paths.BRIDGE_SETTINGS_PATH
+BRIDGE_STATE_PATH = paths.BRIDGE_STATE_PATH
 
 # 密钥字段：只写 secrets 文件
 SECRET_KEYS = ("app_id", "app_secret")

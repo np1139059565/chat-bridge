@@ -21,8 +21,9 @@ graphify-out/
 .env
 *.local.yaml
 # 远程桥接：仅含 QQ 凭证的文件不入库；非密钥配置（指令、开关）单独成文件，入库
-flask_server/remote_bridge.yaml
-flask_server/remote_bridge.yaml.bak
+flask_server/config/remote_bridge.yaml
+flask_server/config/remote_bridge.yaml.bak
+# 过渡：旧版本服务会在服务根写该文件，重启后即消失
 flask_server/remote_bridge_state.json
-# 截屏产物（运行时生成）
-flask_server/screenshots/
+# 运行时数据产物（截屏、去重记账等）
+flask_server/data/

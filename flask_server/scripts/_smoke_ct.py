@@ -10,12 +10,20 @@
 隔离策略：本脚本先建一个临时工作目录，并通过环境变量
 CHAT_BRIDGE_CUSTOM_TOOLS_YAML 把 custom_tools 的落盘路径指向该目录下的
 tools.yaml，随后才导入 custom_tools。因此测试全程只读写临时文件，
-不会触碰 flask_server/custom_tools.yaml，结束后整个临时目录被删除。
+不会触碰 flask_server/config/custom_tools.yaml，结束后整个临时目录被删除。
 """
 import os
+import sys
 import tempfile
 import json
 import shutil
+
+# 把服务根目录（flask_server/）加入模块搜索路径：
+# 本脚本位于 flask_server/scripts/ 下，直接运行时其上一级不在 sys.path 中，
+# 需手动补上，才能 import custom_tools。
+_SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _SERVER_DIR not in sys.path:
+    sys.path.insert(0, _SERVER_DIR)
 
 # 临时工作目录：存放测试用的 skill 与 custom_tools 落盘文件
 root = tempfile.mkdtemp(prefix="skill_smoke_")

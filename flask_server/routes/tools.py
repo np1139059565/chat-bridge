@@ -130,7 +130,7 @@ def _call_external(name, ctool, params, page_url="", host_page_url=""):
             "请求已排队但执行方未在时限内取走。请确认调试扩展已打开并停留在目标页面。")
     # 截图类结果：把 dataURL 原图保存到本地，并把落盘信息附回结果。
     # 保存放后端做（内容脚本无文件系统权限），路径与 QQ「/sp」指令一致，
-    # 均为 flask_server/screenshots/，便于用户统一查找。
+    # 均为 flask_server/data/screenshots/，便于用户统一查找。
     if isinstance(data, dict) and data.get("data") and isinstance(data["data"], dict):
         shot = data["data"].get("screenshot")
         if isinstance(shot, str) and shot.startswith("data:image/"):

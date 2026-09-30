@@ -6,18 +6,19 @@
 两份逻辑相同、命名与格式却不同（PNG vs JPEG、有无毫秒），
 同一目录下混着两种文件，难以分辨。此模块统一为一处实现，两处调用它。
 
-存放目录：flask_server/screenshots/
+存放目录：flask_server/data/screenshots/
 文件名：shot_年月日_时分秒_毫秒.扩展名
 """
 import base64
 import os
 import time
 
+import paths
+
 
 def _screenshots_dir():
-    """返回截图目录的绝对路径（flask_server/screenshots/）。"""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, "screenshots")
+    """返回截图目录的绝对路径（flask_server/data/screenshots/）。"""
+    return str(paths.SCREENSHOTS_DIR)
 
 
 def save_data_url(data_url):

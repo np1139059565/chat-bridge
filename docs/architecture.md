@@ -150,7 +150,7 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 ## 五、关键约定
 
-- **配置唯一来源**：`flask_server/config.yaml`，插件不持久化配置到浏览器（除面板挂靠侧、会话存档）。
+- **配置唯一来源**：`flask_server/config/config.yaml`，插件不持久化配置到浏览器（除面板挂靠侧、会话存档）。
 - **参数查询先行**：AI 调用工具前应先 `get_tool_params` 核对参数名（不同工具参数名不统一）。
 - **路径约定**：文件类工具口径统一——绝对路径原样使用，相对路径以工程根为基准解析；skill 文档统一用 `list_skills` / `read_skill`（`skill` + skill 内相对 `file`）读取。
 - **单次一个工具块**：AI 每次回复只输出一个 JSON 代码块。

@@ -29,7 +29,7 @@ python server.py
 ### 冒烟测试
 
 ```bash
-python flask_server/_smoke_ct.py
+python flask_server/scripts/_smoke_ct.py
 ```
 
 ---
@@ -38,11 +38,12 @@ python flask_server/_smoke_ct.py
 
 | 要改什么 | 去哪里 |
 |---|---|
-| 新增/修改内置工具 | `flask_server/tools_impl.py`（改完需重启服务）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
-| 工具上线开关、端口、体积上限 | `flask_server/config.yaml` 或 `POST /config` |
-| 卡片总线行为 | `flask_server/card_bus.py` + `routes/cards.py` |
-| 外部工具转发 | `flask_server/external_tools.py` + `routes/ext.py` |
+| 新增/修改内置工具 | `flask_server/tools/tools_impl.py`（改完需重启服务）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
+| 工具上线开关、端口、体积上限 | `flask_server/config/config.yaml` 或 `POST /config` |
+| 卡片总线行为 | `flask_server/core/card_bus.py` + `routes/cards.py` |
+| 外部工具转发 | `flask_server/core/external_tools.py` + `routes/ext.py` |
 | 运行期全局状态（工具表 / 配置） | `flask_server/runtime.py` |
+| 路径基准 | `flask_server/paths.py`（唯一来源，文件搬迁时只改这里） |
 | 网页对话抓取、站点规则 | `extend/content/00_state.js`（PROFILES 表）+ `extend/content/02_blocks.js` |
 | 抽屉 UI、卡片渲染 | `extend/dialog/parts/`（Vue 渲染函数）+ `extend/dialog/styles/` |
 | 调试扩展行为 | `skills/debug_chrome/extension/**` |
@@ -123,19 +124,40 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 混在 `remote_bridge.yaml` 一个文件里，而该文件因含密钥被 gitignore 排除——
 结果换机器时指令跟着凭证一起丢失。
 
-**现状**（`flask_server/` 下）：
+**现状**（`flask_server/config/` 与 `flask_server/data/` 下）：
 
 | 文件 | 内容 | 是否入库 |
 |---|---|---|
-| `remote_bridge.yaml` | 仅 QQ 凭证 | 否（gitignore） |
-| `remote_bridge_settings.yaml` | 开关、指令、选择器等 | 是 |
-| `remote_bridge_state.json` | 已推送去重记账 | 否（运行时产物） |
+| `config/remote_bridge.yaml` | 仅 QQ 凭证 | 否（gitignore） |
+| `config/remote_bridge_settings.yaml` | 开关、指令、选择器等 | 是 |
+| `data/remote_bridge_state.json` | 已推送去重记账 | 否（运行时产物） |
 
 `bridge_store.py` 的 `_read_merged()` 负责合并读取，并在读到旧格式
 （密钥文件里混有非密钥字段）时**自动迁移**：把非密钥字段搬到设置文件。
 
 **新增配置项时**：先判断它含不含密钥，决定写入哪个文件。
 `SECRET_KEYS` 列出只进密钥文件的字段。
+
+### 3.8 路径基准
+
+**约定**：服务端所有目录与文件路径统一从 `flask_server/paths.py` 取，
+其它模块不要再用 `__file__` 自行推导路径。
+
+**为什么**：早先每个模块各自用 `__file__.parent` 算基准，一旦文件换目录，
+路径就会算错，且往往是「服务能起、配置找不到」这类不报错的隐性故障。
+集中到 `paths.py` 后，搬迁只需改这一处。
+
+**结构**：
+
+| 路径 | 位置 |
+|---|---|
+| `APP_DIR` / `PROJECT_ROOT` | 服务根 / 工程根 |
+| `core/`、`tools/` | 核心支撑与工具实现（导入时加入 `sys.path`） |
+| `config/` | 配置文件（纯数据） |
+| `data/` | 运行时数据产物（截图、去重记账） |
+
+`paths.py` 必须留在 `flask_server/` 根目录：它是所有路径的锚点，
+并由它把 `core/` 与 `tools/` 注册进模块搜索路径，使既有扁平导入继续可用。
 
 ---
 
@@ -186,7 +208,7 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 
 > 代码走查结论与待办清单见 `docs/code-review-report.md`。
 
-- `flask_server/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
+- `flask_server/scripts/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
 - `scripts/check_quality.py`：行数 / 圈复杂度 / 重复块质量扫描。
 
 ### pre-commit 钩子

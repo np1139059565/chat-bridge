@@ -12,9 +12,10 @@ import json
 import re
 from pathlib import Path
 
-APP_DIR = Path(__file__).resolve().parent
-# 规则目录放在项目根（chat-bridge-main/rules），与 skills/ 同级，便于查看与迁移
-RULES_DIR = APP_DIR.parent / "rules"
+import paths
+
+# 规则目录统一由 paths 提供（位于工程根，与 skills/ 同级）
+RULES_DIR = paths.RULES_DIR
 # 优先级元数据文件（放在规则目录内，_ 前缀不会被 *.md 扫描命中）
 META_PATH = RULES_DIR / "_meta.json"
 

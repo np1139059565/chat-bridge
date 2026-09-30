@@ -19,7 +19,7 @@
 
 ### 页面探查
 
-网页 AI 调用 `get_element_style` / `get_page_snapshot`，工具卡片执行后由本扩展在页面完成采集并回传。`get_page_snapshot` 截取可见区域，图片会存到 `flask_server/screenshots/`。
+网页 AI 调用 `get_element_style` / `get_page_snapshot`，工具卡片执行后由本扩展在页面完成采集并回传。`get_page_snapshot` 截取可见区域，图片会存到 `flask_server/data/screenshots/`。
 
 ### 故障分析
 

@@ -18,12 +18,15 @@ from pathlib import Path
 
 from flask import Flask
 
-# 当前文件所在目录（flask_server/）
+# 当前文件所在目录（flask_server/）：作为导入引导，先确保 paths 可被导入，
+# 再由 paths 统一推导其余路径并把 core/ tools/ 加入模块搜索路径。
 APP_DIR = Path(__file__).resolve().parent
-# 把服务目录加入模块搜索路径，保证 tools_impl / custom_tools 等可被导入
 if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
-APP_DIR_STR = str(APP_DIR)
+
+import paths
+
+APP_DIR_STR = paths.APP_DIR_STR
 
 # Flask 应用实例；路由模块通过蓝图注册到这里
 app = Flask(__name__)
@@ -33,7 +36,7 @@ impl = None
 
 
 # 配置唯一来源：本地 config.yaml（插件从后端读取，不存浏览器）
-CONFIG_PATH = APP_DIR / "config.yaml"
+CONFIG_PATH = paths.CONFIG_PATH
 CONFIG = {"flask": {"host": "127.0.0.1", "port": 5000},
           "limits": {"max_json_chars": 100000},
           "default_profile": "glm", "site_profiles": {}, "tools": {}}

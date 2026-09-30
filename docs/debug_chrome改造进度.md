@@ -12,7 +12,7 @@
 
 ## 已确认的决策
 
-- 截图存储目录：`flask_server/screenshots/`（保持不变，`/sp` 已用此目录）。
+- 截图存储目录：`flask_server/data/screenshots/`（保持不变，`/sp` 已用此目录）。
 - `get_page_snapshot`：整体重写，不再支持 `snapshot_type`。
 - 执行 JS：允许任意代码。
 - DevTools：新增 `devtools_page`，改动扩展结构，确认值得做。
@@ -38,7 +38,7 @@
       状态：已完成。去掉 dom 分支与 snapshot_type，只做截图。
 - [x] 更新 tool.json：get_page_snapshot 去掉 snapshot_type 参数
       状态：已完成。
-- [x] 截图存盘到 flask_server/screenshots/（对齐 /sp 命名）
+- [x] 截图存盘到 flask_server/data/screenshots/（对齐 /sp 命名）
       状态：已完成。tools.py 新增 _save_screenshot_data_url。
       改动文件：content/05_tool-handlers.js、tool.json、flask_server/routes/tools.py
 
@@ -115,12 +115,12 @@
 - get_network_logs：✅（返回真实请求记录）
 - get_element_style：✅（返回 body 样式与 DOM）
 - get_console_logs：✅（重载后验证，读到测试日志）
-- get_page_snapshot：✅（返回 base64 图片，且存盘到 flask_server/screenshots/，
+- get_page_snapshot：✅（返回 base64 图片，且存盘到 flask_server/data/screenshots/，
   文件名 shot_年月日_时分秒_毫秒.jpg）
 
 **全部工具实测通过。**
 
-**改动文件**：content/05_tool-handlers.js、flask_server/custom_tools.yaml
+**改动文件**：content/05_tool-handlers.js、flask_server/config/custom_tools.yaml
 
 ### 阶段 7：配置分离与截图推送 QQ（task 6）
 

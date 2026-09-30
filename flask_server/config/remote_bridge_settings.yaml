@@ -31,7 +31,7 @@ commands:
   - /rf
   - /rs
   interval: 5
-- name: /reall
+- name: /reai
   label: 重新生成
   selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
     [role="button"][aria-disabled="false"]

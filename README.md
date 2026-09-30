@@ -40,22 +40,32 @@ chat-bridge-main/
 │   ├── server.py              # 兼容入口：委托 app.create_app()
 │   ├── app.py                 # 应用装配：create_app() / 蓝图注册 / CORS / 运行期初始化
 │   ├── runtime.py             # 运行期全局状态中心
-│   ├── config_store.py        # config.yaml 读写与合并
-│   ├── error_utils.py         # 错误分类与定位
-│   ├── responses.py           # 错误响应辅助
-│   ├── tool_helpers.py        # 工具通用辅助（参数校验、路径解析、体积控制）
-│   ├── tool_meta.py           # 内置工具元数据声明（描述 + 参数表）
-│   ├── tools_impl.py          # 内置工具实现与派发表
-│   ├── yaml_utils.py          # YAML 标量原语
+│   ├── paths.py               # 路径基准唯一来源（导入引导）
+│   ├── core/                  # 核心支撑
+│   │   ├── config_store.py    # config.yaml 读写与合并
+│   │   ├── error_utils.py     # 错误分类与定位
+│   │   ├── responses.py       # 错误响应辅助
+│   │   ├── yaml_utils.py      # YAML 标量原语
+│   │   ├── rules.py           # 规则文件读取与优先级
+│   │   ├── prompt_sections.py # 技能说明与技能清单收集
+│   │   ├── card_bus.py        # 外部卡片总线
+│   │   ├── external_tools.py  # 外部工具提供方注册表与转发
+│   │   └── screenshot_store.py# 截图存盘
+│   ├── tools/                 # 内置工具
+│   │   ├── tool_helpers.py    # 工具通用辅助（参数校验、路径解析、体积控制）
+│   │   ├── tool_meta.py       # 内置工具元数据声明（描述 + 参数表）
+│   │   ├── tools_impl.py      # 内置工具实现与派发表
+│   │   └── run_command_impl.py# run_command 实现
+│   ├── config/                # 配置文件（纯数据）
+│   │   ├── config.yaml        # 配置唯一来源
+│   │   └── custom_tools.yaml  # 已安装自定义工具清单（自动维护）
+│   ├── data/                  # 运行时数据产物
+│   │   └── screenshots/       # 截图存盘目录
+│   ├── scripts/               # 服务内脚本
+│   │   └── _smoke_ct.py       # 自定义工具子系统冒烟测试
 │   ├── routes/                # 各功能域蓝图
 │   ├── custom_tools/          # 标准 skill 的解析 / 注册 / 执行（包）
-│   ├── external_tools.py      # 外部工具提供方注册表与转发
-│   ├── card_bus.py            # 外部卡片总线
-│   ├── rules.py               # 规则文件读取与优先级
-│   ├── prompt_sections.py     # 技能说明与技能清单收集
-│   ├── config.yaml            # 配置唯一来源
-│   ├── custom_tools.yaml      # 已安装自定义工具清单（自动维护）
-│   └── _smoke_ct.py           # 自定义工具子系统冒烟测试
+│   └── remote_bridge/         # 远程桥接（QQ）
 ├── skills/                    # 标准 skill（自定义工具来源）
 │   ├── json_tool/             # json_validate：校验并格式化 JSON
 │   └── debug_chrome/          # 页面探查调试扩展
@@ -91,14 +101,14 @@ python server.py
 
 ## 配置说明
 
-- **`flask_server/config.yaml`**：后端配置唯一来源。
+- **`flask_server/config/config.yaml`**：后端配置唯一来源。
   - `flask.host` / `flask.port`：服务地址。
   - `default_profile` / `site_profiles`：按域名选择站点规则（`glm` / `deepseek`）。
   - `tools.<name>.enabled`：工具上下线开关。
   - `tools.run_command.languages`：`run_command` 支持的语言列表。
   - `limits.max_json_chars`：工具结果 JSON 体积上限。
-- **`flask_server/custom_tools.yaml`**：自定义工具清单，由插件自动维护。
-- **`flask_server/remote_bridge.yaml`**：远程桥接配置（QQ 凭证、推送开关、自定义指令），由设置页维护；`remote_bridge_state.json` 为其去重记账，自动生成。
+- **`flask_server/config/custom_tools.yaml`**：自定义工具清单，由插件自动维护。
+- **`flask_server/config/remote_bridge.yaml`**：远程桥接配置（QQ 凭证、推送开关、自定义指令），由设置页维护；`remote_bridge_state.json` 为其去重记账，自动生成。
 
 ## 自定义工具 / Skill
 
@@ -118,7 +128,7 @@ python server.py
 
 ## 开发
 
-- **冒烟测试**：`python flask_server/_smoke_ct.py`。
+- **冒烟测试**：`python flask_server/scripts/_smoke_ct.py`。
 - **质量扫描**：`python scripts/check_quality.py`（行数 / 圈复杂度 / 重复块）。
 - **提交钩子**：`pre-commit install` 安装一次；提交时自动做语法校验（py / js / json / yaml）
   与仓库卫生检查（拦截 `*.bak` 等临时残留、超过 450 行的源码）。

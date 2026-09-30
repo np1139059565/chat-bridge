@@ -5,15 +5,15 @@ AI 工具调用镜像插件 —— YAML 处理公共原语
 - coerce_scalar：把 YAML 标量字符串转成 Python 值（bool / int / float / str / None）
 - strip_comment：去掉行内注释，但保留引号内的 #
 - quote：把 Python 字符串安全地写成带引号的 YAML 标量
-- load_config_dict：读取 flask_server/config.yaml 为字典（各工具读取配置的统一入口）
+- load_config_dict：读取 flask_server/config/config.yaml 为字典（各工具读取配置的统一入口）
 
 两个 YAML 文件各自的结构（块映射 / 工具列表）差异较大，其整体解析器仍保留在
 各自模块内；此处只合并真正重复的标量级处理与配置文件读取，避免同一逻辑多处维护。
 """
-from pathlib import Path
+import paths
 
-# config.yaml 位于本文件同目录（flask_server/）
-CONFIG_PATH = Path(__file__).resolve().parent / "config.yaml"
+# config.yaml 路径统一由 paths 提供
+CONFIG_PATH = paths.CONFIG_PATH
 
 
 def load_config_dict():

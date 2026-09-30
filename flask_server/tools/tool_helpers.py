@@ -15,6 +15,7 @@
 import json
 from pathlib import Path
 
+import paths
 import yaml_utils
 
 
@@ -25,10 +26,9 @@ class ToolParamError(Exception):
     """
 
 
-# 工程根目录（flask_server 的上一级）：通用文件工具的相对路径以此为基准解析。
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# skills 根目录：read_skill 以此为基准定位各 skill。
-SKILLS_ROOT = PROJECT_ROOT / "skills"
+# 工程根目录与 skills 根目录：统一由 paths 提供，避免各处用 __file__ 重复推导。
+PROJECT_ROOT = paths.PROJECT_ROOT
+SKILLS_ROOT = paths.SKILLS_ROOT
 
 
 def abspath(p):
