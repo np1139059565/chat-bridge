@@ -192,6 +192,29 @@
   margin: 0 0 var(--cb-sp-1);
 }
 
+/* 工具结果：第三类角色，与「用户」「AI」并列。
+   用虚线与独立底色区分，表示这是机器产物而非人说的话。 */
+.msg.tool-result .bubble {
+  background: var(--cb-bg-subtle);
+  border: 1px dashed var(--cb-border-strong, #b9c2d0);
+}
+
+.msg.tool-result .who .role-tag {
+  display: inline-block;
+  padding: 0 5px;
+  margin-right: var(--cb-sp-2);
+  border-radius: 3px;
+  font-size: var(--cb-fs-xs);
+  line-height: 1.6;
+}
+
+/* 工具结果的角色标签：橙黄底，与用户（默认）和 AI 区分 */
+.msg.tool-result .who .role-tool {
+  background: #fff1d6;
+  color: #9a6100;
+  border: 1px solid #f0d19a;
+}
+
 /* 用户消息折叠头：与「思考过程」一致，默认折叠，点此展开 / 收起 */
 .msg .user-head {
   display: flex;

@@ -118,18 +118,11 @@
    */
   M.isRealUserMessage = function (m) {
     if (!m || m.role !== 'user') return false;
-    // 优先读来源标记：tool（工具结果）不是人说的话，直接排除。
-    // 标记在建节点时由 msgSource 算好；旧数据无标记时回退到内容判断。
-    if (m.source === 'tool') return false;
-    if (m.source === 'user') return true;
-    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    for (let i = 0; i < blocks.length; i++) {
-      const b = blocks[i];
-      if (!b) continue;
-      const s = String(b.code || b.text || '');
-      if (s.indexOf('bridge-chat-res') >= 0) return false;
-    }
-    return true;
+    // 统一走 msgSource 判定来源（唯一入口）：只有非工具结果才算真实用户发言。
+    // 注意 msgSource 仅对工具结果（bridge-chat-res）返回 'tool'；
+    // 外部卡片（external-call）返回 'user'，故外部卡片仍算用户发言（既定要求）。
+    // 直接调函数而非读 m.source 字段——切片阶段消息尚未挂上树节点字段。
+    return this.msgSource(m) !== 'tool';
   };
 
   /**

@@ -217,6 +217,27 @@
   };
 
   /**
+   * 渲染一条「工具结果」消息为第三类角色：与「用户」「AI」并列，独立样式。
+   * 工具结果（bridge-chat-res）不是任何人说的话，而是机器的产物；
+   * 单独呈现便于在镜像区一眼区分「人说的」与「机器回的」。
+   * @param {Object} ctx Vue 实例
+   * @param {Object} m 消息对象
+   * @param {string} mKey 消息键
+   * @returns {VNode} 消息节点
+   */
+  D.renderToolResultMessage = function (ctx, m, mKey) {
+    return h('div', { class: 'msg tool-result', key: mKey }, [
+      h('div', { class: 'bubble' }, [
+        h('div', { class: 'who' }, [
+          h('span', { class: 'role-tag role-tool' }, '工具'),
+          m.name || ''
+        ]),
+        h('div', { class: 'blocks' }, D.toArray(m.blocks).map((b, j) => D.renderBlock(ctx, b, j, mKey)))
+      ])
+    ]);
+  };
+
+  /**
    * 按块类型渲染，保留原网页的内容分类（标题 / 段落 / 列表 / 引用 / 表格 / 思考 / 代码）。
    * @param {Object} ctx Vue 实例
    * @param {Object} block 块对象
@@ -316,6 +337,11 @@
   D.renderMessage = function (ctx, m, i, originalIdx) {
     const mKey = (m.role || 'msg') + '-' + originalIdx;
     const isUser = m.role === 'user';
+    // 工具结果（bridge-chat-res）：独立第三类角色，单独样式呈现，
+    // 与「用户」「AI」并列，一眼可辨。
+    if (ctx.msgSource && ctx.msgSource(m) === 'tool') {
+      return D.renderToolResultMessage(ctx, m, mKey);
+    }
     // external-call 信封：这不是普通用户消息，而是外部卡片的本体，
     // 在镜像区还原为卡片外观呈现，并加标记色，便于与普通消息区分。
     if (isUser) {
