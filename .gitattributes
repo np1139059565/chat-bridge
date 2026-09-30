@@ -1,0 +1,45 @@
+# 行尾与文件类型统一规则
+#
+# 背景：仓库内文件一律以 LF 存储；Windows 检出时若被编辑器改成 CRLF，
+# git status 会把大量文件标成 modified，掩盖真实改动。
+# 这里显式声明：文本文件在仓库内与工作区都用 LF（eol=lf），不做自动转换；
+# 二进制文件禁止任何行尾/编码处理，避免损坏。
+
+# 默认：所有文件按文本处理，仓库内与工作区均为 LF
+* text=auto eol=lf
+
+# 常见文本类型显式声明为 LF
+*.js      text eol=lf
+*.mjs     text eol=lf
+*.cjs     text eol=lf
+*.ts      text eol=lf
+*.css     text eol=lf
+*.html    text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf
+*.py      text eol=lf
+*.yaml    text eol=lf
+*.yml     text eol=lf
+*.txt     text eol=lf
+*.sh      text eol=lf
+*.xml     text eol=lf
+*.svg     text eol=lf
+
+# Windows 脚本：保留 CRLF，否则某些环境执行会出问题
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+
+# 二进制文件：不做任何转换
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.webp    binary
+*.pdf     binary
+*.zip     binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.eot     binary
+
