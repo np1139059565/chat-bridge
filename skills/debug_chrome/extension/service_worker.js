@@ -36,6 +36,25 @@ function appendNetwork(tabId, entry) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { type } = message || {};
+  // 代理请求：content script 运行在页面源下，从公网页面访问 127.0.0.1 会被
+  // Chrome 的 Private Network Access 拦截（Permission denied for loopback）。
+  // service worker 是扩展源，不受此限制，故由它代发并回传结果。
+  if (type === 'proxy-fetch') {
+    (async () => {
+      try {
+        const resp = await fetch(message.url, {
+          method: message.method || 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: message.body ? JSON.stringify(message.body) : undefined
+        });
+        const data = await resp.json();
+        sendResponse({ ok: true, data: data });
+      } catch (e) {
+        sendResponse({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
+  }
   if (type === 'capture-visible-tab') {
     handleCaptureScreenshot(sender, sendResponse);
     return true;

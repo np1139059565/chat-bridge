@@ -25,7 +25,7 @@ tools:
   - name: "get_element_style"
     description: "按选择器采集元素样式与 DOM 信息。"
     skill_name: "debug_chrome"
-    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
+    skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
@@ -51,7 +51,7 @@ tools:
   - name: "push_message"
     description: "向调试扩展抽屉推送一条文字信息"
     skill_name: "debug_chrome"
-    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
+    skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
@@ -72,19 +72,73 @@ tools:
         required: true
         description: "为 true 时不回传执行结果，仅执行推送。用于最后一次总结性推送，避免结果回传再次唤醒 AI"
   - name: "get_page_snapshot"
-    description: "采集页面快照。"
+    description: "截取目标页面当前可见区域，返回图片并保存到本地。"
     skill_name: "debug_chrome"
-    skill_prompt: "本技能提供页面探查能力，相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
+    skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: false
+    enabled: true
     parameters:
-      - name: "snapshot_type"
+      - name: "page_url"
         type: "string"
         required: true
-        description: "dom 或 screenshot"
+        description: "目标页面的 URL"
+  - name: "get_console_logs"
+    description: "读取目标页面捕获的 console 记录（log/info/warn/error/debug），供故障分析。"
+    skill_name: "debug_chrome"
+    skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
+    skill_dir: "skills\\debug_chrome"
+    arg_style: "flag"
+    executor: "external"
+    provider: "debug_chrome"
+    enabled: true
+    parameters:
+      - name: "page_url"
+        type: "string"
+        required: true
+        description: "目标页面的 URL"
+      - name: "limit"
+        type: "number"
+        required: false
+        description: "最多返回最近多少条，默认全部（上限 500）"
+      - name: "level"
+        type: "string"
+        required: false
+        description: "只看某个级别，如 error；省略则全部"
+  - name: "get_network_logs"
+    description: "读取目标页面在 DevTools 中捕获的网络请求记录（需该页 DevTools 打开过），供故障分析。"
+    skill_name: "debug_chrome"
+    skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
+    skill_dir: "skills\\debug_chrome"
+    arg_style: "flag"
+    executor: "external"
+    provider: "debug_chrome"
+    enabled: true
+    parameters:
+      - name: "page_url"
+        type: "string"
+        required: true
+        description: "目标页面的 URL"
+      - name: "limit"
+        type: "number"
+        required: false
+        description: "最多返回最近多少条，默认全部（上限 300）"
+  - name: "exec_js"
+    description: "在目标页面主世界执行任意 JavaScript，可读写 window / document / localStorage 等，可触发元素点击等操作，支持 await。返回执行结果（复杂对象会做安全序列化）。"
+    skill_name: "debug_chrome"
+    skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
+    skill_dir: "skills\\debug_chrome"
+    arg_style: "flag"
+    executor: "external"
+    provider: "debug_chrome"
+    enabled: true
+    parameters:
+      - name: "code"
+        type: "string"
+        required: true
+        description: "要执行的 JavaScript 代码；可写多行，可直接使用 await"
       - name: "page_url"
         type: "string"
         required: true

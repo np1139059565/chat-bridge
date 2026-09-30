@@ -125,22 +125,15 @@
     const id = await A.getTabId();
     if (id == null) throw new Error('NO_TAB_ID');
     const open = (typeof isOpen === 'boolean') ? isOpen : !!state.drawerIframe;
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), A.POLL_TIMEOUT_MS);
-    try {
-      const res = await fetch(`${state.backendUrl}/api/ext/${A.PROVIDER}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'poll', tab_id: id, page_url: location.href, is_open: open }),
-        signal: ctrl.signal,
-      });
-      if (!res.ok) throw new Error('POLL_FAILED');
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error || 'POLL_FAILED');
-      return data.commands || [];
-    } finally {
-      clearTimeout(timer);
-    }
+    // 交给 service worker 代发：内容脚本运行在页面源下，直连本机回环地址
+    // 会被 Chrome 的 Private Network Access 拦截（Permission denied for loopback）。
+    const data = await A.proxyFetch(`${state.backendUrl}/api/ext/${A.PROVIDER}`, {
+      method: 'POST',
+      body: { action: 'poll', tab_id: id, page_url: location.href, is_open: open },
+      timeoutMs: A.POLL_TIMEOUT_MS,
+    });
+    if (!data || !data.success) throw new Error((data && data.error) || 'POLL_FAILED');
+    return data.commands || [];
   };
 
   /**

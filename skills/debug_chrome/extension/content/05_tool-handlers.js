@@ -3,13 +3,13 @@
   const A = window.AIStyleDebug;
   const state = A.state;
 
-  // 经提供方通道回传某次工具调用的结果
+  // 经提供方通道回传某次工具调用的结果。
+  // 走 service worker 代发，原因同心跳：内容脚本在页面源下直连本机地址会被拦截。
   A.postResult = async function (requestId, result) {
     try {
-      await fetch(`${state.backendUrl}/api/ext/${A.PROVIDER}`, {
+      await A.proxyFetch(`${state.backendUrl}/api/ext/${A.PROVIDER}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'result', request_id: requestId, result }),
+        body: { action: 'result', request_id: requestId, result: result },
       });
     } catch (err) {
       // 回传失败由服务端转发超时处理
@@ -138,10 +138,9 @@
       // 这里用 exec_js 通道把它读回来。
       const limit = typeof params.limit === 'number' ? params.limit : 500;
       const level = params.level || '';
-      const code = '(function(){'
-        + 'var logs = window.__AI_DEBUG_CONSOLE_LOGS || [];'
-        + 'return logs;'
-        + '})()';
+      // exec_js 的代码由 async 函数包裹，必须以 return 交出结果；
+      // 若写成自执行函数（无 return），返回的是 undefined，会被误判为空。
+      const code = 'return (window.__AI_DEBUG_CONSOLE_LOGS || []);';
       const res = await A.execJs(code);
       if (!res || !res.success) return { success: false, error: (res && res.error) || 'EXEC_JS_ERROR' };
       let logs = Array.isArray(res.result) ? res.result : [];
@@ -254,24 +253,29 @@
         if (done) return;
         done = true;
         clearTimeout(timer);
-        chrome.runtime.onMessage.removeListener(listener);
         fn(arg);
       };
-      const listener = (msg) => {
-        if (!msg || msg.type !== 'screenshot-result') return;
-        if (msg.success) {
+      // 超时兜底：后台若因 service worker 休眠等原因不回，回调不会触发，
+      // 必须自行超时退出，否则等待方永久挂起、卡死轮询循环。
+      const timer = setTimeout(() => finish(reject, new Error('SNAPSHOT_TIMEOUT')), A.SCREENSHOT_TIMEOUT_MS);
+      // 关键：后台用 sendResponse 回复，响应只会进 sendMessage 的回调参数，
+      // 不会作为一条独立消息触发 onMessage。故这里必须用回调接收，
+      // 早先用 onMessage.addListener 等待，永远等不到，必然超时。
+      try {
+        chrome.runtime.sendMessage({ type: 'capture-visible-tab' }, (resp) => {
+          if (chrome.runtime.lastError) {
+            finish(reject, new Error(chrome.runtime.lastError.message || 'SEND_FAILED'));
+            return;
+          }
+          if (!resp || !resp.success) {
+            finish(reject, new Error((resp && resp.error) || '截图失败'));
+            return;
+          }
           // 直接用后台返回的原图：不做 canvas 缩放。
           // 缩放需在页面里解码大图再重绘，图大时会长时间占用主线程、
           // 表现为页面卡死；卡片的等比缩放交给显示层用 CSS 完成即可。
-          finish(resolve, msg.data.screenshot);
-        } else {
-          finish(reject, new Error(msg.error || '截图失败'));
-        }
-      };
-      const timer = setTimeout(() => finish(reject, new Error('SNAPSHOT_TIMEOUT')), A.SCREENSHOT_TIMEOUT_MS);
-      chrome.runtime.onMessage.addListener(listener);
-      try {
-        chrome.runtime.sendMessage({ type: 'capture-visible-tab' });
+          finish(resolve, resp.data.screenshot);
+        });
       } catch (e) {
         finish(reject, e);
       }

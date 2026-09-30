@@ -68,6 +68,60 @@
       状态：已完成。network 需该页 DevTools 打开过才有数据。
       改动文件：manifest.json、devtools.html、devtools.js、service_worker.js、tool.json、content/05_tool-handlers.js
 
+### 阶段 5：网络请求改造（消除 Private Network Access 拦截）
+
+**背景**：换电脑后 Chrome 版本更新，启用了 Private Network Access 限制——
+公网页面（如 chat.deepseek.com）内发起的请求，禁止访问本机回环地址（127.0.0.1）。
+调试扩展的 content script 运行在页面源下，直接 fetch 后端被拦截，
+表现为「抽屉一直显示未连接」。
+
+**原则**：content script 只保留 DOM 操作，所有后端请求统一交给 service worker 代发
+（service worker 是扩展源，不受此限制）。抽屉 iframe 也是扩展源，无需改。
+
+**请求点普查结果**：
+- debug_chrome 内容脚本：2 处直连 fetch（心跳、结果回传）→ 需改
+- debug_chrome 抽屉 iframe：1 处 fetch（发卡片）→ 扩展源，无需改
+- chat-bridge content script：0 处网络请求 → 已干净，无需改
+- chat-bridge 抽屉 iframe：全部请求在此（扩展源）→ 无需改
+
+- [x] service_worker.js 新增 `proxy-fetch` 代理通道
+- [x] content/01_config.js 新增 `A.proxyFetch`（含超时兜底，默认 15 秒）
+- [x] content/03_heartbeat.js 心跳改走 proxyFetch
+- [x] content/05_tool-handlers.js 结果回传改走 proxyFetch
+- [x] 复查：内容脚本已无直连 fetch / XMLHttpRequest / sendBeacon / WebSocket
+- [x] chat-bridge 侧复查：content script 无网络请求，无需改
+      状态：已完成。
+      改动文件：skills/debug_chrome/extension/service_worker.js、content/01_config.js、content/03_heartbeat.js、content/05_tool-handlers.js
+
+### 阶段 6：实测与修复（task 5）
+
+**背景**：改造完成后逐个实测新工具，发现并修复两个机制性 bug。
+
+- [x] 连接异常排查：换电脑后 Chrome 启用 Private Network Access，
+      内容脚本从公网页面直连 127.0.0.1 被拦 → 见阶段 5。
+- [x] get_console_logs 返回空：拼的代码是自执行函数、没有 return，
+      exec_js 拿到 undefined 被当空。改为 `return (window.__AI_DEBUG_CONSOLE_LOGS || [])`。
+- [x] get_page_snapshot 超时：内容脚本用 onMessage 等结果，
+      但后台用 sendResponse 回复——响应只进 sendMessage 回调，不触发 onMessage，
+      监听器永远等不到。改为用 sendMessage 回调接收。
+- [x] custom_tools.yaml 参数过时：后端参数校验读这个缓存文件，
+      它仍是旧定义（带 snapshot_type）。修正 get_page_snapshot 条目，
+      并同步 6 个工具的 skill_prompt 文案。
+
+**实测结果**：
+- 连接状态：✅ 正常
+- push_message：✅
+- exec_js：✅（读到 localStorage 键、标题、DOM 信息）
+- get_network_logs：✅（返回真实请求记录）
+- get_element_style：✅（返回 body 样式与 DOM）
+- get_console_logs：✅（重载后验证，读到测试日志）
+- get_page_snapshot：✅（返回 base64 图片，且存盘到 flask_server/screenshots/，
+  文件名 shot_年月日_时分秒_毫秒.jpg）
+
+**全部工具实测通过。**
+
+**改动文件**：content/05_tool-handlers.js、flask_server/custom_tools.yaml
+
 ## 已知遗留（未处理，供后续决定）
 
 - `skills/debug_chrome/extension/content/05_tool-handlers.js` 的 `A.downscaleImage`

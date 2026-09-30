@@ -51,4 +51,54 @@
       });
     });
   };
+
+  /**
+   * 统一的后端请求入口：交给 service worker 代发。
+   *
+   * 为什么不能直接 fetch：内容脚本运行在页面源下，从公网页面（如 chat.deepseek.com）
+   * 访问本机回环地址（127.0.0.1）会被 Chrome 的 Private Network Access 拦截：
+   *   Access ... blocked by CORS policy: Permission was denied for this request
+   *   to access the `loopback` address space.
+   * service worker 是扩展源，不受此限制，故所有后端请求统一由它代发。
+   * 内容脚本只保留 DOM 操作，不再直接发网络请求。
+   *
+   * @param {string} url 完整请求地址
+   * @param {Object} [opts] 可选：{ method, body, timeoutMs }
+   * @returns {Promise<Object>} 响应 JSON
+   */
+  A.proxyFetch = function (url, opts) {
+    const o = opts || {};
+    const timeoutMs = typeof o.timeoutMs === 'number' ? o.timeoutMs : A.PROXY_FETCH_TIMEOUT_MS;
+    return new Promise((resolve, reject) => {
+      let done = false;
+      const finish = (fn, arg) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        fn(arg);
+      };
+      // 超时兜底：service worker 的 fetch 若挂起，sendMessage 回调不会返回，
+      // 不设超时会让调用方永久 await，进而卡死轮询循环。
+      const timer = setTimeout(() => finish(reject, new Error('PROXY_TIMEOUT')), timeoutMs);
+      try {
+        chrome.runtime.sendMessage({
+          type: 'proxy-fetch',
+          url: url,
+          method: o.method || 'POST',
+          body: o.body || null
+        }, (resp) => {
+          if (!resp || !resp.ok) {
+            finish(reject, new Error((resp && resp.error) || 'PROXY_FAILED'));
+            return;
+          }
+          finish(resolve, resp.data);
+        });
+      } catch (e) {
+        finish(reject, e);
+      }
+    });
+  };
+
+  // 代理请求的默认超时上限（毫秒）
+  A.PROXY_FETCH_TIMEOUT_MS = 15000;
 })();
