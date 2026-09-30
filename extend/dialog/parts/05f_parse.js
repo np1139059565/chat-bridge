@@ -63,4 +63,32 @@
   M.msgId = function (m) {
     return this.messageFingerprint(m);
   };
+
+  /**
+   * 判定一条消息的来源，返回第三方角色标记：'user' | 'assistant' | 'tool'。
+   *
+   * 为什么要它：工具结果等机器产物此前都伪装成 user 落地，各处只能靠
+   * 「内容里有没有 bridge-chat-res 字样」反推，脆弱且分散。这里把来源判定
+   * 收敛成唯一入口：建节点时算一次、存到节点上，之后所有地方读字段即可。
+   *
+   * 约定：
+   *   - assistant 消息 → 'assistant'（AI）；
+   *   - 含 bridge-chat-res 的 user 消息 → 'tool'（工具结果，第三方角色）；
+   *   - 其余 user 消息（含外部卡片 / QQ 消息）→ 'user'（用户本人）。
+   * @param {Object} m 消息对象
+   * @returns {string} 'user' | 'assistant' | 'tool'
+   */
+  M.msgSource = function (m) {
+    if (!m) return 'user';
+    if (m.role === 'assistant') return 'assistant';
+    if (m.role !== 'user') return 'user';
+    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (!b) continue;
+      const s = String(b.code || b.text || '');
+      if (s.indexOf('bridge-chat-res') >= 0) return 'tool';
+    }
+    return 'user';
+  };
 })();

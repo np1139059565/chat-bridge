@@ -104,6 +104,9 @@
       role: msg.role || '',
       name: msg.name || '',
       blocks: msg.blocks || [],
+      // source：来源标记（user / assistant / tool），建节点时算一次并存储，
+      // 之后所有判定读它，不再各自扫字符串反推（见 05f_parse.js 的 msgSource）。
+      source: this.msgSource(msg),
       deleted: false,
       cards: {}
     };

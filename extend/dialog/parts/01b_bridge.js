@@ -190,6 +190,9 @@
       // 结果存在节点的 cards 里，不上报的话 QQ 端只看得到调用、看不到结果。
       messages.push({
         id: id, role: node.role, blocks: node.blocks || [], md: node.md || '',
+        // source：来源标记（user / assistant / tool），供后端直接读字段定类，
+        // 无需再扫字符串反推。缺字段时后端回退到内容判断。
+        source: node.source || '',
         cardResults: extractCardResults(node)
       });
     });

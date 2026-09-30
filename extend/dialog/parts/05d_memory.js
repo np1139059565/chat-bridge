@@ -118,6 +118,10 @@
    */
   M.isRealUserMessage = function (m) {
     if (!m || m.role !== 'user') return false;
+    // 优先读来源标记：tool（工具结果）不是人说的话，直接排除。
+    // 标记在建节点时由 msgSource 算好；旧数据无标记时回退到内容判断。
+    if (m.source === 'tool') return false;
+    if (m.source === 'user') return true;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
     for (let i = 0; i < blocks.length; i++) {
       const b = blocks[i];

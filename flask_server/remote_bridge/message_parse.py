@@ -112,9 +112,19 @@ def _tool_result_of(m):
 def _classify(m):
     """给一条消息定类：user / tool / ai。
 
-    assistant 一律算 AI；user 角色里凡是 external-call 信封（不论来自 QQ
-    还是调试扩展）都算工具消息；其余算用户消息。
+    优先读抽屉传来的来源标记 source（user / assistant / tool）——它是
+    「第三方角色」的落点，把工具结果与真人发言彻底分开，无需扫字符串反推。
+    缺字段时回退旧逻辑：assistant 算 AI；user 角色里带 external-call 信封的
+    算工具消息；其余算用户消息。
     """
+    src = m.get("source") or ""
+    if src == "assistant":
+        return "ai"
+    if src == "tool":
+        return "tool"
+    if src == "user":
+        return "user"
+    # 回退：旧数据无 source 字段，按内容判定
     if m.get("role") == "assistant":
         return "ai"
     if _parse_envelope(m):
