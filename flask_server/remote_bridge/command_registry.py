@@ -196,9 +196,33 @@ def _help_custom_lines(customs):
     return lines
 
 
+def _help_external_lines():
+    """外部指令的展示行：来自各 skill 的 tool.json 声明（由外部扩展执行）。
+
+    读取失败不应影响 /help 主体，故整体 try 兜底，失败时返回空。
+    """
+    try:
+        import custom_tools.commands as ext_cmds
+        cmds = ext_cmds.list_external_commands()
+    except Exception as e:
+        log("读取外部指令失败：", e)
+        return []
+    if not cmds:
+        return []
+    lines = ["", "**外部指令**"]
+    for c in cmds:
+        al = c.get("alias") or ""
+        if al and al != c["name"]:
+            lines.append("- `%s` %s（%s）" % (al, c.get("desc", ""), c["name"]))
+        else:
+            lines.append("- `%s` %s" % (c["name"], c.get("desc", "")))
+    return lines
+
+
 def help_text():
-    """组装指令列表文本：先内置指令，再自定义指令。"""
+    """组装指令列表文本：先内置指令，再外部指令，最后自定义指令。"""
     lines = ["可用指令："] + _help_builtin_lines()
+    lines += _help_external_lines()
     lines += _help_custom_lines(bridge_store.get_config().get("commands") or [])
     return "\n".join(lines)
 
