@@ -223,9 +223,28 @@
     }
     // request_id 在 payload 顶层（需回传结果的指令才有），单独传给动作处理
     this._runBridgeAction(payload.action, payload.params || {}, payload.request_id || '');
+    // 页面操作类指令：动作执行后自动截一张图回传给 QQ，便于在手机上核对界面结果。
+    // 延迟一小会儿再截，等界面（设置面板 / 侧栏切换等）完成重绘。
+    if (payload.auto_screenshot && payload.request_id) {
+      this._autoScreenshot(payload.request_id);
+    }
     // 回执后端：命令已消费，此后不再重复投递
     this.confirmCardDelivered(c.id);
     return true;
+  };
+
+  /**
+   * 执行动作后自动截屏并回传 QQ。
+   * 延迟到界面重绘完成再截，避免截到切换过程中的中间态。
+   * @param {string} requestId 待回传请求 id
+   */
+  M._autoScreenshot = function (requestId) {
+    setTimeout(() => {
+      window.parent.postMessage({
+        type: 'bridge_screenshot',
+        request_id: requestId || ''
+      }, '*');
+    }, 600);
   };
 
   /**

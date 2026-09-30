@@ -33,19 +33,19 @@ def log(*args):
 BUILTIN = {
     # —— 抽屉外观 ——
     "/side": {"desc": "抽屉在左/右之间切换", "aliases": ["/sd"], "group": "抽屉外观"},
-    "/settings": {"desc": "打开设置面板", "aliases": [], "group": "抽屉外观"},
-    "/back": {"desc": "从设置返回对话镜像", "aliases": [], "group": "抽屉外观"},
+    "/settings": {"desc": "打开设置面板", "aliases": ["/st"], "group": "抽屉外观"},
+    "/back": {"desc": "从设置返回对话镜像", "aliases": ["/bk"], "group": "抽屉外观"},
     # —— 会话管理 ——
     "/sessions": {"desc": "列出会话列表", "aliases": ["/ls"], "group": "会话管理"},
     "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"], "group": "会话管理"},
     "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"], "group": "会话管理"},
     "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"], "group": "会话管理"},
-    "/copy-json": {"desc": "复制当前会话 JSON", "aliases": [], "group": "会话管理"},
+    "/copy-json": {"desc": "复制当前会话 JSON", "aliases": ["/cj"], "group": "会话管理"},
     "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"], "group": "会话管理"},
     # —— 卡片与结果 ——
     "/rerun": {"desc": "重新执行最新卡片并回传", "aliases": ["/rr"], "group": "卡片与结果"},
     "/copy": {"desc": "复制最新卡片结果并回传 AI", "aliases": ["/cp"], "group": "卡片与结果"},
-    "/skip": {"desc": "跳过最新一张卡片", "aliases": [], "group": "卡片与结果"},
+    "/skip": {"desc": "跳过最新一张卡片", "aliases": ["/sk"], "group": "卡片与结果"},
     # —— 自动回传 ——
     "/switch-auto": {"desc": "自动回传开关（/sa on|off，不带则切换）", "aliases": ["/sa"], "group": "自动回传"},
     "/re-time": {"desc": "设置自动回传延迟（秒）", "aliases": ["/rt"], "group": "自动回传"},
@@ -53,10 +53,10 @@ BUILTIN = {
     "/screenshot": {"desc": "截取浏览器屏幕", "aliases": ["/sp"], "group": "页面与服务"},
     "/refush": {"desc": "刷新浏览器并打开抽屉", "aliases": ["/rf"], "group": "页面与服务"},
     "/restart": {"desc": "重启服务端", "aliases": ["/rs"], "group": "页面与服务"},
-    "/reconnect": {"desc": "重新连接后端", "aliases": [], "group": "页面与服务"},
+    "/reconnect": {"desc": "重新连接后端", "aliases": ["/rc"], "group": "页面与服务"},
     # —— 内容采集 ——
     "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"], "group": "内容采集"},
-    "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": [], "group": "内容采集"},
+    "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": ["/m"], "group": "内容采集"},
     # —— 帮助 ——
     "/help": {"desc": "显示指令列表", "aliases": ["/h"], "group": "帮助"},
 }

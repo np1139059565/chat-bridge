@@ -69,7 +69,7 @@ def _reply(qq_client, openid, text, markdown=False):
     return ok
 
 
-def _dispatch(action, params=None):
+def _dispatch(action, params=None, openid="", screenshot=False):
     """把一条抽屉命令通过卡片总线下发。
 
     卡片类型为 drawer-command：抽屉轮询取到后按 action 执行本地动作，
@@ -77,9 +77,18 @@ def _dispatch(action, params=None):
     @param action 动作名：clear_all_sessions / clear_messages /
                   copy_system_prompt / toggle_auto_send / set_delay 等
     @param params 动作参数
+    @param openid 发起指令的用户；需要截图回传时用于登记待回传请求
+    @param screenshot 是否在动作执行后自动截一张图回传 QQ。
+                      页面操作类指令用它在手机上观察界面结果；
+                      组合指令执行期间（_reply_ctx.suppress）强制关闭，避免大量截图刷屏。
     """
     import card_bus
     payload = {"action": action, "params": params or {}}
+    # 页面操作类指令：动作执行完自动截图回传，便于在 QQ 端核对界面变化。
+    want_shot = bool(screenshot and openid and not getattr(_reply_ctx, "suppress", False))
+    if want_shot:
+        payload["request_id"] = _register_pending(openid)
+        payload["auto_screenshot"] = True
     card = card_bus.bus.create(
         source="bridge",
         card_type="drawer-command",
@@ -87,7 +96,7 @@ def _dispatch(action, params=None):
         content=json.dumps(payload, ensure_ascii=False),
         payload=payload,
     )
-    log("已下发抽屉命令", action, "id=" + card.id[:8])
+    log("已下发抽屉命令", action, "截图=" + ("是" if want_shot else "否"), "id=" + card.id[:8])
     return card
 
 
@@ -255,13 +264,13 @@ def _h_switch_auto(qq_client, openid, arg, msg_id):
     """
     a = (arg or "").strip().lower()
     if a in ("on", "1", "true", "开", "开启"):
-        _dispatch("set_auto_send", {"on": True})
+        _dispatch("set_auto_send", {"on": True}, openid, screenshot=True)
         _reply(qq_client, openid, "已下发：开启自动回传")
     elif a in ("off", "0", "false", "关", "关闭"):
-        _dispatch("set_auto_send", {"on": False})
+        _dispatch("set_auto_send", {"on": False}, openid, screenshot=True)
         _reply(qq_client, openid, "已下发：关闭自动回传")
     elif a == "":
-        _dispatch("toggle_auto_send")
+        _dispatch("toggle_auto_send", {}, openid, screenshot=True)
         _reply(qq_client, openid, "已下发：切换自动回传开关")
     else:
         _reply(qq_client, openid, "用法：/sa [on|off]，不带参数则切换")
@@ -280,7 +289,7 @@ def _h_re_time(qq_client, openid, arg, msg_id):
     if secs <= 0:
         _reply(qq_client, openid, "秒数必须大于 0")
         return
-    _dispatch("set_delay", {"seconds": secs})
+    _dispatch("set_delay", {"seconds": secs}, openid, screenshot=True)
     _reply(qq_client, openid, "已下发：设置自动回传延迟 %s 秒" % secs)
 
 
@@ -318,8 +327,8 @@ def _h_copy(qq_client, openid, arg, msg_id):
 
 
 def _h_reparse(qq_client, openid, arg, msg_id):
-    """重新解析当前网页对话。"""
-    _dispatch("reparse", {})
+    """重新解析当前网页对话（执行后自动截图回传）。"""
+    _dispatch("reparse", {}, openid, screenshot=True)
     _reply(qq_client, openid, "已下发：重新解析对话")
 
 
@@ -345,26 +354,26 @@ def _h_md(qq_client, openid, arg, msg_id):
 
 
 def _h_refush(qq_client, openid, arg, msg_id):
-    """刷新浏览器并打开抽屉。"""
-    _dispatch("refresh_page", {})
+    """刷新浏览器并打开抽屉（刷新后自动截图回传）。"""
+    _dispatch("refresh_page", {}, openid, screenshot=True)
     _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
 
 
 def _h_side(qq_client, openid, arg, msg_id):
-    """抽屉在左 / 右之间切换。"""
-    _dispatch("switch_side", {})
+    """抽屉在左 / 右之间切换（执行后自动截图回传）。"""
+    _dispatch("switch_side", {}, openid, screenshot=True)
     _reply(qq_client, openid, "已下发：切换抽屉位置")
 
 
 def _h_settings(qq_client, openid, arg, msg_id):
-    """打开设置面板。"""
-    _dispatch("open_settings", {})
+    """打开设置面板（执行后自动截图回传）。"""
+    _dispatch("open_settings", {}, openid, screenshot=True)
     _reply(qq_client, openid, "已下发：打开设置面板")
 
 
 def _h_back(qq_client, openid, arg, msg_id):
-    """从设置返回对话镜像。"""
-    _dispatch("close_settings", {})
+    """从设置返回对话镜像（执行后自动截图回传）。"""
+    _dispatch("close_settings", {}, openid, screenshot=True)
     _reply(qq_client, openid, "已下发：返回对话镜像")
 
 
