@@ -9,6 +9,8 @@
  *   03_custom_tools.js  自定义工具读取、上下线、扫描与安装
  *   04_sessions.js      多会话切换 / 恢复 / 持久化、历史卡片删除
  *   05_messages.js      工具列表、System Prompt、消息接收与卡片构建、导出
+ *   05d_memory.js       工作记忆检查：连续多轮未写记忆时提醒
+ *   05e_quality.js      助手回复质量检测：只含代码块、思考非中文
  *   06_execute.js       卡片执行与自动回传倒计时
  *   07_render.js        渲染函数
  *   08_settings.js      设置面板（System Prompt / 规则 / 工具 / 通用配置 / 会话记录）

@@ -248,6 +248,8 @@
       log('ingestMessages：切片为空，忽略');
       return;
     }
+    // 记忆检查：检测到用户真实发言即启动（工具结果回传、外部卡片信封不算用户发言）
+    if (incoming.some((m) => this.isRealUserMessage(m))) this.armMemoryCheck();
     // 打印过滤后各条指纹：与 sendPage 的 ids 同源，便于两边逐条比对。
     log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
       + '，来源=' + (reason || 'generate')
@@ -272,10 +274,13 @@
     // 3) 组装分支：以切片末条为最新
     conv.branchKeys = this.assembleBranchKeys(conv, incoming);
 
+    // 记忆检查：仅在本轮为 generate 且存在可回传工具卡片时判定（细节见 05d_memory.js）
+    const memoryIssue = this.memoryIssueForRound(incoming, reason);
+
     // 4) 为代码块建卡，并收集自动执行候选。
     //   入树的消息：卡片写在节点上，并与切片消息共享同一份卡片表；
     //   不入树的消息：卡片直接写在切片消息上（供手动操作）。
-    //   检测出的问题（多调用冲突 / 回复质量）不另立流程，直接作为该条卡片的结果。
+    //   检测出的问题（多调用冲突 / 回复质量 / 记忆滞后）不另立流程，直接作为该条卡片的结果。
     const autoCandidates = [];
     // 滚动轮次里被「上膛」的那张最新卡片（仅最后一条消息上的），供底部复检使用
     let armedLast = null;
@@ -306,6 +311,10 @@
           };
         } else if (m.role === 'assistant') {
           issue = this.assistantQualityIssue(m);
+        }
+        // 记忆滞后提醒：仅贴在本轮最后一条助手输出上（更早的消息已无提醒意义）
+        if (!issue && m.role === 'assistant' && mi === incoming.length - 1 && memoryIssue) {
+          issue = memoryIssue;
         }
       }
       blocks.forEach((b) => {
@@ -413,46 +422,4 @@
     return holder.nonce;
   };
 
-  /**
-   * 判定一条助手消息的质量问题。返回 null 表示无问题，否则返回问题描述。
-   * @param {Object} m 消息对象
-   * @returns {Object|null} { error, message }
-   */
-  M.assistantQualityIssue = function (m) {
-    if (!m || m.role !== 'assistant') return null;
-    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    if (!blocks.length) return null;
-    // 问题一：只有代码块，没有任何文字说明
-    const hasCode = blocks.some((b) => b && b.type === 'code');
-    const hasText = blocks.some((b) => {
-      if (!b || b.type === 'code' || b.type === 'thinking') return false;
-      let s = '';
-      if (b.text != null) s = String(b.text);
-      else if (b.items) s = window.AIMirrorDomUtils.toArray(b.items).join(' ');
-      else if (b.rows) s = JSON.stringify(b.rows);
-      return s.trim().length > 0;
-    });
-    if (hasCode && !hasText) {
-      return {
-        error: 'code_only_reply',
-        message: '本条回复只包含代码块，缺少文字说明，无法监控流程。'
-          + '请在代码块之外补充说明再重新生成。'
-      };
-    }
-    // 问题二：思考内容大段英文
-    const think = blocks.find((b) => b && b.type === 'thinking');
-    if (think) {
-      const t = String(think.text || '');
-      const letters = (t.match(/[A-Za-z]/g) || []).length;
-      const total = t.replace(/\s/g, '').length;
-      if (total > 200 && letters / total > 0.8) {
-        return {
-          error: 'thinking_english',
-          message: '本条回复的思考内容以英文为主（约 ' + Math.round(letters / total * 100)
-            + '% 为英文字符），无法监控流程。请用中文重新生成。'
-        };
-      }
-    }
-    return null;
-  };
 })();
