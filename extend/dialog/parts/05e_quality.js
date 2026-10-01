@@ -51,8 +51,15 @@
     // 只要开关处于打开状态即强制检测，与是否收到语音无关；缺失则打回重生成。
     const voiceOn = !!(this.bridgePush && this.bridgePush.voice);
     if (voiceOn) {
-      const hasVoice = blocks.some((b) => b && b.type === 'code'
-        && String(b.lang || '').toLowerCase() === 'voice');
+      // 判定是否含 voice 块，宽松匹配——避免因站点解析差异误报：
+      // 1) 代码块 lang 含 'voice'（容忍大小写与 voice-xx 变体）；
+      // 2) 回退到消息 md 原文里的 ```voice 围栏（站点读不到 lang 时仍可命中）。
+      let hasVoice = blocks.some((b) => b && b.type === 'code'
+        && String(b.lang || '').toLowerCase().indexOf('voice') >= 0);
+      if (!hasVoice) {
+        const md = String(m.md || '');
+        if (/```[ \t]*voice\b/i.test(md)) hasVoice = true;
+      }
       if (!hasVoice) {
         return {
           error: 'voice_missing',
