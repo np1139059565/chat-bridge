@@ -33,7 +33,9 @@
    * 顺序刻意如此——文件最后写，避免写错端口把服务写死。
    */
   M.savePort = async function () {
-    const m = /:(\d+)\b/.exec(this.config.flaskUrl || '');
+    // 从输入框草稿里解析端口；草稿为空时退回当前实际地址。
+    const src = this.flaskUrlDraft || this.config.flaskUrl || '';
+    const m = /:(\d+)\b/.exec(src);
     const port = m ? parseInt(m[1], 10) : NaN;
     if (!port || port < 1 || port > 65535) { this.toast('请填写形如 http://127.0.0.1:端口的地址'); return; }
     // 1) 让后端带新端口重启（此请求会因进程重启而中断，属正常）
@@ -51,7 +53,9 @@
     }
     // 3) 探到了才写进 config.yaml，并把新地址落盘，
     // 避免后续探测优先命中浏览器里存的旧地址。
+    // 此刻才切换实际连接地址——探通之前，连接地址始终保持旧值。
     this.config.flaskUrl = base;
+    this.flaskUrlDraft = '';   // 清空草稿，输入框回到回显实际地址的状态
     try { chrome.storage.local.set({ aiMirrorFlaskUrl: base }); } catch (e) { /* 忽略 */ }
     try {
       await D.apiFetch(this, '/config', {

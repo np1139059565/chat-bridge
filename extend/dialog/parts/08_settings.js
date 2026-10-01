@@ -234,11 +234,14 @@
       h('br'),
       // 工具服务地址：唯一输入框，形如 http://127.0.0.1:5000。
       // 保存时从中解析端口，以滚动重启切到新端口。
+      // 输入框绑草稿变量而非连接地址——输入过程中不改实际连接，
+      // 只有点「保存并重启」才把草稿里的端口拿去滚动重启；
+      // 草稿为空时回显当前实际地址，保证首次打开能看到现状。
       h('label', ['工具服务地址', h('input', {
         type: 'text', class: 'bridge-sel-input',
-        value: ctx.config.flaskUrl,
+        value: ctx.flaskUrlDraft || ctx.config.flaskUrl,
         placeholder: 'http://127.0.0.1:端口',
-        onInput: (e) => { ctx.config.flaskUrl = e.target.value; }
+        onInput: (e) => { ctx.flaskUrlDraft = e.target.value; }
       })]),
       h('div', [
         h('button', { onClick: () => ctx.savePort() }, '保存并重启'),

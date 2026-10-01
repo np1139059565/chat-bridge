@@ -158,6 +158,9 @@ window.AIMirrorDialog = (function () {
         profile: 'glm',
         flaskPort: 5000
       },
+      // 工具服务地址输入框的草稿值：与 config.flaskUrl 分离，
+      // 避免「一边输入、连接地址就跟着变」导致请求打到还没起来的端口。
+      flaskUrlDraft: '',
       portMismatch: false,
       configTools: {},
       maxJsonChars: 100000,

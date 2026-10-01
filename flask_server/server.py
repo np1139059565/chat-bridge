@@ -35,10 +35,15 @@ def _parse_cli_args(argv=None):
 
 
 if __name__ == "__main__":
-    # 端口 / 主机优先级：命令行参数 > config.yaml > 内置默认值。
+    # 端口 / 主机优先级：
+    #   环境变量 CB_PORT（滚动重启注入） > 命令行 --port > config.yaml > 默认。
+    # 环境变量最高，确保「改端口重启」时新进程一定用新端口，
+    # 即便启动入口不解析命令行参数也能生效。
+    import os as _os
     cli = _parse_cli_args()
     flask_cfg = runtime.CONFIG.get("flask", {})
+    env_port = _os.environ.get("CB_PORT")
     host = cli.host or flask_cfg.get("host", "127.0.0.1")
-    port = cli.port or flask_cfg.get("port", 5000)
+    port = int(env_port) if env_port else (cli.port or flask_cfg.get("port", 5000))
     # threaded=True：卡片与外部工具均为同步阻塞，需并发承载
     app.run(host=host, port=port, debug=False, threaded=True)
