@@ -187,6 +187,24 @@ _BLOCK_HANDLERS = {
 }
 
 
+def _thinking_text_of(m):
+    """单独提取一条消息里的思考文本（拼接全部 thinking 块）。
+
+    为什么要单独取：AI 回复的 md 字段是「复制按钮」采集的 Markdown 原文，
+    复制内容不含思考过程；推送若只用 md，思考就被整段绕过。故思考不能
+    依附 md，需从 blocks 里独立提取，再由推送环节自行拼装。
+    @param m 消息对象
+    @returns 思考文本；没有思考块返回空串
+    """
+    parts = []
+    for b in (m.get("blocks") or []):
+        if b and b.get("type") == "thinking":
+            t = str(b.get("text") or "").strip()
+            if t:
+                parts.append(t)
+    return "\n\n".join(parts)
+
+
 def _blocks_to_text(m, push_thinking):
     """把一条消息的块合并成一段文本。
 

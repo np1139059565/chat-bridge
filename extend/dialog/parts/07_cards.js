@@ -229,8 +229,7 @@
     return h('div', { class: 'msg tool-result', key: mKey }, [
       h('div', { class: 'bubble' }, [
         h('div', { class: 'who' }, [
-          h('span', { class: 'role-tag role-tool' }, '工具'),
-          m.name || ''
+          h('span', {}, '工具')
         ]),
         h('div', { class: 'blocks' }, D.toArray(m.blocks).map((b, j) => D.renderBlock(ctx, b, j, mKey)))
       ])

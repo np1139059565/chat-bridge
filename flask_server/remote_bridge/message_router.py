@@ -21,6 +21,7 @@ def log(*args):
 # 此处按原名导入，保持本模块内既有调用不变。
 from .message_parse import (
     _parse_envelope, _has_qq_source, _tool_result_of, _classify, _blocks_to_text,
+    _thinking_text_of,
 )
 
 # 被动回复窗口时长（秒）：官方为 60 分钟
@@ -279,8 +280,29 @@ def _push_one(qq_client, openid, m, push):
         body = "%s\n```json\n%s\n```" % (PREFIX.get(kind, kind), text)
         return 'sent' if push_text(qq_client, openid, body, markdown=True) else 'fail'
     raw_md = str(m.get("md") or "").strip()
-    is_markdown = bool(raw_md)
-    text = raw_md or _blocks_to_text(m, push.get("thinking", False))
+    # 正文：优先用复制采集的 Markdown 原文保格式；没有则退回 blocks 拼纯文本。
+    # 此处传 push_thinking=False：思考不再拼进正文，改由下方折叠区单独承载，
+    # 否则思考会随正文重复出现一次。
+    body_text = raw_md or _blocks_to_text(m, False)
+    # 思考内容：md 字段是「复制按钮」的产物，复制内容不含思考过程，
+    # 只看 md 会把思考整段绕过；故从 blocks 里独立提取。
+    # 仅在「思考」推送开关打开时附加。
+    think = _thinking_text_of(m) if push.get("thinking", False) else ""
+    if think:
+        # 思考内容用带语言标记的围栏代码块承载，与工具结果同一形式：
+        # QQ 仅对带语言标记的代码块（如 ```json）折叠渲染，空围栏不折叠，
+        # 故此处必须带语言标记；details / summary 等 HTML 语法 QQ 不解析。
+        # 标记与工具结果统一用 json，确保与已验证可折叠的推送形式一致。
+        # 代码块在前、正文在后，保证读者先看到回答、再按需查看思考。
+        # 若思考内容本身含三反引号，改用四反引号围栏，避免提前闭合。
+        tick = "````" if "```" in think else "```"
+        text = "%sjson\n%s\n%s" % (tick, think, tick)
+        if body_text:
+            text = text + "\n\n" + body_text
+        is_markdown = True
+    else:
+        text = body_text
+        is_markdown = bool(raw_md)
     if not text:
         return 'skip'
     # AI 消息：推送文本之外，若含 [VOICE] 段且语音开关开着，另合成并推一条语音。
