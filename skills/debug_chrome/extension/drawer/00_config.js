@@ -19,7 +19,8 @@ window.AIDrawer = (function () {
   // 仅保留与调试能力相关的配置；连接地址指向工具服务（chat-bridge）
   // url_mappings：URL 前缀 → 本地工程文件路径，供元素卡片把选中元素对应到源码位置
   const DEFAULT_CFG = {
-    backend_url: 'http://127.0.0.1:5000',
+    // 后端地址不预置：由用户在设置页输入框手动填写，避免写死端口。
+    backend_url: '',
     screenshot_enabled: false,
     style_list_enabled: false,
     url_mappings: [],

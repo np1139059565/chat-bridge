@@ -1,5 +1,7 @@
 // 后台脚本：截图、标签页 ID 获取、点击图标切换抽屉
-const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';
+// 后端地址不预置默认值：由用户在抽屉设置页手动填写。
+// 预置 5000 会让「改了端口但忘了同步」时被旧端口悄悄接住，掩盖问题。
+const DEFAULT_BACKEND_URL = '';
 
 async function getBackendUrl() {
   const stored = await chrome.storage.local.get(['backendUrl', 'aistyleCfg']);

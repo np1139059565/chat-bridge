@@ -14,7 +14,7 @@ from flask import Blueprint, jsonify, request
 
 import runtime
 from config_store import save_config_to_yaml
-from service_control import restart_server
+from service_control import rolling_restart
 
 bp = Blueprint("config_route", __name__)
 
@@ -134,7 +134,9 @@ def restart_port():
         return jsonify(success=False, error="port 必须是整数"), 400
     if port < 1 or port > 65535:
         return jsonify(success=False, error="port 超出合法范围"), 400
-    # 不写配置文件：新端口仅通过启动参数传给重启后的进程。
-    # 延迟重启，让本响应先发回前端，再让出端口。
-    restart_server(extra_args=["--port", str(port)])
+    # 不写配置文件：新端口仅通过启动参数传给新进程。
+    # 滚动重启：先以新端口起新服务，确认可连后旧服务再退出，
+    # 全程旧服务存活，不存在服务真空。本响应立即返回，
+    # 后续「确认新服务→退出旧进程」在后台进行。
+    rolling_restart(port)
     return jsonify(success=True, port=port)

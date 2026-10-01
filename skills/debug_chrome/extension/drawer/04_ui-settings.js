@@ -27,7 +27,7 @@
         h('div', { class: 'settings' }, [
           h('div', { class: 'section' }, [
             h('h3', '连接配置'),
-            D.field('工具服务地址', D.textInput(c.backend_url, (v) => { c.backend_url = v; scheduleSave(); }, 'http://127.0.0.1:5000')),
+            D.field('工具服务地址', D.textInput(c.backend_url, (v) => { c.backend_url = v; scheduleSave(); }, 'http://127.0.0.1:端口')),
             h('p', { class: 'hint-text' }, '工具服务由 chat-bridge 提供；调试能力以工具形式挂靠在其上。'),
           ]),
 

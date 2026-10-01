@@ -47,8 +47,10 @@
       this.toast('新端口 ' + port + ' 未在时限内就绪，服务可能未起来，请检查');
       return;
     }
-    // 3) 探到了才写进 config.yaml
+    // 3) 探到了才写进 config.yaml，并把新地址落盘，
+    // 避免后续探测优先命中浏览器里存的旧地址。
     this.config.flaskUrl = base;
+    try { chrome.storage.local.set({ aiMirrorFlaskUrl: base }); } catch (e) { /* 忽略 */ }
     try {
       await D.apiFetch(this, '/config', {
         method: 'POST', body: { flask: { port: port } }, lenientJson: true

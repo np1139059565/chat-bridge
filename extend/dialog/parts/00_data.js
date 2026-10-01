@@ -152,7 +152,9 @@ window.AIMirrorDialog = (function () {
       siteKey: '',
       profileId: '',
       config: {
-        flaskUrl: 'http://127.0.0.1:5000',
+        // 后端地址不预置：由 discoverFlask 探测并落盘，探测不到时留空，
+        // 待用户在设置页手动填写端口。
+        flaskUrl: '',
         profile: 'glm',
         flaskPort: 5000
       },

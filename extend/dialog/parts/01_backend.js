@@ -281,13 +281,14 @@
         chrome.storage.local.get(['aiMirrorFlaskUrl'], (r) => res((r && r.aiMirrorFlaskUrl) || ''));
       });
     } catch (e) { /* 存储不可用则忽略 */ }
+    // 探测地址来源：上次探通的地址 → 当前连通地址 → 设置页端口输入框构造的地址。
+    // 不再附带写死的候选端口，避免改端口后仍被旧端口悄悄接住；
+    // 端口输入框的默认值（可被用户修改）是唯一的兜底依据。
+    const byPort = this.config.flaskPort ? ('http://127.0.0.1:' + this.config.flaskPort) : '';
     const candidates = [
       saved,
       this.config.flaskUrl,
-      'http://127.0.0.1:5000',
-      'http://127.0.0.1:8080',
-      'http://127.0.0.1:8000',
-      'http://localhost:5000'
+      byPort
     ].filter(Boolean);
     for (let i = 0; i < candidates.length; i++) {
       const base = candidates[i].replace(/\/+$/, '');
@@ -344,9 +345,11 @@
       if (cfg.limits && cfg.limits.max_json_chars) this.maxJsonChars = cfg.limits.max_json_chars;
       if (cfg.default_profile) this.config.profile = cfg.default_profile;
       // 配置端口与实际连通端口不一致 = 端口已改但服务尚未重启（需重启才生效）
-      const m = /:(\d+)/.exec(this.config.flaskUrl);
-      const livePort = m ? parseInt(m[1], 10) : 5000;
-      this.portMismatch = livePort !== parseInt(this.config.flaskPort, 10);
+      // 从当前实际连通的地址里取端口做比对；取不到就不判不一致，
+      // 避免用一个写死的端口去猜。
+      const m = /:(\d+)/.exec(this.config.flaskUrl || '');
+      const livePort = m ? parseInt(m[1], 10) : NaN;
+      this.portMismatch = !isNaN(livePort) && livePort !== parseInt(this.config.flaskPort, 10);
       log('loadConfig: 后端=' + this.config.flaskUrl, '工具数=' + Object.keys(this.configTools).length,
         '端口一致=' + !this.portMismatch);
     } catch (e) {

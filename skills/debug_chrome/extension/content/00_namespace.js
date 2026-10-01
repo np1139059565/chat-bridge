@@ -6,7 +6,8 @@ window.AIStyleDebug = (function () {
   const MAX_ELEMENTS = 5;
   const MAX_SHOT_WIDTH = 1280;
   // 后端指向工具服务（chat-bridge）；端口与工具服务 config.yaml 的 flask.port 一致
-  const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';
+  // 后端地址不预置默认值：由抽屉设置页手动填写，避免写死端口。
+  const DEFAULT_BACKEND_URL = '';
   const DRAWER_READY_TIMEOUT_MS = 5000;
 
   // get_element_style 默认返回的常用 CSS 属性。全量样式有数百条，默认只回传
