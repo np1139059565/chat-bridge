@@ -161,6 +161,8 @@ window.AIMirrorDialog = (function () {
       // 工具服务地址输入框的草稿值：与 config.flaskUrl 分离，
       // 避免「一边输入、连接地址就跟着变」导致请求打到还没起来的端口。
       flaskUrlDraft: '',
+      // 是否正在切换端口：为真时禁用输入框与按钮，禁止处理中途再改端口。
+      portSwitching: false,
       portMismatch: false,
       configTools: {},
       maxJsonChars: 100000,

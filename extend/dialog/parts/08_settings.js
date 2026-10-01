@@ -241,12 +241,16 @@
         type: 'text', class: 'bridge-sel-input',
         value: ctx.flaskUrlDraft || ctx.config.flaskUrl,
         placeholder: 'http://127.0.0.1:端口',
+        // 切换端口期间禁用输入，禁止中途再改
+        disabled: ctx.portSwitching,
         onInput: (e) => { ctx.flaskUrlDraft = e.target.value; }
       })]),
       h('div', [
-        h('button', { onClick: () => ctx.savePort() }, '保存并重启'),
-        h('button', { onClick: () => ctx.initBackend() }, '重新连接'),
-        h('span', { class: 'hint' }, '保存后自动以新端口滚动重启（先起新、探通再退旧），探通后才写入配置')
+        h('button', {
+          disabled: ctx.portSwitching,
+          onClick: () => ctx.savePort()
+        }, ctx.portSwitching ? '切换中…' : '保存并重启'),
+        h('span', { class: 'hint' }, '端口不一致才重启：先起新服务、探通后才切换并退出旧服务；超时自动还原')
       ]),
       // 工具结果 JSON 体积上限：写入后端 config.yaml，即时生效
       h('label', ['工具结果体积上限(字符)', h('input', {

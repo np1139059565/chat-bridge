@@ -7,9 +7,7 @@
   这是「改端口」的标准做法：旧服务在新服务确认可用前一直存活，
   因此不存在「旧端口已让出、新端口还没起来」的真空期。
 
-两种模式都通过「起一个与父进程彻底脱离的子进程」实现。
-新端口通过环境变量 CB_PORT 传给新进程（不依赖命令行参数解析，
-避免启动入口不认 --port 时新进程仍去读旧配置、抢占旧端口而崩溃）。
+新端口通过命令行参数 --port 传给新进程（server.py 的入口负责解析）。
 新进程的输出写入 data/logs/restart.log，便于排查启动失败。
 """
 import os
@@ -19,19 +17,16 @@ import threading
 import time
 import urllib.request
 
-
-# 传给新进程的端口环境变量名（server.py 会优先读取它）
-PORT_ENV = "CB_PORT"
-
-# 新进程输出日志路径（相对 flask_server 目录）
-_LOG_PATH = os.path.join("data", "logs", "restart.log")
+# flask_server 根目录（本文件在 core/ 下）
+_APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# 新进程输出日志（绝对路径，不依赖运行时工作目录）
+_LOG_PATH = os.path.join(_APP_DIR, "data", "logs", "restart.log")
 
 
-def _spawn(extra_args=None, env_port=None, delay=0.0):
+def _spawn(extra_args=None, delay=0.0):
     """起一个与父进程彻底脱离的子进程，重新拉起当前服务。
 
-    @param extra_args 附加命令行参数（一般不用；端口走环境变量）
-    @param env_port   通过环境变量 CB_PORT 传给新进程的端口；None 表示不传
+    @param extra_args 附加到启动命令的参数，如 ['--port', '5006']
     @param delay      子进程等待多久再启动（秒）；0 表示立即
     """
     argv = [sys.executable] + list(sys.argv) + list(extra_args or [])
@@ -41,10 +36,6 @@ def _spawn(extra_args=None, env_port=None, delay=0.0):
         popen_cmd = [sys.executable, "-c", code]
     else:
         popen_cmd = argv
-    # 环境变量：继承当前环境，并注入新端口（若有）
-    env = dict(os.environ)
-    if env_port is not None:
-        env[PORT_ENV] = str(env_port)
     # 把新进程输出重定向到日志文件，方便排查启动失败。
     # 之前丢弃输出，导致新服务起不来时无从查因。
     try:
@@ -53,12 +44,11 @@ def _spawn(extra_args=None, env_port=None, delay=0.0):
     except Exception:
         log_f = subprocess.DEVNULL
     kw = {
-        "cwd": os.getcwd(),
+        "cwd": _APP_DIR,
         "close_fds": True,               # 不继承监听 socket，避免端口被占
         "stdin": subprocess.DEVNULL,     # 与控制台解耦
         "stdout": log_f,
         "stderr": log_f,
-        "env": env,
     }
     if os.name == "nt":
         # Windows 上必须用 DETACHED_PROCESS 才能真正脱离父进程；
@@ -95,15 +85,13 @@ def rolling_restart(port, host="127.0.0.1", timeout=25.0):
     新端口若在时限内起不来，旧服务保持运行（不退出）。
     本函数立即返回，实际的「确认后退出」在后台线程进行。
 
-    新端口通过环境变量 CB_PORT 传给新进程，不依赖命令行参数解析。
-
-    @param port     新端口
+    @param port     新端口（通过 --port 传给新进程）
     @param host     探测用的主机（一般 127.0.0.1）
     @param timeout  等待新服务就绪的总时长（秒）
     """
     def _worker():
-        # 1) 起新进程（环境变量带新端口），旧服务此刻仍在运行
-        _spawn(env_port=port)
+        # 1) 起新进程（--port 带新端口），旧服务此刻仍在运行
+        _spawn(extra_args=["--port", str(port)])
         # 2) 轮询探测新端口，直到通或超时
         deadline = time.time() + timeout
         while time.time() < deadline:
