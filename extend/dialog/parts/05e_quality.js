@@ -29,6 +29,9 @@
     if (hasCode && !hasText) {
       return {
         error: 'code_only_reply',
+        // scope：问题归属。'block' 表示该检测天生依赖代码块，只能随代码块卡片回传；
+        // 'message' 表示与代码块无关，改走消息级回传（见 05_messages.js 的分流）。
+        scope: 'block',
         message: '本条回复只包含代码块，缺少文字说明，无法监控流程。'
           + '请在代码块之外补充说明再重新生成。'
       };
@@ -42,6 +45,8 @@
       if (total > 200 && letters / total > 0.8) {
         return {
           error: 'thinking_english',
+          // 与代码块无关：思考内容属于整条回复的属性，走消息级回传。
+          scope: 'message',
           message: '本条回复的思考内容以英文为主（约 ' + Math.round(letters / total * 100)
             + '% 为英文字符），无法监控流程。请用中文重新生成。'
         };
@@ -56,6 +61,9 @@
       if (!hasVoice) {
         return {
           error: 'voice_missing',
+          // 与代码块无关：语音朗读缺失是整条回复的属性，走消息级回传。
+          // 这样纯文字回复（无任何代码块）也能收到该提示并重新生成。
+          scope: 'message',
           message: '本条回复缺少语音朗读文本。请另用一个代码块，块内为 JSON：'
             + '{"type":"bridge-voice","text":"适合朗读的纯口语文本"}，然后重新生成。'
         };

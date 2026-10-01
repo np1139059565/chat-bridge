@@ -1,7 +1,8 @@
 // 模块：extend/dialog/parts/05_messages.js
 // 用途：消息接收与消息树核心：工具列表拉取、网页消息接收与解析、
-//       分支组装、自动执行候选收集、助手回复质量检测。
-//       消息树写入口 upsertTree 在 05b_tree.js。
+//       分支组装、灌入切片的编排、自动执行收尾。
+//       消息树写入口 upsertTree 在 05b_tree.js；
+//       建卡与质量检测在 05g_cards.js。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 //
 // 数据模型：
@@ -164,20 +165,6 @@
   };
 
   /**
-   * 把一张工具卡片纳入「本轮可自动执行」候选池。
-   * 只收集未执行、未跳过、未在倒计时中的卡片；镜像里没有对应代码块的（幽灵卡片）不进入。
-   * @param {Array} pool 候选池（就地追加）
-   * @param {Object} card 工具卡片
-   */
-  M.collectAutoCandidate = function (pool, card) {
-    if (!card || !card.isTool) return;
-    if (card.executed || card.skipped || card._cdTimer) return;
-    if (!this.cardInMirror(card)) return;
-    if (pool.indexOf(card) >= 0) return;
-    pool.push(card);
-  };
-
-  /**
    * 灌入一批网页消息。
    * 顺序：写消息树 → 记录可见区 key → 组装分支 → 为代码块建卡 → 自动执行 / 冲突回报 → 落盘。
    * @param {Array} messages 本次网页推送的消息（有序）
@@ -233,7 +220,7 @@
     // 异步：需等后端指纹返回；带超时保护，后端不可达时不阻塞入库。
     const memoryIssue = await this.memoryIssueForRound(incoming, reason);
 
-    // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见两个辅助方法）
+    // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见 05g_cards.js 与下方收尾）
     const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly);
     this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom);
 
@@ -246,136 +233,6 @@
     // 走 WithMd 版本：先点复制按钮取带格式的 Markdown，再上报，
     // 这样推送到 QQ 的内容才保得住格式。
     this.reportToBridgeWithMd(reason);
-  };
-
-  /**
-   * 为切片的代码块建卡，并收集自动执行候选与重跑候选。
-   * 入树的消息：卡片写在节点上，与切片消息共享同一份卡片表；
-   * 不入树的消息：卡片直接写在切片消息上（供手动操作）。
-   * @returns {Object} { autoCandidates, armedLast, rerunCard }
-   */
-  M._buildCardsForIncoming = function (conv, incoming, reason, memoryIssue, scrollOnly) {
-    const autoCandidates = [];
-    let armedLast = null;   // 滚动轮次里被「上膛」的最新卡片（仅最后一条消息上的）
-    let rerunCard = null;   // 重复卡片重跑候选（严格受限旁路，见下方判定）
-    incoming.forEach((m, mi) => {
-      // 定位本条在本轮切片中的真实 key：优先用切片内相邻边 '上一条-本条'。
-      // 为什么不用 keyOfId：内容指纹碰撞时，keyOfId 返回「第一个右段匹配」的
-      // 更早旧 key，会把新消息指向旧节点——旧节点上已有同 id 卡片且可能已执行，
-      // 导致新卡片不建、自动候选=0、分支回溯串到浅处。改用本轮真实边可避免。
-      let key = '';
-      if (mi > 0) {
-        const edge = this.msgId(incoming[mi - 1]) + '-' + this.msgId(m);
-        if (conv.msgTree[edge]) key = edge;
-      }
-      if (!key) key = this.keyOfId(conv.msgTree, this.msgId(m));
-      const node = conv.msgTree[key];
-      const holder = node || m;
-      holder.cards = holder.cards || {};
-      if (node) m.cards = holder.cards;
-      const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-      const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks);
-      blocks.forEach((b) => {
-        if (!b || b.type !== 'code' || !b.id) return;
-        const exist = holder.cards[b.id];
-        if (exist) {
-          if (exist.isTool && issue && !exist.preIssue) exist.preIssue = issue;
-          if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
-          // 重复卡片重跑：来源=generate、卡片在本轮最新消息上、且此前已执行过，三者缺一不可
-          if (reason === 'generate' && mi === incoming.length - 1
-              && exist.isTool && exist.executed) {
-            rerunCard = exist;
-          }
-          return;
-        }
-        // 只把「助手回答」里的代码块当成可执行工具调用（用户消息里的示例块不建卡）
-        const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
-        holder.cards[b.id] = this._makeCard(b, call, issue);
-        if (!call) return;
-        if (scrollOnly) {
-          // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行
-          if (mi === incoming.length - 1) {
-            holder.cards[b.id].autoArmed = true;
-            armedLast = holder.cards[b.id];
-          }
-        } else {
-          // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
-          // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
-          this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
-        }
-      });
-    });
-    return { autoCandidates: autoCandidates, armedLast: armedLast, rerunCard: rerunCard };
-  };
-
-  /**
-   * 计算某条消息在建卡阶段要贴的问题：多调用冲突优先，其次回复质量与记忆滞后。
-   * 只在 AI 生产结束（generate）场景检测，其它场景不该给已有卡片贴问题标签。
-   * @returns {Object|null} { error, message } 或 null
-   */
-  M._messageIssue = function (m, mi, total, reason, memoryIssue, blocks) {
-    if (reason !== 'generate') return null;
-    let toolCallCount = 0;
-    if (m.role === 'assistant') {
-      blocks.forEach((b) => {
-        if (b && b.type === 'code' && b.id && this.parseToolCall(b)) toolCallCount += 1;
-      });
-    }
-    if (toolCallCount > 1) {
-      return {
-        error: 'multiple_tool_calls',
-        message: '本条回复包含多个工具调用代码块（共 ' + toolCallCount + ' 个）。'
-          + '请一次只返回一个调用块，收到结果后再决定下一步。'
-      };
-    }
-    if (m.role === 'assistant') {
-      const issue = this.assistantQualityIssue(m);
-      if (issue) return issue;
-      // 记忆滞后提醒：仅贴在本轮最后一条助手输出上（更早的消息已无提醒意义）
-      if (mi === total - 1 && memoryIssue) return memoryIssue;
-    }
-    return null;
-  };
-
-  /**
-   * 构造一张代码块卡片的状态对象。
-   * @param {Object} b 代码块
-   * @param {Object|null} call 解析出的工具调用（非工具块为 null）
-   * @param {Object|null} issue 建卡阶段检测出的问题
-   * @returns {Object} 卡片对象
-   */
-  M._makeCard = function (b, call, issue) {
-    return {
-      id: b.id,
-      lang: b.lang || '',
-      phase: '',
-      code: b.code || '',
-      isTool: !!call,
-      silent: !!(call && this.toolSilent(call.tool)),
-      // noReply：调用方显式声明「不需要结果回传」。
-      noReply: !!(call && call.parameters && call.parameters.no_reply === true),
-      tool: call ? call.tool : '',
-      parameters: call ? call.parameters : {},
-      status: 'pending',
-      result: null,
-      error: null,
-      executed: false,
-      // finishedAt：执行完成时刻（毫秒）。执行结束（成功或失败）时写入，
-      // 在消息列表中显示，便于分析卡片的时序问题。
-      finishedAt: null,
-      // preIssue：建卡阶段检测出的问题。执行时直接作为结果，不去调工具。
-      preIssue: (call && issue) ? issue : null,
-      autoArmed: false,
-      stack: null,
-      errorType: '',
-      origin: '',
-      location: null,
-      hint: '',
-      nonce: '',
-      // hostPageUrl：承载本对话的顶层页面地址；命令超时逸散时后端据此优先回投本页面。
-      // 缺这个字段时，后端只能随机投给其他页面，出现「发给 B 却落到 C」。
-      hostPageUrl: this.page_url || ''
-    };
   };
 
   /**
