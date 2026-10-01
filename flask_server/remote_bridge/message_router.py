@@ -150,19 +150,39 @@ def _extract_voice_text(text):
     return (m.group(1).strip() if m else "")
 
 
-def _extract_voice_from_blocks(m):
-    """从消息的 blocks 里找 lang==voice 的代码块，取块内文本。
+def _is_tool_call_block(b):
+    """判断一个代码块是否为工具调用块：内容为含 type=bridge-chat-call 的 JSON。
 
-    为什么要从 blocks 找而不是拼好的文本：拼接文本时 _block_code 会把
-    代码块包成不带语言标记的围栏，voice 标记会丢失。直接从块上读 lang 最可靠。
+    与前端 parseToolCall 同一套判据——只看内容，不看语言名。
+    @param b 块对象
+    @returns 是否为工具调用块
+    """
+    import json
+    src = str(b.get("code") or "").strip()
+    if not src or src[0] != "{":
+        return False
+    try:
+        obj = json.loads(src)
+        return isinstance(obj, dict) and obj.get("type") == "bridge-chat-call"
+    except Exception:
+        return False
+
+
+def _extract_voice_from_blocks(m):
+    """从消息的 blocks 里取语音朗读文本。
+
+    判定与「代码块识别」同一套逻辑——只看是不是代码块，不看语言名：
+    排除工具调用块（内容为含 bridge-chat-call 的 JSON），其余代码块即语音朗读块。
+    这样各站点（语言名能否解析）都能稳定取到。
     @param m 消息对象
     @returns 语音文本；无则空串
     """
     for b in (m.get("blocks") or []):
         if not b or b.get("type") != "code":
             continue
-        if str(b.get("lang") or "").lower() == "voice":
-            return str(b.get("code") or "").strip()
+        if _is_tool_call_block(b):
+            continue
+        return str(b.get("code") or "").strip()
     return ""
 
 

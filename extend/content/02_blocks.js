@@ -21,6 +21,15 @@
     if (pre) {
       const mm = /language-([a-zA-Z0-9_+#-]+)/.exec(String(pre.className || ''));
       if (mm) return mm[1];
+      // 语言类常写在 pre 内的 code 元素上（如 <code class="language-voice">），
+      // pre 自身没有 language- 类。补查一层，否则语言标记读不到。
+      const cd = pre.querySelector('code');
+      if (cd) {
+        const cl = cd.getAttribute && cd.getAttribute('lang');
+        if (cl) return cl;
+        const cm = /language-([a-zA-Z0-9_+#-]+)/.exec(String(cd.className || ''));
+        if (cm) return cm[1];
+      }
     }
     const box = host.closest ? host.closest('.code-no-artifacts') : null;
     if (box) {

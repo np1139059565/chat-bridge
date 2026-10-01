@@ -47,24 +47,20 @@
         };
       }
     }
-    // 问题三：语音开关打开期间，每一轮回复都必须带 voice 代码块（供合成语音发回）。
-    // 只要开关处于打开状态即强制检测，与是否收到语音无关；缺失则打回重生成。
+    // 问题三：语音开关打开期间，每一轮回复都必须带语音朗读块（供合成语音发回）。
+    // 判定与「代码块识别」同一套逻辑——只看是不是代码块，不看语言名：
+    // 代码块识别从不依赖语言名（靠内容判别），而语言名在部分站点解析不到，
+    // 若以语言名判 voice 必误报。故：排除工具调用块（内容为含 bridge-chat-call 的 JSON），
+    // 其余代码块即视为语音朗读块。
     const voiceOn = !!(this.bridgePush && this.bridgePush.voice);
     if (voiceOn) {
-      // 判定是否含 voice 块，宽松匹配——避免因站点解析差异误报：
-      // 1) 代码块 lang 含 'voice'（容忍大小写与 voice-xx 变体）；
-      // 2) 回退到消息 md 原文里的 ```voice 围栏（站点读不到 lang 时仍可命中）。
-      let hasVoice = blocks.some((b) => b && b.type === 'code'
-        && String(b.lang || '').toLowerCase().indexOf('voice') >= 0);
-      if (!hasVoice) {
-        const md = String(m.md || '');
-        if (/```[ \t]*voice\b/i.test(md)) hasVoice = true;
-      }
+      const hasVoice = blocks.some((b) => b && b.type === 'code'
+        && !this.parseToolCall(b));
       if (!hasVoice) {
         return {
           error: 'voice_missing',
-          message: '本条回复缺少语音朗读文本。请补一个语言标记为 voice 的 Markdown 代码块'
-            + '（即 ```voice ... ```），块内放适合朗读的纯口语文本，然后重新生成。'
+          message: '本条回复缺少语音朗读文本。请另用一个 Markdown 代码块，'
+            + '块内放适合朗读的纯口语文本，然后重新生成。'
         };
       }
     }
