@@ -157,14 +157,6 @@
   opacity: 1;
 }
 
-/* 执行完成时刻：毫秒级，紧跟条目 id 显示，便于分析卡片时序。固定不伸缩。 */
-.conv-time {
-  flex: 0 0 auto;
-  font-family: var(--cb-font-mono, monospace);
-  font-size: var(--cb-fs-xs);
-  color: var(--cb-text-muted);
-  opacity: .7;
-}
 
 /* 卡片门牌号：跟在「工具调用 · 工具名」后显示的卡片 id。
    等宽小字、浅底胶囊，悬停变主色，点击复制，便于排查卡片重复 / 定位具体哪张卡。 */

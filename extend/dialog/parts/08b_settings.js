@@ -177,11 +177,6 @@
           title: 'key：' + e.key + '（点击复制）',
           onClick: () => ctx.copy(e.key)
         }, e.id),
-        // 执行完成时刻（毫秒级）：该消息下卡片最后一次执行的时间，便于分析时序。
-        e.finishedAt
-          ? h('span', { class: 'conv-time', title: '执行完成：' + new Date(e.finishedAt).toLocaleString() },
-            formatFinishTime(e.finishedAt))
-          : null,
         e.kind === 'message' && e.preview && !open
           ? h('span', { class: 'conv-meta', title: e.preview }, e.preview)
           : null,
@@ -194,18 +189,6 @@
       // 展开区：复用镜像区已有的块渲染与卡片渲染，保证两处呈现一致。
       open ? h('div', { class: 'conv-body' }, D.renderEntryBody(ctx, e)) : null
     ]);
-  }
-
-  /**
-   * 把执行完成时刻（毫秒）格式化为「时分:分秒.毫秒」短串，便于列表紧凑显示。
-   * @param {number} ts 毫秒时间戳
-   * @returns {string} 形如 11:55:21.842
-   */
-  function formatFinishTime(ts) {
-    const d = new Date(ts);
-    const p = (n, w) => String(n).padStart(w || 2, '0');
-    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
-      + '.' + p(d.getMilliseconds(), 3);
   }
 
   /** 条目类型 → 展示用标签。只显示角色（用户/AI），省略块数以节省横向空间。 */

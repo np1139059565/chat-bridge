@@ -61,6 +61,15 @@
   padding: var(--cb-sp-2) var(--cb-sp-3);
 }
 
+/* 执行完成时刻：毫秒级，显示在卡片内操作行之下，便于分析卡片时序。 */
+.card-time {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-sub);
+  opacity: .75;
+  padding: 0 var(--cb-sp-3) var(--cb-sp-2);
+}
+
 /* 卡片头部右侧控件组：状态徽标 + 自动回传开关 + 倒计时 */
 .head-controls {
   display: flex;

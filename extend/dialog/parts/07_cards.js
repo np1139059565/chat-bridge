@@ -10,6 +10,18 @@
   const h = Vue.h;
 
   /**
+   * 把执行完成时刻（毫秒）格式化为「时分:分秒.毫秒」短串。
+   * @param {number} ts 毫秒时间戳
+   * @returns {string} 形如 11:55:21.842
+   */
+  D.formatTime = function (ts) {
+    const d = new Date(ts);
+    const p = (n, w) => String(n).padStart(w || 2, '0');
+    return p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds())
+      + '.' + p(d.getMilliseconds(), 3);
+  };
+
+  /**
    * 从工具结果里提取截图 dataURL。
    * 截图工具（get_page_snapshot）的结果结构：
    *   { success:true, data:{ screenshot:'data:image/...', saved:{...} } }
@@ -60,6 +72,11 @@
       // 由下方结果区统一呈现，避免同一内容重复两处。
       kids.push(h('pre', { class: 'params-json' }, JSON.stringify(card.parameters, null, 2)));
       D._renderCardActions(ctx, card, readonly, sending, kids);
+      // 执行完成时刻（毫秒级）：放在卡片内操作行之下、结果之上，便于分析时序。
+      if (card.finishedAt) {
+        kids.push(h('div', { class: 'card-time', title: '执行完成：' + new Date(card.finishedAt).toLocaleString() },
+          '执行完成：' + D.formatTime(card.finishedAt)));
+      }
       D._renderToolResult(ctx, card, readonly, kids);
     } else {
       kids.push(h('pre', { class: 'code-body' }, block.code));
