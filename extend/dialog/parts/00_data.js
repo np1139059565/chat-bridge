@@ -322,11 +322,17 @@ window.AIMirrorDialog = (function () {
           // 便于一眼认出某张卡片挂在哪条消息下、也便于排查卡片重复。
           const cards = (node && node.cards) || {};
           const cardIds = Object.keys(cards).filter(function (bid) { return !!cards[bid]; });
+          // 该消息下卡片的最晚执行完成时刻（毫秒）：供列表显示，便于分析时序。
+          const finishedAt = Object.keys(cards).reduce(function (mx, bid) {
+            const c = cards[bid];
+            return Math.max(mx, (c && c.finishedAt) || 0);
+          }, 0);
           items.push({
             key: it.key,
             kind: 'message',
             id: id,
             cardIds: cardIds,
+            finishedAt: finishedAt || null,
             role: node.role || '',
             name: node.name || '',
             preview: D.firstLine(node),
@@ -359,6 +365,9 @@ window.AIMirrorDialog = (function () {
         // 匹配消息指纹，或该消息下任一卡片 id：
         // 这样既能按消息定位，也能按卡片门牌号反查它挂在哪条消息下。
         if (String(e.id || '').toLowerCase().indexOf(q) >= 0) return true;
+        // 再匹配完整 key（形如 'pid-id'）：只匹配 id（右段）会漏掉「作为父段出现」
+        // 的条目（如 key 112-113 里，搜 112 应命中）。故 key 也纳入匹配。
+        if (String(e.key || '').toLowerCase().indexOf(q) >= 0) return true;
         const cards = e.cardIds || [];
         for (let i = 0; i < cards.length; i++) {
           if (String(cards[i] || '').toLowerCase().indexOf(q) >= 0) return true;

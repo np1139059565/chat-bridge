@@ -140,16 +140,23 @@
     const tree = conv.msgTree || {};
     const list = slice || [];
     if (!list.length) return [];
-    const lastId = this.msgId(list[list.length - 1]);
+    const ids = list.map((m) => this.msgId(m));
+    // 切片内「当前 id → 前一条 id」映射：回溯时优先走本轮真实边。
+    const prevInSlice = {};
+    for (let i = 1; i < ids.length; i++) prevInSlice[ids[i]] = ids[i - 1];
     const path = [];
     const seen = {};
-    let cur = lastId;
+    let cur = ids[ids.length - 1];
     while (cur && !seen[cur]) {
       seen[cur] = true;
-      const k = this.keyOfId(tree, cur);
-      if (!k) break;
-      path.unshift(k);
-      const pid = k.slice(0, k.indexOf('-'));
+      let key = '';
+      // 优先用切片内相邻边；碰撞时 keyOfId 会返回旧 key 致回溯变浅。
+      const prev = prevInSlice[cur];
+      if (prev && tree[prev + '-' + cur]) key = prev + '-' + cur;
+      if (!key) key = this.keyOfId(tree, cur);
+      if (!key) break;
+      path.unshift(key);
+      const pid = key.slice(0, key.indexOf('-'));
       if (pid === '0') break;
       cur = pid;
     }
@@ -252,7 +259,16 @@
     let armedLast = null;   // 滚动轮次里被「上膛」的最新卡片（仅最后一条消息上的）
     let rerunCard = null;   // 重复卡片重跑候选（严格受限旁路，见下方判定）
     incoming.forEach((m, mi) => {
-      const key = this.keyOfId(conv.msgTree, this.msgId(m));
+      // 定位本条在本轮切片中的真实 key：优先用切片内相邻边 '上一条-本条'。
+      // 为什么不用 keyOfId：内容指纹碰撞时，keyOfId 返回「第一个右段匹配」的
+      // 更早旧 key，会把新消息指向旧节点——旧节点上已有同 id 卡片且可能已执行，
+      // 导致新卡片不建、自动候选=0、分支回溯串到浅处。改用本轮真实边可避免。
+      let key = '';
+      if (mi > 0) {
+        const edge = this.msgId(incoming[mi - 1]) + '-' + this.msgId(m);
+        if (conv.msgTree[edge]) key = edge;
+      }
+      if (!key) key = this.keyOfId(conv.msgTree, this.msgId(m));
       const node = conv.msgTree[key];
       const holder = node || m;
       holder.cards = holder.cards || {};
@@ -344,6 +360,9 @@
       result: null,
       error: null,
       executed: false,
+      // finishedAt：执行完成时刻（毫秒）。执行结束（成功或失败）时写入，
+      // 在消息列表中显示，便于分析卡片的时序问题。
+      finishedAt: null,
       // preIssue：建卡阶段检测出的问题。执行时直接作为结果，不去调工具。
       preIssue: (call && issue) ? issue : null,
       autoArmed: false,

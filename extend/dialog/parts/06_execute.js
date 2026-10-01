@@ -53,6 +53,7 @@
       card.error ? ('错误=' + card.error) : '');
     // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
     card.executed = true;
+    card.finishedAt = Date.now();
     if (this._persist) this._persist();
     // 上报一次：工具结果此时才产生，不上报的话 QQ 端只看得到工具调用、
     // 看不到结果。以 'tool' 来源上报，后端据此放行（不按普通回看丢弃）。
@@ -75,6 +76,7 @@
     card.error = null;
     card.errorType = '';
     card.executed = true;
+    card.finishedAt = Date.now();
     if (this._persist) this._persist();
     // 质量问题回传不受 noReply 约束：noReply 的本意是「成功结果不必回传」，
     // 而质量不合格必须让 AI 知道并修正，否则卡片看似完成、AI 却收不到反馈。
