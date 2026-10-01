@@ -5,6 +5,7 @@
  * 实现已按职责拆分到 dialog/parts/ 目录（需按序号先加载）：
  *   00_data.js          命名空间、常量、data / computed / mounted
  *   01_backend.js       后端交互：地址发现、配置读写、外部卡片轮询
+ *   01f_port.js         端口修改流程：探测新端口、重启后端、写配置
  *   02_rules.js         规则文件增删改与优先级
  *   03_custom_tools.js  自定义工具读取、上下线、扫描与安装
  *   04_sessions.js      多会话切换 / 恢复 / 持久化、历史卡片删除

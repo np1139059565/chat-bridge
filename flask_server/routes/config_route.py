@@ -14,6 +14,7 @@ from flask import Blueprint, jsonify, request
 
 import runtime
 from config_store import save_config_to_yaml
+from service_control import restart_server
 
 bp = Blueprint("config_route", __name__)
 
@@ -111,3 +112,29 @@ def config():
         return jsonify(success=saved, saved=saved, changed=changed, requireRestart=require_restart)
     # GET：返回完整配置快照
     return jsonify(_config_snapshot())
+
+
+@bp.route("/config/restart-port", methods=["POST", "OPTIONS"])
+def restart_port():
+    """以新端口重启服务，不落盘。
+
+    这是「改端口」流程的中间步：前端先带新端口调此端点，让服务在
+    新端口上重新起来；前端探测到新端口通了，再调 POST /config 把端口
+    写进 config.yaml。这样文件是最后一步，避免写错端口把服务写死。
+
+    请求体：{ "port": 5001 }
+    响应：立即返回，随后进程重启（连接会短暂中断属正常）。
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(force=True, silent=True) or {}
+    try:
+        port = int(data.get("port"))
+    except (TypeError, ValueError):
+        return jsonify(success=False, error="port 必须是整数"), 400
+    if port < 1 or port > 65535:
+        return jsonify(success=False, error="port 超出合法范围"), 400
+    # 不写配置文件：新端口仅通过启动参数传给重启后的进程。
+    # 延迟重启，让本响应先发回前端，再让出端口。
+    restart_server(extra_args=["--port", str(port)])
+    return jsonify(success=True, port=port)

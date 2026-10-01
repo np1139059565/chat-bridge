@@ -252,7 +252,7 @@
       })]),
       h('div', [
         h('button', { onClick: () => ctx.savePort() }, '保存端口'),
-        h('span', { class: 'hint' }, '端口修改需重启 Flask 服务才能监听新端口')
+        h('span', { class: 'hint' }, '保存后自动以新端口重启服务，探通后才写入配置；期间连接会短暂中断')
       ]),
       // 工具结果 JSON 体积上限：写入后端 config.yaml，即时生效
       h('label', ['工具结果体积上限(字符)', h('input', {

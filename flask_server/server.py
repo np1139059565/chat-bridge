@@ -10,16 +10,35 @@ AI 工具调用镜像插件 —— 本地 Flask 工具服务（兼容入口）
 - app.py            应用装配（create_app）
 
 本文件保留原启动方式（python server.py），内部委托给 app.create_app()。
+支持 --host / --port 命令行参数：用于「改端口后自重启」时把新端口直接传给
+新进程，无需先写配置文件。命令行参数优先级高于 config.yaml。
 """
+import argparse
+
 import runtime
 from app import create_app
 
 # 构建应用（初始化工具表、配置、路由）
 app = create_app()
 
+
+def _parse_cli_args(argv=None):
+    """解析命令行参数。仅识别 --host / --port，其余参数一概忽略，
+    以免与 Flask 自身或其它调用方式冲突。
+    """
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--host", default=None)
+    parser.add_argument("--port", type=int, default=None)
+    # 忽略未知参数：调用方（如重启逻辑）可能透传了不属于本服务的参数。
+    args, _ = parser.parse_known_args(argv)
+    return args
+
+
 if __name__ == "__main__":
-    # 端口来自 config.yaml（flask.port），修改后需重启服务
+    # 端口 / 主机优先级：命令行参数 > config.yaml > 内置默认值。
+    cli = _parse_cli_args()
     flask_cfg = runtime.CONFIG.get("flask", {})
+    host = cli.host or flask_cfg.get("host", "127.0.0.1")
+    port = cli.port or flask_cfg.get("port", 5000)
     # threaded=True：卡片与外部工具均为同步阻塞，需并发承载
-    app.run(host=flask_cfg.get("host", "127.0.0.1"), port=flask_cfg.get("port", 5000),
-            debug=False, threaded=True)
+    app.run(host=host, port=port, debug=False, threaded=True)

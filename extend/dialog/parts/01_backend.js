@@ -273,18 +273,32 @@
    * 这样即使 config.yaml 改了端口，也无需在浏览器里手动填地址。
    */
   M.discoverFlask = async function () {
+    // 优先用上次探通的地址：端口改过后，刷新页面也能直接连回新端口，
+    // 不必再靠固定候选列表瞎试。
+    let saved = '';
+    try {
+      saved = await new Promise((res) => {
+        chrome.storage.local.get(['aiMirrorFlaskUrl'], (r) => res((r && r.aiMirrorFlaskUrl) || ''));
+      });
+    } catch (e) { /* 存储不可用则忽略 */ }
     const candidates = [
+      saved,
       this.config.flaskUrl,
       'http://127.0.0.1:5000',
       'http://127.0.0.1:8080',
       'http://127.0.0.1:8000',
       'http://localhost:5000'
-    ];
+    ].filter(Boolean);
     for (let i = 0; i < candidates.length; i++) {
       const base = candidates[i].replace(/\/+$/, '');
       try {
         const r = await fetch(base + '/config', { headers: { 'Accept': 'application/json' } });
-        if (r.ok) { this.config.flaskUrl = base; return; }
+        if (r.ok) {
+          this.config.flaskUrl = base;
+          // 落盘：让「改端口 + 刷新」后仍能连回同一地址。
+          try { chrome.storage.local.set({ aiMirrorFlaskUrl: base }); } catch (e) { /* 忽略 */ }
+          return;
+        }
       } catch (e) { /* 该地址无服务，试下一个 */ }
     }
     log('discoverFlask: 未找到后端，保留默认地址', this.config.flaskUrl);
@@ -398,32 +412,6 @@
         ]);
       }))
     ]);
-  };
-
-  /**
-   * 端口配置：写回后端 config.yaml。端口改动需重启 Flask 才能真正监听新端口，
-   * 因此不能立即把连接切到新端口——先保存，再重新探测（若已重启则连新端口，
-   * 否则仍连旧端口保持可用），并提示用户重启。
-   */
-  M.savePort = async function () {
-    const port = parseInt(this.config.flaskPort, 10);
-    if (!port || port < 1 || port > 65535) { this.toast('端口非法'); return; }
-    try {
-      const data = await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { flask: { port: port } },
-        lenientJson: true
-      });
-      // 不改连接地址：重新探测，只有新端口真的在监听才切过去
-      await this.initBackend();
-      if (data.requireRestart) {
-        this.toast('端口已保存（' + port + '）。请重启 Flask 服务，再点「重新连接后端」');
-      } else {
-        this.toast('端口已保存');
-      }
-    } catch (e) {
-      this.toast('保存失败：' + e);
-    }
   };
 
   /**

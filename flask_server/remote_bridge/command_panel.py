@@ -41,35 +41,13 @@ from .command_dispatch import (
 from .command_external import handle_external
 
 def _restart_server(delay=3.0):
-    """延迟 3 秒重启服务（最简实现）。
+    """延迟 3 秒重启服务。
 
-    步骤：
-      1. 起一个与父进程彻底脱离的子进程，让它 sleep 3 秒后启动新服务；
-      2. 父进程立即退出，把端口让出来。
-
-    关键：Windows 上必须用 DETACHED_PROCESS 才能真脱离。
-    之前的 start_new_session 在 Windows 上是空操作，子进程会随父进程一起
-    被终止，新服务起不来、端口无人监听，抽屉所有接口随之全断。
+    具体实现已抽到 core/service_control.restart_server，与「前端改端口后
+    重启」共用同一套逻辑，避免两份重启代码各自维护。
     """
-    import subprocess
-    import sys
-    # 子进程：等 3 秒 → 用原解释器与原参数 execv 启动服务
-    code = "import time,os,sys;time.sleep(%s);os.execv(sys.executable,%r)" % (
-        delay, [sys.executable] + list(sys.argv))
-    kw = {
-        "cwd": os.getcwd(),
-        "close_fds": True,                 # 不继承监听 socket，避免端口被占
-        "stdin": subprocess.DEVNULL,       # 与控制台解耦
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
-    }
-    if os.name == "nt":
-        kw["creationflags"] = 0x00000008   # DETACHED_PROCESS：真正脱离父进程
-    else:
-        kw["start_new_session"] = True
-    subprocess.Popen([sys.executable, "-c", code], **kw)
-    # 父进程立即退出，端口让给 3 秒后的新进程
-    os._exit(0)
+    from service_control import restart_server
+    restart_server(delay=delay)
 
 
 def _combo_interval(entry):
