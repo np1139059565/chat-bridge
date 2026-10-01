@@ -132,15 +132,20 @@ class ProviderHub:
             self._providers = {k: list(v or []) for k, v in (groups or {}).items()}
 
     def provider_tools(self):
-        """返回所有已注册提供方的工具定义合并列表。
+        """返回所有已注册提供方的工具定义合并列表（供 /tools 展示）。
 
         在线状态仅用于界面提示，不影响工具是否可被调用：只要工具已注册，
         就出现在目录中，调用时排队等待提供方取走执行。
+        过滤 command_only 工具：它们是指令的执行端，对 AI 透明，不进工具目录；
+        但仍留在 _providers 里，供 find_tool / dispatch 找到并执行。
         """
         out = []
         with self._lock:
             for _provider, tools in self._providers.items():
-                out.extend(tools)
+                for t in tools:
+                    if t.get("command_only"):
+                        continue
+                    out.append(t)
         return out
 
     def is_online(self, provider):

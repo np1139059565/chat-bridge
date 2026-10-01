@@ -33,6 +33,10 @@ def external_providers():
         # wakeup：唤醒类工具随命令透传给 hub，供 poll 在抽屉关闭时放行
         if t.get("wakeup"):
             entry["wakeup"] = True
+        # command_only：标记「仅供指令执行」的工具，供 /tools 侧过滤，
+        # 但仍注册进 hub —— 指令 dispatch 要靠 find_tool 找到它（读 wakeup 等）。
+        if t.get("command_only"):
+            entry["command_only"] = True
         groups.setdefault(provider, []).append(entry)
     return groups
 
@@ -73,8 +77,10 @@ def all_meta():
 
     上线即在此返回，与执行端是否在线无关：executor=external 的工具若提供方离线，
     调用时返回离线错误，但不从工具列表撤出。
+    排除 command_only 工具：它们是指令的执行端，对 AI 透明，不进 AI 工具目录。
     """
-    return [public_meta(t) for t in load_tools().values() if t.get("enabled")]
+    return [public_meta(t) for t in load_tools().values()
+            if t.get("enabled") and not t.get("command_only")]
 
 
 def all_meta_full():

@@ -355,6 +355,11 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen):
         # wakeup：唤醒类工具（如 open_drawer），允许在「抽屉关闭」时由待命轮询取走执行。
         # 普通工具只在抽屉打开时可被取走，唤醒类工具打破该限制。
         "wakeup": bool(raw.get("wakeup")),
+        # command_only：仅供「外部指令」执行的工具，不对 AI 暴露。
+        # 这类工具是指令（供 QQ 用户使用）的执行端，对 AI 透明，
+        # 不进入 AI 工具目录、不写入 System Prompt；但仍注册到 provider hub，
+        # 指令经 hub.dispatch 调用时才能找到它（含 wakeup 等属性）。
+        "command_only": bool(raw.get("command_only")),
         "enabled": False,
     }
 

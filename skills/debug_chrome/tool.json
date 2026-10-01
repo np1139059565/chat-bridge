@@ -65,18 +65,21 @@
       "description": "打开调试抽屉（已打开则视为成功）。",
       "executor": "external",
       "wakeup": true,
+      "command_only": true,
       "parameters": []
     },
     {
       "name": "close_drawer",
       "description": "关闭调试抽屉（已关闭则视为成功）。",
       "executor": "external",
+      "command_only": true,
       "parameters": []
     },
     {
       "name": "switch_drawer_side",
       "description": "切换调试抽屉的挂靠侧（左/右）；不传 side 则在左右之间切换。",
       "executor": "external",
+      "command_only": true,
       "parameters": [
         { "name": "side", "type": "string", "required": false, "description": "left 或 right；省略则切换" }
       ]
@@ -85,12 +88,14 @@
       "name": "open_settings",
       "description": "打开调试抽屉的设置页（抽屉未开则先打开）。",
       "executor": "external",
+      "command_only": true,
       "parameters": []
     },
     {
       "name": "close_settings",
       "description": "从设置页返回对话视图。",
       "executor": "external",
+      "command_only": true,
       "parameters": []
     }
   ],
