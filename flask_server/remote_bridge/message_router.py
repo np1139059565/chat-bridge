@@ -133,56 +133,28 @@ def push_text(qq_client, openid, text, markdown=False):
     return ok
 
 
-def _extract_voice_text(text):
-    """从文本里提取 voice 代码块内的「适合朗读」文本。
-
-    约定（写进 System Prompt）：AI 除正文外，另用一个语言标记为 voice 的
-    Markdown 代码块（即 ```voice ... ```）包住适合转语音的段落。
-    这是**文本回退路径**（如采集到的 Markdown 原文）；优先用 _extract_voice_from_blocks，
-    因为消息块里才保留了 lang 标记。
-    没有该代码块时返回空串，表示这条回复不需要转语音。
-    """
-    import re
-    if not text:
-        return ""
-    # 匹配 ```voice（可有前后空格）到对应的闭合 ```；大小写不敏感
-    m = re.search(r"```[ \t]*voice[ \t]*\r?\n([\s\S]*?)```", text, re.I)
-    return (m.group(1).strip() if m else "")
-
-
-def _is_tool_call_block(b):
-    """判断一个代码块是否为工具调用块：内容为含 type=bridge-chat-call 的 JSON。
-
-    与前端 parseToolCall 同一套判据——只看内容，不看语言名。
-    @param b 块对象
-    @returns 是否为工具调用块
-    """
-    import json
-    src = str(b.get("code") or "").strip()
-    if not src or src[0] != "{":
-        return False
-    try:
-        obj = json.loads(src)
-        return isinstance(obj, dict) and obj.get("type") == "bridge-chat-call"
-    except Exception:
-        return False
-
 
 def _extract_voice_from_blocks(m):
     """从消息的 blocks 里取语音朗读文本。
 
-    判定与「代码块识别」同一套逻辑——只看是不是代码块，不看语言名：
-    排除工具调用块（内容为含 bridge-chat-call 的 JSON），其余代码块即语音朗读块。
-    这样各站点（语言名能否解析）都能稳定取到。
+    与工具调用块同一机制——认代码块内容里的 JSON type 字段，不看语言名：
+    找内容为 {"type":"bridge-voice","text":"..."} 的块，取其 text。
     @param m 消息对象
     @returns 语音文本；无则空串
     """
+    import json
     for b in (m.get("blocks") or []):
         if not b or b.get("type") != "code":
             continue
-        if _is_tool_call_block(b):
+        src = str(b.get("code") or "").strip()
+        if not src or src[0] != "{":
             continue
-        return str(b.get("code") or "").strip()
+        try:
+            obj = json.loads(src)
+        except Exception:
+            continue
+        if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
+            return str(obj.get("text") or "").strip()
     return ""
 
 
@@ -208,19 +180,18 @@ def push_voice(qq_client, openid, path):
 
 
 def _maybe_push_voice(qq_client, openid, m, text, push):
-    """AI 回复若含 voice 代码块且语音开关开着，则合成语音并推送。
+    """AI 回复若含语音朗读块且语音开关开着，则合成语音并推送。
 
-    提取顺序：先从消息 blocks 找 lang==voice 的代码块（最可靠，保留 lang），
-    找不到再回退到拼装文本里匹配 ```voice 围栏。
+    从消息 blocks 里认 {"type":"bridge-voice","text":...} 块并取其 text。
     @param m AI 消息对象（用于从 blocks 提取语音文本）
-    @param text AI 回复的完整文本（回退提取用）
+    @param text AI 回复的完整文本（当前未使用，保留签名兼容）
     @param push 推送开关字典
     @returns 是否真的推送了语音
     """
     # 语音识别开关未打开则不合成（与入向同一开关，语义统一为「语音功能总开关」）
     if not push.get("voice"):
         return False
-    voice_text = _extract_voice_from_blocks(m) or _extract_voice_text(text)
+    voice_text = _extract_voice_from_blocks(m)
     if not voice_text:
         return False
     import os
@@ -325,7 +296,7 @@ def _push_one(qq_client, openid, m, push):
         is_markdown = bool(raw_md)
     if not text:
         return 'skip'
-    # AI 消息：推送文本之外，若含 [VOICE] 段且语音开关开着，另合成并推一条语音。
+    # AI 消息：推送文本之外，若含 bridge-voice 块且语音开关开着，另合成并推一条语音。
     # 放在文本推送成功之后：文本是主体，语音是附加，不应因语音失败影响文本。
     if kind == "ai":
         _maybe_push_voice(qq_client, openid, m, text, push)

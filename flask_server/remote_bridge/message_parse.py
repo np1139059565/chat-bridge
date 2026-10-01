@@ -144,7 +144,7 @@ def _block_thinking(b, push_thinking):
 
 
 def _block_code(b, push_thinking):
-    """代码块：工具调用只摘出工具名与参数，其余原样包裹在围栏里。"""
+    """代码块：工具调用摘出工具名与参数，语音块渲染成 voice 围栏，其余原样包裹。"""
     import json
     code = str(b.get("code") or "")
     try:
@@ -152,6 +152,8 @@ def _block_code(b, push_thinking):
         if obj.get("type") == "bridge-chat-call":
             return "[工具调用] %s 参数=%s" % (
                 obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False))
+        if obj.get("type") == "bridge-voice":
+            return "```voice\n" + str(obj.get("text") or "").strip() + "\n```"
     except Exception:
         pass
     return "```\n" + code + "\n```"

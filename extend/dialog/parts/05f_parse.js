@@ -31,6 +31,25 @@
   };
 
   /**
+   * 判断代码块是否为语音朗读块：内容为 {"type":"bridge-voice","text":...}。
+   * 与工具调用块同一机制——认内容里的 type 字段，不看语言名。
+   * @param {Object} block 代码块
+   * @returns {string} 朗读文本；不是语音块返回空串
+   */
+  M.parseVoiceBlock = function (block) {
+    if (!block || block.type !== 'code') return '';
+    const src = String(block.code || '').trim();
+    if (!src || src.charAt(0) !== '{') return '';
+    try {
+      const obj = JSON.parse(src);
+      if (obj && obj.type === 'bridge-voice') {
+        return String(obj.text || '').trim();
+      }
+    } catch (e) { /* 不是语音块，按普通代码块渲染 */ }
+    return '';
+  };
+
+  /**
    * 判断一条消息是否为外部调用信封（external-call）。
    * 外部卡片发送到网页后，会以一条 user 消息落在对话里；这条消息即卡片的
    * 本体，用于在镜像区还原为卡片、在列表里做颜色标记。

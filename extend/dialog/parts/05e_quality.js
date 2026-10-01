@@ -48,19 +48,16 @@
       }
     }
     // 问题三：语音开关打开期间，每一轮回复都必须带语音朗读块（供合成语音发回）。
-    // 判定与「代码块识别」同一套逻辑——只看是不是代码块，不看语言名：
-    // 代码块识别从不依赖语言名（靠内容判别），而语言名在部分站点解析不到，
-    // 若以语言名判 voice 必误报。故：排除工具调用块（内容为含 bridge-chat-call 的 JSON），
-    // 其余代码块即视为语音朗读块。
+    // 判定与工具调用块同一机制——认代码块内容里的 JSON type 字段，不看语言名。
+    // 语音块内容形如 {"type":"bridge-voice","text":"适合朗读的口语"}。
     const voiceOn = !!(this.bridgePush && this.bridgePush.voice);
     if (voiceOn) {
-      const hasVoice = blocks.some((b) => b && b.type === 'code'
-        && !this.parseToolCall(b));
+      const hasVoice = blocks.some((b) => this.parseVoiceBlock(b));
       if (!hasVoice) {
         return {
           error: 'voice_missing',
-          message: '本条回复缺少语音朗读文本。请另用一个 Markdown 代码块，'
-            + '块内放适合朗读的纯口语文本，然后重新生成。'
+          message: '本条回复缺少语音朗读文本。请另用一个代码块，块内为 JSON：'
+            + '{"type":"bridge-voice","text":"适合朗读的纯口语文本"}，然后重新生成。'
         };
       }
     }
