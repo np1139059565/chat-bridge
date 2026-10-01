@@ -36,4 +36,19 @@
   // 否则「打开抽屉」需要一个已打开的抽屉来接，形成死锁。
   // 上报的 is_open 由抽屉是否存在自动判定（见 doHeartbeat）。
   A.startPolling();
+
+  /**
+   * 检查镜像侧留下的「刷新后自动开抽屉」标记。
+   * 镜像扩展在执行 /rf（刷新页面）时会把 sessionStorage.aiDebugAutoOpen 置 1，
+   * 然后刷新；刷新后本扩展内容脚本重新注入，在此读该标记自动打开抽屉，
+   * 读完立即删除，保证只对本次刷新生效，不会长期驻留。
+   * sessionStorage 按页面源共享，两个扩展的内容脚本读的是同一份。
+   */
+  (function checkAutoOpen() {
+    let flag = null;
+    try { flag = sessionStorage.getItem('aiDebugAutoOpen'); } catch (e) { return; }
+    if (!flag) return;
+    try { sessionStorage.removeItem('aiDebugAutoOpen'); } catch (e) { /* 忽略 */ }
+    A.openDrawer();
+  })();
 })();
