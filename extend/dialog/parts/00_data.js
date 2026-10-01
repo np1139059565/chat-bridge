@@ -198,11 +198,9 @@ window.AIMirrorDialog = (function () {
       bridgeEnabled: true,   // 默认开启：远程功能开箱即用
       bridgeConnected: false,
       bridgeAppId: '', bridgeAppSecret: '',
-      // voice：语音识别开关，默认关；关时收到语音文件直接丢弃
+      // voice：语音识别开关，默认关；关时收到语音文件直接丢弃。
+      // 打开后，每一轮 AI 回复都会被强制要求带 voice 代码块（见 05e_quality.js）。
       bridgePush: { user: true, tool: true, ai: true, thinking: false, voice: false },
-      // voiceReplyExpected：刚投递过「语音确认」卡片，期待随后 AI 回复带 voice 代码块。
-      // 置真后，AI 下一次回复若缺 voice 块，会被质量检查拦下要求重生成。
-      voiceReplyExpected: false,
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态
       // 指令录入（拆多行以避免超长行）
