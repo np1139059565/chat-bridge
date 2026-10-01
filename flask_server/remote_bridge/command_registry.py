@@ -18,12 +18,12 @@
 """
 import json
 
-from . import bridge_store
+from . import bridge_store, bridge_log
 
 
 def log(*args):
-    """统一前缀打印。"""
-    print("[bridge][command]", *args)
+    """统一前缀日志：终端 + 按天落盘。"""
+    bridge_log.write("[bridge][command]", *args)
 
 
 # 内置指令表：完整命令名 → { desc 说明, aliases 快捷键列表 }
@@ -57,6 +57,8 @@ BUILTIN = {
     # —— 内容采集 ——
     "/copy-system-prompt": {"desc": "复制 System Prompt 并发送给 AI", "aliases": ["/csp"], "group": "内容采集"},
     "/md": {"desc": "采集当前 AI 回复的 Markdown 原文", "aliases": ["/m"], "group": "内容采集"},
+    # —— 语音 ——
+    "/voice-ok": {"desc": "确认语音识别文字并转给 AI", "aliases": ["/vo"], "group": "语音"},
     # —— 工作记忆 ——
     "/memory": {"desc": "读取最新工作记忆文件并发送", "aliases": ["/mem"], "group": "工作记忆"},
     # —— 帮助 ——

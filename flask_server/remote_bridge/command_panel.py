@@ -293,6 +293,27 @@ def _h_help(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, help_text(), markdown=True)
 
 
+def _h_voice_ok(qq_client, openid, arg, msg_id):
+    """确认语音识别文字：取出暂存文字，以普通文本卡片格式转投给 AI。
+
+    确认即消费：取到就清除暂存，避免重复投递；无待确认内容时提示用户。
+    投递复用 qq_gateway 的 deliver_text_as_card，路径与手打 QQ 消息完全一致。
+    """
+    from . import voice_pending
+    text = voice_pending.take(openid)
+    if not text:
+        _reply(qq_client, openid, "没有待确认的语音（可能已过期或未识别）")
+        return
+    # 延迟导入桥接单例，避免包内循环导入
+    from . import bridge as bridge_singleton
+    gw = getattr(bridge_singleton, "gateway", None)
+    if not gw:
+        _reply(qq_client, openid, "桥接未就绪，无法转投")
+        return
+    gw.deliver_text_as_card(openid, text, msg_id, title="语音", from_voice=True)
+    _reply(qq_client, openid, "已确认，语音文字已转给 AI")
+
+
 def _h_memory(qq_client, openid, arg, msg_id):
     """读取 memory 目录下最新的工作记忆文件，把内容发送到 QQ，供用户检查。
 
@@ -345,6 +366,7 @@ _BUILTIN_HANDLERS = {
     "/copy-json": _h_copy_json,
     "/skip": _h_skip,
     "/help": _h_help,
+    "/voice-ok": _h_voice_ok,
     "/memory": _h_memory,
 }
 

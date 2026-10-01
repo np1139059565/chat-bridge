@@ -28,3 +28,5 @@ flask_server/remote_bridge_state.json
 flask_server/screenshots/
 # 运行时数据产物（截屏、去重记账等）
 flask_server/data/
+# 语音模型（vosk，体积大且可重新下载，不入库）
+models/

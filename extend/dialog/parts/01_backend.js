@@ -35,12 +35,11 @@
     await this.discoverFlask();
     await this.loadConfig();
     await this.loadCustomTools();
+    // 桥接配置要先读：语音开关决定 prompt 是否注入朗读约定，须在生成前就位。
+    await this.loadBridge();   // 远程桥接配置与状态（失败不阻断其余功能）
     await this.fetchTools();   // 内部会刷新技能说明段落并生成 System Prompt
     await this.loadRules();
-    await this.loadBridge();   // 远程桥接配置与状态（失败不阻断其余功能）
-    // 外部卡片轮询不在此启动：它由面板可见性驱动（见 setPanelVisible）。
-    // iframe 首次加载时面板通常是隐藏的，若在此无条件启动，
-    // 关闭的面板仍会取走卡片，正是要避免的问题。
+    // 外部卡片轮询不在此启动，改由面板可见性驱动（见 setPanelVisible）。
   };
 
   /** 技能数据：说明段落与技能清单，注入 System Prompt。 */
@@ -154,18 +153,16 @@
         };
         this.externalCards.push(card);
         added.push(card);
-        // 卡片已入列（即将渲染展示），回执后端确认收货，此后不再重复投递。
-        // 若此处在回执前中断（刷新 / 崩溃），后端仍会把卡片判为未确认，
-        // 下次轮询可再次取走，不会出现「取走了却没展示，还再也拿不到」的情况。
+        // 卡片已入列，回执后端确认收货；若在回执前中断，后端判为未确认，
+        // 下次轮询可再取走，不会出现「取走了却没展示、还再也拿不到」的情况。
         this.confirmCardDelivered(c.id);
         log('外部卡片已投递', card.id, card.title);
       });
       // 与工具卡片一致：仅当全局自动开关开启时才自动发送，且本轮只自动发送
       // 最新一张（积压多张时不全部触发，其余等待用户手动发送）。
       if (this.autoSendEnabled && added.length) {
-        // 同一批新卡片按入列顺序追加，末位即最新。
-        // 从响应式列表末位回读：externalCards 里的元素是 Vue 代理，
-        // 倒计时改它才会驱动界面刷新；added 里存的是原始对象，改它不刷新。
+        // 从响应式列表末位回读（Vue 代理），改它才会驱动界面刷新；
+        // added 里存的是原始对象，改它不刷新。末位即最新卡片。
         this.scheduleExternalSend(this.externalCards[this.externalCards.length - 1]);
       }
       // 新卡片入列后立即写盘：待处理卡片此前只存在内存里，刷新会整批丢失。
@@ -205,6 +202,10 @@
     };
     const text = JSON.stringify(envelope, null, 2);
     window.parent.postMessage({ type: 'auto_send', text }, '*');
+    // 语音确认卡片：置标志，供随后的质量检查要求 AI 回复带 voice 代码块。
+    if (card.payload && card.payload.from_voice) {
+      this.voiceReplyExpected = true;
+    }
     // 执行完成即结束：立即置为完成态并记为已执行过（供刷新/切会话后恢复）
     card.status = 'done';
     card.executed = true;
@@ -297,8 +298,7 @@
     this.siteKey = k;
     // 清空上一站点的数据视图，避免不同站点内容混在一起
     this.conversations = {};
-    // 同时清掉上一站点的待写计时器：它们持有旧会话 id，若稍后触发，
-    // 会以新站点的存档键前缀写入，把数据串到别的站点上。
+    // 清掉上一站点的待写计时器：它们持有旧会话 id，稍后触发会把数据串到别的站点。
     if (this._persistTimers) {
       Object.keys(this._persistTimers).forEach((id) => {
         clearTimeout(this._persistTimers[id]);
@@ -322,9 +322,9 @@
       const cfg = await D.apiFetch(this, '/config', {
         headers: { 'Accept': 'application/json' }
       });
-      // 注意：flaskUrl 由 discoverFlask() 探测到的「实际可连通地址」决定，绝不能用
-      // cfg.flask.url（= 配置文件里声明的端口）覆盖——否则端口改了但服务还没重启时，
-      // 会连到一个根本没在监听的新端口，导致连接断开。
+      // 注意：flaskUrl 由 discoverFlask() 探测到的「实际可连通地址」决定，
+      // 绝不能用 cfg.flask.url（配置文件声明的端口）覆盖——否则端口改了
+      // 但服务还没重启时会连到空端口，导致连接断开。
       if (cfg.flask && cfg.flask.port) this.config.flaskPort = cfg.flask.port;
       if (cfg.tools) this.configTools = cfg.tools;
       if (cfg.limits && cfg.limits.max_json_chars) this.maxJsonChars = cfg.limits.max_json_chars;

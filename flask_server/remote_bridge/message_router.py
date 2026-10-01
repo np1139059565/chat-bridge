@@ -11,7 +11,12 @@
 import threading
 import time
 
-from . import bridge_store
+from . import bridge_store, bridge_log
+
+
+def log(*args):
+    """统一前缀日志：终端 + 按天落盘。"""
+    bridge_log.write("[bridge][router]", *args)
 # 消息解析与块文本组装已抽到独立模块 message_parse.py；
 # 此处按原名导入，保持本模块内既有调用不变。
 from .message_parse import (
@@ -119,12 +124,100 @@ def push_text(qq_client, openid, text, markdown=False):
     msg_id, seq = next_seq(openid)
     if not msg_id:
         # 窗口关闭：无处可推，静默丢弃（设计上等待用户下次发消息唤醒）
-        print("[bridge][router] 窗口已关闭，暂不推送")
+        log("窗口已关闭，暂不推送")
         return False
     ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq, markdown=markdown)
     if not ok:
-        print("[bridge][router] 推送失败：", data)
+        log("推送失败：", data)
     return ok
+
+
+def _extract_voice_text(text):
+    """从文本里提取 voice 代码块内的「适合朗读」文本。
+
+    约定（写进 System Prompt）：AI 除正文外，另用一个语言标记为 voice 的
+    Markdown 代码块（即 ```voice ... ```）包住适合转语音的段落。
+    这是**文本回退路径**（如采集到的 Markdown 原文）；优先用 _extract_voice_from_blocks，
+    因为消息块里才保留了 lang 标记。
+    没有该代码块时返回空串，表示这条回复不需要转语音。
+    """
+    import re
+    if not text:
+        return ""
+    # 匹配 ```voice（可有前后空格）到对应的闭合 ```；大小写不敏感
+    m = re.search(r"```[ \t]*voice[ \t]*\r?\n([\s\S]*?)```", text, re.I)
+    return (m.group(1).strip() if m else "")
+
+
+def _extract_voice_from_blocks(m):
+    """从消息的 blocks 里找 lang==voice 的代码块，取块内文本。
+
+    为什么要从 blocks 找而不是拼好的文本：拼接文本时 _block_code 会把
+    代码块包成不带语言标记的围栏，voice 标记会丢失。直接从块上读 lang 最可靠。
+    @param m 消息对象
+    @returns 语音文本；无则空串
+    """
+    for b in (m.get("blocks") or []):
+        if not b or b.get("type") != "code":
+            continue
+        if str(b.get("lang") or "").lower() == "voice":
+            return str(b.get("code") or "").strip()
+    return ""
+
+
+def push_voice(qq_client, openid, path):
+    """把一段本地音频推送到 QQ（与图片推送同路，走被动回复窗口）。
+
+    窗口关闭时静默跳过（等用户下次发消息再唤醒），与文本 / 图片一致。
+    @param qq_client QQClient 实例
+    @param openid 目标用户
+    @param path 本地音频文件绝对路径
+    @returns 是否发送成功
+    """
+    if not qq_client or not openid or not path:
+        return False
+    msg_id, seq = next_seq(openid)
+    if not msg_id:
+        log("窗口已关闭，暂不推送语音")
+        return False
+    ok, data = qq_client.send_c2c_voice(openid, path, msg_id=msg_id, msg_seq=seq)
+    if not ok:
+        log("推送语音失败：", data)
+    return ok
+
+
+def _maybe_push_voice(qq_client, openid, m, text, push):
+    """AI 回复若含 voice 代码块且语音开关开着，则合成语音并推送。
+
+    提取顺序：先从消息 blocks 找 lang==voice 的代码块（最可靠，保留 lang），
+    找不到再回退到拼装文本里匹配 ```voice 围栏。
+    @param m AI 消息对象（用于从 blocks 提取语音文本）
+    @param text AI 回复的完整文本（回退提取用）
+    @param push 推送开关字典
+    @returns 是否真的推送了语音
+    """
+    # 语音识别开关未打开则不合成（与入向同一开关，语义统一为「语音功能总开关」）
+    if not push.get("voice"):
+        return False
+    voice_text = _extract_voice_from_blocks(m) or _extract_voice_text(text)
+    if not voice_text:
+        return False
+    import os
+    import paths
+    from . import voice_tts
+    os.makedirs(paths.VOICE_DIR, exist_ok=True)
+    out_path = str(paths.VOICE_DIR / ("out_" + str(int(time.time() * 1000)) + ".mp3"))
+    ok, err = voice_tts.text_to_voice(voice_text, out_path)
+    if not ok:
+        log("语音合成失败：", err)
+        return False
+    sent = push_voice(qq_client, openid, out_path)
+    # 音频文件用完即删，不留垃圾（无论发送成败）
+    try:
+        os.remove(out_path)
+    except OSError:
+        pass
+    return sent
 
 
 def push_image(qq_client, openid, path):
@@ -141,11 +234,11 @@ def push_image(qq_client, openid, path):
         return False
     msg_id, seq = next_seq(openid)
     if not msg_id:
-        print("[bridge][router] 窗口已关闭，暂不推送图片")
+        log("窗口已关闭，暂不推送图片")
         return False
     ok, data = qq_client.send_c2c_image(openid, path, msg_id=msg_id, msg_seq=seq)
     if not ok:
-        print("[bridge][router] 推送图片失败：", data)
+        log("推送图片失败：", data)
     return ok
 
 
@@ -190,6 +283,10 @@ def _push_one(qq_client, openid, m, push):
     text = raw_md or _blocks_to_text(m, push.get("thinking", False))
     if not text:
         return 'skip'
+    # AI 消息：推送文本之外，若含 [VOICE] 段且语音开关开着，另合成并推一条语音。
+    # 放在文本推送成功之后：文本是主体，语音是附加，不应因语音失败影响文本。
+    if kind == "ai":
+        _maybe_push_voice(qq_client, openid, m, text, push)
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃

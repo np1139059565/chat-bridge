@@ -16,13 +16,14 @@
 
 依赖：websocket-client（未安装时降级为不启动，不影响服务其余功能）
 """
-import base64
 import json
 import os
 import threading
 import time
 import urllib.error
 import urllib.request
+
+from .qq_media import QqMediaMixin
 
 try:
     import websocket  # websocket-client
@@ -60,8 +61,11 @@ def log(*args):
     print("[bridge][qq]", *args)
 
 
-class QQClient:
-    """QQ 机器人客户端：token 管理 + WebSocket 长连接。"""
+class QQClient(QqMediaMixin):
+    """QQ 机器人客户端：token 管理 + WebSocket 长连接。
+
+    富媒体（图片 / 语音）发送能力由 QqMediaMixin 提供（见 qq_media.py）。
+    """
 
     def __init__(self, app_id, app_secret, on_event, intents=None):
         """
@@ -214,77 +218,6 @@ class QQClient:
             return False, "HTTP %s %s" % (e.code, self._http_error_detail(e))
         except Exception as e:
             return False, str(e)
-
-    @staticmethod
-    def _read_file_b64(path):
-        """读取本地文件并 Base64 编码为 ASCII 字符串；失败由调用方捕获。"""
-        with open(path, "rb") as f:
-            return base64.b64encode(f.read()).decode("ascii")
-
-    def _upload_image(self, openid, b64):
-        """上传图片富媒体，返回 (file_info, error)。
-
-        上传接口支持 url 与 file_data 二选一；用 file_data 传本地内容，
-        就绕开了「QQ 服务器来取图」对公网地址的依赖。
-        file_type=1 表示图片；srv_send_msg=False 表示只返回 file_info、不自动发送。
-        """
-        url = API_BASE + "/v2/users/%s/files" % openid
-        try:
-            up = self._http_post(url, {
-                "file_type": 1,
-                "file_data": b64,
-                "srv_send_msg": False,
-            }, self._auth_header())
-        except urllib.error.HTTPError as e:
-            return "", "upload HTTP %s %s" % (e.code, self._http_error_detail(e))
-        except Exception as e:
-            return "", str(e)
-        return (up or {}).get("file_info") or "", ""
-
-    def _send_media(self, openid, file_info, msg_id, msg_seq):
-        """发送富媒体消息（msg_type=7），返回 (ok, data_or_error)。"""
-        url = API_BASE + "/v2/users/%s/messages" % openid
-        body = {
-            "content": "",
-            "msg_type": 7,           # 7 = 富媒体
-            "media": {"file_info": file_info},
-            "msg_id": msg_id,
-            "msg_seq": msg_seq,
-        }
-        try:
-            resp = self._http_post(url, body, self._auth_header())
-            return True, resp
-        except urllib.error.HTTPError as e:
-            return False, "send HTTP %s %s" % (e.code, self._http_error_detail(e))
-        except Exception as e:
-            return False, str(e)
-
-    def send_c2c_image(self, openid, image_path, msg_id="", msg_seq=1):
-        """发送单聊图片（富媒体）。
-
-        用本地文件直接上传，无需公网地址：
-        读文件 → Base64 编码 → 作为 file_data 上传拿 file_info → 发 msg_type=7。
-        上传接口路径、file_type 取值、msg_type=7 的消息体结构已核对官方文档。
-        @param openid     接收方用户 openid
-        @param image_path 本地图片文件路径
-        @param msg_id     被动回复引用的用户消息 id
-        @param msg_seq    同一 msg_id 下的序号
-        @returns (ok, data_or_error)
-        """
-        if not self._ensure_token():
-            return False, "no_token"
-        try:
-            b64 = self._read_file_b64(image_path)
-        except Exception as e:
-            return False, "read_file_failed: %s" % e
-        # 第一步：上传富媒体，拿 file_info
-        file_info, err = self._upload_image(openid, b64)
-        if err:
-            return False, err
-        if not file_info:
-            return False, "no_file_info"
-        # 第二步：发送富媒体消息
-        return self._send_media(openid, file_info, msg_id, msg_seq)
 
     # ---------- WebSocket ----------
     def start(self):

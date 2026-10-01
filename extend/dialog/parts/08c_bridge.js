@@ -117,7 +117,8 @@
       pushRow(ctx, 'user', '用户消息'),
       pushRow(ctx, 'tool', '工具消息'),
       pushRow(ctx, 'ai', 'AI 消息'),
-      pushRow(ctx, 'thinking', '思考过程（默认不推，冗长）')
+      pushRow(ctx, 'thinking', '思考过程（默认不推，冗长）'),
+      pushRow(ctx, 'voice', '语音（识别 + 合成，关闭则丢弃语音）')
     ]);
   }
 

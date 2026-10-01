@@ -65,7 +65,7 @@
       this.bridgeEnabled = !!cfg.enabled;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
-      this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false }, cfg.push || {});
+      this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false, voice: false }, cfg.push || {});
       this.bridgeCommands = cfg.commands || [];
       // Markdown 采集选择器：来自配置（对应内置指令 /md）。
       // 它是配置项而非自定义指令——内置指令本就不可由用户增删。
@@ -150,9 +150,16 @@
     }
   };
 
-  /** 切换某类消息的推送开关（用户 / 工具 / AI / 思考）。 */
+  /** 切换某类消息的推送开关（用户 / 工具 / AI / 思考 / 语音）。
+   *
+   * 语音开关会改变 System Prompt（是否注入朗读文本约定），
+   * 故切换后必须重建 prompt，否则界面显示已开、prompt 里却没有对应约定。
+   */
   M.toggleBridgePush = function (kind) {
     this.bridgePush[kind] = !this.bridgePush[kind];
+    if (kind === 'voice') {
+      this.systemPrompt = this.generateSystemPrompt();
+    }
     this.saveBridge();
   };
 

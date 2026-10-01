@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 
-from . import message_router
+from . import message_router, bridge_log
 
 # 待回传请求表：{ request_id: {openid, expire} }
 # 有些指令（列会话 / 截屏）需要浏览器执行后把结果回传，再转发到 QQ。
@@ -30,8 +30,8 @@ PENDING_TTL = 60  # 请求有效期（秒），超时未回传则丢弃
 
 
 def log(*args):
-    """统一前缀打印。"""
-    print("[bridge][command]", *args)
+    """统一前缀日志：终端 + 按天落盘。"""
+    bridge_log.write("[bridge][command]", *args)
 
 
 # 线程局部标记：组合指令执行期间的中间步骤，回复会被抑制，避免刷屏。

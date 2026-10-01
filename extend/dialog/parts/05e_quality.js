@@ -47,6 +47,21 @@
         };
       }
     }
+    // 问题三：语音确认后，回复必须带 voice 代码块（供合成语音发回 QQ）。
+    // 仅当 voiceReplyExpected 为真（刚投递过 /vo 确认卡片）时检查；
+    // 检查一次后即清标志，避免 AI 始终不合规时陷入无限重生成。
+    if (this.voiceReplyExpected) {
+      this.voiceReplyExpected = false;
+      const hasVoice = blocks.some((b) => b && b.type === 'code'
+        && String(b.lang || '').toLowerCase() === 'voice');
+      if (!hasVoice) {
+        return {
+          error: 'voice_missing',
+          message: '本条回复缺少语音朗读文本。请补一个语言标记为 voice 的 Markdown 代码块'
+            + '（即 ```voice ... ```），块内放适合朗读的纯口语文本，然后重新生成。'
+        };
+      }
+    }
     return null;
   };
 })();
