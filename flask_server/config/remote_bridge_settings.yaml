@@ -5,7 +5,6 @@ push:
   tool: true
   ai: true
   thinking: true
-  voice: true
 md_selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
   div[role="button"]:has(.ds-cross-fade)
 commands:
