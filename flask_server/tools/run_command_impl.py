@@ -147,24 +147,21 @@ def _prepare_run(p):
 
 
 def _spawn_run(cmd, cwd_path, timeout):
-    """启动子进程执行命令；解释器缺失转为环境类错误，超时返回 None。"""
-    try:
-        return subprocess.run(
-            cmd,
-            cwd=str(cwd_path),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            shell=False,
-            timeout=timeout,
-            env=dict(os.environ, PYTHONIOENCODING="utf-8"),
-        )
-    except FileNotFoundError as e:
-        raise FileNotFoundError("无法启动命令（解释器或程序缺失）：%s" % e)
-    except subprocess.TimeoutExpired:
+    """启动子进程执行命令；解释器缺失转为环境类错误，超时返回 None。
+
+    走 proc_runner 而非 subprocess.run：后者超时只杀直接子进程，
+    若子进程派生了持有输出管道的孙进程（git 交互、编辑器等），
+    超时会一直被拖到孙进程退出才返回——超时保护形同虚设。
+    proc_runner 超时杀整棵进程树，确保超时真正生效。
+    """
+    from proc_runner import run_with_tree_timeout
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    res = run_with_tree_timeout(cmd, cwd=str(cwd_path), timeout=timeout, env=env)
+    if res.timed_out:
         return None
+    # ProcResult 是 namedtuple，本身即带 returncode/stdout/stderr，
+    # 与 _run_result 期望的字段一致，直接返回即可。
+    return res
 
 
 def _run_result(lang, cwd_path, proc):

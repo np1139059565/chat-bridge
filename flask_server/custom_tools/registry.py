@@ -220,25 +220,26 @@ CUSTOM_TOOL_TIMEOUT = 60
 
 
 def _spawn(cmd, skill_dir):
-    """启动子进程执行命令；解释器或脚本缺失时转为环境类错误，超时则终止并报错。"""
-    try:
-        # Windows 上子进程默认按 GBK 写 stdout，强制 UTF-8 以免中文乱码（mojibake）。
-        child_env = dict(os.environ)
-        child_env["PYTHONIOENCODING"] = "utf-8"
-        return subprocess.run(
-            cmd, cwd=str(skill_dir), stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, encoding="utf-8", errors="replace", shell=False, env=child_env,
-            timeout=CUSTOM_TOOL_TIMEOUT,
-        )
-    except FileNotFoundError as e:
-        # 解释器或脚本缺失 → 环境/路径类
-        raise FileNotFoundError("无法启动脚本（解释器或脚本缺失）：" + str(e))
-    except subprocess.TimeoutExpired:
+    """启动子进程执行命令；解释器或脚本缺失时转为环境类错误，超时则终止并报错。
+
+    走 proc_runner 而非 subprocess.run：后者超时只杀直接子进程，
+    若子进程派生了持有输出管道的孙进程（脚本里调 git、起后台服务等），
+    超时会被拖到孙进程退出才返回——超时保护形同虚设。
+    proc_runner 用「读取线程 + 主线程超时」，超时后立即返回，不被拖住。
+    """
+    from proc_runner import run_with_tree_timeout
+    # Windows 上子进程默认按 GBK 写 stdout，强制 UTF-8 以免中文乱码（mojibake）。
+    child_env = dict(os.environ)
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    res = run_with_tree_timeout(
+        cmd, cwd=str(skill_dir), timeout=CUSTOM_TOOL_TIMEOUT, env=child_env)
+    if res.timed_out:
         # 超时：转为专用错误类型，交由上层归类为「执行超时」而非工具代码缺陷
         raise subprocess.TimeoutExpired(
             "自定义工具脚本执行超过 %d 秒未结束，已终止" % CUSTOM_TOOL_TIMEOUT,
             CUSTOM_TOOL_TIMEOUT,
         )
+    return res
 
 
 def _normalize_output(proc):
