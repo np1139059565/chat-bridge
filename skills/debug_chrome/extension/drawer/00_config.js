@@ -19,8 +19,9 @@ window.AIDrawer = (function () {
   // 仅保留与调试能力相关的配置；连接地址指向工具服务（chat-bridge）
   // url_mappings：URL 前缀 → 本地工程文件路径，供元素卡片把选中元素对应到源码位置
   const DEFAULT_CFG = {
-    // 后端地址不预置：由用户在设置页输入框手动填写，避免写死端口。
-    backend_url: '',
+    // 后端地址默认值：这是设置页输入框的默认值，用户可手动修改；
+    // 保留它，避免每次都要重新输入。
+    backend_url: 'http://127.0.0.1:5000',
     screenshot_enabled: false,
     style_list_enabled: false,
     url_mappings: [],
@@ -36,6 +37,8 @@ window.AIDrawer = (function () {
     Object.keys(base).forEach((k) => {
       if (stored[k] !== undefined) base[k] = stored[k];
     });
+    // 后端地址若被存成空串（历史遗留），回退到默认值，避免输入框空白。
+    if (!base.backend_url) base.backend_url = DEFAULT_CFG.backend_url;
     if (!Array.isArray(base.url_mappings)) base.url_mappings = [];
     return base;
   }

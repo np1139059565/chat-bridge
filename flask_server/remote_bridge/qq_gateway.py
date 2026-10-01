@@ -75,11 +75,15 @@ def _extract_image(d):
         if not isinstance(a, dict):
             continue
         ct = str(a.get("content_type") or "").lower()
+        fname = str(a.get("filename") or "").lower()
         url = str(a.get("url") or a.get("image_url") or "")
         if not url:
             continue
-        low = url.lower()
-        if ct in ("image", "pic") or low.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+        # content_type 实际形如 image/jpeg、image/png（非裸 "image"），
+        # 故用 startswith("image") 判断；再以 filename 扩展名兜底。
+        # URL 常为带参数的下载链接、不含扩展名，故不能只看 URL。
+        if ct.startswith("image") or ct in ("pic",) \
+                or fname.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
             return url
     return ""
 

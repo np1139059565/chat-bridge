@@ -16,8 +16,9 @@
       const msgList = ref(null);
       const inputBox = ref(null);       // 消息输入框（用于按内容自适应高度）
       const stickToBottom = ref(true);  // 是否自动吸底：用户上滚后置 false，回到底部再置 true
-      // 后端地址不预置：由设置页输入框手动填写，避免写死端口。
-      const backendUrl = ref('');
+      // 后端地址初值取配置默认值（对应设置页输入框默认值），
+      // 稍后 initBackendUrl 会用存储里的真实值覆盖。
+      const backendUrl = ref(D.DEFAULT_CFG.backend_url || '');
       const hostPageUrl = ref('');
       const toast = ref('');
       let toastTimer = null;
