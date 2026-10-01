@@ -38,6 +38,30 @@
   };
 
   /**
+   * 消费一张 QQ 图片卡片：把图片贴进网页 AI 输入框（截图逆向流程）。
+   *
+   * 后端把 QQ 收到的图片转成 dataURL 放进卡片（type=qq-image）。
+   * 本函数取出 dataURL，交给内容脚本复用已有的 pasteImageToWebpageAI 贴图，
+   * 不下发网页 AI、不入 externalCards 列表。
+   * @param {Object} c 后端下发的卡片
+   * @returns {boolean} 是否为图片卡片（是则调用方跳过后续处理）
+   */
+  M.consumeQqImage = function (c) {
+    if (!c || c.type !== 'qq-image') return false;
+    const dataUrl = (c.payload && c.payload.data_url) || '';
+    if (dataUrl) {
+      // 交给内容脚本贴图：与截图回传同一条通道
+      window.parent.postMessage({ type: 'auto_send_image', dataUrl: dataUrl }, '*');
+      this.toast('已把 QQ 图片贴入网页 AI 输入框');
+    } else {
+      this.toast('QQ 图片数据缺失，无法贴图');
+    }
+    // 回执后端：卡片已消费，不再重复投递
+    this.confirmCardDelivered(c.id);
+    return true;
+  };
+
+  /**
    * 执行动作后自动截屏并回传 QQ。
    * 延迟到界面重绘完成再截，避免截到切换过程中的中间态。
    * @param {string} requestId 待回传请求 id

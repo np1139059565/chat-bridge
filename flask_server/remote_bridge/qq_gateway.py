@@ -61,6 +61,29 @@ def _extract_voice(d):
     return ""
 
 
+def _extract_image(d):
+    """从事件里提取图片附件的下载地址；没有则返回空串。
+
+    容错解析：QQ 图片消息的正文 content 通常为空，图片放在 attachments 里。
+    不同版本/场景字段名可能不一致，故多个字段名与判定方式都试一遍：
+      - content_type 为 image / pic；
+      - 或 url 以常见图片扩展名结尾。
+    真实字段结构需用一次真实图片消息校准；此处宁可多试不可漏判。
+    """
+    atts = d.get("attachments") or []
+    for a in atts:
+        if not isinstance(a, dict):
+            continue
+        ct = str(a.get("content_type") or "").lower()
+        url = str(a.get("url") or a.get("image_url") or "")
+        if not url:
+            continue
+        low = url.lower()
+        if ct in ("image", "pic") or low.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+            return url
+    return ""
+
+
 def _download_file(url, dest_path):
     """下载 URL 到本地文件；成功返回 True。
 
@@ -135,8 +158,15 @@ class QqGateway:
             self._handle_voice(openid, voice_url, msg_id)
             return
 
+        # 图片消息：正文 content 通常为空，图片在 attachments 里。
+        # 同样先于「content 判空」处理，否则图片会被当成空消息丢掉。
+        image_url = _extract_image(data)
+        if image_url:
+            self._handle_image(openid, image_url, msg_id)
+            return
+
         if not content:
-            log("事件缺少 content 且非语音，忽略")
+            log("事件缺少 content 且非语音/图片，忽略")
             return
         log("收到单聊消息", "openid=" + openid[:8], "长度=" + str(len(content)))
 
@@ -198,6 +228,57 @@ class QqGateway:
             log("识别成功，已暂存待 /vo 确认：", text)
             # 4) 回发识别结果，等用户 /vo 确认
             self._reply_voice(openid, "识别到语音：\n" + text + "\n\n发送 /vo 确认转给 AI，不确认则忽略")
+
+        import threading
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _handle_image(self, openid, image_url, msg_id):
+        """处理一条图片消息：下载存本地，并投一张卡片让镜像扩展贴进网页 AI。
+
+        复用截图的逆向流程：图片转 dataURL 放进卡片，扩展取到后
+        调 auto_send_image 贴进网页 AI 输入框。
+        图片本身也落盘到 QQ_IMAGES_DIR，满足「存储下来」的要求。
+        """
+        def _worker():
+            import os
+            import base64
+            import paths
+            os.makedirs(str(paths.QQ_IMAGES_DIR), exist_ok=True)
+            ts = str(int(time.time() * 1000))
+            low = image_url.lower()
+            ext = ".png"
+            for e in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                if low.endswith(e):
+                    ext = e
+                    break
+            img_path = str(paths.QQ_IMAGES_DIR / ("in_" + ts + ext))
+            # 1) 下载存本地
+            if not _download_file(image_url, img_path):
+                self._reply_voice(openid, "图片下载失败")
+                return
+            # 2) 读成 dataURL 放进卡片（与截图结果同构），扩展据此贴图
+            try:
+                with open(img_path, "rb") as f:
+                    b64 = base64.b64encode(f.read()).decode("ascii")
+            except Exception as e:
+                log("读取图片失败：", e)
+                return
+            mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                    ".gif": "image/gif", ".webp": "image/webp"}.get(ext, "image/png")
+            data_url = "data:%s;base64,%s" % (mime, b64)
+            # 3) 投一张卡片：type=qq-image，供前端识别并贴图（不下发网页 AI）
+            try:
+                card = card_bus.bus.create(
+                    source="qq",
+                    card_type="qq-image",
+                    title="QQ 图片",
+                    content="（QQ 图片，自动贴入网页 AI 输入框）",
+                    payload={"kind": "qq-image", "data_url": data_url,
+                             "openid": openid, "path": img_path},
+                )
+                log("已投递图片卡片", card.id[:8], "等待抽屉取走")
+            except Exception as e:
+                log("投递图片卡片失败：", e)
 
         import threading
         threading.Thread(target=_worker, daemon=True).start()

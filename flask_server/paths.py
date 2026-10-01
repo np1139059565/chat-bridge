@@ -41,6 +41,8 @@ BRIDGE_STATE_PATH = DATA_DIR / "remote_bridge_state.json"
 # 语音临时目录：QQ 语音解码后的 PCM/WAV、TTS 合成的音频文件都落这里；
 # 属运行时产物，用后即删，不长期留存。
 VOICE_DIR = DATA_DIR / "voice"
+# QQ 图片目录：用户从 QQ 发来的图片存这里，供镜像扩展取走、贴进网页 AI 输入框。
+QQ_IMAGES_DIR = DATA_DIR / "qq_images"
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
 LOGS_DIR = DATA_DIR / "logs"

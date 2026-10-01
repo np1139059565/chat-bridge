@@ -121,6 +121,8 @@
       const conv = this.ensureConv(this.activeConv);
       const added = [];
       cards.forEach((c) => {
+        // QQ 图片卡片：不下发网页 AI，直接把图片贴进输入框（截图逆向流程）
+        if (this.consumeQqImage(c)) return;
         // 抽屉命令卡片：不下发网页 AI，直接执行本地动作（桥接指令）
         if (this.consumeBridgeCommand(c)) return;
         if (this.externalCards.some((x) => x.id === c.id)) return;
