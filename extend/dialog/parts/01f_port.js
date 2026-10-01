@@ -28,12 +28,14 @@
   };
 
   /**
-   * 保存端口：先带新端口重启后端（不落盘），探到新端口通了才写配置文件。
+   * 保存端口：从「工具服务地址」输入框解析端口，带新端口滚动重启后端
+   * （先起新、探通再退旧），探到新端口通了才写配置文件。
    * 顺序刻意如此——文件最后写，避免写错端口把服务写死。
    */
   M.savePort = async function () {
-    const port = parseInt(this.config.flaskPort, 10);
-    if (!port || port < 1 || port > 65535) { this.toast('端口非法'); return; }
+    const m = /:(\d+)\b/.exec(this.config.flaskUrl || '');
+    const port = m ? parseInt(m[1], 10) : NaN;
+    if (!port || port < 1 || port > 65535) { this.toast('请填写形如 http://127.0.0.1:端口的地址'); return; }
     // 1) 让后端带新端口重启（此请求会因进程重启而中断，属正常）
     this.toast('正在以新端口 ' + port + ' 重启服务…');
     try {

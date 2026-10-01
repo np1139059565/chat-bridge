@@ -232,27 +232,18 @@
       h('div', { class: 'hint' }, '开启自动后：只对最新一张待执行卡片倒计时自动执行，执行完再倒计时自动发送到网页 AI（两者共用此时长）；积压的旧卡片需手动执行，卡片上可单独跳过。'),
       (!ctx.flaskOk) ? h('div', { class: 'flask-warn' }, '⚠ 无法连接 Flask 服务（' + ctx.flaskError + '），当前使用内置工具目录。') : null,
       h('br'),
-      // Flask 连接地址：由后端 config.yaml 下发，仅会话内使用，不持久化到浏览器
-      h('label', ['Flask 连接地址（来自后端 config.yaml）',
-        h('div', { class: 'ro' }, ctx.config.flaskUrl)]),
-      h('div', [
-        h('button', { onClick: () => ctx.initBackend() }, '重新连接后端'),
-        h('span', { class: 'hint' }, '改了 config.yaml 端口后点此重新发现')
-      ]),
-      // 端口不一致告警：配置端口已改但服务仍在旧端口运行（尚未重启）
-      ctx.portMismatch
-        ? h('div', { class: 'flask-warn' },
-          '⚠ 配置端口 ' + ctx.config.flaskPort + ' 与服务实际端口不一致：服务仍在旧端口运行。'
-          + '请重启 Flask 服务监听新端口，然后点「重新连接后端」。插件当前仍连接旧端口，未使用未生效的新配置。')
-        : null,
-      // 端口配置：写入后端 config.yaml，重启 Flask 后生效
-      h('label', ['Flask 端口（重启服务生效）', h('input', {
-        type: 'number', value: ctx.config.flaskPort,
-        onInput: (e) => { ctx.config.flaskPort = e.target.value; }
+      // 工具服务地址：唯一输入框，形如 http://127.0.0.1:5000。
+      // 保存时从中解析端口，以滚动重启切到新端口。
+      h('label', ['工具服务地址', h('input', {
+        type: 'text', class: 'bridge-sel-input',
+        value: ctx.config.flaskUrl,
+        placeholder: 'http://127.0.0.1:端口',
+        onInput: (e) => { ctx.config.flaskUrl = e.target.value; }
       })]),
       h('div', [
-        h('button', { onClick: () => ctx.savePort() }, '保存端口'),
-        h('span', { class: 'hint' }, '保存后自动以新端口重启服务，探通后才写入配置；期间连接会短暂中断')
+        h('button', { onClick: () => ctx.savePort() }, '保存并重启'),
+        h('button', { onClick: () => ctx.initBackend() }, '重新连接'),
+        h('span', { class: 'hint' }, '保存后自动以新端口滚动重启（先起新、探通再退旧），探通后才写入配置')
       ]),
       // 工具结果 JSON 体积上限：写入后端 config.yaml，即时生效
       h('label', ['工具结果体积上限(字符)', h('input', {
