@@ -202,10 +202,6 @@
     };
     const text = JSON.stringify(envelope, null, 2);
     window.parent.postMessage({ type: 'auto_send', text }, '*');
-    // 语音确认卡片：置标志，供随后的质量检查要求 AI 回复带 voice 代码块。
-    if (card.payload && card.payload.from_voice) {
-      this.voiceReplyExpected = true;
-    }
     // 执行完成即结束：立即置为完成态并记为已执行过（供刷新/切会话后恢复）
     card.status = 'done';
     card.executed = true;

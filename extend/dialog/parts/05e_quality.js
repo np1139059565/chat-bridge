@@ -47,11 +47,10 @@
         };
       }
     }
-    // 问题三：语音确认后，回复必须带 voice 代码块（供合成语音发回 QQ）。
-    // 仅当 voiceReplyExpected 为真（刚投递过 /vo 确认卡片）时检查；
-    // 检查一次后即清标志，避免 AI 始终不合规时陷入无限重生成。
-    if (this.voiceReplyExpected) {
-      this.voiceReplyExpected = false;
+    // 问题三：语音开关打开期间，每一轮回复都必须带 voice 代码块（供合成语音发回）。
+    // 只要开关处于打开状态即强制检测，与是否收到语音无关；缺失则打回重生成。
+    const voiceOn = !!(this.bridgePush && this.bridgePush.voice);
+    if (voiceOn) {
       const hasVoice = blocks.some((b) => b && b.type === 'code'
         && String(b.lang || '').toLowerCase() === 'voice');
       if (!hasVoice) {
