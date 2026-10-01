@@ -4,6 +4,8 @@
 - GET  /tools   返回已上线工具清单（内置 + 自定义 + 外部提供方）
 - POST /tool    调用工具（内置 / 自定义脚本 / 外部提供方）
 """
+import concurrent.futures as _futures
+
 from flask import Blueprint, jsonify, request
 
 import runtime
@@ -13,6 +15,31 @@ import screenshot_store
 from responses import disabled_resp, tool_error
 
 bp = Blueprint("tools", __name__)
+
+# 内置工具执行的兜底超时（秒）：内置工具（读文件、搜索等）在 Flask 请求线程里
+# 同步执行，若某次调用因异常输入陷入长时间循环，会一直占用请求线程、令调用方无限挂起。
+# 单独执行的脚本 / 命令类工具有各自的子进程超时；此值是其外层的最后一道保险丝。
+# 取值需大于脚本类工具自身的超时（60 秒），避免把正常慢命令误判为超时。
+BUILTIN_TOOL_TIMEOUT = 120
+
+# 执行内置工具的线程池：用独立线程跑工具函数，主线程按超时等待，
+# 从而在工具卡住时仍能返回错误响应，而不是永久阻塞请求。
+_TOOL_POOL = _futures.ThreadPoolExecutor(max_workers=4)
+
+
+def _run_with_timeout(fn, params, timeout):
+    """在独立线程里执行工具函数，超时抛 TimeoutError。
+
+    注意：Python 无法强制终止正在运行的线程，超时后该线程会继续跑到自然结束，
+    但调用方（HTTP 请求）能立即拿到超时错误，不会无限挂起——这正是本兜底的目的。
+    @returns 工具函数的返回值
+    @raises TimeoutError 超时未返回
+    """
+    future = _TOOL_POOL.submit(fn, params)
+    try:
+        return future.result(timeout=timeout)
+    except _futures.TimeoutError:
+        raise TimeoutError("工具执行超过 %d 秒未返回" % timeout)
 
 
 def _save_screenshot_data_url(data_url):
@@ -57,7 +84,8 @@ def _call_builtin(name, params):
     if not runtime.is_tool_enabled(name):
         return disabled_resp(name)
     try:
-        result = fn(params)
+        # 独立线程 + 超时兜底：工具卡住时返回错误而非无限挂起请求
+        result = _run_with_timeout(fn, params, BUILTIN_TOOL_TIMEOUT)
         return jsonify(success=True, tool=name, result=result)
     except Exception as e:
         return tool_error(name, e)

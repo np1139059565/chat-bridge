@@ -35,6 +35,39 @@ from run_command_impl import (
 
 # 工具目录：元数据定义在 tool_meta.py，此处直接引用，保持「声明」与「实现」分离
 
+# 搜索类工具默认跳过的目录：这些目录体积大或属运行时产物，
+# 递归扫描它们既慢又无意义（如 models/ 是 1.36G 模型、.git/ 是版本库内部）。
+# 跳过可避免 search_file / search_content 在大工程里卡死。
+DEFAULT_IGNORE_DIRS = {
+    ".git", "models", "node_modules", "__pycache__",
+    ".venv", "venv", "env", ".idea", ".vscode",
+}
+
+
+def _iter_files(root, recursive=True):
+    """遍历 root 下的文件，跳过 DEFAULT_IGNORE_DIRS 中的目录。
+
+    用 os.walk 而非 rglob：rglob 无法跳过整棵子树，
+    而 os.walk 可原地裁剪 dirnames，从而不进入被忽略的目录。
+    @param root 起始路径（文件则直接产出该文件）
+    @param recursive 是否递归；False 时只看一层
+    @returns 文件 Path 迭代器
+    """
+    if not root.is_dir():
+        yield root
+        return
+    if not recursive:
+        for entry in root.iterdir():
+            if entry.is_file():
+                yield entry
+        return
+    for dirpath, dirnames, filenames in os.walk(root):
+        # 原地裁剪：os.walk 据此跳过这些子目录，不再深入
+        dirnames[:] = [d for d in dirnames if d not in DEFAULT_IGNORE_DIRS]
+        for fn in filenames:
+            yield Path(dirpath) / fn
+
+
 # ---------- 各工具实现 ----------
 def t_list_dir(p):
     """列出目录下的文件与子目录，跳过点文件与忽略模式。"""
@@ -68,11 +101,9 @@ def t_search_file(p):
     pattern = p.get("pattern", "*")
     recursive = p.get("recursive", True)
     ig = p.get("ignore_globs") or []
-    gen = root.rglob("*") if recursive else root.glob("*")
     matches = []
-    for f in gen:
-        if not f.is_file():
-            continue
+    # 用 _iter_files 遍历：跳过 models/ .git/ 等大目录，避免递归卡死
+    for f in _iter_files(root, recursive):
         if not _match_name(f.name, pattern):
             continue
         if any(_match_name(f.name, g) for g in ig):
@@ -152,11 +183,9 @@ def t_search_content(p):
     context = max(0, context)
     regex = re.compile(pattern, 0 if case else re.IGNORECASE)
     root = _abspath(path)
-    files = root.rglob("*") if root.is_dir() else [root]
     matches = []
-    for f in files:
-        if not f.is_file():
-            continue
+    # 用 _iter_files 遍历：跳过 models/ .git/ 等大目录，避免递归卡死
+    for f in _iter_files(root):
         matches += _collect_file_matches(f, regex, glob, context, len(matches))
     return enforce_size_limit(
         {"count": len(matches), "matches": matches},

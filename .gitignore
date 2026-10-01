@@ -30,3 +30,5 @@ flask_server/screenshots/
 flask_server/data/
 # 语音模型（vosk，体积大且可重新下载，不入库）
 models/
+# 记忆（工作记忆 + 错题本）：属本地长期沉淀，不入库
+memory/

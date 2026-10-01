@@ -311,7 +311,9 @@ def _h_voice_ok(qq_client, openid, arg, msg_id):
         _reply(qq_client, openid, "桥接未就绪，无法转投")
         return
     gw.deliver_text_as_card(openid, text, msg_id, title="语音", from_voice=True)
-    _reply(qq_client, openid, "已确认，语音文字已转给 AI")
+    # 回显投递内容：QQ 端要能看到「转给 AI 的到底是什么」，
+    # 否则用户只收到一句「已确认」，无从核对投递的文字是否正确。
+    _reply(qq_client, openid, "已确认，语音文字已转给 AI：\n" + text)
 
 
 def _h_memory(qq_client, openid, arg, msg_id):

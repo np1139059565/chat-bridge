@@ -51,7 +51,30 @@
 | `description` | 是 | 说明，展示给 AI |
 | `executor` | 是 | `external`（外部）|
 | `silent` | 否 | 为 `true` 时不在抽屉生成工具卡片（如 `push_message`） |
+| `wakeup` | 否 | 为 `true` 时允许在抽屉关闭时被待命轮询取走（如 `open_drawer`） |
+| `command_only` | 否 | 为 `true` 时该工具**仅供外部指令执行，对 AI 透明**（见下） |
 | `parameters` | 是 | 参数数组，每项含 `name` / `type` / `required` / `description` |
+
+### 2.2.1 command_only：指令执行端工具
+
+**背景**：外部指令（如 `/dbg-open`）需要映射到一个工具来执行（见 `external-command.md`）。
+但这个工具是**指令的执行端**，供 QQ 用户在聊天对话里使用，**不应对 AI 暴露**。
+
+**问题**：若把这类工具当普通工具声明（仅 `enabled: true`），它会：
+1. 进入 `/tools` 返回的 AI 工具目录；
+2. 被 `meta.all_meta()` 收集，**污染 System Prompt 的工具列表**。
+
+这违反「指令对 AI 透明、工具才对 AI 暴露」的边界，是严重错误。
+
+**约定**：凡「只作外部指令执行端、不供 AI 调用」的工具，必须标 `command_only: true`。
+效果：
+- `meta.all_meta()` 过滤它 → 不进 AI 工具目录、不进 System Prompt；
+- `hub.provider_tools()` 过滤它 → 不出现在 `/tools`；
+- **但仍注册进 provider hub** → 指令经 `hub.dispatch` 执行时，`find_tool` 仍能找到它（含 `wakeup` 等属性），执行不受影响。
+
+**判据**：问自己——「这个工具会被 AI 调用吗？」
+- 会（如 `get_element_style`、`exec_js`）→ 普通工具，不标。
+- 不会，只作为某条指令的执行端（如 `open_drawer`）→ 必须标 `command_only: true`。
 
 ### 2.3 参数类型
 
