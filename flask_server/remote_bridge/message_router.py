@@ -45,6 +45,14 @@ _push_lock = threading.Lock()
 # 当前活跃的被动回复窗口：{ openid: {"msg_id": ..., "expire": 时间戳} }
 _windows = {}
 
+# 最近一次上报切片缓存：{ conv_id: payload }。
+# 用途：把「窗口更新」与「消息推送」连起来——用户发消息续期后重放一次，
+# 补推此前因窗口关闭而滞后的消息（见 note_incoming）。
+_last_report = {}
+
+# 最近一次上报用的 QQClient 引用：重放时复用（note_incoming 拿不到 client）。
+_last_client = None
+
 # 最近一个发来消息的 openid。
 # 抽屉上报时并不知道 openid（那是 QQ 侧的概念），因此回退用它——
 # 单用户场景下，「最近跟我说话的人」就是推送目标。
@@ -111,8 +119,39 @@ def next_seq(openid):
 
 
 def note_incoming(openid, msg_id):
-    """收到用户新消息时调用：刷新窗口（用户发消息即续期）。"""
+    """收到用户新消息时调用：刷新窗口，并补推此前的滞后消息。
+
+    关键：窗口更新与消息推送本是解耦的——推送只由抽屉上报触发。
+    因此用户发消息（尤其是指令）虽续了期，却不会自动补推积压消息，
+    表现为「发了新问题，上一条才姗姗来迟」。这里在续期后主动重放
+    最近一次上报切片：此时窗口已开，去重复用已推集合，滞后者得以补推。
+    """
     _remember_window(openid, msg_id)
+    _replay_last_report()
+
+
+def _replay_last_report():
+    """续期后重放最近一次上报切片，补推滞后消息。
+
+    放后台线程执行：重放内部会发 HTTP 推送，若同步跑在 WebSocket 回调线程里，
+    会阻塞心跳、甚至触发断连（与语音处理同理）。
+    只读缓存、复用现有去重：已在「已推集合」里的不会重复推送；
+    异常一律吞掉——补推是尽力而为，不能影响消息接收主流程。
+    """
+    client = _last_client
+    if not client:
+        return
+
+    def _worker():
+        # 复制一份：重放期间可能有新上报写入缓存，边遍历边改会出问题
+        for conv_id, payload in list(_last_report.items()):
+            try:
+                handle_report(client, payload)
+                log("续期后重放补推", conv_id)
+            except Exception as e:
+                log("续期后重放失败（不影响接收）：", e)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def push_text(qq_client, openid, text, markdown=False):
@@ -346,6 +385,11 @@ def handle_report(qq_client, payload):
     messages = payload.get("messages") or []
     if not openid or not messages:
         return 0
+    # 缓存最近一次切片与客户端：用户续期窗口后据此重放，补推滞后消息。
+    # 只存引用，不深拷贝：切片可能很大，且重放时只读。
+    global _last_client
+    _last_client = qq_client
+    _last_report[conv_id] = payload
 
     push = bridge_store.get_config().get("push") or {}
     # 整段「读已推集合 → 逐条推送 → 写回」串行执行：
