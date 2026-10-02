@@ -35,12 +35,18 @@
    * 失败时保留完整堆栈与错误分类，供 AI 区分参数问题与工具代码缺陷。
    */
   M.executeCard = async function (card, isAuto) {
-    log('执行工具卡片', card.tool || '(非工具)', '方式=' + (isAuto ? '自动' : '手动'));
-    // 建卡阶段已检测出问题：直接作为结果，不调用本地工具
-    if (card.preIssue) { this._applyPreIssue(card, isAuto); return; }
+    const cid = card.id || '(无 id)';
+    log('卡片执行开始：id=' + cid + ' 工具=' + (card.tool || '(非工具)')
+      + ' 方式=' + (isAuto ? '自动' : '手动'));
+    // 建卡阶段已检测出致命告警：直接作为结果，不调用本地工具
+    if (card.preIssue) {
+      log('卡片执行跳过：id=' + cid + ' 原因=致命告警接管（' + card.preIssue.error + '），不调用工具');
+      this._applyPreIssue(card, isAuto);
+      return;
+    }
     // 执行前校验：卡片必须仍存在于镜像中（幽灵卡片一律不执行）
     if (!this.cardInMirror(card)) {
-      log('已拦截不在镜像中的卡片', card.tool || card.id || '');
+      log('卡片执行拦截：id=' + cid + ' 原因=不在镜像中（幽灵卡片）');
       card.status = 'pending';
       if (!isAuto) this.toast('该卡片已不在当前镜像中，已取消执行');
       return;
@@ -49,8 +55,8 @@
     this._resetCardDiagnostics(card);
     await this._callTool(card);
     // 结果概览：只记一行，避免把大段 result 打进控制台
-    log('工具执行结束', card.tool || '(非工具)', '状态=' + card.status,
-      card.error ? ('错误=' + card.error) : '');
+    log('卡片执行结束：id=' + cid + ' 工具=' + (card.tool || '(非工具)')
+      + ' 状态=' + card.status + (card.error ? (' 错误=' + card.error) : ''));
     // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
     card.executed = true;
     card.finishedAt = Date.now();
@@ -61,7 +67,13 @@
     // 自动回传仅在「自动流程」触发时进行；noReply 只豁免成功结果：
     // 执行失败必须回传，让 AI 知道工具没跑成，否则卡片标红、AI 收不到反馈。
     const mustReply = !card.noReply || card.status === 'error';
-    if (isAuto && this.autoSendEnabled && mustReply) this.scheduleAutoSend(card);
+    if (isAuto && this.autoSendEnabled && mustReply) {
+      this.scheduleAutoSend(card);
+    } else {
+      // 不回传必须留痕：排查「自动流程停止」时，这是最关键的断点。
+      log('卡片不回传：id=' + cid + ' 原因='
+        + (isAuto ? (this.autoSendEnabled ? 'noReply' : '自动开关关') : '非自动流程'));
+    }
   };
 
   /**

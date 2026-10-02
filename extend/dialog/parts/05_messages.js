@@ -263,14 +263,21 @@
 
     // 5) 自动执行：仅本轮最新的一张；不入树切片绝不自动执行。
     const runnable = autoCandidates.filter((c) => c && !c.skipped);
-    if (!notInTree && this.autoSendEnabled) {
-      if (!scrollOnly && runnable.length) {
-        // 非滚动轮次：候选按本轮建卡顺序追加，末位即最新
-        const newest = runnable[runnable.length - 1];
-        if (newest && !newest.skipped) this.scheduleExecute(newest);
-      } else if (scrollOnly) {
-        this._maybeAutoExecOnScroll(collected.armedLast, atBottom);
-      }
+    // 自动执行决策留痕：这是排查「自动流程停止」的核心断点，逐条件说明为何执行/不执行。
+    if (notInTree) {
+      log('自动执行决策：本轮不入树，跳过（候选=' + runnable.length + '）');
+    } else if (!this.autoSendEnabled) {
+      log('自动执行决策：自动开关关，跳过（候选=' + runnable.length + '）');
+    } else if (!scrollOnly && runnable.length) {
+      // 非滚动轮次：候选按本轮建卡顺序追加，末位即最新
+      const newest = runnable[runnable.length - 1];
+      log('自动执行决策：执行最新卡片 id=' + (newest.id || '(无)')
+        + ' 工具=' + (newest.tool || '(非工具)') + '（候选=' + runnable.length + '）');
+      if (newest && !newest.skipped) this.scheduleExecute(newest);
+    } else if (scrollOnly) {
+      this._maybeAutoExecOnScroll(collected.armedLast, atBottom);
+    } else {
+      log('自动执行决策：无候选，不执行');
     }
     // 预备标记只生效一次
     autoCandidates.forEach((c) => { if (c) c.autoArmed = false; });
@@ -287,9 +294,10 @@
     const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
       && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
     const pass = atBottom && armedOk;
-    console.log('[AI-Mirror][dialog][scroll复检] 自动=' + this.autoSendEnabled
+    // 自动流程是否放行的关键判定：记录三个条件与结论，便于排查「自动流程停止」。
+    log('自动执行复检（滚动）：自动开关=' + this.autoSendEnabled
       + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
-      + ' → ' + (pass ? '放行自动执行' : '保持待执行'));
+      + ' → ' + (pass ? '放行执行' : '不执行'));
     if (pass) this.scheduleExecute(armedLast);
   };
 
