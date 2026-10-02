@@ -9,8 +9,12 @@
   const D = window.AIMirrorDialog;
   const log = D.log;
 
-  // 队列状态：items 待发条目，sending 是否正在发送，gap 两条之间的间隔（毫秒）。
-  const Q = { items: [], sending: false, gap: 800 };
+  // 队列状态：items 待发条目，sending 是否正在发送。
+  // 间隔按条目类型区分（毫秒）：
+  //  - gap：普通文本条目，发后留出「写入输入框 → 回车 → 复位」的时间；
+  //  - imageGap：图片条目，内容脚本贴图后要等约 1500ms 才回车提交，
+  //    若仍按 gap 会让紧随其后的文本挤在图片提交前，导致顶掉或乱序。
+  const Q = { items: [], sending: false, gap: 800, imageGap: 1800 };
   D.sendQueue = Q;
 
   /**
@@ -36,16 +40,19 @@
     Q.sending = true;
     const item = Q.items.shift();
     log('发送队列出列：' + item.type + '，剩余=' + Q.items.length);
+    // 本条的等待间隔：图片条目需更久（贴图后要等回车提交），文本用默认值。
+    let wait = Q.gap;
     if (item.type === 'auto_send_image') {
       window.parent.postMessage({ type: 'auto_send_image', dataUrl: item.dataUrl, text: item.text || '' }, '*');
+      wait = Q.imageGap;
     } else {
       window.parent.postMessage({ type: 'auto_send', text: item.text || '' }, '*');
     }
-    // 发送后隔 gap 再取下一条：给网页留出「写入输入框 → 回车发送 → 复位」的时间。
+    // 发送后隔 wait 再取下一条：给网页留出「写入输入框 → 回车发送 → 复位」的时间。
     Q.timer = setTimeout(function () {
       Q.timer = null;
       Q.sending = false;
       D._pumpSendQueue();
-    }, Q.gap);
+    }, wait);
   };
 })();
