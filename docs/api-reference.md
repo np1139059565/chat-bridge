@@ -26,7 +26,7 @@
 
 请求：
 ```json
-{ "tool": "read_file", "parameters": { "filePath": "E:/projects/demo/README.md" } }
+{ "tool": "read_file", "parameters": { "file_path": "E:/projects/demo/README.md" } }
 ```
 
 成功：
@@ -215,19 +215,19 @@ POST 请求体示例：
 
 | 工具 | 必填参数 | 可选参数 |
 |---|---|---|
-| `list_dir` | `target_directory` | `ignore_globs` |
-| `search_file` | `target_directory`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
-| `search_content` | `pattern` | `path`, `glob`, `contextAround`（上下文行数）, `caseSensitive` |
-| `read_file` | `filePath`（绝对路径原样，相对路径以工程根为基准） | `offset`, `limit` |
+| `list_dir` | `dir_path` | `ignore_globs` |
+| `search_file` | `dir_path`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
+| `search_content` | `pattern` | `dir_path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
+| `read_file` | `file_path`（绝对路径原样，相对路径以工程根为基准） | `offset`, `limit` |
 | `list_skills` | — | — |
 | `read_skill` | `skill`, `file` | `offset`, `limit` |
 | `read_lints` | — | `paths`, `severity` |
-| `replace_in_file` | `filePath`, `old_str` | `new_str` |
-| `write_to_file` | `filePath`, `content` | — |
-| `delete_file` | `target_file` | — |
+| `replace_in_file` | `file_path`, `old_string` | `new_string` |
+| `write_to_file` | `file_path`, `content` | — |
+| `delete_file` | `file_path` | — |
 | `get_tool_params` | `tool_id` | — |
 | `list_rules` | — | — |
 | `read_rule` | `name` | — |
 | `run_command` | `language`, `command` | `cwd`, `timeout` |
 
-> 参数名不统一是刻意的（如 `list_dir` 用 `target_directory`、`read_file` 用 `filePath`）。调用前请先 `get_tool_params` 核对。
+> 参数命名口径：文件路径统一 `file_path`，目录路径统一 `dir_path`。调用前请先 `get_tool_params` 核对。

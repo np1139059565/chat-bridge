@@ -71,8 +71,8 @@ def _iter_files(root, recursive=True):
 # ---------- 各工具实现 ----------
 def t_list_dir(p):
     """列出目录下的文件与子目录，跳过点文件与忽略模式。"""
-    _require(p, "target_directory")
-    d = _abspath(p.get("target_directory"))
+    _require(p, "dir_path")
+    d = _abspath(p.get("dir_path"))
     ig = p.get("ignore_globs") or []
     items = []
     for name in sorted(os.listdir(d)):
@@ -96,8 +96,8 @@ def t_search_file(p):
     先列出目录下的文件、再自行比对通配符，而不是把 pattern 交给 rglob/glob：
     后者的大小写敏感行为随操作系统而异，自行比对可保证各平台一致。
     """
-    _require(p, "target_directory", "pattern")
-    root = _abspath(p.get("target_directory"))
+    _require(p, "dir_path", "pattern")
+    root = _abspath(p.get("dir_path"))
     pattern = p.get("pattern", "*")
     recursive = p.get("recursive", True)
     ig = p.get("ignore_globs") or []
@@ -172,12 +172,12 @@ def t_search_content(p):
     """按正则搜索文件内容，返回匹配行；结果超限时改为报错并提示缩小范围。"""
     _require(p, "pattern")
     pattern = p.get("pattern", "")
-    path = p.get("path", ".")
+    path = p.get("dir_path", ".")
     glob = p.get("glob")
-    case = p.get("caseSensitive", False)
+    case = p.get("case_sensitive", False)
     # 上下文行数：非法或负数一律按 0 处理（只返回匹配行本身）
     try:
-        context = int(p.get("contextAround") or 0)
+        context = int(p.get("context_around") or 0)
     except (TypeError, ValueError):
         context = 0
     context = max(0, context)
@@ -214,8 +214,8 @@ def t_read_file(p):
     路径口径与写文件类工具保持一致：绝对路径原样使用，相对路径以工程根为基准解析。
     """
     _normalize_aliases(p)
-    _require(p, "filePath")
-    fp = _abspath(p.get("filePath"))
+    _require(p, "file_path")
+    fp = _abspath(p.get("file_path"))
     res = _read_text_segment(fp, p.get("offset", 1), p.get("limit"))
     read_lines = res.pop("_read_lines")
     total = res["total_lines"]
@@ -264,18 +264,18 @@ def t_read_lints(p):
 def t_replace_in_file(p):
     """在文件中做精确字符串替换，要求 old_str 唯一。"""
     _normalize_aliases(p)
-    _require(p, "filePath", "old_str")
-    fp = _abspath(p.get("filePath"))
-    old = p.get("old_str")
-    new = p.get("new_str", "")
+    _require(p, "file_path", "old_string")
+    fp = _abspath(p.get("file_path"))
+    old = p.get("old_string")
+    new = p.get("new_string", "")
     if old == "":
-        raise ToolParamError("old_str 不能为空")
+        raise ToolParamError("old_string 不能为空")
     content = Path(fp).read_text(encoding="utf-8")
     cnt = content.count(old)
     if cnt == 0:
-        raise ToolParamError("未找到 old_str（原文需与文件内容完全一致，含缩进与换行）")
+        raise ToolParamError("未找到 old_string（原文需与文件内容完全一致，含缩进与换行）")
     if cnt > 1:
-        raise ToolParamError("old_str 在文件中出现 %d 次，不唯一，请扩大上下文" % cnt)
+        raise ToolParamError("old_string 在文件中出现 %d 次，不唯一，请扩大上下文" % cnt)
     content = content.replace(old, new, 1)
     Path(fp).write_text(content, encoding="utf-8")
     return {"replaced": True, "file": str(fp)}
@@ -284,8 +284,8 @@ def t_replace_in_file(p):
 def t_write_to_file(p):
     """创建或覆盖写入完整文件内容（父目录不存在时自动创建）。"""
     _normalize_aliases(p)
-    _require(p, "filePath", "content")
-    fp = _abspath(p.get("filePath"))
+    _require(p, "file_path", "content")
+    fp = _abspath(p.get("file_path"))
     content = p.get("content", "")
     fp.parent.mkdir(parents=True, exist_ok=True)
     fp.write_text(content, encoding="utf-8")
@@ -295,8 +295,8 @@ def t_write_to_file(p):
 def t_delete_file(p):
     """删除指定文件。"""
     _normalize_aliases(p)
-    _require(p, "target_file")
-    fp = _abspath(p.get("target_file"))
+    _require(p, "file_path")
+    fp = _abspath(p.get("file_path"))
     os.remove(fp)
     return {"deleted": True, "file": str(fp)}
 

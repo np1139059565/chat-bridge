@@ -136,12 +136,25 @@ def resolve_skill_file(skill, rel):
 
 # 参数别名：调用方可能用 path / file 等写法指代 filePath，统一归一到规范名，
 # 避免因别名导致「缺参」报错。
+# 参数别名：调用方可能用 camelCase / 旧名指代规范参数，统一归一到规范名，
+# 避免因别名导致「缺参」报错。规范名口径：文件路径=file_path，目录路径=dir_path。
 _PARAM_ALIASES = {
-    "path": "filePath",
-    "file": "filePath",
-    "file_path": "filePath",
-    "filepath": "filePath",
-    "target_file": "filePath",
+    # 文件路径 → file_path
+    "path": "file_path",
+    "file": "file_path",
+    "filePath": "file_path",
+    "filepath": "file_path",
+    "target_file": "file_path",
+    # 目录路径 → dir_path
+    "target_directory": "dir_path",
+    "dirPath": "dir_path",
+    "directory": "dir_path",
+    # 替换文本 → old_string / new_string
+    "old_str": "old_string",
+    "new_str": "new_string",
+    # 其它 camelCase → snake_case
+    "contextAround": "context_around",
+    "caseSensitive": "case_sensitive",
 }
 
 
@@ -158,7 +171,7 @@ def normalize_aliases(p):
 def require(p, *names):
     """校验必填参数；缺失 / 空串时抛 ToolParamError，并明确告知正确参数名。
 
-    目的是避免 AI 臆造别名（如把 target_directory 写成 path）后工具静默用默认值、
+    目的是避免 AI 臆造别名（如把 file_path 写成 path）后工具静默用默认值、
     返回成功却结果错误，使调用方无从察觉参数用错。
     """
     for n in names:

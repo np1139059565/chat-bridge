@@ -32,14 +32,14 @@ TOOLS = {
     "list_dir": {
         "description": "列出指定目录下的文件和子目录（不含点文件）",
         "parameters": [
-            {"name": "target_directory", "type": "string", "required": True, "description": "要列出的目录路径（相对或绝对）"},
+            {"name": "dir_path", "type": "string", "required": True, "description": "要列出的目录路径（相对或绝对）"},
             {"name": "ignore_globs", "type": "array", "required": False, "description": "要忽略的通配符模式列表"},
         ],
     },
     "search_file": {
         "description": "按文件名通配符模式递归搜索文件，支持忽略特定模式",
         "parameters": [
-            {"name": "target_directory", "type": "string", "required": True, "description": "搜索根目录"},
+            {"name": "dir_path", "type": "string", "required": True, "description": "搜索根目录"},
             {"name": "pattern", "type": "string", "required": True, "description": "文件名通配符，如 *.js；匹配不区分大小写"},
             {"name": "recursive", "type": "boolean", "required": False, "description": "是否递归子目录，默认 true"},
             {"name": "ignore_globs", "type": "array", "required": False, "description": "忽略模式列表，同样不区分大小写"},
@@ -49,17 +49,17 @@ TOOLS = {
         "description": "基于正则在文件内容中搜索匹配（支持上下文、类型过滤）",
         "parameters": [
             {"name": "pattern", "type": "string", "required": True, "description": "正则表达式"},
-            {"name": "path", "type": "string", "required": False, "description": "搜索路径，默认当前目录"},
+            {"name": "dir_path", "type": "string", "required": False, "description": "搜索路径，默认当前目录"},
             {"name": "glob", "type": "string", "required": False, "description": "文件名过滤，如 *.py"},
-            {"name": "contextAround", "type": "integer", "required": False, "description": "上下文字节数/行数"},
-            {"name": "caseSensitive", "type": "boolean", "required": False, "description": "是否区分大小写"},
+            {"name": "context_around", "type": "integer", "required": False, "description": "上下文字节数/行数"},
+            {"name": "case_sensitive", "type": "boolean", "required": False, "description": "是否区分大小写"},
         ],
     },
     "read_file": {
         # 路径口径与写文件类工具一致：绝对路径原样，相对路径以工程根为基准
         "description": "读取本地文件内容（绝对路径原样，相对路径以工程根为基准），支持指定偏移与行数",
         "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件路径（绝对路径原样，相对路径以工程根为基准）"},
+            {"name": "file_path", "type": "string", "required": True, "description": "文件路径（绝对路径原样，相对路径以工程根为基准）"},
             {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
             {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
         ],
@@ -87,26 +87,26 @@ TOOLS = {
         ],
     },
     "replace_in_file": {
-        # 要求 old_str 在文件中唯一，避免误改多处；适合最小化改动
+        # 要求 old_string 在文件中唯一，避免误改多处；适合最小化改动
         "description": "在已有文件中进行精确字符串替换（用于最小化改动）",
         "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件路径"},
-            {"name": "old_str", "type": "string", "required": True, "description": "待替换原文（须唯一）"},
-            {"name": "new_str", "type": "string", "required": True, "description": "替换后的文本"},
+            {"name": "file_path", "type": "string", "required": True, "description": "文件路径"},
+            {"name": "old_string", "type": "string", "required": True, "description": "待替换原文（须唯一）"},
+            {"name": "new_string", "type": "string", "required": True, "description": "替换后的文本"},
         ],
     },
     "write_to_file": {
         # 覆盖写入：父目录不存在时自动创建，便于生成新文件
         "description": "创建或覆盖写入完整文件内容",
         "parameters": [
-            {"name": "filePath", "type": "string", "required": True, "description": "文件路径"},
+            {"name": "file_path", "type": "string", "required": True, "description": "文件路径"},
             {"name": "content", "type": "string", "required": True, "description": "完整文件内容"},
         ],
     },
     "delete_file": {
         "description": "删除指定路径的文件",
         "parameters": [
-            {"name": "target_file", "type": "string", "required": True, "description": "要删除的文件路径"},
+            {"name": "file_path", "type": "string", "required": True, "description": "要删除的文件路径"},
         ],
     },
 
