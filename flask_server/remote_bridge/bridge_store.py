@@ -56,6 +56,12 @@ def _default_config():
             # 语音识别开关：关时收到语音文件直接丢弃，不进 ASR；
             # 开时语音经识别转文字、回发等 /vo 确认后才投给 AI。默认关。
             "voice": False,
+            # 质量检测开关：与推送开关同区存放，供前端设置页读写。
+            # 默认全开；显式关时对应检测不跑。字段在此列出，避免读写时丢键。
+            "check_code_only": True,
+            "check_thinking": True,
+            "check_multi_call": True,
+            "check_memory": True,
         },
         # Markdown 复制按钮选择器：AI 回复完成后点它，截获带格式的原文，
         # 推送 QQ 时优先使用。留空则关闭格式增强，退回纯文本。

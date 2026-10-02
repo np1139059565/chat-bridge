@@ -203,6 +203,11 @@
     if (card.status === 'done') {
       payload.success = true;
       payload.result = card.result;
+      // 补充告警：工具已成功执行，仅附带一条质量提醒。工具结果与告警合为同一条回传，
+      // 不再单独发第二条，避免抢跑与刷屏。
+      if (card.advisory) {
+        payload.advisory = { issue: card.advisory.error, message: card.advisory.message };
+      }
     } else {
       payload.success = false;
       payload.origin = card.origin || 'unknown';

@@ -203,7 +203,8 @@
       page_url: sourceUrl
     };
     const text = JSON.stringify(envelope, null, 2);
-    window.parent.postMessage({ type: 'auto_send', text }, '*');
+    // 经统一发送队列回传：与工具卡片结果、质量告警串行，避免同时到达互相顶掉。
+    D.enqueueSend({ type: 'auto_send', text: text });
     // 执行完成即结束：立即置为完成态并记为已执行过（供刷新/切会话后恢复）
     card.status = 'done';
     card.executed = true;

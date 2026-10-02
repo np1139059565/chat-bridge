@@ -52,8 +52,9 @@
     // 同消息文字（图文消息）；纯图片时后端已补「用户截图」。
     const text = (c.payload && c.payload.text) || '';
     if (dataUrl) {
-      // 交给内容脚本：先贴图，再把文字写进同一输入框，最后只发一次
-      window.parent.postMessage({ type: 'auto_send_image', dataUrl: dataUrl, text: text }, '*');
+      // 交给内容脚本：先贴图，再把文字写进同一输入框，最后只发一次。
+      // 经统一发送队列，避免与工具卡片结果、质量告警同时到达互相顶掉。
+      D.enqueueSend({ type: 'auto_send_image', dataUrl: dataUrl, text: text });
       this.toast(text ? '已把 QQ 图文贴入网页 AI 输入框' : '已把 QQ 图片贴入网页 AI 输入框');
     } else {
       this.toast('QQ 图片数据缺失，无法贴图');

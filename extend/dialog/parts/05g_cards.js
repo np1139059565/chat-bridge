@@ -31,63 +31,114 @@
    */
   M._buildCardsForIncoming = function (conv, incoming, reason, memoryIssue, scrollOnly) {
     const autoCandidates = [];
-    let armedLast = null;   // 滚动轮次里被「上膛」的最新卡片（仅最后一条消息上的）
-    let rerunCard = null;   // 重复卡片重跑候选（严格受限旁路，见下方判定）
+    // 状态集中到一个对象，便于把「单条消息建卡」抽成子函数，控制主函数行数。
+    const state = {
+      armedLast: null,        // 滚动轮次里被「上膛」的最新卡片（仅最后一条消息上的）
+      rerunCard: null,        // 重复卡片重跑候选（严格受限旁路，见下方判定）
+      pendingMsgIssue: null,  // 消息级补充告警暂存：建卡后统一决定落点
+      pendingHolder: null,    // 该告警所属消息的承载对象
+      firstToolCard: null     // 本轮第一张工具卡片（告警无候选可搭时退回它）
+    };
     incoming.forEach((m, mi) => {
-      // 定位本条在本轮切片中的真实 key：优先用切片内相邻边 '上一条-本条'。
-      // 为什么不用 keyOfId：内容指纹碰撞时，keyOfId 返回「第一个右段匹配」的
-      // 更早旧 key，会把新消息指向旧节点——旧节点上已有同 id 卡片且可能已执行，
-      // 导致新卡片不建、自动候选=0、分支回溯串到浅处。改用本轮真实边可避免。
-      let key = '';
-      if (mi > 0) {
-        const edge = this.msgId(incoming[mi - 1]) + '-' + this.msgId(m);
-        if (conv.msgTree[edge]) key = edge;
-      }
-      if (!key) key = this.keyOfId(conv.msgTree, this.msgId(m));
-      const node = conv.msgTree[key];
-      const holder = node || m;
-      holder.cards = holder.cards || {};
-      if (node) m.cards = holder.cards;
-      const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-      const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks);
-      // 消息级问题（与代码块无关：语音缺失 / 思考非中文 / 记忆滞后）：
-      // 改走独立的消息级后台回传，界面不显示，也不挂到任何代码块卡片上。
-      if (issue && issue.scope === 'message') {
-        this._scheduleMessageIssue(holder, issue, reason);
-      }
-      // 只有代码块级问题才随卡片回传；消息级问题已由上面单独处理，避免重复回传。
-      const blockIssue = (issue && issue.scope !== 'message') ? issue : null;
-      blocks.forEach((b) => {
-        if (!b || b.type !== 'code' || !b.id) return;
-        const exist = holder.cards[b.id];
-        if (exist) {
-          if (exist.isTool && blockIssue && !exist.preIssue) exist.preIssue = blockIssue;
-          if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
-          // 重复卡片重跑：来源=generate、卡片在本轮最新消息上、且此前已执行过，三者缺一不可
-          if (reason === 'generate' && mi === incoming.length - 1
-              && exist.isTool && exist.executed) {
-            rerunCard = exist;
-          }
-          return;
-        }
-        // 只把「助手回答」里的代码块当成可执行工具调用（用户消息里的示例块不建卡）
-        const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
-        holder.cards[b.id] = this._makeCard(b, call, blockIssue);
-        if (!call) return;
-        if (scrollOnly) {
-          // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行
-          if (mi === incoming.length - 1) {
-            holder.cards[b.id].autoArmed = true;
-            armedLast = holder.cards[b.id];
-          }
-        } else {
-          // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
-          // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
-          this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
-        }
-      });
+      this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
     });
-    return { autoCandidates: autoCandidates, armedLast: armedLast, rerunCard: rerunCard };
+    this._decideIssueTarget(autoCandidates, state, reason);
+    return { autoCandidates: autoCandidates, armedLast: state.armedLast, rerunCard: state.rerunCard };
+  };
+
+  /**
+   * 处理单条消息的建卡：定位节点、检测告警、为代码块建卡并收集候选。
+   * 状态经 state 对象回写，供主函数汇总与落点决策。
+   */
+  M._buildCardsForOne = function (conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state) {
+    // 定位本条在本轮切片中的真实 key：优先用切片内相邻边 '上一条-本条'。
+    // 为什么不用 keyOfId：内容指纹碰撞时，keyOfId 返回「第一个右段匹配」的
+    // 更早旧 key，会把新消息指向旧节点——旧节点上已有同 id 卡片且可能已执行，
+    // 导致新卡片不建、自动候选=0、分支回溯串到浅处。改用本轮真实边可避免。
+    let key = '';
+    if (mi > 0) {
+      const edge = this.msgId(incoming[mi - 1]) + '-' + this.msgId(m);
+      if (conv.msgTree[edge]) key = edge;
+    }
+    if (!key) key = this.keyOfId(conv.msgTree, this.msgId(m));
+    const node = conv.msgTree[key];
+    const holder = node || m;
+    holder.cards = holder.cards || {};
+    if (node) m.cards = holder.cards;
+    const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+    const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks);
+    // 告警按严重度分流（落点见 _decideIssueTarget）：
+    //   · 补充类（advisory，如语音缺失 / 思考非中文 / 只含代码块 / 记忆滞后）→ 暂存，
+    //     搭到卡片上作附注，不阻止工具执行；无卡片才独立回传。
+    //   · 致命类（fatal，如多个调用块）→ 直接作为卡片的 preIssue，接管执行、不调用工具。
+    if (issue && issue.severity === 'advisory') {
+      state.pendingMsgIssue = issue;
+      state.pendingHolder = holder;
+    }
+    // 致命类才随卡片作为 preIssue；补充类已由上面暂存，避免重复。
+    const blockIssue = (issue && issue.severity === 'fatal') ? issue : null;
+    blocks.forEach((b) => {
+      this._buildCardForBlock(holder, m, b, mi, incoming, reason, scrollOnly, blockIssue, autoCandidates, state);
+    });
+  };
+
+  /**
+   * 为单个代码块建卡（或复用已存在卡片），并维护候选、上膛、重跑与首发工具卡片状态。
+   */
+  M._buildCardForBlock = function (holder, m, b, mi, incoming, reason, scrollOnly, blockIssue, autoCandidates, state) {
+    if (!b || b.type !== 'code' || !b.id) return;
+    const exist = holder.cards[b.id];
+    if (exist) {
+      if (exist.isTool && blockIssue && !exist.preIssue) exist.preIssue = blockIssue;
+      if (exist.isTool && !state.firstToolCard) state.firstToolCard = exist;
+      if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
+      // 重复卡片重跑：来源=generate、卡片在本轮最新消息上、且此前已执行过，三者缺一不可
+      if (reason === 'generate' && mi === incoming.length - 1
+          && exist.isTool && exist.executed) {
+        state.rerunCard = exist;
+      }
+      return;
+    }
+    // 只把「助手回答」里的代码块当成可执行工具调用（用户消息里的示例块不建卡）
+    const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
+    holder.cards[b.id] = this._makeCard(b, call, blockIssue);
+    if (!call) return;
+    if (!state.firstToolCard) state.firstToolCard = holder.cards[b.id];
+    if (scrollOnly) {
+      // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行
+      if (mi === incoming.length - 1) {
+        holder.cards[b.id].autoArmed = true;
+        state.armedLast = holder.cards[b.id];
+      }
+    } else {
+      // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
+      // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
+      this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
+    }
+  };
+
+  /**
+   * 消息级告警落点决策：告警是卡片的补充能力，不是独立通道。
+   * 规则：有工具卡片可搭就搭卡片；没有卡片（纯文字回复）才独立回传。
+   */
+  M._decideIssueTarget = function (autoCandidates, state, reason) {
+    if (!state.pendingMsgIssue) return;
+    // 补充类告警要挂到「本轮会被自动执行的那张卡片」上，否则挂在未执行的卡片上
+    // 会导致告警丢失。自动执行取候选末位（最新），故优先挂候选末位；无候选时退回
+    // 第一张工具卡片（如滚动轮次只建卡不自动执行）。
+    const target = (autoCandidates.length ? autoCandidates[autoCandidates.length - 1] : state.firstToolCard);
+    if (target) {
+      if (state.pendingMsgIssue.severity === 'fatal') {
+        // 致命类：接管卡片，执行时直接作为结果，不调用工具。
+        if (!target.preIssue) target.preIssue = state.pendingMsgIssue;
+      } else {
+        // 补充类：不阻止执行，挂到卡片上，结果回传时附带提醒。
+        if (!target.advisory) target.advisory = state.pendingMsgIssue;
+      }
+    } else {
+      // 无卡片可搭：走独立回传（纯文字回复也能被提醒）。
+      this._scheduleMessageIssue(state.pendingHolder, state.pendingMsgIssue, reason);
+    }
   };
 
   /**
@@ -108,6 +159,8 @@
         error: 'multiple_tool_calls',
         // 天生依赖代码块（工具调用块），留在卡片级回传。
         scope: 'block',
+        // 致命类：一次多个调用块，无法判断执行哪个，接管卡片、不执行工具。
+        severity: 'fatal',
         message: '本条回复包含多个工具调用代码块（共 ' + toolCallCount + ' 个）。'
           + '请一次只返回一个调用块，收到结果后再决定下一步。'
       };
@@ -151,8 +204,10 @@
       // finishedAt：执行完成时刻（毫秒）。执行结束（成功或失败）时写入，
       // 在消息列表中显示，便于分析卡片的时序问题。
       finishedAt: null,
-      // preIssue：建卡阶段检测出的问题。执行时直接作为结果，不去调工具。
+      // preIssue：致命告警（如多个调用块）。执行时直接作为结果，不去调工具。
       preIssue: (call && issue) ? issue : null,
+      // advisory：补充告警（如语音缺失 / 思考非中文）。不阻止执行，结果回传时附带。
+      advisory: null,
       autoArmed: false,
       stack: null,
       errorType: '',
@@ -167,8 +222,9 @@
   };
 
   /**
-   * 处理消息级质量问题：与代码块无关的检测结果（语音缺失 / 思考非中文 / 记忆滞后）。
-   * 方案2：后台自动回传，界面不显示、不占用任何卡片，直接走 auto_send 通道。
+   * 独立回传一条消息级质量告警。
+   * 仅在「本轮没有任何工具卡片可搭」时被调用（纯文字回复场景，见建卡末尾的落点决策）。
+   * 回传经统一发送队列，与其它回传串行，避免抢跑、互相顶掉。
    * 去重键为「会话 + 消息指纹 + 问题代码」：同一问题只回传一次，避免滚动 / 切换重复触发。
    * @param {Object} holder 承载该消息的对象（消息树节点或切片消息）
    * @param {Object} issue 问题描述 { error, message, scope }
@@ -186,23 +242,21 @@
     const key = this.activeConv + '|' + mid + '|' + issue.error;
     if (store[key]) return;
     store[key] = true;
-    // 延迟与卡片自动回传一致（autoSendDelay），避免与文本上报抢跑
-    const delay = this.autoSendDelay || 3000;
-    setTimeout(() => {
-      // 以工具结果（bridge-chat-res）格式回传，而非纯文本。
-      // 关键：镜像靠「内容含 bridge-chat-res」判定工具结果（见 05f_parse.msgSource），
-      // 故这条落地即被判为 tool 来源：不冒用「用户」前缀、不算真实用户发言
-      // （不误触记忆窗口），且作为一条消息进消息树。
-      const payload = {
-        tool: 'quality_report',
-        type: 'bridge-chat-res',
-        nonce: 'qr-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
-        success: true,
-        result: { issue: issue.error, message: issue.message }
-      };
-      window.parent.postMessage({ type: 'auto_send', text: JSON.stringify(payload, null, 2) }, '*');
-      log('消息级质量回传：' + issue.error);
-    }, delay);
+    // 以工具结果（bridge-chat-res）格式回传，而非纯文本。
+    // 关键：镜像靠「内容含 bridge-chat-res」判定工具结果（见 05f_parse.msgSource），
+    // 故这条落地即被判为 tool 来源：不冒用「用户」前缀、不算真实用户发言
+    // （不误触记忆窗口），且作为一条消息进消息树。
+    // 经统一发送队列回传：与本轮其它回传串行，避免抢跑、互相顶掉。
+    // 注意：此函数只在本轮「无工具卡片可搭」时才会被调用（见建卡末尾的落点决策）。
+    const payload = {
+      tool: 'quality_report',
+      type: 'bridge-chat-res',
+      nonce: 'qr-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+      success: true,
+      result: { issue: issue.error, message: issue.message }
+    };
+    D.enqueueSend({ type: 'auto_send', text: JSON.stringify(payload, null, 2) });
+    log('消息级质量回传（无卡片，独立入队）：' + issue.error);
   };
 
 })();

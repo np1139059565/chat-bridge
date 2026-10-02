@@ -46,6 +46,14 @@ window.AIMirrorDialog = (function () {
   D.hashStr = window.AIMirrorDomUtils.hashStr;
   D.toArray = window.AIMirrorDomUtils.toArray;
 
+  // 远程桥接「推送 + 质量检测」开关的唯一默认值来源。
+  // 前端初始 data 与加载后端配置时的 merge 基底都引用它，杜绝三处各写一份默认值
+  // 导致「未定义」被误当作「开」、或保存时把开关配置悄悄抹掉。
+  D.DEFAULT_BRIDGE_PUSH = {
+    user: true, tool: true, ai: true, thinking: false, voice: false,
+    check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true
+  };
+
   /**
    * 外部卡片的条目 key：与消息的 'pid-id' 同构（两段、连字符连接）。
    * 卡片在创建时即生成 key 字段。
@@ -207,10 +215,9 @@ window.AIMirrorDialog = (function () {
       // 打开后，每一轮 AI 回复都会被强制要求带 voice 代码块（见 05e_quality.js）。
       // push.*：推送到 QQ 的消息类型开关；
       // check.*：质量检测开关（各自独立，用户可关）；voice 兼作语音检测开关。
-      bridgePush: {
-        user: true, tool: true, ai: true, thinking: false, voice: false,
-        check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true
-      },
+      // 引用唯一默认值来源（见文件头部 D.DEFAULT_BRIDGE_PUSH 注释）。
+      // 浅拷贝一份，避免多实例共享同一对象导致互相污染。
+      bridgePush: Object.assign({}, D.DEFAULT_BRIDGE_PUSH),
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态
       // 指令录入（拆多行以避免超长行）

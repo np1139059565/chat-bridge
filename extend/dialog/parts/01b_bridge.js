@@ -65,7 +65,10 @@
       this.bridgeEnabled = !!cfg.enabled;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
-      this.bridgePush = Object.assign({ user: true, tool: true, ai: true, thinking: false, voice: false }, cfg.push || {});
+      // 以唯一默认值为基底合并后端配置：后端缺某字段时落到「默认开/默认关」，
+      // 而不是未定义。此前基底漏掉 check_* 四个键，导致它们恒为 undefined，
+      // 开关显示成「关」（真值判定）、检测却照跑（!== false 判定），出现「没开也告警」。
+      this.bridgePush = Object.assign({}, D.DEFAULT_BRIDGE_PUSH, cfg.push || {});
       this.bridgeCommands = cfg.commands || [];
       // Markdown 采集选择器：来自配置（对应内置指令 /md）。
       // 它是配置项而非自定义指令——内置指令本就不可由用户增删。

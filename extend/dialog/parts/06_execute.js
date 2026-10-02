@@ -236,11 +236,12 @@
   M.postCardResult = function (card) {
     const shot = D.extractScreenshot(card.result);
     if (shot) {
-      // 图片：交给内容脚本写进输入框并发送
-      window.parent.postMessage({ type: 'auto_send_image', dataUrl: shot }, '*');
+      // 图片：交给内容脚本写进输入框并发送。统一经发送队列，避免与告警抢跑。
+      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot });
       return;
     }
-    window.parent.postMessage({ type: 'auto_send', text: this.resultText(card) }, '*');
+    // 文本结果同样经队列，保证一次只回传一条、与其它回传串行。
+    D.enqueueSend({ type: 'auto_send', text: this.resultText(card) });
   };
 
   /** 执行按钮文案：自动倒计时中显示剩余秒数，否则按是否执行过显示。 */
