@@ -27,6 +27,13 @@ _CT_PATH_ENV = "CHAT_BRIDGE_CUSTOM_TOOLS_YAML"
 _ct_override = os.environ.get(_CT_PATH_ENV)
 CT_PATH = Path(_ct_override).resolve() if _ct_override else paths.CUSTOM_TOOLS_PATH
 
+# 自定义工具运行时文件（只存 enabled 开关，不入库）。
+# 定义（有哪些工具、脚本、参数）写 custom_tools.yaml 并入库；
+# 上下线状态写本文件并排除出版本库，使勾选开关不产生版本变化。
+_CT_RT_ENV = "CHAT_BRIDGE_CUSTOM_TOOLS_RUNTIME_YAML"
+_ct_rt_override = os.environ.get(_CT_RT_ENV)
+CT_RUNTIME_PATH = Path(_ct_rt_override).resolve() if _ct_rt_override else paths.CUSTOM_TOOLS_RUNTIME_PATH
+
 # 工具名 / 参数名：仅允许字母、数字、下划线
 NAME_RE = re.compile(r"^[A-Za-z0-9_]+$")
 

@@ -1,6 +1,5 @@
 flask:
   host: 127.0.0.1
-  port: 5000
 limits:
   max_json_chars: 100000
 default_profile: glm
@@ -8,36 +7,3 @@ site_profiles:
   chatglm.cn: glm
   chatglm.com: glm
   deepseek.com: deepseek
-tools:
-  list_dir:
-    enabled: true
-  search_file:
-    enabled: true
-  search_content:
-    enabled: true
-  read_file:
-    enabled: true
-  read_skill:
-    enabled: true
-  read_lints:
-    enabled: true
-  replace_in_file:
-    enabled: true
-  write_to_file:
-    enabled: true
-  delete_file:
-    enabled: true
-  get_tool_params:
-    enabled: true
-  list_rules:
-    enabled: true
-  read_rule:
-    enabled: true
-  run_command:
-    enabled: true
-    languages:
-    - cmd
-    - git
-    - python
-  list_skills:
-    enabled: true

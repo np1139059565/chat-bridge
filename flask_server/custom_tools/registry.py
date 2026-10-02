@@ -14,12 +14,47 @@ import subprocess
 from pathlib import Path
 
 from .loader import dump_yaml, parse_yaml, parse_skill, infer_interpreter, to_str, flag_arg
-from .paths import CT_PATH, resolve_to_abs
+from .paths import CT_PATH, CT_RUNTIME_PATH, resolve_to_abs
+
+
+# ---------- 运行时开关（单独文件，不入库） ----------
+def _read_runtime_enabled():
+    """读取运行时开关文件，返回 { 工具名: bool }；不存在或损坏返回空字典。
+
+    该文件只存上下线状态，排除出版本库，使勾选开关不产生版本变化。
+    """
+    if not CT_RUNTIME_PATH.exists():
+        return {}
+    try:
+        import yaml
+        data = yaml.safe_load(CT_RUNTIME_PATH.read_text(encoding="utf-8")) or {}
+        raw = data.get("enabled") or {}
+        return {k: bool(v) for k, v in raw.items()}
+    except Exception as e:
+        print("[custom_tools] 读取运行时开关失败：", e)
+        return {}
+
+
+def _write_runtime_enabled(tools):
+    """把各工具的 enabled 状态写入运行时开关文件；失败返回 False。"""
+    payload = {"enabled": {name: bool(t.get("enabled")) for name, t in tools.items()}}
+    try:
+        import yaml
+        CT_RUNTIME_PATH.write_text(
+            yaml.safe_dump(payload, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        return True
+    except Exception as e:
+        print("[custom_tools] 写回运行时开关失败：", e)
+        return False
 
 
 # ---------- 读取 / 落盘 ----------
 def load_tools():
-    """读取 custom_tools.yaml 并转为 { 工具名: 工具字典 }；解析失败返回空字典。"""
+    """读取 custom_tools.yaml（定义）并合并运行时开关，返回 { 工具名: 工具字典 }。
+
+    定义文件提供工具本身（脚本、参数等），入库；
+    运行时文件提供 enabled 开关，不入库。合并后行为与拆分前一致。
+    """
     if not CT_PATH.exists():
         return {}
     try:
@@ -31,13 +66,18 @@ def load_tools():
     for t in tools:
         if isinstance(t, dict) and t.get("name"):
             out[t["name"]] = t
+    # 合并运行时开关：定义文件里没有 enabled，一律以运行时文件为准
+    enabled_map = _read_runtime_enabled()
+    for name, t in out.items():
+        t["enabled"] = bool(enabled_map.get(name, t.get("enabled", False)))
     return out
 
 
 def save_tools(tools):
-    """把工具字典写回 custom_tools.yaml；失败返回 False。"""
+    """保存工具：定义写 custom_tools.yaml（入库），开关写运行时文件（不入库）。"""
     try:
         CT_PATH.write_text(dump_yaml(list(tools.values())), encoding="utf-8")
+        _write_runtime_enabled(tools)
         return True
     except Exception as e:
         print("[custom_tools] 写回 custom_tools.yaml 失败：", e)

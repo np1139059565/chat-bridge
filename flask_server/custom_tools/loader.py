@@ -144,7 +144,8 @@ def _dump_tool_entry(t):
         out.append("    silent: true")
     if t.get("wakeup"):
         out.append("    wakeup: true")
-    out.append("    enabled: %s" % ("true" if t.get("enabled") else "false"))
+    # 说明：上下线开关（enabled）是运行时状态，不入本文件，
+    # 由 registry 单独写入 custom_tools_runtime.yaml（排除出版本库）。
     out += _dump_fixed_args(t.get("fixed_args") or [])
     out += _dump_params(t.get("parameters") or [])
     return out

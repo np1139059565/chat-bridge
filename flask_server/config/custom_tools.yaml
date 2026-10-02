@@ -8,7 +8,6 @@ tools:
     script: "scripts/json_validate.py"
     interpreter: "python"
     arg_style: "flag"
-    enabled: true
     parameters:
       - name: "text"
         type: "string"
@@ -30,7 +29,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: true
     parameters:
       - name: "selector"
         type: "string"
@@ -57,7 +55,6 @@ tools:
     executor: "external"
     provider: "debug_chrome"
     silent: true
-    enabled: true
     parameters:
       - name: "message"
         type: "string"
@@ -79,7 +76,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: true
     parameters:
       - name: "page_url"
         type: "string"
@@ -93,7 +89,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: true
     parameters:
       - name: "page_url"
         type: "string"
@@ -115,7 +110,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: true
     parameters:
       - name: "page_url"
         type: "string"
@@ -133,7 +127,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: true
     parameters:
       - name: "code"
         type: "string"
@@ -152,8 +145,6 @@ tools:
     executor: "external"
     provider: "debug_chrome"
     wakeup: true
-    command_only: true
-    enabled: true
   - name: "close_drawer"
     description: "关闭调试抽屉（已关闭则视为成功）。"
     skill_name: "debug_chrome"
@@ -162,8 +153,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    command_only: true
-    enabled: true
   - name: "switch_drawer_side"
     description: "切换调试抽屉的挂靠侧（左/右）；不传 side 则在左右之间切换。"
     skill_name: "debug_chrome"
@@ -172,8 +161,6 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    command_only: true
-    enabled: true
     parameters:
       - name: "side"
         type: "string"
@@ -187,15 +174,11 @@ tools:
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    command_only: true
-    enabled: true
   - name: "close_settings"
     description: "从设置页返回对话视图。"
-    command_only: true
     skill_name: "debug_chrome"
     skill_prompt: "本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用 push_message 工具主动向用户推送进度、方案与结论。"
     skill_dir: "skills\\debug_chrome"
     arg_style: "flag"
     executor: "external"
     provider: "debug_chrome"
-    enabled: true

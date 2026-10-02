@@ -25,12 +25,15 @@ import runtime
 #   remote_bridge_state.json    —— 已推送去重记账，运行时产物，不入库
 BRIDGE_SECRETS_PATH = paths.BRIDGE_SECRETS_PATH
 BRIDGE_SETTINGS_PATH = paths.BRIDGE_SETTINGS_PATH
+BRIDGE_RUNTIME_PATH = paths.BRIDGE_RUNTIME_PATH
 BRIDGE_STATE_PATH = paths.BRIDGE_STATE_PATH
 
-# 密钥字段：只写 secrets 文件
+# 密钥字段：只写 secrets 文件（不入库）
 SECRET_KEYS = ("app_id", "app_secret")
-# 非密钥标量字段：只写 settings 文件
-SETTING_SCALAR_KEYS = ("enabled", "intents", "md_selector")
+# 定义字段：只写 settings 文件（入库，换机器应保留）
+SETTING_SCALAR_KEYS = ("intents", "md_selector")
+# 运行时字段：只写 runtime 文件（不入库，随本机状态变）
+RUNTIME_SCALAR_KEYS = ("enabled",)
 
 # 用可重入锁：save_config 持锁期间会调用 get_config()，
 # 后者在未初始化时会进入 load_config() 再取同一把锁。
@@ -89,15 +92,21 @@ def _write_yaml(path, data):
 
 
 def _read_merged():
-    """读取密钥文件与设置文件并合并为一个配置字典。
+    """读取密钥、定义与运行时三个文件并合并为一个配置字典。
 
-    迁移逻辑：旧版本把凭证与指令混存在 remote_bridge.yaml 一个文件里。
-    若发现该文件含非密钥字段（如 commands），把它们搬到设置文件，
-    使换机器时指令不再随密钥一起被排除。
+    字段分三类落盘：
+      密钥   -> remote_bridge.yaml（不入库）
+      定义   -> remote_bridge_settings.yaml（入库，如指令、选择器）
+      运行时 -> remote_bridge_runtime.yaml（不入库，如总开关、推送开关）
+
+    迁移逻辑：旧版本把运行时字段（enabled / push）写在设置文件里。
+    若发现设置文件残留这些字段，搬到运行时文件，使开关改动不再入库。
     """
     secrets = _read_yaml(BRIDGE_SECRETS_PATH)
     settings = _read_yaml(BRIDGE_SETTINGS_PATH)
+    runtime_cfg = _read_yaml(BRIDGE_RUNTIME_PATH)
     migrated = False
+    # 旧版本把非密钥字段混存在密钥文件里，搬到设置文件
     for k in list(secrets.keys()):
         if k in SECRET_KEYS:
             continue
@@ -105,21 +114,32 @@ def _read_merged():
             settings[k] = secrets[k]
         secrets.pop(k, None)
         migrated = True
+    # 旧版本把运行时字段写在设置文件里，搬到运行时文件
+    for k in list(settings.keys()):
+        if k in RUNTIME_SCALAR_KEYS or k == "push":
+            if k not in runtime_cfg:
+                runtime_cfg[k] = settings[k]
+            settings.pop(k, None)
+            migrated = True
     merged = dict(secrets)
     merged.update(settings)
+    merged.update(runtime_cfg)
     if migrated:
-        _write_yaml(BRIDGE_SECRETS_PATH, {k: v for k, v in merged.items() if k in SECRET_KEYS})
-        _write_yaml(BRIDGE_SETTINGS_PATH, {k: v for k, v in merged.items() if k not in SECRET_KEYS})
+        _write_split(merged)
     return merged
 
 
 def _write_split(cfg):
-    """把配置按「密钥 / 非密钥」分写到两个文件。"""
+    """把配置按「密钥 / 定义 / 运行时」分写到三个文件。"""
     secrets = {k: cfg.get(k, "") for k in SECRET_KEYS}
-    settings = {k: v for k, v in cfg.items() if k not in SECRET_KEYS}
+    settings = {k: v for k, v in cfg.items()
+                if k not in SECRET_KEYS and k not in RUNTIME_SCALAR_KEYS and k != "push"}
+    runtime_cfg = {k: v for k, v in cfg.items()
+                   if k in RUNTIME_SCALAR_KEYS or k == "push"}
     ok1 = _write_yaml(BRIDGE_SECRETS_PATH, secrets)
     ok2 = _write_yaml(BRIDGE_SETTINGS_PATH, settings)
-    return bool(ok1 and ok2)
+    ok3 = _write_yaml(BRIDGE_RUNTIME_PATH, runtime_cfg)
+    return bool(ok1 and ok2 and ok3)
 
 
 # 内存中的配置缓存：避免每次读盘

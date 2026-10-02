@@ -36,7 +36,9 @@ impl = None
 
 
 # 配置唯一来源：本地 config.yaml（插件从后端读取，不存浏览器）
+# 运行时字段（端口、工具上下线、语言清单）另存 config_runtime.yaml，不入库
 CONFIG_PATH = paths.CONFIG_PATH
+CONFIG_RUNTIME_PATH = paths.CONFIG_RUNTIME_PATH
 CONFIG = {"flask": {"host": "127.0.0.1", "port": 5000},
           "limits": {"max_json_chars": 100000},
           "default_profile": "glm", "site_profiles": {}, "tools": {}}
