@@ -10,21 +10,27 @@ AI 工具调用镜像插件 —— YAML 处理公共原语
 两个 YAML 文件各自的结构（块映射 / 工具列表）差异较大，其整体解析器仍保留在
 各自模块内；此处只合并真正重复的标量级处理与配置文件读取，避免同一逻辑多处维护。
 """
-import paths
-
-# config.yaml 路径统一由 paths 提供
-CONFIG_PATH = paths.CONFIG_PATH
+import config_file
 
 
 def load_config_dict():
-    """读取 config.yaml 并返回字典；文件缺失、无 PyYAML 或解析失败时返回 {}。
+    """读取主配置（definition.yaml 与 runtime.yaml 的 app 分区）并合并为字典。
 
     这是各工具读取配置的统一入口（如 limits.max_json_chars、tools.run_command.languages）。
+    运行时字段（工具开关、语言清单）覆盖定义中的同名字段，与主配置加载口径一致。
     """
     try:
-        import yaml
-        with CONFIG_PATH.open("r", encoding="utf-8") as fh:
-            return yaml.safe_load(fh) or {}
+        base = config_file.get_definition_section("app")
+        rt = config_file.get_runtime_section("app")
+        if isinstance(rt.get("flask"), dict):
+            base.setdefault("flask", {})
+            base["flask"].update(rt["flask"])
+        if isinstance(rt.get("tools"), dict):
+            base.setdefault("tools", {})
+            for name, ent in rt["tools"].items():
+                if isinstance(ent, dict):
+                    base["tools"].setdefault(name, {}).update(ent)
+        return base
     except Exception:
         return {}
 

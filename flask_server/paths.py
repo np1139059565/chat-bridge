@@ -42,6 +42,14 @@ BRIDGE_SECRETS_PATH = CONFIG_DIR / "remote_bridge.yaml"
 BRIDGE_SETTINGS_PATH = CONFIG_DIR / "remote_bridge_settings.yaml"
 BRIDGE_RUNTIME_PATH = CONFIG_DIR / "remote_bridge_runtime.yaml"
 
+# ---------- 合并后的两份配置文件 ----------
+# 配置集中为两份，按「是否入库」划分（git 只能整文件忽略，故运行时必须独立一份）：
+#   definition.yaml —— 全部定义，入库（站点映射、工具定义、指令、选择器、主机地址）
+#   runtime.yaml    —— 全部运行时与密钥，不入库（开关、端口、凭证、工具上下线）
+# 每份内含 app / custom_tools / bridge 三个分区，由各子系统各写各段。
+DEFINITION_PATH = CONFIG_DIR / "definition.yaml"
+RUNTIME_PATH = CONFIG_DIR / "runtime.yaml"
+
 # ---------- 运行时数据 ----------
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"
 BRIDGE_STATE_PATH = DATA_DIR / "remote_bridge_state.json"

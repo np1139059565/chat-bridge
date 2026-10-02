@@ -139,11 +139,13 @@ def _dump_tool_entry(t):
     for key in _TOOL_STR_FIELDS:
         if t.get(key) not in (None, ""):
             out.append("    %s: %s" % (key, quote(t[key])))
-    # silent / wakeup 为布尔标记，仅在为真时写出
+    # silent / wakeup / command_only 为布尔标记，仅在为真时写出
     if t.get("silent"):
         out.append("    silent: true")
     if t.get("wakeup"):
         out.append("    wakeup: true")
+    if t.get("command_only"):
+        out.append("    command_only: true")
     # 说明：上下线开关（enabled）是运行时状态，不入本文件，
     # 由 registry 单独写入 custom_tools_runtime.yaml（排除出版本库）。
     out += _dump_fixed_args(t.get("fixed_args") or [])

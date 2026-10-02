@@ -1,0 +1,271 @@
+app:
+  flask:
+    host: 127.0.0.1
+  limits:
+    max_json_chars: 100000
+  default_profile: glm
+  site_profiles:
+    chatglm.cn: glm
+    chatglm.com: glm
+    deepseek.com: deepseek
+custom_tools:
+  tools:
+  - name: json_validate
+    description: 校验并格式化 JSON 文本：返回美化后的 JSON；非法 JSON 返回错误。用于核对 AI 生成的 JSON 片段。
+    skill_name: json_tool
+    skill_dir: skills\json_tool
+    script: scripts/json_validate.py
+    interpreter: python
+    arg_style: flag
+    enabled: true
+    parameters:
+    - name: text
+      type: string
+      required: true
+      description: 待校验的 JSON 文本
+    - name: indent
+      type: number
+      required: false
+      description: 缩进空格数，默认 2
+    - name: sort_keys
+      type: boolean
+      required: false
+      description: 是否按 key 排序
+  - name: get_element_style
+    description: 按选择器采集元素样式与 DOM 信息。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    enabled: true
+    parameters:
+    - name: selector
+      type: string
+      required: true
+      description: CSS 选择器
+    - name: page_url
+      type: string
+      required: true
+      description: 目标页面的 URL
+    - name: properties
+      type: array
+      required: false
+      description: 只采集这些 CSS 属性（如 ["color","font-size"]）；省略则返回常用属性集
+    - name: include_all
+      type: boolean
+      required: false
+      description: 是否返回全量计算样式（默认 false，返回常用属性）
+  - name: push_message
+    description: 向调试扩展抽屉推送一条文字信息
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    silent: true
+    enabled: true
+    parameters:
+    - name: message
+      type: string
+      required: true
+      description: 推送正文
+    - name: title
+      type: string
+      required: false
+      description: 可选标题
+    - name: no_reply
+      type: boolean
+      required: true
+      description: 为 true 时不回传执行结果，仅执行推送。用于最后一次总结性推送，避免结果回传再次唤醒 AI
+  - name: get_page_snapshot
+    description: 截取目标页面当前可见区域，返回图片并保存到本地。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    enabled: true
+    parameters:
+    - name: page_url
+      type: string
+      required: true
+      description: 目标页面的 URL
+  - name: get_console_logs
+    description: 读取目标页面捕获的 console 记录（log/info/warn/error/debug），供故障分析。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    enabled: true
+    parameters:
+    - name: page_url
+      type: string
+      required: true
+      description: 目标页面的 URL
+    - name: limit
+      type: number
+      required: false
+      description: 最多返回最近多少条，默认全部（上限 500）
+    - name: level
+      type: string
+      required: false
+      description: 只看某个级别，如 error；省略则全部
+  - name: get_network_logs
+    description: 读取目标页面在 DevTools 中捕获的网络请求记录（需该页 DevTools 打开过），供故障分析。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    enabled: true
+    parameters:
+    - name: page_url
+      type: string
+      required: true
+      description: 目标页面的 URL
+    - name: limit
+      type: number
+      required: false
+      description: 最多返回最近多少条，默认全部（上限 300）
+  - name: exec_js
+    description: 在目标页面主世界执行任意 JavaScript，可读写 window / document / localStorage 等，可触发元素点击等操作，支持
+      await。返回执行结果（复杂对象会做安全序列化）。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    enabled: true
+    parameters:
+    - name: code
+      type: string
+      required: true
+      description: 要执行的 JavaScript 代码；可写多行，可直接使用 await
+    - name: page_url
+      type: string
+      required: true
+      description: 目标页面的 URL
+  - name: open_drawer
+    description: 打开调试抽屉（已打开则视为成功）。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    wakeup: true
+    command_only: true
+    enabled: true
+  - name: close_drawer
+    description: 关闭调试抽屉（已关闭则视为成功）。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    command_only: true
+    enabled: true
+  - name: switch_drawer_side
+    description: 切换调试抽屉的挂靠侧（左/右）；不传 side 则在左右之间切换。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    command_only: true
+    enabled: true
+    parameters:
+    - name: side
+      type: string
+      required: false
+      description: left 或 right；省略则切换
+  - name: open_settings
+    description: 打开调试抽屉的设置页（抽屉未开则先打开）。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    command_only: true
+    enabled: true
+  - name: close_settings
+    description: 从设置页返回对话视图。
+    command_only: true
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    arg_style: flag
+    executor: external
+    provider: debug_chrome
+    enabled: true
+bridge:
+  intents: 0
+  md_selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
+    div[role="button"]:has(.ds-cross-fade)
+  commands:
+  - name: /new
+    label: 开启新对话
+    selector: div._5a8ac7a.a084f19e
+    page_url: ''
+  - name: /new1
+    label: 新建1
+    steps:
+    - /new
+    - /csp
+    - /sa on
+    interval: 2
+  - name: /crp
+    label: 清空消息记录并重新解析
+    steps:
+    - /cms
+    - /rp
+    interval: 1
+  - name: /rall
+    label: 重启前后端并刷新
+    steps:
+    - /rf
+    - /sa on
+    - /rs
+    interval: 5
+  - name: /reai
+    label: 重新生成
+    selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
+      [role="button"][aria-disabled="false"]
+    page_url: ''
+  - name: /reai1
+    label: 消息频繁失败后重发
+    selector: div.ds-button.ds-button--warning:nth-child(3)
+    page_url: ''

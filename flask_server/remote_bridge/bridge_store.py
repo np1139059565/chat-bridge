@@ -18,22 +18,22 @@ from pathlib import Path
 
 import paths
 import runtime
+import config_file
 
-# 路径说明（按「是否含密钥」分离，决定谁能入库）：
-#   remote_bridge.yaml          —— 仅存 QQ 凭证（app_id / app_secret），含密钥，不入库
-#   remote_bridge_settings.yaml —— 存开关、指令等非密钥配置，入库，换机器不丢
-#   remote_bridge_state.json    —— 已推送去重记账，运行时产物，不入库
-BRIDGE_SECRETS_PATH = paths.BRIDGE_SECRETS_PATH
-BRIDGE_SETTINGS_PATH = paths.BRIDGE_SETTINGS_PATH
-BRIDGE_RUNTIME_PATH = paths.BRIDGE_RUNTIME_PATH
+# 路径说明：
+#   definition.yaml / runtime.yaml —— 桥接配置集中在两份合并文件的 bridge 分区，见下
+#   remote_bridge_state.json      —— 已推送去重记账，运行时产物，不入库
 BRIDGE_STATE_PATH = paths.BRIDGE_STATE_PATH
 
-# 密钥字段：只写 secrets 文件（不入库）
+# 桥接配置集中在两份合并文件的 bridge 分区（见 core/config_file.py）：
+#   definition.yaml 的 bridge —— 定义（入库）：指令、选择器、订阅事件位
+#   runtime.yaml 的 bridge    —— 运行时与密钥（不入库）：开关、凭证、推送开关
+# 密钥字段：与运行时同写 runtime.yaml（不入库）
 SECRET_KEYS = ("app_id", "app_secret")
-# 定义字段：只写 settings 文件（入库，换机器应保留）
-SETTING_SCALAR_KEYS = ("intents", "md_selector")
-# 运行时字段：只写 runtime 文件（不入库，随本机状态变）
-RUNTIME_SCALAR_KEYS = ("enabled",)
+# 定义字段：写 definition.yaml 的 bridge 分区（入库，换机器应保留）
+SETTING_KEYS = ("intents", "md_selector", "commands")
+# 运行时字段：写 runtime.yaml 的 bridge 分区（不入库，随本机状态变）
+RUNTIME_KEYS = ("enabled", "push")
 
 # 用可重入锁：save_config 持锁期间会调用 get_config()，
 # 后者在未初始化时会进入 load_config() 再取同一把锁。
@@ -66,80 +66,27 @@ def _default_config():
     }
 
 
-def _read_yaml(path):
-    """读取一个 YAML 文件；不存在或解析失败返回空字典。"""
-    if not path.exists():
-        return {}
-    try:
-        import yaml
-        text = path.read_text(encoding="utf-8")
-        return yaml.safe_load(text) or {}
-    except Exception as e:
-        print("[bridge] 读取 %s 失败：%s" % (path.name, e))
-        return {}
-
-
-def _write_yaml(path, data):
-    """写入一个 YAML 文件；成功返回 True。"""
-    try:
-        import yaml
-        with open(path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(data, f, allow_unicode=True, sort_keys=False)
-        return True
-    except Exception as e:
-        print("[bridge] 写入 %s 失败：%s" % (path.name, e))
-        return False
-
-
 def _read_merged():
-    """读取密钥、定义与运行时三个文件并合并为一个配置字典。
+    """读取合并文件中 bridge 分区的定义段与运行时段，合并为一个配置字典。
 
-    字段分三类落盘：
-      密钥   -> remote_bridge.yaml（不入库）
-      定义   -> remote_bridge_settings.yaml（入库，如指令、选择器）
-      运行时 -> remote_bridge_runtime.yaml（不入库，如总开关、推送开关）
-
-    迁移逻辑：旧版本把运行时字段（enabled / push）写在设置文件里。
-    若发现设置文件残留这些字段，搬到运行时文件，使开关改动不再入库。
+    字段分两类落盘（均在合并文件的 bridge 分区内）：
+      定义   -> definition.yaml（入库，如指令、选择器、订阅事件位）
+      运行时 -> runtime.yaml（不入库，如凭证、总开关、推送开关）
     """
-    secrets = _read_yaml(BRIDGE_SECRETS_PATH)
-    settings = _read_yaml(BRIDGE_SETTINGS_PATH)
-    runtime_cfg = _read_yaml(BRIDGE_RUNTIME_PATH)
-    migrated = False
-    # 旧版本把非密钥字段混存在密钥文件里，搬到设置文件
-    for k in list(secrets.keys()):
-        if k in SECRET_KEYS:
-            continue
-        if k not in settings:
-            settings[k] = secrets[k]
-        secrets.pop(k, None)
-        migrated = True
-    # 旧版本把运行时字段写在设置文件里，搬到运行时文件
-    for k in list(settings.keys()):
-        if k in RUNTIME_SCALAR_KEYS or k == "push":
-            if k not in runtime_cfg:
-                runtime_cfg[k] = settings[k]
-            settings.pop(k, None)
-            migrated = True
-    merged = dict(secrets)
-    merged.update(settings)
+    settings = config_file.get_definition_section("bridge")
+    runtime_cfg = config_file.get_runtime_section("bridge")
+    merged = dict(settings)
     merged.update(runtime_cfg)
-    if migrated:
-        _write_split(merged)
     return merged
 
 
 def _write_split(cfg):
-    """把配置按「密钥 / 定义 / 运行时」分写到三个文件。"""
-    secrets = {k: cfg.get(k, "") for k in SECRET_KEYS}
-    settings = {k: v for k, v in cfg.items()
-                if k not in SECRET_KEYS and k not in RUNTIME_SCALAR_KEYS and k != "push"}
-    runtime_cfg = {k: v for k, v in cfg.items()
-                   if k in RUNTIME_SCALAR_KEYS or k == "push"}
-    ok1 = _write_yaml(BRIDGE_SECRETS_PATH, secrets)
-    ok2 = _write_yaml(BRIDGE_SETTINGS_PATH, settings)
-    ok3 = _write_yaml(BRIDGE_RUNTIME_PATH, runtime_cfg)
-    return bool(ok1 and ok2 and ok3)
+    """把 bridge 配置按「定义 / 运行时」分写到两份合并文件的分区。"""
+    settings = {k: v for k, v in cfg.items() if k in SETTING_KEYS}
+    runtime_cfg = {k: v for k, v in cfg.items() if k in RUNTIME_KEYS or k in SECRET_KEYS}
+    ok1 = config_file.update_definition_section("bridge", settings)
+    ok2 = config_file.update_runtime_section("bridge", runtime_cfg)
+    return bool(ok1 and ok2)
 
 
 # 内存中的配置缓存：避免每次读盘
