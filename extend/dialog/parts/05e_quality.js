@@ -1,6 +1,7 @@
 // 模块：extend/dialog/parts/05e_quality.js
 // 用途：助手回复的质量检测：只含代码块、思考内容非中文等。
 //       检测结果作为该条消息上卡片的结果回传给 AI，促其重新生成。
+//       每类检测都有独立开关（bridgePush.check_*），用户可自主决定是否检测。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 (function () {
   'use strict';
@@ -16,6 +17,8 @@
     if (!m || m.role !== 'assistant') return null;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
     if (!blocks.length) return null;
+    // 检测开关集合：默认开，显式关才跳过（防止旧存档缺字段时误关）。
+    const checks = this.bridgePush || {};
     // 问题一：只有代码块，没有任何文字说明
     const hasCode = blocks.some((b) => b && b.type === 'code');
     const hasText = blocks.some((b) => {
@@ -26,11 +29,11 @@
       else if (b.rows) s = JSON.stringify(b.rows);
       return s.trim().length > 0;
     });
-    if (hasCode && !hasText) {
+    if (hasCode && !hasText && checks.check_code_only !== false) {
       return {
         error: 'code_only_reply',
         // scope：问题归属。'block' 表示该检测天生依赖代码块，只能随代码块卡片回传；
-        // 'message' 表示与代码块无关，改走消息级回传（见 05_messages.js 的分流）。
+        // 'message' 表示与代码块无关，改走消息级回传（见 05g_cards.js 的分流）。
         scope: 'block',
         message: '本条回复只包含代码块，缺少文字说明，无法监控流程。'
           + '请在代码块之外补充说明再重新生成。'
@@ -38,7 +41,7 @@
     }
     // 问题二：思考内容大段英文
     const think = blocks.find((b) => b && b.type === 'thinking');
-    if (think) {
+    if (think && checks.check_thinking !== false) {
       const t = String(think.text || '');
       const letters = (t.match(/[A-Za-z]/g) || []).length;
       const total = t.replace(/\s/g, '').length;
@@ -55,6 +58,7 @@
     // 问题三：语音开关打开期间，每一轮回复都必须带语音朗读块（供合成语音发回）。
     // 判定与工具调用块同一机制——认代码块内容里的 JSON type 字段，不看语言名。
     // 语音块内容形如 {"type":"bridge-voice","text":"适合朗读的口语"}。
+    // 开关即 bridgePush.voice：关闭语音识别功能时，本检测自然不跑。
     const voiceOn = !!(this.bridgePush && this.bridgePush.voice);
     if (voiceOn) {
       const hasVoice = blocks.some((b) => this.parseVoiceBlock(b));

@@ -155,6 +155,8 @@
    */
   M.memoryIssueForRound = async function (incoming, reason) {
     if (reason !== 'generate') return null;
+    // 检测开关：关闭时不检测记忆（默认开，显式关才跳过）。
+    if ((this.bridgePush || {}).check_memory === false) return null;
     if (!this.memoryCheck || !this.memoryCheck.armed) return null;
     // 一个窗口内最多提醒一次：提醒过就跳过，等用户下次发言再重开窗口
     if (this.memoryCheck.notified) return null;

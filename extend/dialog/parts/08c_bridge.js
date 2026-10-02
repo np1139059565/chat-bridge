@@ -45,6 +45,8 @@
         h('br'),
         renderPushBlock(ctx),
         h('br'),
+        renderCheckBlock(ctx),
+        h('br'),
         renderCmdBlock(ctx),
       ]) : null
     ]);
@@ -119,6 +121,22 @@
       pushRow(ctx, 'ai', 'AI 消息'),
       pushRow(ctx, 'thinking', '思考过程（默认不推，冗长）'),
       pushRow(ctx, 'voice', '语音（识别 + 合成，关闭则丢弃语音）')
+    ]);
+  }
+
+  /**
+   * 渲染「质量检测」区块：各类检测各自独立开关。
+   * 关闭某类即不检测该类（默认全开）。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 该区块节点
+   */
+  function renderCheckBlock(ctx) {
+    return h('div', [
+      h('div', { class: 'card-head' }, [h('span', '质量检测（关闭则不检测该类）')]),
+      pushRow(ctx, 'check_code_only', '只含代码块、无文字说明'),
+      pushRow(ctx, 'check_thinking', '思考内容非中文'),
+      pushRow(ctx, 'check_multi_call', '多个工具调用块'),
+      pushRow(ctx, 'check_memory', '记忆滞后（连续多轮未写记忆）')
     ]);
   }
 

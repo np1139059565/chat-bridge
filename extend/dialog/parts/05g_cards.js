@@ -103,7 +103,7 @@
         if (b && b.type === 'code' && b.id && this.parseToolCall(b)) toolCallCount += 1;
       });
     }
-    if (toolCallCount > 1) {
+    if (toolCallCount > 1 && (this.bridgePush || {}).check_multi_call !== false) {
       return {
         error: 'multiple_tool_calls',
         // 天生依赖代码块（工具调用块），留在卡片级回传。
@@ -189,7 +189,18 @@
     // 延迟与卡片自动回传一致（autoSendDelay），避免与文本上报抢跑
     const delay = this.autoSendDelay || 3000;
     setTimeout(() => {
-      window.parent.postMessage({ type: 'auto_send', text: issue.message }, '*');
+      // 以工具结果（bridge-chat-res）格式回传，而非纯文本。
+      // 关键：镜像靠「内容含 bridge-chat-res」判定工具结果（见 05f_parse.msgSource），
+      // 故这条落地即被判为 tool 来源：不冒用「用户」前缀、不算真实用户发言
+      // （不误触记忆窗口），且作为一条消息进消息树。
+      const payload = {
+        tool: 'quality_report',
+        type: 'bridge-chat-res',
+        nonce: 'qr-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+        success: true,
+        result: { issue: issue.error, message: issue.message }
+      };
+      window.parent.postMessage({ type: 'auto_send', text: JSON.stringify(payload, null, 2) }, '*');
       log('消息级质量回传：' + issue.error);
     }, delay);
   };

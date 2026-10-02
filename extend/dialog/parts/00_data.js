@@ -205,7 +205,12 @@ window.AIMirrorDialog = (function () {
       bridgeAppId: '', bridgeAppSecret: '',
       // voice：语音识别开关，默认关；关时收到语音文件直接丢弃。
       // 打开后，每一轮 AI 回复都会被强制要求带 voice 代码块（见 05e_quality.js）。
-      bridgePush: { user: true, tool: true, ai: true, thinking: false, voice: false },
+      // push.*：推送到 QQ 的消息类型开关；
+      // check.*：质量检测开关（各自独立，用户可关）；voice 兼作语音检测开关。
+      bridgePush: {
+        user: true, tool: true, ai: true, thinking: false, voice: false,
+        check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true
+      },
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态
       // 指令录入（拆多行以避免超长行）
