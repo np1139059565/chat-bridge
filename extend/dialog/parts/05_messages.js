@@ -198,7 +198,9 @@
       + '，ids=' + JSON.stringify(incoming.map((m) => this.msgId(m))) + '）');
 
     // 1) 写入消息树
-    const up = this.upsertTree(conv, incoming, reason);
+    //    atBottom 一并传入：末路兜底需要它判断「用户是否正看着最新处」，
+    //    只有 generate 且在底部时，才允许把找不到锚点的整片接到分支末端。
+    const up = this.upsertTree(conv, incoming, reason, atBottom);
 
     // 不入树（断裂 / 碰撞 / 单节点 / 中间命中）：仍建卡供手动操作，但不自动执行。
     const notInTree = (up.mode === 'orphan' || up.mode === 'collision'

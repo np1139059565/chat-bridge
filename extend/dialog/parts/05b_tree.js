@@ -51,7 +51,7 @@
    * @param {string} [reason] 触发来源：'generate' / 'scroll' / 'switch' / 'manual'
    * @returns {Object} { mode } 本次处理结果
    */
-  M.upsertTree = function (conv, incoming, reason) {
+  M.upsertTree = function (conv, incoming, reason, atBottom) {
     const tree = conv.msgTree || (conv.msgTree = {});
     const list = incoming || [];
     const n = list.length;
@@ -70,19 +70,9 @@
     const matched = [];
     sliceKeys.forEach((k, i) => { if (tree[k]) matched.push(i); });
 
-    // 4) 完全无交集：生产轮次回退为「从已知节点按顺序接上」；否则仅展示不入树
+    // 4) 完全无交集：寻点回退 + 末路兜底，统一交给 _treeNoMatch 处理
     if (!matched.length) {
-      // 允许按节点回退接上的两种情形：
-      //  1) 来源是 generate：AI 刚说完新话，切片首条边的另一端天然不在树里；
-      //  2) 切片可从树中已有节点往下延伸：首条已在树、其余都不在树。
-      //     回看类来源（scroll / switch / manual）只在情形 2 下放行，
-      //     这样既能稳定接上真正的末端追加与新分支，又不会把往回滚的历史误接到末端。
-      const canAppend = reason === 'generate' || this.isAppendableFromExisting(tree, ids);
-      if (canAppend) {
-        const r = this._treeAppendFromExisting(conv, tree, ids, list, reason);
-        if (r) return r;
-      }
-      return this._treeOrphan(conv, tree, ids, list, sliceKeys);
+      return this._treeNoMatch(conv, tree, ids, list, reason, atBottom, sliceKeys);
     }
 
     // 5) 命中的边必须连续，否则视为碰撞
@@ -122,6 +112,39 @@
   };
 
   /**
+   * 无命中边时的统一处理：先「寻点」回退接上，再「末路兜底」接到分支末端，
+   * 都不行才落到「仅展示不入树」。从 upsertTree 抽出，使主函数保持简短。
+   *
+   * 三步依次尝试：
+   *   1) 寻点回退（_treeAppendFromExisting）：切片里有节点已在树中，从它往后接；
+   *   2) 末路兜底（_treeAppendToTail）：generate 且视口在底部时，整片接到分支末端；
+   *   3) orphan：以上都失败，仅展示、不入树。
+   * 为何兜底要限定「generate + 在底部」：往回翻看历史时也会出现「与树无任何相同边」
+   * 的切片，不加约束会把历史误接到末端、污染整棵树。
+   * @param {boolean} atBottom 视口是否停在对话最底部（由调用方传入）
+   * @param {Array} sliceKeys 切片各相邻边（仅 orphan 诊断用）
+   * @returns {Object} 处理结果 { mode }
+   */
+  M._treeNoMatch = function (conv, tree, ids, list, reason, atBottom, sliceKeys) {
+    // 1) 寻点回退：允许按节点接上的两种情形——
+    //    · 来源是 generate：AI 刚说完新话，切片首条边的另一端天然不在树里；
+    //    · 切片可从树中已有节点往下延伸：首条已在树、其余都不在树。
+    //    回看类来源（scroll / switch / manual）只在后者放行，避免把历史误接到末端。
+    const canAppend = reason === 'generate' || this.isAppendableFromExisting(tree, ids);
+    if (canAppend) {
+      const r = this._treeAppendFromExisting(conv, tree, ids, list, reason);
+      if (r) return r;
+    }
+    // 2) 末路兜底：寻点也失效时，generate 且在底部才整片接到分支末端
+    if (reason === 'generate' && atBottom) {
+      const r2 = this._treeAppendToTail(conv, tree, ids, list);
+      if (r2) return r2;
+    }
+    // 3) 都不行：仅展示、不入树
+    return this._treeOrphan(conv, tree, ids, list, sliceKeys);
+  };
+
+  /**
    * 无命中边时，尝试「从树中最后一个已知节点往后按顺序接上」。
    * 新消息的第一条边天然不在树里，故按节点定位接入点。
    * @returns {Object|null} 成功返回 { mode:'append' }；无法接上返回 null
@@ -140,6 +163,44 @@
     conv.orphanSlice = [];
     log('upsertTree：无命中边，从第 ' + baseIdx + ' 条后接上（来源=' + (reason || 'generate') + '），节点=' + Object.keys(tree).length);
     return { mode: 'append' };
+  };
+
+  /**
+   * 末路兜底：寻边、寻点都失败时，把整片接到「当前分支末端」之后。
+   *
+   * 前提（由调用方 upsertTree 校验）：来源为 generate 且视口在底部，
+   * 即确实是「用户正看着最新处、AI 刚生成的新内容」，而非往回翻看的历史。
+   *
+   * 接入点取当前分支末端（branchKeys 末节点）：它代表树中「用户当前所处的最新位置」。
+   * 若分支末端取不到（罕见），退回取树中「最后写入的节点」作末端。
+   * 整片按顺序串接到该节点之后，父边为「末端id-首条id」。
+   * @returns {Object|null} 成功返回 { mode:'append-tail' }；无法确定末端返回 null
+   */
+  M._treeAppendToTail = function (conv, tree, ids, list) {
+    // 1) 定位当前分支末端：优先用 branchKeys 的末节点，其次用 visibleKeys 末节点
+    let tailKey = '';
+    const bk = conv.branchKeys || [];
+    const vk = conv.visibleKeys || [];
+    if (bk.length) tailKey = bk[bk.length - 1];
+    else if (vk.length) tailKey = vk[vk.length - 1];
+    if (!tailKey || !tree[tailKey]) {
+      // 2) 退路：分支/可见 key 都取不到时，用树中最后一个节点的 key 作末端
+      const keys = Object.keys(tree);
+      tailKey = keys.length ? keys[keys.length - 1] : '';
+    }
+    if (!tailKey) return null;
+    // 末端节点的「右段」即其自身 id，作为整片首条的父
+    const cut = tailKey.indexOf('-');
+    const tailId = cut >= 0 ? tailKey.slice(cut + 1) : tailKey;
+    // 3) 从末端往后依次串接整片
+    for (let i = 0; i < ids.length; i++) {
+      const parentId = (i === 0) ? tailId : ids[i - 1];
+      const key = parentId + '-' + ids[i];
+      if (!tree[key]) tree[key] = this.makeNode(list[i]);
+    }
+    conv.orphanSlice = [];
+    log('upsertTree：末路兜底，整片接到分支末端 ' + tailId + ' 之后，新增 ' + ids.length + ' 条');
+    return { mode: 'append-tail' };
   };
 
   /**
