@@ -153,7 +153,9 @@ def _block_code(b, push_thinking):
             return "[工具调用] %s 参数=%s" % (
                 obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False))
         if obj.get("type") == "bridge-voice":
-            return "```voice\n" + str(obj.get("text") or "").strip() + "\n```"
+            # 语音块与工具调用块同为 JSON 结构：原样输出 JSON 文本，
+            # 保持与识别端（_extract_voice_from_blocks）一致，不再包成 voice 围栏。
+            return "[语音] " + str(obj.get("text") or "").strip()
     except Exception:
         pass
     return "```\n" + code + "\n```"

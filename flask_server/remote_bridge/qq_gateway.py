@@ -355,8 +355,8 @@ class QqGateway:
         if from_voice:
             request_text = (
                 "【本卡片来自 QQ 语音机器人】这是一段语音转成的文字。"
-                "请针对它作答，并在回复中务必附上一个语言标记为 voice 的 Markdown 代码块"
-                "（即三个反引号加 voice 开头、三个反引号结尾的代码块），块内放适合朗读的纯口语文本，"
+                "请针对它作答，并在回复中务必另用一个代码块，块内为 JSON："
+                '{"type":"bridge-voice","text":"适合朗读的纯口语文本"}，'
                 "供系统合成语音发回用户。\n\n语音内容：\n" + content
             )
         payload = {
