@@ -37,3 +37,7 @@ commands:
   selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
     [role="button"][aria-disabled="false"]
   page_url: ''
+- name: /reai1
+  label: 消息频繁失败后重发
+  selector: div.ds-button.ds-button--warning:nth-child(3)
+  page_url: ''
