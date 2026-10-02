@@ -266,6 +266,17 @@
     const k = mKey + '-' + j;
     if (block.type === 'heading') return h('div', { class: 'mb-h', key: k }, block.text);
     if (block.type === 'paragraph') return h('p', { class: 'mb-p', key: k }, block.text);
+    // 图片块：直接渲染原图。src 可能是 blob: / https: / dataURL；
+    // blob 地址在抽屉（iframe）里可能无法显示，此时退化为占位提示，不阻断其它块。
+    if (block.type === 'image') {
+      return h('div', { class: 'mb-img', key: k }, [
+        h('img', {
+          src: block.src,
+          alt: block.alt || '图片',
+          onError: (e) => { try { e.target.style.display = 'none'; } catch (err) { /* 忽略 */ } }
+        })
+      ]);
+    }
     if (block.type === 'list') {
       // items 归一化：网页推送或旧存档可能把它序列化成非数组，直接 map 会抛错。
       const items = D.toArray(block.items);

@@ -95,7 +95,22 @@
         out.push({ type: 'code', lang: lang, code: code, id: 'c' + A.hashStr(lang + '|' + code) });
         return;
       }
+      // 图片块：用户消息或 AI 回复里的图片。此前的解析完全忽略 img，
+      // 导致图片在采集第一步就被丢弃（抽屉无记录、推 QQ 也无图）。
+      // src 可能是 blob: / https: / dataURL，统一原样带上，
+      // 由后续环节决定如何转存与推送。
+      if (tag === 'IMG') {
+        const src = el.currentSrc || el.src || el.getAttribute('data-src') || '';
+        if (src) out.push({ type: 'image', src: src, alt: el.getAttribute('alt') || '' });
+        return;
+      }
       if (tag === 'P') {
+        // 段落内可能嵌着图片（如 <p><img></p>）：先取出段内图片块，
+        // 再取文字。否则遇到 P 直接 return 会把图片整段漏掉。
+        Array.prototype.forEach.call(el.querySelectorAll('img'), function (img) {
+          const src = img.currentSrc || img.src || img.getAttribute('data-src') || '';
+          if (src) out.push({ type: 'image', src: src, alt: img.getAttribute('alt') || '' });
+        });
         const t = A.textOf(el);
         if (t) out.push({ type: 'paragraph', text: t });
         return;

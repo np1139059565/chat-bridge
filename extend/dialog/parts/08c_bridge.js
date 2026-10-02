@@ -45,8 +45,6 @@
         h('br'),
         renderPushBlock(ctx),
         h('br'),
-        renderCheckBlock(ctx),
-        h('br'),
         renderCmdBlock(ctx),
       ]) : null
     ]);
@@ -127,10 +125,12 @@
   /**
    * 渲染「质量检测」区块：各类检测各自独立开关。
    * 关闭某类即不检测该类（默认全开）。
+   * 本区块挂在「通用配置」下渲染（见 08_settings.js 的 renderGeneralSettings），
+   * 定义留在本文件是为了复用同文件的 pushRow 开关行组件。
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 该区块节点
    */
-  function renderCheckBlock(ctx) {
+  D.renderCheckBlock = function (ctx) {
     return h('div', [
       h('div', { class: 'card-head' }, [h('span', '质量检测（关闭则不检测该类）')]),
       pushRow(ctx, 'check_code_only', '只含代码块、无文字说明'),
@@ -138,7 +138,7 @@
       pushRow(ctx, 'check_multi_call', '多个工具调用块'),
       pushRow(ctx, 'check_memory', '记忆滞后（连续多轮未写记忆）')
     ]);
-  }
+  };
 
   /**
    * 渲染「QQ 指令」区块：内置指令说明 + 自定义指令编辑器 + 指令列表。
@@ -226,13 +226,15 @@
             onClick: () => ctx.bridgePicking ? ctx.stopPickElement() : ctx.startPickElement()
           }, ctx.bridgePicking ? '取消选择' : '选择元素'),
         (!ctx.bridgeNewCmdIsCombo)
-          ? h('span', { class: 'hint' }, '也可直接在下方输入/编辑选择器')
+          ? h('span', { class: 'hint' }, '也可直接在下方输入/编辑选择器或表达式')
           : null
       ]),
-      // 选择器输入框：点「选择元素」会自动填入，也可直接打字修改
+      // 选择器输入框：点「选择元素」会自动填入，也可直接打字修改。
+      // 支持两种写法：纯选择器（如 .a.b）或完整调用表达式
+      // （如 document.querySelectorAll(".a.b")，可在其后接 JS 微调以命中唯一元素）。
       (!ctx.bridgeNewCmdIsCombo) ? h('input', {
         type: 'text', class: 'bridge-sel-input',
-        placeholder: '选择器，如 #btn-go 或 .submit-btn',
+        placeholder: '选择器或表达式，如 #btn-go 或 document.querySelectorAll(".a.b")',
         value: ctx.bridgePicked ? (ctx.bridgePicked.selector || '') : '',
         onInput: (e) => {
           // 直接编辑选择器：保留原 page_url，清掉 tag（不再对应某个具体元素）

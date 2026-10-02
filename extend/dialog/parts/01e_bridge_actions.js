@@ -49,10 +49,12 @@
   M.consumeQqImage = function (c) {
     if (!c || c.type !== 'qq-image') return false;
     const dataUrl = (c.payload && c.payload.data_url) || '';
+    // 同消息文字（图文消息）；纯图片时后端已补「用户截图」。
+    const text = (c.payload && c.payload.text) || '';
     if (dataUrl) {
-      // 交给内容脚本贴图：与截图回传同一条通道
-      window.parent.postMessage({ type: 'auto_send_image', dataUrl: dataUrl }, '*');
-      this.toast('已把 QQ 图片贴入网页 AI 输入框');
+      // 交给内容脚本：先贴图，再把文字写进同一输入框，最后只发一次
+      window.parent.postMessage({ type: 'auto_send_image', dataUrl: dataUrl, text: text }, '*');
+      this.toast(text ? '已把 QQ 图文贴入网页 AI 输入框' : '已把 QQ 图片贴入网页 AI 输入框');
     } else {
       this.toast('QQ 图片数据缺失，无法贴图');
     }
@@ -263,26 +265,32 @@
     }
     if (d.type === 'picker_result') {
       this.bridgePicking = false;
+      // 选择器统一包装成「完整调用表达式」：输入框因此显示为
+      // document.querySelectorAll(".a.b")，用户可在其后接 JS 微调。
+      // 纯选择器由执行端兼容，故对旧数据无影响。
+      const wrapped = d.selector
+        ? 'document.querySelectorAll(' + JSON.stringify(d.selector) + ')'
+        : '';
       // 处于「修改选择器」模式：直接覆盖对应指令的选择器并保存
       if (this.bridgeEditIdx !== null && this.bridgeEditIdx !== undefined) {
         const cmd = (this.bridgeCommands || [])[this.bridgeEditIdx];
         if (cmd) {
-          cmd.selector = d.selector || '';
+          cmd.selector = wrapped;
           cmd.page_url = d.page_url || '';
           this.saveBridge();
-          this.toast('已更新选择器：' + (d.selector || ''));
+          this.toast('已更新选择器：' + wrapped);
         }
         this.bridgeEditIdx = null;
         return true;
       }
-      // 新增模式：记下选择器与所在页面，供新增指令使用
+      // 新增模式：记下选择器表达式与所在页面，供新增指令使用
       this.bridgePicked = {
-        selector: d.selector || '',
+        selector: wrapped,
         page_url: d.page_url || '',
         tag: d.tag || '',
         confidence: d.confidence || ''
       };
-      this.toast('已选中：' + (d.tag || '') + ' ' + (d.selector || ''));
+      this.toast('已选中：' + (d.tag || '') + ' ' + wrapped);
       return true;
     }
     if (d.type === 'picker_stopped') {

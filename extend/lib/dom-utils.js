@@ -81,6 +81,9 @@
     toArray(msg.blocks).forEach(function (b) {
       if (!b) return;
       if (b.type === 'thinking') return;   // 思考内容不参与指纹
+      // 图片不参与指纹：图片 src（blob / 带签名的临时地址）常随重绘变化，
+      // 纳入会让同一条消息反复算出不同指纹，进而误判成新消息、卡片编号漂移。
+      if (b.type === 'image') return;
       if (b.type === 'code') parts.push('code|' + (b.lang || '') + '|' + (b.code || ''));
       else if (b.type === 'heading') parts.push('heading|' + (b.level || '') + '|' + (b.text || ''));
       // 列表块的 items 容错：可能被序列化成非数组（对象 / 字符串），
@@ -95,12 +98,53 @@
     return 'm' + hashStr(parts.join('\u0001'));
   }
 
+  /**
+   * 解析「选择器表达式」，求值得到元素集合。
+   * 支持两种写法，向后兼容：
+   *   1) 完整调用表达式，如 document.querySelectorAll(".a.b")、
+   *      document.querySelector("#x")，甚至带 JS 微调（如 [...].filter(...)）；
+   *   2) 纯选择器，如 .a.b、#btn-go（旧数据），按 querySelectorAll 处理。
+   * 判定策略：先当 JS 表达式求值；成功则把结果规整为元素数组；
+   * 失败（纯选择器不是合法 JS）再退回 querySelectorAll。
+   * 调用方据返回数组的长度判断「是否唯一元素」。
+   * @param {string} expr 选择器表达式
+   * @returns {{list: Array<Element>, error: string}} 元素数组与错误码（空串表示无错）
+   */
+  function resolveSelectorExpr(expr) {
+    const s = String(expr == null ? '' : expr).trim();
+    if (!s) return { list: [], error: 'empty' };
+    let result;
+    let evaluated = false;
+    try {
+      // 用 Function 求值：隔离世界的 document 与页面共享同一 DOM，可直接访问
+      result = (new Function('return (' + s + ');'))();
+      evaluated = true;
+    } catch (e) {
+      evaluated = false;   // 非合法 JS：多半是纯选择器，走下面回退
+    }
+    if (!evaluated) {
+      try {
+        return { list: Array.prototype.slice.call(document.querySelectorAll(s)), error: '' };
+      } catch (e2) {
+        return { list: [], error: 'invalid' };   // 选择器语法也非法
+      }
+    }
+    // 规整：单个元素、类数组（NodeList/HTMLCollection/数组）分别处理
+    let list = [];
+    if (result && result.nodeType === 1) list = [result];
+    else if (result && typeof result.length === 'number') list = Array.prototype.slice.call(result);
+    // 过滤掉非元素项（表达式可能混入文本节点或其它值）
+    list = list.filter(function (n) { return n && n.nodeType === 1; });
+    return { list: list, error: list.length ? '' : 'not_found' };
+  }
+
   // 暴露到全局，供 <script> 引入后直接使用
   global.AIMirrorDomUtils = {
     debounce: debounce,
     hashStr: hashStr,
     textOf: textOf,
     toArray: toArray,
-    messageFingerprint: messageFingerprint
+    messageFingerprint: messageFingerprint,
+    resolveSelectorExpr: resolveSelectorExpr
   };
 })(typeof window !== 'undefined' ? window : this);

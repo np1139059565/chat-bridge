@@ -137,19 +137,42 @@
    * 等状态同步后派发 Enter 键事件触发发送。
    * @param {string} text 要回传的文本
    */
-  A.pasteToWebpageAI = function (text) {
-    const ta = A.findInputBox();
-    if (!ta) {
-      A.warn('pasteToWebpageAI: 未找到网页 AI 输入框');
-      A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
-      return;
-    }
+  /**
+   * 把文本一次性写入输入框（复制粘贴式写值，非逐字输入）。
+   * 用原生 setter 写整个值，触发框架的响应式更新，再派发 input 事件。
+   * 抽成公共函数，供「纯文本」与「图文合一」两条路径复用。
+   * @param {Element} ta 输入框
+   * @param {string} text 文本
+   */
+  A.writeInputValue = function (ta, text) {
+    if (!ta) return;
     const value = String(text || '');
     ta.focus();
     // 用原生 setter 写值，触发框架的响应式更新
     Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
       .set.call(ta, value);
     ta.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+
+  /**
+   * 自动回传：把文本写回网页 AI 的输入框并触发发送。
+   * 输入框选择器按站点规则取（glm / deepseek 的 DOM 结构不同），
+   * 设值走原生 setter（兼容 Vue/React 的响应式），再派发 input 事件，
+   * 等状态同步后派发 Enter 键事件触发发送。
+   * @param {string} text 要回传的文本
+   * @param {boolean} [autoSend] 是否写完后自动回车发送；false 表示只写值
+   *   （图文合一流程自行控制发送时机，避免图文各发一条）
+   */
+  A.pasteToWebpageAI = function (text, autoSend) {
+    const ta = A.findInputBox();
+    if (!ta) {
+      A.warn('pasteToWebpageAI: 未找到网页 AI 输入框');
+      A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
+      return;
+    }
+    A.writeInputValue(ta, text);
+    // 只写值不发送：交给调用方（图文合一）统一回车
+    if (autoSend === false) return;
     // 两步走：先等发送按钮就绪，再延迟 500ms，然后回车发送。
     // 就绪信号取发送按钮的 disabled 状态：未就绪时按钮带 ds-button--disabled，
     // 就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱
@@ -200,7 +223,7 @@
    * 图片写入依赖站点实现，失败时回传提示，由用户手动粘贴。
    * @param {string} dataUrl 图片 dataURL
    */
-  A.pasteImageToWebpageAI = function (dataUrl) {
+  A.pasteImageToWebpageAI = function (dataUrl, text) {
     const ta = A.findInputBox();
     if (!ta) {
       A.warn('pasteImageToWebpageAI: 未找到网页 AI 输入框');
@@ -221,9 +244,18 @@
       ta.focus();
       // 派发带文件的 paste 事件，交给站点自身处理上传与预览
       ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-      // 等图片上传 / 预览就绪后回车发送；用固定延时兜底（图片上传耗时不可预期）
-      setTimeout(function () { A.pressEnter(ta); }, 1500);
-      A.post({ type: 'auto_send_result', ok: true, msg: '已尝试粘贴图片并发送' });
+      // 图文合一：贴图后不立即回车，先等图片上传 / 预览就绪（固定延时兜底），
+      // 再把文字一次性写入输入框（复制粘贴式，非逐字），最后只回车一次。
+      // 这样一条图文消息只发一次，AI 收到的是「一张图 + 一段文字」。
+      const delay = 1500;
+      setTimeout(function () {
+        if (text) A.writeInputValue(ta, text);
+        // 等发送按钮就绪再回车：图片上传后按钮需重新变为可用
+        A.waitSendReady(function () {
+          setTimeout(function () { A.pressEnter(ta); }, 300);
+        });
+      }, delay);
+      A.post({ type: 'auto_send_result', ok: true, msg: text ? '已尝试粘贴图文并发送' : '已尝试粘贴图片并发送' });
     } catch (e) {
       A.warn('pasteImageToWebpageAI 失败', e && e.message);
       A.post({ type: 'auto_send_result', ok: false, msg: '粘贴图片失败：' + (e && e.message) });

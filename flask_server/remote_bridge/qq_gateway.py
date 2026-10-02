@@ -164,9 +164,11 @@ class QqGateway:
 
         # 图片消息：正文 content 通常为空，图片在 attachments 里。
         # 同样先于「content 判空」处理，否则图片会被当成空消息丢掉。
+        # 同一条消息若既有图又有文字（图文消息），把 content 一并带上，
+        # 由图片卡片统一承载，避免文字被这个提前 return 丢掉。
         image_url = _extract_image(data)
         if image_url:
-            self._handle_image(openid, image_url, msg_id)
+            self._handle_image(openid, image_url, msg_id, content or "")
             return
 
         if not content:
@@ -236,12 +238,16 @@ class QqGateway:
         import threading
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _handle_image(self, openid, image_url, msg_id):
+    def _handle_image(self, openid, image_url, msg_id, text=""):
         """处理一条图片消息：下载存本地，并投一张卡片让镜像扩展贴进网页 AI。
 
         复用截图的逆向流程：图片转 dataURL 放进卡片，扩展取到后
         调 auto_send_image 贴进网页 AI 输入框。
         图片本身也落盘到 QQ_IMAGES_DIR，满足「存储下来」的要求。
+        图文消息：同一条消息的文字随图片一起放进卡片，由扩展贴图后
+        再把文字粘进同一输入框、一次回车，保证「图文合成一条消息」。
+        纯图片（无文字）时补一句「用户截图」，给 AI 一点上下文。
+        @param text 同一条消息附带的文字（图文消息）；为空表示纯图片
         """
         def _worker():
             import os
@@ -278,7 +284,9 @@ class QqGateway:
                     title="QQ 图片",
                     content="（QQ 图片，自动贴入网页 AI 输入框）",
                     payload={"kind": "qq-image", "data_url": data_url,
-                             "openid": openid, "path": img_path},
+                             "openid": openid, "path": img_path,
+                             # 图文消息：带上同消息文字；纯图片则补「用户截图」
+                             "text": (text or "").strip() or "用户截图"},
                 )
                 log("已投递图片卡片", card.id[:8], "等待抽屉取走")
             except Exception as e:

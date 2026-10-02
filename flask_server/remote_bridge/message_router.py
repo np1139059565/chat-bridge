@@ -11,7 +11,7 @@
 import threading
 import time
 
-from . import bridge_store, bridge_log
+from . import bridge_store, bridge_log, message_images
 
 
 def log(*args):
@@ -371,6 +371,21 @@ def _push_card_result(qq_client, openid, card, push):
     return push_image(qq_client, openid, img_path)
 
 
+def _push_images_block(qq_client, openid, m, push, pushed, seen_keys):
+    """推送一条消息里的图片块并记账，返回成功张数。
+
+    从 handle_report 内层循环抽出，避免嵌套过深；seen_keys 就地追加。
+    """
+    mid = m.get("id") or ""
+    ikey = (mid + "#img") if mid else ""
+    if ikey and (ikey in pushed or ikey in seen_keys):
+        return 0
+    n = message_images.push_message_images(qq_client, openid, m, push, push_image)
+    if n > 0 and ikey:
+        seen_keys.append(ikey)
+    return n
+
+
 def handle_report(qq_client, payload):
     """处理抽屉上报：diff 出新增消息并推送。
 
@@ -411,6 +426,8 @@ def handle_report(qq_client, payload):
                 # 失败不记账：留待下轮重试，避免消息被永久漏掉
                 if status in ('sent', 'skip'):
                     seen_keys.append(mid)
+                # 图片推送：按「消息id#img」去重，与正文各自独立
+                sent += _push_images_block(qq_client, openid, m, push, pushed, seen_keys)
             # 2) 卡片结果推送：按「消息id#卡片id」去重，与正文互不影响。
             for card in (m.get("cardResults") or []):
                 cid = card.get("id") or ""

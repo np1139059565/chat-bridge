@@ -54,6 +54,8 @@ window.AIMirrorContent = (function () {
   A.debounce = window.AIMirrorDomUtils.debounce;
   A.hashStr = window.AIMirrorDomUtils.hashStr;
   A.textOf = window.AIMirrorDomUtils.textOf;
+  // 选择器表达式解析：兼容纯选择器与完整调用写法（点击 / 采集共用）
+  A.resolveSelectorExpr = window.AIMirrorDomUtils.resolveSelectorExpr;
 
   // 站点规则表：不同模型的网页结构完全不同，无法用一套选择器通用。
   // 只使用各站点稳定的类名，绝不用 db183363 / _63c77b1 这类 CSS-Module 哈希（随时会变）。

@@ -196,12 +196,12 @@
   A.clickCopyButton = function (selector) {
     // 空选择器：直接判定失败，交由调用方回传空结果
     if (!selector) { A.warn('clickCopyButton：选择器为空'); return false; }
-    // 用 querySelectorAll 而非 querySelector：
-    // 前者对 :has() 这类复杂选择器的解析更宽容，且与 clickBySelector 保持一致
-    let list = [];
-    try { list = document.querySelectorAll(selector); } catch (e) {
-      // 选择器语法无效：打出原因，避免异常被静默吞掉后无从排查
-      A.warn('clickCopyButton：选择器语法无效', selector, e && e.message);
+    // 统一走「选择器表达式」解析：兼容纯选择器与完整调用写法，
+    // 后者可在选择器后接 JS 微调以命中唯一元素。
+    const r = A.resolveSelectorExpr(selector);
+    const list = r.list;
+    if (r.error === 'invalid') {
+      A.warn('clickCopyButton：选择器语法无效', selector);
       return false;
     }
     // 未命中任何元素：页面结构可能已变，或选择器已失效
@@ -217,8 +217,11 @@
 
   A.clickBySelector = function (selector) {
     if (!selector) return { ok: false, reason: 'empty_selector', count: 0 };
-    let list = [];
-    try { list = document.querySelectorAll(selector); } catch (e) {
+    // 统一走「选择器表达式」解析：兼容纯选择器与 document.querySelectorAll(...) 等
+    // 完整调用写法，后者可在选择器后接 JS 微调以命中唯一元素。
+    const r = A.resolveSelectorExpr(selector);
+    let list = r.list;
+    if (r.error === 'invalid') {
       return { ok: false, reason: 'invalid_selector', count: 0 };
     }
     // 未找到：选择器失效或页面结构变了
