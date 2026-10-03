@@ -14,25 +14,69 @@
   };
 
   /**
+   * 修复 JSON 字符串字面量里「未转义的裸控制字符」。
+   *
+   * 背景：网页 markdown 渲染会把代码块里的 \n 还原成真实换行，导致工具调用 JSON
+   * 的字符串内部出现裸换行 / 制表符等控制字符——这在 JSON 规范里非法，JSON.parse
+   * 会抛 “Bad control character in string literal”。
+   * 做法：状态机遍历，仅在「字符串内部」把裸控制字符替换为其转义形式；
+   * 字符串外的换行（JSON 结构缩进）原样保留，不影响结构。
+   * @param {string} src 可能含裸控制字符的 JSON 文本
+   * @returns {string} 修复后的文本
+   */
+  M._repairJsonControlChars = function (src) {
+    const s = String(src || '');
+    let out = '';
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < s.length; i++) {
+      const ch = s[i];
+      if (inString) {
+        if (escaped) { escaped = false; out += ch; continue; }
+        if (ch === '\\') { escaped = true; out += ch; continue; }
+        if (ch === '"') { inString = false; out += ch; continue; }
+        const code = ch.charCodeAt(0);
+        if (code < 0x20) {
+          // 裸控制字符：替换为合法转义写法
+          if (ch === '\n') out += '\\n';
+          else if (ch === '\r') out += '\\r';
+          else if (ch === '\t') out += '\\t';
+          else out += '\\u' + ('000' + code.toString(16)).slice(-4);
+          continue;
+        }
+        out += ch;
+        continue;
+      }
+      if (ch === '"') inString = true;
+      out += ch;
+    }
+    return out;
+  };
+
+  /**
    * 判断代码块是否为一次工具调用：内容是 { tool, parameters } 且带 bridge-chat-call 即算。
    * 安全性由调用方保证：只有「助手消息」里的代码块才会被判为工具调用。
+   * 容错：首次解析失败时，先修复字符串内裸控制字符再解析一次（见 _repairJsonControlChars）。
    */
   M.parseToolCall = function (block) {
     if (!block || block.type !== 'code') return null;
     const src = String(block.code || '').trim();
     if (!src || src.charAt(0) !== '{') return null; // 快速排除非 JSON
+    let obj = null;
     try {
-      const obj = JSON.parse(src);
-      if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
-        return { tool: String(obj.tool), parameters: obj.parameters || {} };
-      }
-      // 临时诊断日志：能解析成对象、但不是工具调用信封（如缺少 tool / type 不匹配）。
-      D.log('解析诊断：JSON 可解析但非工具调用 envelope，keys=' + Object.keys(obj || {}).join(',')
-        + ' type=' + (obj && obj.type));
+      obj = JSON.parse(src);
     } catch (e) {
-      // 临时诊断日志：JSON 解析失败——多半是网页渲染改动了转义（换行 / 引号 / 反斜杠）。
-      // 打印错误与原文首段，确认后可删。
-      D.log('解析诊断：JSON.parse 失败：' + e.message + ' 原文首段=' + src.slice(0, 120));
+      // 首次失败：多半是网页渲染把 \n 还原成真实换行，导致字符串内出现裸控制字符。
+      // 修复后再解析一次；仍失败则按普通代码块处理。
+      try {
+        obj = JSON.parse(this._repairJsonControlChars(src));
+        if (obj) D.log('解析修复：裸控制字符已修复后解析成功');
+      } catch (e2) {
+        return null;
+      }
+    }
+    if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
+      return { tool: String(obj.tool), parameters: obj.parameters || {} };
     }
     return null;
   };

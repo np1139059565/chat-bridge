@@ -86,15 +86,6 @@
    * 为单个代码块建卡（或复用已存在卡片），并维护候选、上膛、重跑与首发工具卡片状态。
    */
   M._buildCardForBlock = function (holder, m, b, mi, incoming, reason, scrollOnly, blockIssue, autoCandidates, state) {
-    // 临时诊断日志：定位「新卡片不建卡 / 不成工具卡」问题，确认后可删。
-    // 记录块的类型、是否有 id、所属消息角色与代码块首段，用于区分：
-    //   · 无 id → 首行直接 return，卡根本不建；
-    //   · 有 id 但解析失败 → 卡建了但 isTool=false，无按钮、不进候选。
-    if (b && b.type === 'code') {
-      log('建卡诊断：type=' + b.type + ' id=' + (b.id || '(无)')
-        + ' role=' + (m && m.role) + ' lang=' + (b.lang || '')
-        + ' code首段=' + String(b.code || '').slice(0, 80));
-    }
     if (!b || b.type !== 'code' || !b.id) return;
     const exist = holder.cards[b.id];
     if (exist) {
