@@ -48,6 +48,9 @@
    */
   M.consumeQqImage = function (c) {
     if (!c || c.type !== 'qq-image') return false;
+    // 外部用户消息到达：先中止当前进行中的工具卡片，避免其回传结果与
+    // 用户新消息交错（见 abortActiveCards）。
+    this.abortActiveCards('QQ 图片到达');
     const dataUrl = (c.payload && c.payload.data_url) || '';
     // 同消息文字（图文消息）；纯图片时后端已补「用户截图」。
     const text = (c.payload && c.payload.text) || '';

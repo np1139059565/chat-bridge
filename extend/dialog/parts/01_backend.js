@@ -192,6 +192,9 @@
     if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
     card.countdown = 0;
     card.phase = '';
+    // 外部用户消息到达（QQ 文本卡 / 指令卡等）：先中止当前进行中的工具卡片，
+    // 避免其回传结果与这条用户新消息交错，导致「结果与问题对不上」。
+    this.abortActiveCards('外部卡片到达');
     // 输入信封：{ type, request, page_url }，不携带 id。
     // page_url 为卡片发起方所在页面的地址（由调试扩展随卡片一并传来），
     // 让网页 AI 知道这条外部卡片来自哪个页面。

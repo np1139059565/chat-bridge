@@ -273,6 +273,37 @@
     this.toast('已跳过该卡片');
   };
 
+  /**
+   * 中止当前会话里所有「进行中」的工具卡片（倒计时中或正在执行）。
+   *
+   * 触发场景：外部用户消息（QQ 用户消息 / 指令 / 图片）到达时调用——
+   * 若此刻还有工具卡在倒计时或执行，其回传结果会与用户新消息交错，
+   * 造成「结果与问题对不上」的错乱。故立即跳过这些卡片，取消回传。
+   * @param {string} [reason] 触发来源（仅用于日志）
+   * @returns {number} 被中止的卡片数
+   */
+  M.abortActiveCards = function (reason) {
+    const cardMap = this.allCards();
+    let n = 0;
+    Object.keys(cardMap).forEach((id) => {
+      const c = cardMap[id];
+      if (!c || !c.isTool) return;
+      const active = c.status === 'running' || (c._cdTimer && c.countdown > 0);
+      if (!active) return;
+      if (c._cdTimer) { clearTimeout(c._cdTimer); c._cdTimer = null; }
+      c.countdown = 0;
+      c.phase = '';
+      c.skipped = true;
+      n += 1;
+    });
+    if (n) {
+      log('中止进行中卡片：' + n + ' 张（' + (reason || '') + '）');
+      if (this._persist) this._persist();
+      this.toast('用户消息到达，已跳过 ' + n + ' 张进行中卡片');
+    }
+    return n;
+  };
+
   /** 倒计时后自动执行（与自动发送共享 autoSendDelay）。 */
   M.scheduleExecute = function (card) {
     // 倒计时状态机由 D.startCountdown 统一提供（工具卡片与外部卡片共用）
