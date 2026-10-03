@@ -26,7 +26,14 @@
       if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
         return { tool: String(obj.tool), parameters: obj.parameters || {} };
       }
-    } catch (e) { /* 不是工具调用，按普通代码块渲染 */ }
+      // 临时诊断日志：能解析成对象、但不是工具调用信封（如缺少 tool / type 不匹配）。
+      D.log('解析诊断：JSON 可解析但非工具调用 envelope，keys=' + Object.keys(obj || {}).join(',')
+        + ' type=' + (obj && obj.type));
+    } catch (e) {
+      // 临时诊断日志：JSON 解析失败——多半是网页渲染改动了转义（换行 / 引号 / 反斜杠）。
+      // 打印错误与原文首段，确认后可删。
+      D.log('解析诊断：JSON.parse 失败：' + e.message + ' 原文首段=' + src.slice(0, 120));
+    }
     return null;
   };
 
