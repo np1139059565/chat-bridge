@@ -173,82 +173,12 @@ def push_text(qq_client, openid, text, markdown=False):
 
 
 
-def _extract_voice_from_blocks(m):
-    """从消息的 blocks 里取语音朗读文本。
-
-    与工具调用块同一机制——认代码块内容里的 JSON type 字段，不看语言名：
-    找内容为 {"type":"bridge-voice","text":"..."} 的块，取其 text。
-    @param m 消息对象
-    @returns 语音文本；无则空串
-    """
-    import json
-    for b in (m.get("blocks") or []):
-        if not b or b.get("type") != "code":
-            continue
-        src = str(b.get("code") or "").strip()
-        if not src or src[0] != "{":
-            continue
-        try:
-            obj = json.loads(src)
-        except Exception:
-            continue
-        if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
-            return str(obj.get("text") or "").strip()
-    return ""
-
-
-def push_voice(qq_client, openid, path):
-    """把一段本地音频推送到 QQ（与图片推送同路，走被动回复窗口）。
-
-    窗口关闭时静默跳过（等用户下次发消息再唤醒），与文本 / 图片一致。
-    @param qq_client QQClient 实例
-    @param openid 目标用户
-    @param path 本地音频文件绝对路径
-    @returns 是否发送成功
-    """
-    if not qq_client or not openid or not path:
-        return False
-    msg_id, seq = next_seq(openid)
-    if not msg_id:
-        log("窗口已关闭，暂不推送语音")
-        return False
-    ok, data = qq_client.send_c2c_voice(openid, path, msg_id=msg_id, msg_seq=seq)
-    if not ok:
-        log("推送语音失败：", data)
-    return ok
-
-
-def _maybe_push_voice(qq_client, openid, m, text, push):
-    """AI 回复若含语音朗读块且语音开关开着，则合成语音并推送。
-
-    从消息 blocks 里认 {"type":"bridge-voice","text":...} 块并取其 text。
-    @param m AI 消息对象（用于从 blocks 提取语音文本）
-    @param text AI 回复的完整文本（当前未使用，保留签名兼容）
-    @param push 推送开关字典
-    @returns 是否真的推送了语音
-    """
-    # 语音识别开关未打开则不合成（与入向同一开关，语义统一为「语音功能总开关」）
-    if not push.get("voice"):
-        return False
-    voice_text = _extract_voice_from_blocks(m)
-    if not voice_text:
-        return False
-    import os
-    import paths
-    from . import voice_tts
-    os.makedirs(paths.VOICE_DIR, exist_ok=True)
-    out_path = str(paths.VOICE_DIR / ("out_" + str(int(time.time() * 1000)) + ".mp3"))
-    ok, err = voice_tts.text_to_voice(voice_text, out_path)
-    if not ok:
-        log("语音合成失败：", err)
-        return False
-    sent = push_voice(qq_client, openid, out_path)
-    # 音频文件用完即删，不留垃圾（无论发送成败）
-    try:
-        os.remove(out_path)
-    except OSError:
-        pass
-    return sent
+# 出向语音（提取语音文本 / 合成 / 推送）已抽到 message_voice.py，
+# 使本文件保持在行数上限内；此处按原名导入，保持既有调用不变。
+from .message_voice import (
+    extract_voice_from_blocks as _extract_voice_from_blocks,
+    push_voice, maybe_push_voice as _maybe_push_voice,
+)
 
 
 def push_image(qq_client, openid, path):
@@ -400,6 +330,9 @@ def handle_report(qq_client, payload):
     messages = payload.get("messages") or []
     if not openid or not messages:
         return 0
+    # 合并上次推送失败的消息：它们可能已滚出可见区、不再出现在切片里，
+    # 靠这份缓存获得重试机会（成功 / 跳过后自动移出，见本函数末尾 set_pending）。
+    messages = bridge_store.merge_pending(conv_id, messages)
     # 缓存最近一次切片与客户端：用户续期窗口后据此重放，补推滞后消息。
     # 只存引用，不深拷贝：切片可能很大，且重放时只读。
     global _last_client
@@ -413,6 +346,8 @@ def handle_report(qq_client, payload):
         pushed = bridge_store.get_pushed_set(conv_id)
         sent = 0
         seen_keys = []
+        # 本轮推送失败的消息：结束后写入待推缓存，供下次上报优先重试。
+        failed = []
 
         for m in messages:
             mid = m.get("id") or ""
@@ -426,6 +361,9 @@ def handle_report(qq_client, payload):
                 # 失败不记账：留待下轮重试，避免消息被永久漏掉
                 if status in ('sent', 'skip'):
                     seen_keys.append(mid)
+                elif status == 'fail':
+                    # 正文推送失败：记入待推，下次上报优先重试（此时窗口多半已续期）
+                    failed.append(m)
                 # 图片推送：按「消息id#img」去重，与正文各自独立
                 sent += _push_images_block(qq_client, openid, m, push, pushed, seen_keys)
             # 2) 卡片结果推送：按「消息id#卡片id」去重，与正文互不影响。
@@ -443,4 +381,7 @@ def handle_report(qq_client, payload):
 
         # 只登记本轮「成功或本就不该推」的 key；失败的不写，下轮会再评估
         bridge_store.mark_pushed(conv_id, seen_keys)
+        # 回写待推缓存：本轮失败的消息挂起，下次上报优先重试；
+        # 成功 / 跳过的消息不在其中，故会自动移出缓存。
+        bridge_store.set_pending(conv_id, failed)
         return sent

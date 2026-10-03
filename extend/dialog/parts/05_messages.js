@@ -200,7 +200,10 @@
     // 1) 写入消息树
     //    atBottom 一并传入：末路兜底需要它判断「用户是否正看着最新处」，
     //    只有 generate 且在底部时，才允许把找不到锚点的整片接到分支末端。
+    //    beforeNodes 用于判断本轮是否真的有新节点入库（供上报解耦用，见末尾）。
+    const beforeNodes = Object.keys(conv.msgTree).length;
     const up = this.upsertTree(conv, incoming, reason, atBottom);
+    const addedNodes = Object.keys(conv.msgTree).length > beforeNodes;
 
     // 不入树（断裂 / 碰撞 / 单节点 / 中间命中）：仍建卡供手动操作，但不自动执行。
     const notInTree = (up.mode === 'orphan' || up.mode === 'collision'
@@ -231,10 +234,18 @@
       + '，分支=' + conv.branchKeys.length
       + '，自动候选=' + collected.autoCandidates.length);
     if (this._persist) this._persist();
-    // 上报给远程桥接层：仅 generate 来源（AI 刚说完新话）。
-    // 走 WithMd 版本：先点复制按钮取带格式的 Markdown，再上报，
-    // 这样推送到 QQ 的内容才保得住格式。
-    this.reportToBridgeWithMd(reason);
+    // 上报给远程桥接层。
+    // 原实现只在 generate 来源上报，问题：若生成态轮询错过了「生成中→空闲」跳变，
+    // 新消息会以 scroll 来源采集，此时不上报，导致最后一轮推送被漏、直到下次才补。
+    // 解耦为「本轮确属 AI 新增内容即上报」：只要本轮真的有新节点入库，
+    // 且切片末尾是 assistant（AI 刚说完的话），就以 generate 语义上报。
+    // 后端按消息 id 去重，重复上报不会造成重复推送，代价可忽略。
+    const lastIsAssistant = incoming.length
+      && incoming[incoming.length - 1].role === 'assistant';
+    const shouldReport = (reason === 'generate') || (addedNodes && lastIsAssistant);
+    if (shouldReport) {
+      this.reportToBridgeWithMd('generate');
+    }
   };
 
   /**

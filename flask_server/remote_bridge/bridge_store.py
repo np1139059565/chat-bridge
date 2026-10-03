@@ -253,3 +253,49 @@ def mark_pushed(conv_id, msg_ids):
         # 落盘：把 set 转成 list 以便 JSON 序列化
         state = {"pushed": {k: sorted(v) for k, v in _pushed.items()}}
         _write_state(state)
+
+
+# ---------- 待推消息缓存（推送失败后重试） ----------
+# 用途：某条消息推送失败（窗口关闭 / 网络错误）时暂存于此，下次上报时优先重试。
+# 解决：一条消息推送失败后若滚出网页可见区，就不再出现在上报切片里，
+#       没有这份缓存就永远推不到（表现为「最后一轮被漏、下次才补」）。
+# 仅存内存：进程重启即清空，可接受——重启后抽屉会重新上报全量切片，
+#          且窗口正常时消息本就会推成功。
+_pending_msgs = {}
+
+
+def merge_pending(conv_id, messages):
+    """把待推消息并入当前上报切片：当前切片优先（字段更新），待推里独有的补到末尾。
+
+    调用方：message_router.handle_report 在推送前合并，使失败过的消息获得重试机会。
+    @param conv_id 会话 id
+    @param messages 当前上报的消息切片（有序）
+    @returns 合并后的消息列表
+    """
+    key = conv_id or "__default__"
+    with _lock:
+        pend = dict(_pending_msgs.get(key) or {})
+    if not pend:
+        return list(messages)
+    seen = set()
+    out = []
+    for m in messages or []:
+        mid = (m or {}).get("id") or ""
+        if mid:
+            seen.add(mid)
+        out.append(m)
+    for mid, m in pend.items():
+        if mid not in seen:
+            out.append(m)
+    return out
+
+
+def set_pending(conv_id, failed_messages):
+    """用本轮失败的消息替换该会话的待推缓存（成功 / 跳过的消息随之移出）。
+
+    @param conv_id 会话 id
+    @param failed_messages 本轮推送失败的消息对象列表
+    """
+    key = conv_id or "__default__"
+    with _lock:
+        _pending_msgs[key] = {(m or {}).get("id"): m for m in (failed_messages or []) if (m or {}).get("id")}
