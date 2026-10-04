@@ -46,8 +46,9 @@
       var imgs = Array.isArray(m.image) ? m.image : [m.image];
       body = imgs.map(function (name) {
         var u = '/api/web/image-file/' + encodeURIComponent(name);
-        return '<a href="' + u + '" target="_blank" rel="noopener">' +
-          '<img class="msg-img" src="' + u + '" alt="图片"></a>';
+        // 不套 <a target="_blank">：新开标签页会重新请求图片。
+        // 改为页面内浮层看大图，直接复用已加载的图片（同 src 走缓存，零请求）。
+        return '<img class="msg-img" src="' + u + '" alt="图片">';
       }).join('');
       if (m.text && m.text !== '[截图]' && m.text !== '[图片]') body += renderMarkdown(m.text);
     } else if (m.kind === 'web-image' || m.text === '[图片]') {
@@ -76,9 +77,34 @@
     return true;
   }
 
-  // ---------- 指令链接：点击复制到输入框 ----------
+  // ---------- 图片看大图：页面内浮层，复用已加载的图片 ----------
+  // 不新开标签页（新文档必然重新请求），而是把被点图片的地址交给浮层里的 img。
+  // 同一地址 + 后端强缓存 → 直接命中浏览器缓存，不再产生网络请求。
+  var viewer = null;
+  function showViewer(src) {
+    if (!viewer) {
+      viewer = document.createElement('div');
+      viewer.className = 'img-viewer';
+      var vimg = document.createElement('img');
+      vimg.className = 'img-viewer-img';
+      viewer.appendChild(vimg);
+      // 点任意处关闭
+      viewer.addEventListener('click', function () { viewer.classList.remove('on'); });
+      document.body.appendChild(viewer);
+    }
+    viewer.querySelector('.img-viewer-img').src = src;
+    viewer.classList.add('on');
+  }
+
+  // ---------- 指令链接 / 图片点击（事件委托） ----------
   listEl.addEventListener('click', function (e) {
     var t = e.target;
+    // 图片：页面内浮层看大图，复用缓存
+    if (t && t.classList && t.classList.contains('msg-img')) {
+      e.preventDefault();
+      showViewer(t.getAttribute('src') || '');
+      return;
+    }
     if (t && t.classList && t.classList.contains('cmd-link')) {
       e.preventDefault();
       var cmd = t.getAttribute('data-cmd') || '';

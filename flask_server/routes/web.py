@@ -300,7 +300,9 @@ def web_image_file(name):
         return jsonify(success=False, error="not_found"), 404
     ext = path.rsplit(".", 1)[-1].lower()
     mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-    return send_file(path, mimetype=mime, conditional=True)
+    # max_age：图片文件名唯一（时间戳+序号）、内容不变，故设强缓存，
+    # 让浏览器对同一图片复用已下载的副本，点开看大图时不再重新请求。
+    return send_file(path, mimetype=mime, conditional=True, max_age=604800)
 
 
 @bp.route("/api/web/audio/<name>", methods=["GET", "OPTIONS"])
