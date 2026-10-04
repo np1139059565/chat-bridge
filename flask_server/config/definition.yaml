@@ -1,6 +1,6 @@
 app:
   flask:
-    host: 127.0.0.1
+    host: 0.0.0.0
   limits:
     max_json_chars: 100000
   default_profile: glm
