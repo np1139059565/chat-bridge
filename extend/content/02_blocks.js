@@ -269,6 +269,57 @@
   };
 
   /**
+   * 把图片地址转为 dataURL（供抽屉显示与服务端存盘）。
+   *
+   * 网页里的图片 src 常是 blob:（页面临时对象地址）或 http(s)。
+   * blob: 出了该页面就失效，抽屉 iframe 显示不出、后端也取不到；
+   * 故在此转成自包含的 dataURL，让三处（网页列表 / 抽屉镜像 / 服务端）都能用。
+   * 转换失败回调空串，调用方保留原地址、不阻断其它内容。
+   * @param {string} src 图片地址
+   * @param {function(string)} cb 回调：成功传 dataURL，失败传空串
+   */
+  A.toDataUrl = function (src, cb) {
+    try {
+      fetch(src).then(function (r) { return r.blob(); }).then(function (blob) {
+        var fr = new FileReader();
+        fr.onload = function () { cb(String(fr.result || '')); };
+        fr.onerror = function () { cb(''); };
+        fr.readAsDataURL(blob);
+      }).catch(function () { cb(''); });
+    } catch (e) {
+      cb('');
+    }
+  };
+
+  /**
+   * 归一化一批消息里的图片块：把 blob: / http(s) 地址转成 dataURL。
+   *
+   * 异步进行（读文件是异步的），全部处理完再回调，保证上报时地址已就绪。
+   * 已是 dataURL 的图片原样保留；转换失败的保留原地址（至少不丢块）。
+   * @param {Array} messages 消息数组（就地修改其图片块 src）
+   * @param {function(Array)} done 全部处理完的回调，回传同一数组
+   */
+  A.normalizeImageBlocks = function (messages, done) {
+    var tasks = [];
+    (messages || []).forEach(function (m) {
+      (m.blocks || []).forEach(function (b) {
+        if (b && b.type === 'image' && b.src && b.src.indexOf('data:') !== 0) {
+          tasks.push(b);
+        }
+      });
+    });
+    if (!tasks.length) { done(messages); return; }
+    var left = tasks.length;
+    tasks.forEach(function (b) {
+      A.toDataUrl(b.src, function (dataUrl) {
+        if (dataUrl) b.src = dataUrl;
+        left -= 1;
+        if (left === 0) done(messages);
+      });
+    });
+  };
+
+  /**
    * 判断是否为网页 AI 的「生成中占位消息」。
    * 典型如 GLM 在正式回答前先渲染的一小段固定文案（含 "ChatGLM" 与 "语音"），
    * 回答完成后这段内容会消失。判定同时看结构与内容，避免误伤正式回答：

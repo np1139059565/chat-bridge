@@ -111,6 +111,20 @@ def _write_state(state):
     _cache_sig = _file_sig()
 
 
+def _norm_image(image):
+    """归一化图片字段：支持单张（字符串）与多张（列表）。
+
+    单张存字符串（兼容旧数据与只认字符串的读取方）；多张存字符串列表。
+    空值一律存空串，前端据此判断「有无图片」。
+    @param image 字符串或字符串列表
+    @returns 字符串或字符串列表
+    """
+    if isinstance(image, (list, tuple)):
+        names = [str(x) for x in image if x]
+        return names
+    return str(image or "")
+
+
 def append(role, text, voice="", kind="", image=""):
     """向收件箱追加一条消息，返回该消息对象。
 
@@ -132,7 +146,7 @@ def append(role, text, voice="", kind="", image=""):
             "role": role or "user",
             "text": str(text or ""),
             "voice": str(voice or ""),
-            "image": str(image or ""),
+            "image": _norm_image(image),
             "kind": str(kind or ""),
             "ts": int(time.time() * 1000),
         }
@@ -192,7 +206,7 @@ def append_many(items):
                 "role": it.get("role") or "user",
                 "text": str(it.get("text") or ""),
                 "voice": str(it.get("voice") or ""),
-                "image": str(it.get("image") or ""),
+                "image": _norm_image(it.get("image")),
                 "kind": str(it.get("kind") or ""),
                 "ts": int(it.get("ts") or (time.time() * 1000)),
             }

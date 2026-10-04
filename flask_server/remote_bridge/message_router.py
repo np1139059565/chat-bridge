@@ -225,54 +225,22 @@ def _push_one(qq_client, openid, m, push):
     """
     if not _should_push(m, push):
         return 'skip'
-    # 节点上的 md 字段是 /md 采集来的 Markdown 原文，有它说明这条回复带格式。
-    # 有 md → 走 Markdown 通道（msg_type=2），QQ 端才会渲染标题、加粗等语法；
-    # 没有（未采集 / 非 AI 消息 / 采集失败）→ 退回 blocks 拼的纯文本，走文本通道。
-    kind = _classify(m)
-    # 工具结果消息（bridge-chat-res）：正文是一段 JSON，
-    # 包进代码块并按 Markdown 发送，QQ 端才会渲染成等宽格式。
-    # 直接用解析出的对象反序列化，不经 _blocks_to_text：
-    # 后者对代码块会自行加围栏，再包一层会形成嵌套围栏、Markdown 渲染破损。
-    tr = _tool_result_of(m)
-    if tr is not None:
-        import json
-        text = json.dumps(tr, ensure_ascii=False, indent=2)
-        body = "%s\n```json\n%s\n```" % (PREFIX.get(kind, kind), text)
-        return 'sent' if push_text(qq_client, openid, body, markdown=True) else 'fail'
-    raw_md = str(m.get("md") or "").strip()
-    # 正文：优先用复制采集的 Markdown 原文保格式；没有则退回 blocks 拼纯文本。
-    # 此处传 push_thinking=False：思考不再拼进正文，改由下方折叠区单独承载，
-    # 否则思考会随正文重复出现一次。
-    body_text = raw_md or _blocks_to_text(m, False)
-    # 思考内容：md 字段是「复制按钮」的产物，复制内容不含思考过程，
-    # 只看 md 会把思考整段绕过；故从 blocks 里独立提取。
-    # 仅在「思考」推送开关打开时附加。
-    think = _thinking_text_of(m) if push.get("thinking", False) else ""
-    if think:
-        # 思考内容用带语言标记的围栏代码块承载，与工具结果同一形式：
-        # QQ 仅对带语言标记的代码块（如 ```json）折叠渲染，空围栏不折叠，
-        # 故此处必须带语言标记；details / summary 等 HTML 语法 QQ 不解析。
-        # 标记与工具结果统一用 json，确保与已验证可折叠的推送形式一致。
-        # 代码块在前、正文在后，保证读者先看到回答、再按需查看思考。
-        # 若思考内容本身含三反引号，改用四反引号围栏，避免提前闭合。
-        tick = "````" if "```" in think else "```"
-        text = "%sjson\n%s\n%s" % (tick, think, tick)
-        if body_text:
-            text = text + "\n\n" + body_text
-        is_markdown = True
-    else:
-        text = body_text
-        is_markdown = bool(raw_md)
-    if not text:
+    # 正文组装统一交给 outbound.build_body：QQ 与网页共用同一套规则，
+    # 避免两边各写一份导致「网页版没有思考」这类改造不彻底的问题。
+    from .outbound import build_body
+    built = build_body(m, push)
+    if built.get("skip"):
         return 'skip'
-    # AI 消息：推送文本之外，若含 bridge-voice 块且语音开关开着，另合成并推一条语音。
-    # 放在文本推送成功之后：文本是主体，语音是附加，不应因语音失败影响文本。
-    if kind == "ai":
+    kind = built.get("kind") or _classify(m)
+    text = built.get("text") or ""
+    # AI 消息：文本之外若含语音块且开关开，另合成并推一条语音。
+    # 语音是附加能力，不应因语音失败影响文本。
+    if kind == "ai" and not built.get("is_tool_result"):
         _maybe_push_voice(qq_client, openid, m, text, push)
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
-    return 'sent' if push_text(qq_client, openid, body, markdown=is_markdown) else 'fail'
+    return 'sent' if push_text(qq_client, openid, body, markdown=bool(built.get("markdown"))) else 'fail'
 
 
 def _resolve_openid(payload):

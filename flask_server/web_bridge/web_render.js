@@ -32,18 +32,38 @@
   // ---------- 轻量 Markdown 渲染 ----------
   // 支持：代码块、行内代码、标题、粗体、斜体、链接、引用、有序/无序列表、表格、段落
   // 不追求完整规范，只覆盖网页 AI 回复里常见的格式。
-  function renderMarkdown(src) {
-    if (!src) return '';
-    var text = String(src);
-    // 1) 先抽出围栏代码块，用占位符替换，避免块内内容被行内规则误伤
-    var codes = [];
+  /**
+   * 抽出围栏代码块：用占位符替换，避免块内内容被后续行内规则误伤。
+   *
+   * 从 renderMarkdown 抽出，使其主体保持简短（受行数门禁约束）。
+   * 带语言标记的块（思考 / 工具结果）渲染成可折叠区，与 QQ 端折叠行为一致；
+   * 无语言标记的普通代码块保持展开，避免误伤用户分享的纯代码。
+   * @param {string} text 原文
+   * @param {Array} codes 输出参数：占位符 → HTML 片段的映射数组
+   * @returns {string} 代码块已替换为占位符的文本
+   */
+  function extractFences(text, codes) {
     RE_FENCE.lastIndex = 0;
-    text = text.replace(RE_FENCE, function (m, body) {
-      // 去掉可能的语言标记行
-      var inner = body.replace(/^[a-zA-Z0-9_+-]*\n/, '');
-      codes.push('<pre><code>' + esc(inner) + '</code></pre>');
+    return text.replace(RE_FENCE, function (m, body) {
+      // 首行可能是语言标记（如 json）：抽出语言名与正文
+      var lang = '';
+      var mm = /^([a-zA-Z0-9_+-]*)\n/.exec(body);
+      if (mm) { lang = mm[1]; body = body.slice(mm[0].length); }
+      if (lang) {
+        codes.push('<details class="code-fold"><summary>' + esc(lang) +
+          '</summary><pre><code>' + esc(body) + '</code></pre></details>');
+      } else {
+        codes.push('<pre><code>' + esc(body) + '</code></pre>');
+      }
       return '\u0000CODE' + (codes.length - 1) + '\u0000';
     });
+  }
+
+  function renderMarkdown(src) {
+    if (!src) return '';
+    // 1) 先抽出围栏代码块，用占位符替换，避免块内内容被行内规则误伤
+    var codes = [];
+    var text = extractFences(String(src), codes);
     // 2) 按行处理块级结构
     var lines = text.split(/\n/);
     var html = [];

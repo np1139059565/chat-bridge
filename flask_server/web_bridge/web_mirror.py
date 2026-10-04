@@ -85,6 +85,33 @@ def _synthesize_voice(text):
         return ""
 
 
+def _extract_images(m):
+    """从消息的 blocks 里提取图片并落盘，返回文件名列表。
+
+    图片块（type=image）的 src 可能是 dataURL、http(s) 地址或 blob:。
+    dataURL 与 http(s) 存到网页图片目录；blob: 后端无法访问，跳过。
+    失败不抛异常：图片是附加内容，取不到不应阻断消息入库。
+    @param m 消息对象
+    @returns 文件名列表（相对网页图片目录）；无图返回空列表
+    """
+    names = []
+    for b in (m.get("blocks") or []):
+        if not b or b.get("type") != "image":
+            continue
+        src = str(b.get("src") or "")
+        if not src.startswith("data:image/"):
+            # http(s) 与 blob: 暂不在此处理：前者按需下载、后者后端不可达
+            continue
+        try:
+            import screenshot_store
+            saved = screenshot_store.save_web_image(src)
+            if saved and saved.get("name"):
+                names.append(saved["name"])
+        except Exception as e:
+            log("保存消息图片失败：", e)
+    return names
+
+
 def mirror_report(messages):
     """把一批上报消息镜像进网页收件箱，返回新增条数。
 
@@ -104,6 +131,14 @@ def mirror_report(messages):
     except Exception as e:
         log("解析模块不可用，跳过镜像：", e)
         return 0
+    # 读取推送开关：与 QQ 版同一份配置，保证两边「哪类消息推不推」一致。
+    # 读不到时用空字典，各类默认放行（与 QQ 版 push.get(kind, True) 同义）。
+    try:
+        from remote_bridge import bridge_store
+        push = bridge_store.get_config().get("push") or {}
+    except Exception as e:
+        log("读取推送开关失败，按全推处理：", e)
+        push = {}
     items = []
     for m in messages:
         mid = (m or {}).get("id") or ""
@@ -125,15 +160,28 @@ def mirror_report(messages):
             kind = _classify(m)          # user / tool / ai
         except Exception:
             kind = "ai"
-        # 正文：优先 md 原文（保 Markdown 格式），退回 blocks 拼纯文本
-        raw_md = str(m.get("md") or "").strip()
+        # 推送开关过滤：与 QQ 版同一套配置（push.user / tool / ai）。
+        # 关掉某类推送时，网页版也一并跳过，保持两边设定一致。
+        if not push.get(kind, True):
+            continue
+        # 正文组装统一交给 outbound.build_body：与 QQ 版共用同一套规则，
+        # 网页版因此自动继承「思考内容」与「工具结果围栏」等能力。
+        body = ""
+        is_tool_result = False
         try:
-            body = raw_md or _blocks_to_text(m, False)
-        except Exception:
-            body = raw_md
+            from remote_bridge.outbound import build_body
+            built = build_body(m, push)
+            body = built.get("text") or ""
+            is_tool_result = bool(built.get("is_tool_result"))
+        except Exception as e:
+            log("正文组装失败，退回块拼：", e)
+            try:
+                body = str(m.get("md") or "").strip() or _blocks_to_text(m, False)
+            except Exception:
+                body = str(m.get("md") or "").strip()
         # 外部卡片（external-call 信封）：正文应是信封里 request 承载的「真实发言」，
         # 而非整段 JSON。QQ 用户发来的消息即以信封形态上报，不取 request 会把
-        # 用户的普通一句话显示成一段 JSON（截图里正是此现象）。
+        # 用户的普通一句话显示成一段 JSON。
         if env:
             req = env.get("request")
             if isinstance(req, str) and req.strip():
@@ -143,22 +191,15 @@ def mirror_report(messages):
             body = strip_voice_blocks(body)
         except Exception:
             pass
-        # 工具结果（bridge-chat-res）：本体是一段 JSON，裸文本既不渲染为代码块、
-        # 又会因无空格断行而撑破气泡。此处包上 json 围栏，交前端按代码块渲染。
-        try:
-            from remote_bridge.message_parse import _tool_result_of
-            tr = _tool_result_of(m)
-        except Exception:
-            tr = None
-        if tr is not None:
-            import json as _json
-            body = "```json\n" + _json.dumps(tr, ensure_ascii=False, indent=2) + "\n```"
         # 语音：仅 AI 消息提取并合成
         voice = ""
         if kind == "ai":
             vtext = _voice_text_of(m)
             if vtext:
                 voice = _synthesize_voice(vtext)
+        # 图片块：消息里的 image 块（网页发图、AI 配图等）存到服务端，
+        # 收件箱记文件名，前端与抽屉镜像据此用同一地址取图。
+        images = _extract_images(m)
         # 角色映射：tool 归到工具类，user/ai 原样
         role = kind if kind in ("user", "ai") else "tool"
         items.append({
@@ -166,6 +207,7 @@ def mirror_report(messages):
             "role": role,
             "text": body,
             "voice": voice,
+            "image": (images if len(images) > 1 else (images[0] if images else "")),
             "kind": "",
         })
     if not items:

@@ -102,6 +102,22 @@ body {
   overflow: auto;
   -webkit-overflow-scrolling: touch;
 }
+/* 折叠代码块（思考内容 / 工具结果）：点击标题展开收起，与 QQ 端折叠行为一致 */
+.msg .code-fold { margin: 8px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.msg .code-fold > summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  background: #0b0d11;
+  color: var(--text-dim);
+  font-size: 12px;
+  user-select: none;
+  list-style: none;
+}
+.msg .code-fold > summary::-webkit-details-marker { display: none; }
+.msg .code-fold > summary::before { content: '▸ '; }
+.msg .code-fold[open] > summary::before { content: '▾ '; }
+/* 折叠体内的 pre 去掉自身外边距与圆角，避免与外框套两层 */
+.msg .code-fold pre { margin: 0; border: none; border-radius: 0; }
 .msg code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
 .msg :not(pre) > code { background: #0b0d11; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
 .msg table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 13px; }
@@ -199,6 +215,41 @@ body {
 .composer button.send { background: var(--accent); border-color: var(--accent); color: #fff; }
 .composer button:active { filter: brightness(0.85); }
 .composer button.rec { background: #b23b3b; border-color: #b23b3b; color: #fff; }
+/* ============ 指令展开面板 ============ */
+/* 平时收起（高度 0），点击指令按钮后向上展开，覆盖在消息列表上方 */
+.cmd-panel {
+  flex: 0 0 auto;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.18s ease;
+  background: var(--panel-2);
+  border-top: 1px solid var(--line);
+}
+.cmd-panel.on { max-height: 42vh; overflow-y: auto; }
+/* 网格：每行放四到五个快捷键，故用固定小列宽 + 自动填充 */
+.cmd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  padding: 8px 12px;
+}
+.cmd-grid .cmd-item {
+  text-align: center;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: #7fb2ff;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-grid .cmd-item:active { background: rgba(79,140,255,0.3); }
+
 /* 录音中的提示 */
 .rec-tip {
   position: fixed;

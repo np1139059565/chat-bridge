@@ -93,30 +93,37 @@
     if (convChanged) A.state.currentConvId = convId;
 
     const messages = A.extractBlocks(A.state.containerEl);
+    // 去重键先按「原始解析结果」算：命中即返回，避免滚动时反复做图片转换这类重活。
+    // blob 地址在同一页面会话内稳定，故用它做键是可靠的。
     const key = convId + '|' + JSON.stringify(messages);
     // 内容未变化且非强制推送时直接返回：滚动期间会反复触发，去重可省下大量解析与消息投递
     if (!force && !convChanged && key === A.state.lastPageKey) return;
     A.state.lastPageKey = key;
-    // 逐条算消息指纹并打印：与 dialog 侧的 msgId 同源，便于对齐两边日志、
-    // 区分「同一会话的多次推送」（仅凭消息条数无法分辨）。
-    const fpList = messages.map(function (m) {
-      return window.AIMirrorDomUtils.messageFingerprint(m);
-    });
-    // 视口是否停在最新处：仅滚动轮次的自动执行复检需要，其余来源仅作日志
-    const atBottom = A.isAtBottom();
-    A.log('sendPage: 推送结构化对话 force=' + !!force, '会话=' + convId,
-      '消息数=' + messages.length, 'ids=' + JSON.stringify(fpList),
-      'atBottom=' + atBottom);
-    A.post({
-      type: 'page_blocks',
-      messages: messages,
-      page_url: location.href,
-      siteKey: A.state.siteKey,                       // 按站点隔离数据与设置
-      profileId: A.state.profileId,
-      conversationId: convId,
-      conversationTitle: A.getConversationTitle(),
-      reason: reason || 'manual',  // 触发来源标签，供消费端分流
-      atBottom: atBottom           // 视口是否在底部（滚动轮次自动执行复检用）
+    // 图片归一化：把 blob: / http(s) 地址转成自包含的 dataURL，
+    // 使抽屉镜像、抽屉消息列表、服务端三处都能取到同一张图。
+    // 无图片时同步回调，行为与改造前一致。
+    A.normalizeImageBlocks(messages, function (msgs) {
+      // 逐条算消息指纹并打印：与 dialog 侧的 msgId 同源，便于对齐两边日志、
+      // 区分「同一会话的多次推送」（仅凭消息条数无法分辨）。
+      const fpList = msgs.map(function (m) {
+        return window.AIMirrorDomUtils.messageFingerprint(m);
+      });
+      // 视口是否停在最新处：仅滚动轮次的自动执行复检需要，其余来源仅作日志
+      const atBottom = A.isAtBottom();
+      A.log('sendPage: 推送结构化对话 force=' + !!force, '会话=' + convId,
+        '消息数=' + msgs.length, 'ids=' + JSON.stringify(fpList),
+        'atBottom=' + atBottom);
+      A.post({
+        type: 'page_blocks',
+        messages: msgs,
+        page_url: location.href,
+        siteKey: A.state.siteKey,                       // 按站点隔离数据与设置
+        profileId: A.state.profileId,
+        conversationId: convId,
+        conversationTitle: A.getConversationTitle(),
+        reason: reason || 'manual',  // 触发来源标签，供消费端分流
+        atBottom: atBottom           // 视口是否在底部（滚动轮次自动执行复检用）
+      });
     });
   };
 

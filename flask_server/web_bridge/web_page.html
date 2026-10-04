@@ -23,16 +23,18 @@
   <div class="preview-list" id="previewList"></div>
 </div>
 
-<!-- 输入区：文字、图片、录音、发送 -->
+<!-- 指令展开面板：点击指令按钮向上展开，点选指令填入输入框 -->
+<div class="cmd-panel" id="cmdPanel">
+  <div class="cmd-grid" id="cmdGrid"></div>
+</div>
+
+<!-- 输入区：文字、图片、指令、发送 -->
 <div class="composer">
   <button id="btnImg" title="发图片">🖼</button>
-  <button id="btnRec" title="按住录音">🎤</button>
+  <button id="btnCmd" title="展开指令">⌘</button>
   <textarea id="input" rows="1" placeholder="输入消息…"></textarea>
   <button id="btnSend" class="send" title="发送">➤</button>
 </div>
-
-<!-- 录音提示 -->
-<div class="rec-tip" id="recTip">● 正在录音…</div>
 <!-- 隐藏的图片选择：multiple 支持一次多选 -->
 <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
 

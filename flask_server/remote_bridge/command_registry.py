@@ -229,6 +229,21 @@ def help_text():
     return "\n".join(lines)
 
 
+def shortcut_list():
+    """返回内置指令的快捷键列表（只含快捷键，不含描述）。
+
+    供网页版「指令展开面板」使用：用户要的是一屏能放下多个的短按钮，
+    故只回快捷键本身，描述等长文本一律不带。
+    取每条指令的第一个别名作快捷键；没有别名的用完整命令名兜底。
+    @returns 快捷键字符串列表，顺序与内置指令表一致
+    """
+    out = []
+    for name, info in BUILTIN.items():
+        aliases = info.get("aliases") or []
+        out.append(aliases[0] if aliases else name)
+    return out
+
+
 def register_panel(qq_client):
     """把配置的指令注册到 QQ 指令面板 / 自定义菜单。
 

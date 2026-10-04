@@ -41,11 +41,16 @@
     el.className = 'msg ' + cls;
     el.setAttribute('data-seq', m.seq);
     var body = '';
-    // 带 image 字段：渲染真实图片（指令结果截图等），点击可看大图
-    if (m.image) {
-      body = '<a href="/api/web/image-file/' + encodeURIComponent(m.image) + '" target="_blank" rel="noopener">' +
-        '<img class="msg-img" src="/api/web/image-file/' + encodeURIComponent(m.image) + '" alt="图片"></a>';
-      if (m.text && m.text !== '[截图]') body += renderMarkdown(m.text);
+    // 带 image 字段：渲染真实图片（网页发图 / 指令结果截图等），点击可看大图。
+    // image 可能是单个文件名（字符串）或多张（数组），统一成数组处理。
+    if (m.image && (!Array.isArray(m.image) || m.image.length)) {
+      var imgs = Array.isArray(m.image) ? m.image : [m.image];
+      body = imgs.map(function (name) {
+        var u = '/api/web/image-file/' + encodeURIComponent(name);
+        return '<a href="' + u + '" target="_blank" rel="noopener">' +
+          '<img class="msg-img" src="' + u + '" alt="图片"></a>';
+      }).join('');
+      if (m.text && m.text !== '[截图]' && m.text !== '[图片]') body += renderMarkdown(m.text);
     } else if (m.kind === 'web-image' || m.text === '[图片]') {
       // 图文消息：图片标记 + 文字一并渲染，不能只画标记把文字吞掉。
       // 纯图片时 text 是「[图片]」，只显示标记；带文字时把文字正常渲染出来。
@@ -366,62 +371,45 @@
     renderPreview();
   }
 
-  // ---------- 录音（按住录音，松开发送） ----------
-  var mediaRec = null, chunks = [], recording = false;
-  var btnRec = document.getElementById('btnRec');
-  function startRec() {
-    if (recording) return;
-    // 安全上下文检查：浏览器只在 https 或 localhost 下允许麦克风。
-    // 局域网 http 访问时明确提示原因，避免用户以为功能坏了。
-    var secure = window.isSecureContext ||
-      location.protocol === 'https:' ||
-      location.hostname === 'localhost' ||
-      location.hostname === '127.0.0.1';
-    if (!secure) {
-      alert('当前用 http 访问，浏览器禁止使用麦克风。\n录音需要 https 或本机访问。\n文字、图片、语音播放不受影响。');
-      return;
-    }
-    if (!navigator.mediaDevices || !window.MediaRecorder) { alert('浏览器不支持录音'); return; }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
-      chunks = [];
-      mediaRec = new MediaRecorder(stream);
-      mediaRec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-      mediaRec.onstop = function () {
-        stream.getTracks().forEach(function (t) { t.stop(); });
-        var blob = new Blob(chunks, { type: 'audio/webm' });
-        uploadVoice(blob);
-      };
-      mediaRec.start();
-      recording = true;
-      btnRec.classList.add('rec');
-      document.getElementById('recTip').classList.add('on');
-    }).catch(function () { alert('无法访问麦克风'); });
-  }
-  function stopRec() {
-    if (!recording || !mediaRec) return;
-    recording = false;
-    btnRec.classList.remove('rec');
-    document.getElementById('recTip').classList.remove('on');
-    try { mediaRec.stop(); } catch (e) {}
-  }
-  btnRec.addEventListener('touchstart', function (e) { e.preventDefault(); startRec(); });
-  btnRec.addEventListener('touchend', function (e) { e.preventDefault(); stopRec(); });
-  btnRec.addEventListener('mousedown', function (e) { e.preventDefault(); startRec(); });
-  btnRec.addEventListener('mouseup', function (e) { e.preventDefault(); stopRec(); });
+  // ---------- 指令展开面板 ----------
+  // 点击指令按钮向上展开快捷键列表；点某条指令即填入输入框等待发送。
+  // 指令数据从后端 /api/web/commands 取，新增内置指令时面板自动出现。
+  var btnCmd = document.getElementById('btnCmd');
+  var cmdPanel = document.getElementById('cmdPanel');
+  var cmdGrid = document.getElementById('cmdGrid');
+  var cmdLoaded = false;
 
-  // 上传语音：转 base64 后交给后端（后端落盘并尝试识别）
-  function uploadVoice(blob) {
-    var reader = new FileReader();
-    reader.onload = function () {
-      var b64 = String(reader.result).split(',')[1] || '';
-      fetch('/api/web/voice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audio: b64, format: 'webm' })
-      }).then(function () { fetchMessages(false); });
-    };
-    reader.readAsDataURL(blob);
+  /** 拉取指令快捷键列表并渲染成网格按钮。 */
+  function loadCommands() {
+    fetch('/api/web/commands', { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.success) return;
+        var cmds = data.commands || [];
+        cmdGrid.innerHTML = '';
+        cmds.forEach(function (c) {
+          var d = document.createElement('div');
+          d.className = 'cmd-item';
+          d.textContent = c;
+          d.addEventListener('click', function () {
+            // 填入输入框并留一个尾随空格：需要参数的指令（如 /ss 1）便于直接补参数，
+            // 不需要参数的指令发送时会被 trim，无副作用。
+            inputEl.value = c + ' ';
+            inputEl.focus();
+            cmdPanel.classList.remove('on');
+          });
+          cmdGrid.appendChild(d);
+        });
+      })
+      .catch(function () { /* 取不到指令时面板为空，不阻断聊天 */ });
   }
+
+  // 展开 / 收起指令面板（首次展开时懒加载指令列表）
+  btnCmd.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (!cmdLoaded) { loadCommands(); cmdLoaded = true; }
+    cmdPanel.classList.toggle('on');
+  });
 
   // ---------- 输入框自适应高度 ----------
   function autoGrow() {

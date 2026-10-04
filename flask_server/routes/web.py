@@ -17,6 +17,7 @@ from flask import Blueprint, jsonify, request, Response, send_file
 
 import paths
 import web_bridge
+import screenshot_store
 from web_bridge import web_inbox
 
 bp = Blueprint("web", __name__)
@@ -131,6 +132,25 @@ def web_asset(name):
     return Response(content, mimetype=_WEB_MIME[ext])
 
 
+@bp.route("/api/web/commands", methods=["GET", "OPTIONS"])
+def web_commands():
+    """返回指令快捷键列表，供网页「指令展开面板」渲染。
+
+    只回快捷键本身（不含描述）：面板要一屏放下多个，长描述会挤占空间。
+    数据源是指令注册表，新增内置指令时面板自动出现，无需前端改代码。
+    @returns {success, commands: ["/xx", ...]}
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    try:
+        from remote_bridge import command_registry
+        cmds = command_registry.shortcut_list()
+    except Exception as e:
+        print("[web] 读取指令快捷键失败：", e)
+        cmds = []
+    return jsonify(success=True, commands=cmds)
+
+
 def _handle_command(text):
     """把一条以 / 开头的文本交给指令处理器执行。
 
@@ -190,12 +210,22 @@ def web_image():
     if not urls:
         return jsonify(success=False, error="empty_image")
     card_id = web_bridge.web.ingest_images(urls, text)
-    # 收件箱展示：有文字带文字，并标注图片张数
+    # 图片落盘：网页消息列表、抽屉镜像、抽屉消息列表三处都要能拿到这张图，
+    # 故服务端把 dataURL 存成本地文件，三处统一按文件名经 /api/web/image-file 取用。
+    names = []
+    for u in urls:
+        try:
+            saved = screenshot_store.save_web_image(u)
+            if saved and saved.get("name"):
+                names.append(saved["name"])
+        except Exception as e:
+            print("[web] 保存网页图片失败：", e)
+    # 收件箱展示：有文字带文字，并标注图片张数；图片字段带文件名供前端渲染真图
     label = text or "[图片]"
     if len(urls) > 1:
         label = (text + " " if text else "") + "[%d 张图片]" % len(urls)
-    web_inbox.append("user", label, kind="web-image")
-    return jsonify(success=True, cardId=card_id, count=len(urls))
+    web_inbox.append("user", label, kind="web-image", image=(names if len(names) > 1 else (names[0] if names else "")))
+    return jsonify(success=True, cardId=card_id, count=len(urls), images=names)
 
 
 @bp.route("/api/web/voice", methods=["POST", "OPTIONS"])
