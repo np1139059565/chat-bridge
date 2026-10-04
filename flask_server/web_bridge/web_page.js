@@ -192,6 +192,8 @@
   function bindAudio(au, allowAuto) {
     // 播放事件：区分「程序自动播」与「用户手动点击播」。
     au.addEventListener('play', function () {
+      // 开始播放即标记「已播放」：用户点一下就算听过，不必等播完。
+      markVoicePlayed(au.getAttribute('data-seq'));
       // 开始播放即自动定位：把正在播放的语音滚进可视区。
       // block:'nearest' 温和——已在可视区时不动，避免每次小幅跳动。
       try { au.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 老浏览器忽略 */ }
