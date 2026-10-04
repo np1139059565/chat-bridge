@@ -259,31 +259,37 @@
       return;
     }
     try {
-      // 把全部图片转成 File，一次性放进同一个 DataTransfer
-      const dt = new DataTransfer();
-      let added = 0;
-      list.forEach(function (u, i) {
-        const file = A._dataUrlToFile(u, i);
-        if (file) { dt.items.add(file); added++; }
-      });
-      if (!added) {
-        A.post({ type: 'auto_send_result', ok: false, msg: '图片解析失败' });
-        return;
-      }
+      // 逐张依次粘贴，而不是一次贴多张。
+      // 原因：部分站点（如 DeepSeek）的粘贴处理只取剪贴板里的第一个文件，
+      // 一次塞多张最终只会成一张。改成逐张单独派发 paste 事件、留出间隔，
+      // 让每张都各自被接收一次，从而累积成多张。
+      const GAP = 800;      // 每张贴图之间的间隔（毫秒）
+      const TAIL = 1500;    // 全部贴完后、写文字之前的等待（等预览/上传就绪）
       ta.focus();
-      // 一次 paste 事件带全部文件：站点按多图一并接收、一并预览
-      ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-      // 图文合一：贴图后不立即回车，先等图片上传 / 预览就绪（固定延时兜底），
-      // 再把文字一次性写入输入框（复制粘贴式，非逐字），最后只回车一次。
-      // 这样一条图文消息只发一次，AI 收到的是「一张图 + 一段文字」。
-      const delay = 1500;
-      setTimeout(function () {
-        if (text) A.writeInputValue(ta, text);
-        // 等发送按钮就绪再回车：图片上传后按钮需重新变为可用
-        A.waitSendReady(function () {
-          setTimeout(function () { A.pressEnter(ta); }, 300);
-        });
-      }, delay);
+      let idx = 0;
+      let added = 0;
+      const step = function () {
+        if (idx >= list.length) {
+          // 全部贴完：等预览就绪后写文字，再等发送按钮就绪、回车发送一次
+          setTimeout(function () {
+            if (text) A.writeInputValue(ta, text);
+            A.waitSendReady(function () {
+              setTimeout(function () { A.pressEnter(ta); }, 300);
+            });
+          }, TAIL);
+          return;
+        }
+        const file = A._dataUrlToFile(list[idx], idx);
+        idx++;
+        if (!file) { step(); return; }
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        ta.focus();
+        ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        added++;
+        setTimeout(step, GAP);
+      };
+      step();
       A.post({ type: 'auto_send_result', ok: true, msg: text ? '已尝试粘贴图文并发送' : '已尝试粘贴图片并发送' });
     } catch (e) {
       A.warn('pasteImageToWebpageAI 失败', e && e.message);

@@ -63,6 +63,8 @@ QQ_IMAGES_DIR = DATA_DIR / "qq_images"
 WEB_DIR = DATA_DIR / "web"
 WEB_INBOX_PATH = WEB_DIR / "inbox.json"
 WEB_AUDIO_DIR = WEB_DIR / "audio"
+# 网页图片目录：指令结果的截图等存这里，供网页经接口读取展示。
+WEB_IMAGES_DIR = WEB_DIR / "images"
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
 LOGS_DIR = DATA_DIR / "logs"

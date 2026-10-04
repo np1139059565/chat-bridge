@@ -40,17 +40,15 @@
   /**
    * 消费一张 QQ 图片卡片：把图片贴进网页 AI 输入框（截图逆向流程）。
    *
-   * 后端把 QQ 收到的图片转成 dataURL 放进卡片（type=qq-image）。
-   * 本函数取出 dataURL，交给内容脚本复用已有的 pasteImageToWebpageAI 贴图，
-   * 不下发网页 AI、不入 externalCards 列表。
+   * 后端把收到的图片转成 dataURL 放进卡片（type=qq-image）。
+   * 本函数把卡片转为「外部卡片」入列，与普通外部卡片一致：
+   * 受「自动」开关控制、可手动发送/跳过；发送时由 sendQqImageCard 贴图。
+   * 旧行为是入列前直接贴图（绕过了自动开关），已改为入列受控。
    * @param {Object} c 后端下发的卡片
    * @returns {boolean} 是否为图片卡片（是则调用方跳过后续处理）
    */
   M.consumeQqImage = function (c) {
     if (!c || c.type !== 'qq-image') return false;
-    // 外部用户消息到达：先中止当前进行中的工具卡片，避免其回传结果与
-    // 用户新消息交错（见 abortActiveCards）。
-    this.abortActiveCards('QQ 图片到达');
     // 多图：优先取数组 data_urls；兼容旧单张 data_url。
     let urls = (c.payload && c.payload.data_urls) || [];
     if (!Array.isArray(urls) || !urls.length) {
@@ -59,16 +57,77 @@
     }
     // 同消息文字（图文消息）；纯图片时后端已补「用户截图」。
     const text = (c.payload && c.payload.text) || '';
-    if (urls.length) {
-      // 交给内容脚本：先把全部图贴进输入框，再把文字写进同一输入框，最后只发一次。
-      // 经统一发送队列，避免与工具卡片结果、质量告警同时到达互相顶掉。
-      D.enqueueSend({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0], text: text });
-      this.toast(text ? '已把图片与文字贴入网页 AI 输入框' : '已把图片贴入网页 AI 输入框');
-    } else {
+    if (!urls.length) {
       this.toast('图片数据缺失，无法贴图');
+      this.confirmCardDelivered(c.id);
+      return true;
     }
-    // 回执后端：卡片已消费，不再重复投递
+    // 去重：后端确认前卡片可被反复取走，已在列表里的不再重复入列。
+    if ((this.externalCards || []).some((x) => x.id === c.id)) {
+      this.confirmCardDelivered(c.id);
+      return true;
+    }
+    // 关键：图片卡片不再无条件直接贴图，而是入外部卡片列表，
+    // 与普通外部卡片一致——受「自动」开关控制、可手动发送/跳过。
+    // 入列表前先确保会话对象存在（同 pollExternalCards 的说明）。
+    const conv = this.ensureConv(this.activeConv);
+    const bk = conv.branchKeys || [];
+    const anchorKey = bk.length ? bk[bk.length - 1] : '';
+    const card = {
+      id: c.id,
+      type: c.type || 'qq-image',
+      title: c.title || '图片',
+      content: text || '（图片）',
+      payload: c.payload || {},
+      source: c.source || 'external',
+      status: 'pending',
+      phase: '',
+      countdown: 0,
+      result: null,
+      error: null,
+      executed: false,
+      skipped: false,
+      // 图片卡片专属：贴图所需数据与分支标记
+      isQqImage: true,
+      dataUrls: urls,
+      imgText: text,
+      anchorKey: anchorKey,
+      key: (anchorKey ? anchorKey.slice(anchorKey.indexOf('-') + 1) : '0')
+        + '-' + ('x' + D.hashStr(c.id)),
+      nonce: ''
+    };
+    this.externalCards.push(card);
+    // 回执后端：卡片已入列，不再重复投递
     this.confirmCardDelivered(c.id);
+    D.log('图片卡片已入列', card.id, '张数=' + urls.length);
+    // 受「自动」开关控制：开则倒计时后自动贴图；关则停在列表等手动发送。
+    if (this.autoSendEnabled) this.scheduleExternalSend(card);
+    if (this._persist) this._persist();
+    return true;
+  };
+
+  /**
+   * 发送一张图片卡片：把图片（与文字）贴进网页 AI 输入框。
+   *
+   * 由 sendExternalCard 调用（图片卡片的「发送」语义是贴图，而非发信封）。
+   * 从 01_backend.js 抽出，避免该文件超行数上限。
+   * @param {Object} card 外部卡片对象（含 isQqImage 标记）
+   * @returns {boolean} 是否为本函数处理的图片卡片
+   */
+  M.sendQqImageCard = function (card) {
+    if (!card || !card.isQqImage) return false;
+    const urls = card.dataUrls || [];
+    D.enqueueSend({
+      type: 'auto_send_image',
+      dataUrls: urls,
+      dataUrl: urls[0] || '',
+      text: card.imgText || ''
+    });
+    card.status = 'done';
+    card.executed = true;
+    card.result = { delivered: true, note: '已把图片贴入网页 AI 输入框' };
+    this.toast(card.imgText ? '已把图片与文字贴入网页 AI 输入框' : '已把图片贴入网页 AI 输入框');
+    if (this._persist) this._persist();
     return true;
   };
 

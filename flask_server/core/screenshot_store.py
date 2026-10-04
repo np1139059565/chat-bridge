@@ -46,3 +46,30 @@ def save_data_url(data_url):
     except Exception as e:
         print("[screenshot] 保存失败：", e)
         return None
+
+
+def save_web_image(data_url):
+    """把指令结果的图片 dataURL 存到网页图片目录，返回 {name, path}；失败 None。
+
+    与 QQ 截图分开存放：网页版的结果图片由网页经 /api/web/image-file/<name>
+    直接读取展示，不与截图目录混在一起。
+    @param data_url 图片 dataURL
+    @returns {name, path} 或 None
+    """
+    try:
+        if not data_url or "," not in data_url:
+            return None
+        head, b64 = data_url.split(",", 1)
+        ext = ".jpg" if "image/jpeg" in head else ".png"
+        raw = base64.b64decode(b64)
+        out_dir = str(paths.WEB_IMAGES_DIR)
+        if not os.path.isdir(out_dir):
+            os.makedirs(out_dir)
+        name = "web_" + time.strftime("%Y%m%d_%H%M%S") + "_" + str(int(time.time() * 1000) % 1000) + ext
+        path = os.path.join(out_dir, name)
+        with open(path, "wb") as f:
+            f.write(raw)
+        return {"name": name, "path": path}
+    except Exception as e:
+        print("[screenshot] 网页图片保存失败：", e)
+        return None

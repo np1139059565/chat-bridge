@@ -195,6 +195,9 @@
     // 外部用户消息到达（QQ 文本卡 / 指令卡等）：先中止当前进行中的工具卡片，
     // 避免其回传结果与这条用户新消息交错，导致「结果与问题对不上」。
     this.abortActiveCards('外部卡片到达');
+    // 图片卡片：发送动作 = 贴图而非发信封；具体实现在 01e_bridge_actions.js。
+    // 返回 true 表示已处理，需提前结束本函数，不再走下面的信封路径。
+    if (this.sendQqImageCard(card)) return;
     // 输入信封：{ type, request, page_url }，不携带 id。
     // page_url 为卡片发起方所在页面的地址（由调试扩展随卡片一并传来），
     // 让网页 AI 知道这条外部卡片来自哪个页面。

@@ -41,8 +41,16 @@
     el.className = 'msg ' + cls;
     el.setAttribute('data-seq', m.seq);
     var body = '';
-    if (m.kind === 'web-image' || m.text === '[图片]') {
-      body = '<span class="img-badge">🖼 图片</span>';
+    // 带 image 字段：渲染真实图片（指令结果截图等），点击可看大图
+    if (m.image) {
+      body = '<a href="/api/web/image-file/' + encodeURIComponent(m.image) + '" target="_blank" rel="noopener">' +
+        '<img class="msg-img" src="/api/web/image-file/' + encodeURIComponent(m.image) + '" alt="图片"></a>';
+      if (m.text && m.text !== '[截图]') body += renderMarkdown(m.text);
+    } else if (m.kind === 'web-image' || m.text === '[图片]') {
+      // 图文消息：图片标记 + 文字一并渲染，不能只画标记把文字吞掉。
+      // 纯图片时 text 是「[图片]」，只显示标记；带文字时把文字正常渲染出来。
+      var label = (m.text && m.text !== '[图片]') ? renderMarkdown(m.text) : '';
+      body = '<span class="img-badge">🖼 图片</span>' + label;
     } else {
       body = renderMarkdown(m.text || '');
     }

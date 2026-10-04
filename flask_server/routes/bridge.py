@@ -95,31 +95,68 @@ def _send_text(client, openid, text):
         client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq)
 
 
-def _take_result_context(data):
-    """取出待回传请求并确认桥接在线。
+# 网页版在指令体系里的固定标识（与 command_dispatch.WEB_OPENID 保持一致）
+_WEB_OPENID = "web-user"
 
-    返回 (client, openid, err_resp)：出错时 client 为 None、err_resp 为响应；
-    成功时 err_resp 为 None。请求不存在或已过期属正常情况，返回提示而非报错
-    （可能用户已离开或重复回传）。
+
+def _take_result_context(data):
+    """取出待回传请求，并确定回传去向。
+
+    返回 (client, openid, err_resp)：出错时 err_resp 为响应，成功时为 None。
+    - 网页版（openid == web-user）：不依赖 QQ 连接，client 返回 None，走收件箱；
+    - QQ 版：client 为 bridge.client，必须在线，否则报 bridge_offline。
+    请求不存在或已过期属正常情况，返回提示而非报错（可能用户已离开或重复回传）。
     """
     rid = data.get("request_id") or ""
     item = command_panel.take_pending(rid) if rid else None
     if not item:
         return None, "", jsonify(success=False, error="pending_not_found")
+    openid = item.get("openid") or ""
+    # 网页版：没有 QQ 客户端，也不该要求它在线，直接放行
+    if openid == _WEB_OPENID:
+        return None, openid, None
     client = bridge.client
     if not client:
         return None, "", jsonify(success=False, error="bridge_offline")
-    return client, item.get("openid") or "", None
+    return client, openid, None
+
+
+def _deliver_result_web(text, image):
+    """把网页版指令的执行结果落进网页收件箱。
+
+    与 QQ 版同一份结果，去向不同：这里不进 QQ，而是存进收件箱，
+    由网页按游标拉取后展示。图片存进网页图片目录并带 image 字段。
+    @param text  结果文本（可为空）
+    @param image 结果图片的 dataURL（可为空）
+    @returns Flask 响应
+    """
+    from web_bridge import web_inbox
+    if image:
+        saved = screenshot_store.save_web_image(image)
+        if saved:
+            # 图片消息：带 image 字段，前端据此渲染 <img>
+            web_inbox.append("system", text or "[截图]", kind="command-image", image=saved["name"])
+            return jsonify(success=True, sent="image")
+        # 存盘失败：把错误信息转为文本回退，至少让用户知道结果没丢
+        text = (text + "\n" if text else "") + "截图保存失败"
+    if text:
+        web_inbox.append("system", text, kind="command-reply")
+    return jsonify(success=True)
 
 
 def _deliver_result(client, openid, data):
-    """把回传结果送达 QQ：优先按图片发送，失败则转为文本回退。
+    """把回传结果送达对应去向。
 
+    - 网页版：落进网页收件箱（不进 QQ）；
+    - QQ 版：优先按图片发送，失败则转为文本回退。
     返回成功响应；无内容可发时也返回成功（回传本身已确认接收）。
     """
     text = data.get("text") or ""
     image = data.get("image") or ""
-    # 截屏且无文本：优先按图片发送；失败则把错误信息转为文本回退发送
+    # 网页版：结果落收件箱，不碰 QQ
+    if openid == _WEB_OPENID:
+        return _deliver_result_web(text, image)
+    # QQ 版：截屏且无文本时优先按图片发送；失败则把错误信息转为文本回退
     if image and not text:
         fallback = _try_send_image(client, openid, image)
         if fallback is None:

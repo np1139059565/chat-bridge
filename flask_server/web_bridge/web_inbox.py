@@ -77,13 +77,14 @@ def _write_state(state):
         print("[web] 写回收件箱失败：", e)
 
 
-def append(role, text, voice="", kind=""):
+def append(role, text, voice="", kind="", image=""):
     """向收件箱追加一条消息，返回该消息对象。
 
-    @param role  角色：user（网页/QQ 用户）/ ai（AI 回复）/ tool（工具消息）
+    @param role  角色：user（网页/QQ 用户）/ ai（AI 回复）/ tool / system
     @param text  正文（网页端直接展示的文本，AI 消息为 Markdown 原文）
     @param voice 可选，语音文件名（相对音频目录），网页据此自动播放
-    @param kind  可选，附加类型标记（如 external-call），供前端区分展示
+    @param kind  可选，附加类型标记（如 command-image），供前端区分展示
+    @param image 可选，图片文件名（相对网页图片目录），前端据此渲染 <img>
     @returns 追加后的消息对象（含分配好的 seq 与 id）
     """
     with _lock:
@@ -97,6 +98,7 @@ def append(role, text, voice="", kind=""):
             "role": role or "user",
             "text": str(text or ""),
             "voice": str(voice or ""),
+            "image": str(image or ""),
             "kind": str(kind or ""),
             "ts": int(time.time() * 1000),
         }
@@ -126,10 +128,26 @@ def append_many(items):
         messages = state.get("messages") or []
         seq = int(state.get("seq") or 0)
         changed = False
+        # 内容级判重集合：仅对 ai / tool / system 三类生效。
+        # 原因：抽屉按「基于 blocks 的指纹」去重，而镜像正文优先用 md；
+        # AI 流式生成时 blocks 会增长、指纹随之变化，但 md 最终稳定，
+        # 导致同一条消息因指纹漂移被当成新消息、重复入库。
+        # user 消息不纳入：用户可能连发两条相同的话，需保留。
+        content_seen = set()
+        for m in messages:
+            r = m.get("role")
+            if r in ("ai", "tool", "system"):
+                content_seen.add((r, m.get("text") or ""))
         for it in (items or []):
             sid = str(it.get("source_id") or "")
             # 无源 id 的条目（如网页自己发的）允许直接入库，不去重
             if sid and sid in seen:
+                continue
+            # 内容级判重：同类消息正文完全相同时跳过，兜住指纹漂移导致的重复。
+            # 注意 content_seen 必须随新增同步累加，否则同一批内的重复条目会漏判。
+            _role = it.get("role") or "user"
+            _text = str(it.get("text") or "")
+            if _role in ("ai", "tool", "system") and (_role, _text) in content_seen:
                 continue
             seq += 1
             msg = {
@@ -138,6 +156,7 @@ def append_many(items):
                 "role": it.get("role") or "user",
                 "text": str(it.get("text") or ""),
                 "voice": str(it.get("voice") or ""),
+                "image": str(it.get("image") or ""),
                 "kind": str(it.get("kind") or ""),
                 "ts": int(it.get("ts") or (time.time() * 1000)),
             }
@@ -145,6 +164,9 @@ def append_many(items):
             added.append(msg)
             if sid:
                 seen.add(sid)
+            # 同步累加内容级判重集合：同一批内后续的重复条目据此跳过
+            if _role in ("ai", "tool", "system"):
+                content_seen.add((_role, _text))
             changed = True
         if not changed:
             return []

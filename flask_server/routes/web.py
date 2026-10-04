@@ -51,27 +51,33 @@ def _ensure_web_reply_sink():
 _ensure_web_reply_sink()
 
 
-def _safe_audio_path(name):
-    """把音频文件名解析为绝对路径，并拦截目录穿越。
+def _safe_under(name, base_dir):
+    """把文件名解析为 base_dir 下的绝对路径，并拦截目录穿越。
 
-    只允许纯文件名（不含路径分隔符与上跳），解析后还必须落在音频目录内，
+    只允许纯文件名（不含路径分隔符与上跳），解析后还必须落在 base_dir 内，
     否则返回 None。这样即使有人构造 ../../ 也拿不到目录外的文件。
-    @param name 请求里的文件名
+    @param name     请求里的文件名
+    @param base_dir 允许的基准目录（Path）
     @returns 合法文件路径字符串；非法返回 None
     """
     import os
     if not name or "/" in name or "\\" in name or ".." in name:
         return None
-    base = paths.WEB_AUDIO_DIR.resolve()
-    target = (paths.WEB_AUDIO_DIR / name).resolve()
+    base = base_dir.resolve()
+    target = (base_dir / name).resolve()
     try:
-        # 必须确实位于音频目录之下
+        # 必须确实位于 base_dir 之下
         if os.path.commonpath([str(base), str(target)]) != str(base):
             return None
     except ValueError:
         # 跨盘符等情况 commonpath 会抛错，一律视为非法
         return None
     return str(target) if target.is_file() else None
+
+
+def _safe_audio_path(name):
+    """把音频文件名解析为绝对路径（走通用防护）。"""
+    return _safe_under(name, paths.WEB_AUDIO_DIR)
 
 
 @bp.route("/web-bot", methods=["GET"])
@@ -246,6 +252,22 @@ def web_messages():
     else:
         data = web_inbox.list_since(cursor, limit)
     return jsonify(success=True, **data)
+
+
+@bp.route("/api/web/image-file/<name>", methods=["GET", "OPTIONS"])
+def web_image_file(name):
+    """取网页图片文件（指令结果截图等），供前端渲染 <img>。
+
+    与音频接口同一套目录穿越防护：只允许纯文件名，且必须落在网页图片目录内。
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    path = _safe_under(name, paths.WEB_IMAGES_DIR)
+    if not path:
+        return jsonify(success=False, error="not_found"), 404
+    ext = path.rsplit(".", 1)[-1].lower()
+    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+    return send_file(path, mimetype=mime, conditional=True)
 
 
 @bp.route("/api/web/audio/<name>", methods=["GET", "OPTIONS"])
