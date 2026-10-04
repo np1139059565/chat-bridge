@@ -38,9 +38,12 @@ def _save(path, data):
     """写回一个分区配置文件；成功返回 True。"""
     try:
         import yaml
+        # newline="\n"：禁用 Python 的换行翻译。Windows 上 write_text 默认
+        # newline=None，会把 \n 翻成 \r\n，写出的配置即 CRLF，与仓库/工作区
+        # 要求的 LF 冲突，导致 git 反复把该文件标成 modified（假改动）。
         path.write_text(
             yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
-            encoding="utf-8")
+            encoding="utf-8", newline="\n")
         return True
     except Exception as e:
         print("[config_file] 写入 %s 失败：%s" % (path.name, e))
