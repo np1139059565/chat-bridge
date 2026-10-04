@@ -213,7 +213,7 @@ def _should_push(m, push):
     return not _has_qq_source(m)
 
 
-def _push_one(qq_client, openid, m, push):
+def _push_one(qq_client, openid, m, push, voice_tasks=None):
     """尝试推送一条消息到 QQ，返回状态字符串。
 
     三种结果，供调用方决定是否记账：
@@ -222,6 +222,11 @@ def _push_one(qq_client, openid, m, push):
       'sent' —— 推送成功：记入已推集合。
       'fail' —— 尝试推送但失败（窗口关闭 / 网络错误）：**不记账**，
                 留待下轮上报重试，避免消息被永久漏掉。
+
+    @param voice_tasks 语音合成任务收集器（列表）。传入时，本函数只把
+        需合成语音的 AI 消息登记进去，不在此合成——合成是网络调用，
+        绝不能在 _push_lock 内执行（否则在线服务一卡，锁被占死、
+        线程堆满、服务器拒绝新连接，必须重启才能恢复）。
     """
     if not _should_push(m, push):
         return 'skip'
@@ -233,10 +238,13 @@ def _push_one(qq_client, openid, m, push):
         return 'skip'
     kind = built.get("kind") or _classify(m)
     text = built.get("text") or ""
-    # AI 消息：文本之外若含语音块且开关开，另合成并推一条语音。
-    # 语音是附加能力，不应因语音失败影响文本。
+    # AI 消息：文本之外若含语音块且开关开，登记待合成（真正的合成在锁外执行）
     if kind == "ai" and not built.get("is_tool_result"):
-        _maybe_push_voice(qq_client, openid, m, text, push)
+        if voice_tasks is not None:
+            voice_tasks.append((qq_client, openid, m, text, push))
+        else:
+            # 未传收集器（旧调用方）：保持原行为，直接合成
+            _maybe_push_voice(qq_client, openid, m, text, push)
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
@@ -316,6 +324,10 @@ def handle_report(qq_client, payload):
         seen_keys = []
         # 本轮推送失败的消息：结束后写入待推缓存，供下次上报优先重试。
         failed = []
+        # 语音合成任务清单：锁内只登记、不合成。合成是网络调用，
+        # 绝不能在此锁内执行——否则在线服务卡住会永久占用 _push_lock，
+        # 导致上报线程堆满、服务器拒绝连接（必须重启才恢复）。
+        voice_tasks = []
 
         for m in messages:
             mid = m.get("id") or ""
@@ -323,7 +335,7 @@ def handle_report(qq_client, payload):
             #    工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
             #    否则「消息已推过」会把后来的结果一并挡掉。
             if mid and mid not in pushed:
-                status = _push_one(qq_client, openid, m, push)
+                status = _push_one(qq_client, openid, m, push, voice_tasks)
                 if status == 'sent':
                     sent += 1
                 # 失败不记账：留待下轮重试，避免消息被永久漏掉
@@ -352,4 +364,11 @@ def handle_report(qq_client, payload):
         # 回写待推缓存：本轮失败的消息挂起，下次上报优先重试；
         # 成功 / 跳过的消息不在其中，故会自动移出缓存。
         bridge_store.set_pending(conv_id, failed)
-        return sent
+    # 锁外执行语音合成与推送：网络调用放在 _push_lock 之外，
+    # 在线服务再慢/再卡也不会占住锁、拖垮整台服务。
+    for task in voice_tasks:
+        try:
+            _maybe_push_voice(*task)
+        except Exception as e:
+            log("语音推送失败（不影响主流程）：", e)
+    return sent
