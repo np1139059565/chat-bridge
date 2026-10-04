@@ -158,13 +158,23 @@
         // 按文字包含匹配：网页回显的文字与卡片文字一致即可命中
         if (p.text && text.indexOf(p.text) >= 0) {
           used.push(i);
-          (p.names || []).slice().reverse().forEach(function (n) {
-            m.blocks.unshift({
-              type: 'image',
-              src: base + '/api/web/image-file/' + encodeURIComponent(n),
-              alt: '图片'
-            });
+          const imgBlocks = (p.names || []).slice().reverse().map(function (n) {
+            return { type: 'image', src: base + '/api/web/image-file/' + encodeURIComponent(n), alt: '图片' };
           });
+          // 双写之一：改本轮 incoming 的消息对象
+          imgBlocks.slice().reverse().forEach(function (b) { m.blocks.unshift(b); });
+          // 双写之二：同步到「已在树中」的同一条消息节点。
+          // 必要性：消息可能先于图片卡片入树，而 upsertTree 对「整片已存在」
+          // 的分支直接返回、不更新节点 blocks，只改 incoming 不会反映到镜像区。
+          try {
+            const tk = this.keyOfId(conv.msgTree, this.msgId(m));
+            const tn = tk && conv.msgTree[tk];
+            if (tn && tn !== m && Array.isArray(tn.blocks)) {
+              imgBlocks.slice().reverse().forEach(function (b) {
+                tn.blocks.unshift({ type: b.type, src: b.src, alt: b.alt });
+              });
+            }
+          } catch (e) { log('图片同步到树失败：' + e); }
           break;
         }
       }

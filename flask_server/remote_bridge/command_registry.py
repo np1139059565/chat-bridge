@@ -230,18 +230,42 @@ def help_text():
 
 
 def shortcut_list():
-    """返回内置指令的快捷键列表（只含快捷键，不含描述）。
+    """返回全部指令的快捷键列表（内置 + 外部 + 自定义，只含快捷键）。
 
     供网页版「指令展开面板」使用：用户要的是一屏能放下多个的短按钮，
     故只回快捷键本身，描述等长文本一律不带。
-    取每条指令的第一个别名作快捷键；没有别名的用完整命令名兜底。
-    @returns 快捷键字符串列表，顺序与内置指令表一致
+    顺序与 /help 一致：内置 → 外部（skill 声明）→ 自定义。
+    每条取第一个别名作快捷键；没有别名的用完整命令名兜底。同名去重。
+    @returns 快捷键字符串列表
     """
     out = []
+    # 1) 内置指令
     for name, info in BUILTIN.items():
         aliases = info.get("aliases") or []
         out.append(aliases[0] if aliases else name)
-    return out
+    # 2) 外部指令（来自各 skill 的声明，与 /help 同源）
+    try:
+        import custom_tools.commands as ext_cmds
+        for c in (ext_cmds.list_external_commands() or []):
+            pick = c.get("alias") or c.get("name") or ""
+            if pick:
+                out.append(pick)
+    except Exception as e:
+        log("读取外部指令失败：", e)
+    # 3) 自定义指令（用户在前端配置的，含别名）
+    for c in (bridge_store.get_config().get("commands") or []):
+        aliases = c.get("aliases") or []
+        pick = aliases[0] if aliases else (c.get("name") or "")
+        if pick:
+            out.append(pick)
+    # 去重并保持先后顺序
+    seen = set()
+    uniq = []
+    for s in out:
+        if s and s not in seen:
+            seen.add(s)
+            uniq.append(s)
+    return uniq
 
 
 def register_panel(qq_client):

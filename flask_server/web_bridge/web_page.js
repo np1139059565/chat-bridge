@@ -257,12 +257,23 @@
   });
 
   // ---------- 拉取消息 ----------
+  // 轮询健壮性：pollBusy 防重入（上轮未回不发新请求）；failCount 连续失败计数，
+  // 偶发一次失败不翻脸，连续多次才显示「连接断开」。
+  var pollBusy = false, failCount = 0;
+  var FAIL_TOLERANCE = 2;
+
   function fetchMessages(history) {
+    if (pollBusy) return;   // 上一轮未完成：跳过本轮，避免并发堆积
+    pollBusy = true;
     var url = '/api/web/messages?cursor=' + cursor + '&limit=200';
     if (history) url += '&history=1';
-    fetch(url, { headers: { 'Accept': 'application/json' } })
+    // 加超时：卡住的请求主动中断，否则 pollBusy 会永久为真、轮询停摆。
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 10000);
+    fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        failCount = 0;
         setStatus(true);
         if (!data || !data.success) return;
         cursor = data.seq || cursor;
@@ -274,7 +285,11 @@
         // 保持可见区域是最新消息（列表倒序，最新在顶部）
         if (listEl.scrollTop < 40) listEl.scrollTop = 0;
       })
-      .catch(function () { setStatus(false); });
+      .catch(function () {
+        failCount += 1;   // 连续失败超容差才显示断开，避免抖动就闪断
+        if (failCount >= FAIL_TOLERANCE) setStatus(false);
+      })
+      .then(function () { clearTimeout(timer); pollBusy = false; });
   }
 
   function setStatus(ok) {
@@ -426,5 +441,10 @@
   // ---------- 首次加载：铺历史 + 启动轮询 ----------
   fetchMessages(true);
   setInterval(function () { fetchMessages(false); }, 2500);
+  // 页面重新可见时立即补拉一次：手机切后台会暂停定时器，
+  // 回到前台若不主动拉，会等到下一个周期甚至更久才看到新消息。
+  document.addEventListener('visibilitychange', function () {
+    if (!document.hidden) fetchMessages(false);
+  });
 })();
 
