@@ -97,7 +97,10 @@ def mirror_report(messages):
         return 0
     # 延迟导入解析器：避免模块导入期就拉起 remote_bridge 整包
     try:
-        from remote_bridge.message_parse import _classify, _blocks_to_text, _thinking_text_of
+        from remote_bridge.message_parse import (
+            _classify, _blocks_to_text, _thinking_text_of, _parse_envelope,
+        )
+        from remote_bridge.message_voice import strip_voice_blocks
     except Exception as e:
         log("解析模块不可用，跳过镜像：", e)
         return 0
@@ -109,6 +112,15 @@ def mirror_report(messages):
         # 已入库的不再重复处理（含语音合成这种重活）
         if web_inbox.is_seen(mid):
             continue
+        # 网页自发消息：网页发消息时已按纯文本记过一次（见 routes/web.py），
+        # 抽屉上报回来的却是 external-call 信封原文（source=web）。若在此再镜像，
+        # 就会同一句话记两条、且第二条显示为整段 JSON。故跳过网页自发的信封。
+        try:
+            env = _parse_envelope(m)
+        except Exception:
+            env = None
+        if env and env.get("source") == "web":
+            continue
         try:
             kind = _classify(m)          # user / tool / ai
         except Exception:
@@ -119,6 +131,18 @@ def mirror_report(messages):
             body = raw_md or _blocks_to_text(m, False)
         except Exception:
             body = raw_md
+        # 外部卡片（external-call 信封）：正文应是信封里 request 承载的「真实发言」，
+        # 而非整段 JSON。QQ 用户发来的消息即以信封形态上报，不取 request 会把
+        # 用户的普通一句话显示成一段 JSON（截图里正是此现象）。
+        if env:
+            req = env.get("request")
+            if isinstance(req, str) and req.strip():
+                body = req.strip()
+        # 剔除语音块：语音已由 voice 字段单独承载，正文不该再残留其 JSON 文本
+        try:
+            body = strip_voice_blocks(body)
+        except Exception:
+            pass
         # 工具结果（bridge-chat-res）：本体是一段 JSON，裸文本既不渲染为代码块、
         # 又会因无空格断行而撑破气泡。此处包上 json 围栏，交前端按代码块渲染。
         try:

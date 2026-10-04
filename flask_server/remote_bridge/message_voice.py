@@ -21,15 +21,69 @@ def log(*args):
     bridge_log.write("[bridge][voice]", *args)
 
 
-def extract_voice_from_blocks(m):
-    """从消息的 blocks 里取语音朗读文本。
+def _find_voice_json_in_text(text):
+    """在纯文本里查找「裸 JSON」形态的语音块，返回朗读文本；无则空串。
 
-    与工具调用块同一机制——认代码块内容里的 JSON type 字段，不看语言名：
-    找内容为 {"type":"bridge-voice","text":"..."} 的块，取其 text。
+    容错背景：语音块本应是带围栏的代码块，但生成侧可能漂移成裸 JSON，
+    此时它不落在 blocks 的 code 块里，只存在于正文文本，需在此兜底捞取。
+    为避免误判（正文恰好讨论该标记），要求 JSON 对象以 {"type":"bridge-voice"
+    起头、大括号配平，且解析出的 type 必须确为 bridge-voice。
+    @param text 待扫描文本
+    @returns 语音文本；无则空串
+    """
+    import json
+    if not text:
+        return ""
+    marker = '{"type":"bridge-voice"'
+    start = text.find(marker)
+    while start >= 0:
+        # 从起头处做大括号配平扫描，切出完整 JSON 对象（尊重字符串与转义）
+        depth = 0
+        in_str = False
+        esc = False
+        end = -1
+        for i in range(start, len(text)):
+            ch = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end > 0:
+            try:
+                obj = json.loads(text[start:end])
+            except Exception:
+                obj = None
+            if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
+                return str(obj.get("text") or "").strip()
+        # 未命中则继续找下一个可能位置
+        start = text.find(marker, start + 1)
+    return ""
+
+
+def extract_voice_from_blocks(m):
+    """从消息里取语音朗读文本（兼容两种形态）。
+
+    与工具调用块同一机制——认 JSON 的 type 字段，不看代码块语言名：
+    1) 标准形态：带围栏的代码块，内容为 {"type":"bridge-voice","text":...}；
+    2) 兜底形态：语音块漂移成裸 JSON，此时从正文文本里捞取。
     @param m 消息对象
     @returns 语音文本；无则空串
     """
     import json
+    # 1) 优先按「代码块」取：这是标准形态
     for b in (m.get("blocks") or []):
         if not b or b.get("type") != "code":
             continue
@@ -42,7 +96,74 @@ def extract_voice_from_blocks(m):
             continue
         if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
             return str(obj.get("text") or "").strip()
+    # 2) 兜底：语音块漂移成「裸 JSON」时，从正文文本里捞（md 优先，其次各文本块）
+    texts = [str(m.get("md") or "")]
+    for b in (m.get("blocks") or []):
+        if not b:
+            continue
+        t = b.get("text") or b.get("content")
+        if t:
+            texts.append(str(t))
+    for t in texts:
+        got = _find_voice_json_in_text(t)
+        if got:
+            return got
     return ""
+
+
+def strip_voice_blocks(text):
+    """从正文文本里删除语音块，返回净化后的文本。
+
+    语音块已由 voice 字段单独承载（网页播放器 / QQ 语音条），
+    正文里不应再残留它的 JSON 文本（含围栏与裸两种形态），
+    否则用户会在消息正文里看到一段无意义的 JSON。
+    @param text 原始正文（Markdown 原文或块拼文本）
+    @returns 删除语音块后的正文
+    """
+    if not text:
+        return ""
+    import re
+    out = str(text)
+    # 1) 带围栏的代码块：块内容含 bridge-voice 类型的 JSON 则整块删除
+    def _drop_fenced(mo):
+        inner = mo.group(1) or ""
+        if re.search(r'"type"\s*:\s*"bridge-voice"', inner):
+            return ""
+        return mo.group(0)
+    out = re.sub(r"```[^\n]*\n([\s\S]*?)```", _drop_fenced, out)
+    # 2) 裸 JSON：以 {"type":"bridge-voice" 起头、大括号配平，整段删除
+    marker = '{"type":"bridge-voice"'
+    i = out.find(marker)
+    while i >= 0:
+        depth = 0
+        in_str = False
+        esc = False
+        end = -1
+        for j in range(i, len(out)):
+            ch = out[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = j + 1
+                    break
+        if end > 0:
+            out = out[:i] + out[end:]
+        else:
+            break
+        i = out.find(marker)
+    return out.strip()
 
 
 def push_voice(qq_client, openid, path):

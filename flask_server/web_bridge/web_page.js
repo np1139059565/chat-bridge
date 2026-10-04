@@ -282,23 +282,33 @@
     var text = inputEl.value.trim();
     // 无文字也无图片：不发送
     if (!text && pendingImages.length === 0) return;
+    // 快照本次待发内容：失败时可原样恢复，避免消息静默丢失。
+    var snapshotText = text;
+    var snapshotImgs = pendingImages.slice();
+    // 只有发送成功才清空输入与图片；失败则恢复现场并提示。
+    var finish = function (res) {
+      if (res && res.ok) { clearImages(); fetchMessages(false); return; }
+      inputEl.value = snapshotText;
+      pendingImages = snapshotImgs;
+      renderPreview();
+      setStatus(false);
+      alert('发送失败，内容已保留在输入框，请检查网络后重试');
+    };
     inputEl.value = '';
     autoGrow();
-    // 发送完成后的收尾：清空已选图片并立即拉取
-    var finish = function () { clearImages(); fetchMessages(false); };
     if (pendingImages.length > 0) {
       // 有图片：图文一次性提交（多张一并），避免图片被丢弃
       fetch('/api/web/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dataUrls: pendingImages.slice(), text: text })
-      }).then(finish);
+      }).then(finish).catch(function () { finish(null); });
     } else {
       fetch('/api/web/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text })
-      }).then(finish);
+      }).then(finish).catch(function () { finish(null); });
     }
   }
 

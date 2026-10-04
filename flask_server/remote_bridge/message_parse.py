@@ -65,6 +65,87 @@ def _parse_block_envelope(b):
     return _merge_nested_envelope(obj)
 
 
+def _scan_json_by_type(text, want_type):
+    """在纯文本里扫描第一个 type 等于 want_type 的 JSON 对象。
+
+    容错背景（与语音提取同一根因）：带 type 的 JSON 载荷（工具调用、工具结果、
+    外部信封、语音）标准形态是带围栏的代码块，但生成侧可能漂移成「裸 JSON」
+    （无围栏）。裸 JSON 不落在 blocks 的 code 块里，只存在于正文文本，
+    只看块字段会漏判。此函数专门兜住这种漂移。
+    为避免误判（正文恰好讨论该标记），要求 JSON 以 { 起头、大括号配平，
+    且解析出的 type 必须确为 want_type。
+    @param text      待扫描文本
+    @param want_type 目标 type 值
+    @returns 匹配的 dict；无则 None
+    """
+    import json
+    if not text:
+        return None
+    i = text.find("{")
+    while i >= 0:
+        # 从该 { 起做大括号配平扫描，切出完整 JSON 对象（尊重字符串与转义）
+        depth = 0
+        in_str = False
+        esc = False
+        end = -1
+        for j in range(i, len(text)):
+            ch = text[j]
+            if in_str:
+                if esc:
+                    esc = False
+                elif ch == "\\":
+                    esc = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = j + 1
+                    break
+        if end > 0:
+            try:
+                obj = json.loads(text[i:end])
+            except Exception:
+                obj = None
+            if isinstance(obj, dict) and obj.get("type") == want_type:
+                return obj
+        # 未命中则从下一个 { 继续尝试
+        i = text.find("{", i + 1)
+    return None
+
+
+def _json_payload_of(m, want_type):
+    """从一条消息里找 type 等于 want_type 的 JSON 载荷（兼容代码块与裸 JSON）。
+
+    统一入口：工具结果、外部信封等所有「带 type 的 JSON 载荷」共用，
+    避免各自只认代码块、漂移即失效。
+    查找来源与优先级：
+    1) blocks 各块的 code / text 字段（标准：带围栏代码块落在此处，整块即该 JSON）；
+    2) blocks 各块文本里「嵌在更大文本中」的裸 JSON；
+    3) md 字段（复制采集的 Markdown 原文，裸 JSON 常只在此处）。
+    @param m         消息对象
+    @param want_type 目标 type
+    @returns 匹配的 dict；无则 None
+    """
+    # 1) 块字段精确解析：块整体就是该 JSON
+    for b in (m.get("blocks") or []):
+        obj = _load_json_block(b)
+        if obj is not None and obj.get("type") == want_type:
+            return obj
+    # 2) 块文本里嵌着的裸 JSON
+    for b in (m.get("blocks") or []):
+        obj = _scan_json_by_type(_block_text_of(b), want_type)
+        if obj is not None:
+            return obj
+    # 3) md 原文兜底：裸 JSON 往往只存在于 md
+    return _scan_json_by_type(str(m.get("md") or ""), want_type)
+
+
 def _parse_envelope(m):
     """解析一条消息里的外部调用信封，穿透嵌套。
 
@@ -73,14 +154,16 @@ def _parse_envelope(m):
     顶层 {type, nonce, request, page_url}，而我们的来源标记藏在 request
     这个字符串里。只看顶层会漏判。
 
+    兼容形态：信封可能是带围栏的代码块，也可能是漂移后的裸 JSON，
+    故统一走 _json_payload_of 查找。
+
     @param m 消息对象
     @returns 解析出的信封 dict；解析不出返回 None
     """
-    for b in (m.get("blocks") or []):
-        obj = _parse_block_envelope(b)
-        if obj is not None:
-            return obj
-    return None
+    obj = _json_payload_of(m, "external-call")
+    if obj is None:
+        return None
+    return _merge_nested_envelope(obj)
 
 
 def _has_qq_source(m):
@@ -99,14 +182,12 @@ def _tool_result_of(m):
     工具结果经「回传网页 AI → 成为一条消息 → 镜像抓取」到达这里。
     它是 JSON 文本，不加处理会以纯文本推送、代码块不渲染，
     故此处识别出来，交由推送环节按 Markdown 代码块发送。
+    兼容形态：结果 JSON 可能是带围栏的代码块，也可能是漂移后的裸 JSON
+    （常见于 md 原文），故统一走 _json_payload_of 查找。
     @param m 消息对象
     @returns 解析出的结果对象；不是工具结果返回 None
     """
-    for b in (m.get("blocks") or []):
-        obj = _load_json_block(b)
-        if obj and obj.get("type") == "bridge-chat-res":
-            return obj
-    return None
+    return _json_payload_of(m, "bridge-chat-res")
 
 
 def _classify(m):

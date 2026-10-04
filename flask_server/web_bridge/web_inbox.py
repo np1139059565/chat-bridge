@@ -25,6 +25,22 @@ MAX_MESSAGES = 500
 # 用可重入锁：读改写同一份文件，需整体串行。
 _lock = threading.RLock()
 
+# 内存缓存：收件箱每次读取都要解析整个 JSON，而网页每 2.5 秒轮询一次，
+# 镜像又要对切片逐条调用 is_seen。若每次都全量读盘解析，开销随消息量持续放大。
+# 这里缓存「状态对象 + 文件签名（mtime 纳秒 + 大小）」：签名未变直接复用，
+# 外部改动（如手工编辑）也能被签名变化感知、自动重读。
+_cache = None
+_cache_sig = None
+
+
+def _file_sig():
+    """取收件箱文件的签名（mtime 纳秒 + 大小）；文件不存在返回 None。"""
+    try:
+        st = paths.WEB_INBOX_PATH.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
 
 def _empty_state():
     """收件箱的初始状态：空消息列表 + 游标归零 + 已入库源 id 集合。
@@ -36,22 +52,33 @@ def _empty_state():
 
 
 def _read_state():
-    """读取收件箱文件；不存在或损坏时返回空结构。
+    """读取收件箱状态（带缓存）。不存在或损坏时返回空结构。
 
     损坏时不抛异常：收件箱是「尽力而为」的展示缓存，
     宁可当作空箱重新开始，也不能让网页版整个不可用。
+    缓存策略：比对文件签名，未变则直接返回内存对象，避免重复解析大 JSON。
     """
+    global _cache, _cache_sig
     path = paths.WEB_INBOX_PATH
+    sig = _file_sig()
+    if _cache is not None and sig is not None and sig == _cache_sig:
+        return _cache
     if not path.exists():
-        return _empty_state()
+        _cache = _empty_state()
+        _cache_sig = None
+        return _cache
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
         print("[web] 读取收件箱失败，按空箱处理：", e)
-        return _empty_state()
+        _cache = _empty_state()
+        _cache_sig = sig
+        return _cache
     # 字段兜底：外部改坏文件时不至于让后续逻辑崩在 None 上
     if not isinstance(data, dict):
-        return _empty_state()
+        _cache = _empty_state()
+        _cache_sig = sig
+        return _cache
     msgs = data.get("messages")
     if not isinstance(msgs, list):
         msgs = []
@@ -61,20 +88,27 @@ def _read_state():
     seen = data.get("seen")
     if not isinstance(seen, list):
         seen = []
-    return {"seq": seq, "messages": msgs, "seen": seen}
+    _cache = {"seq": seq, "messages": msgs, "seen": seen}
+    _cache_sig = sig
+    return _cache
 
 
 def _write_state(state):
-    """把收件箱状态写回磁盘。
+    """把收件箱状态写回磁盘，并同步刷新内存缓存。
 
     先确保目录存在；写失败只记录——收件箱是缓存，写不进去不应阻断消息流。
+    写成功后立即更新 _cache 与签名，使后续读取不必再解析一遍。
     """
+    global _cache, _cache_sig
     path = paths.WEB_INBOX_PATH
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
         print("[web] 写回收件箱失败：", e)
+        return
+    _cache = state
+    _cache_sig = _file_sig()
 
 
 def append(role, text, voice="", kind="", image=""):
@@ -128,15 +162,17 @@ def append_many(items):
         messages = state.get("messages") or []
         seq = int(state.get("seq") or 0)
         changed = False
-        # 内容级判重集合：仅对 ai / tool / system 三类生效。
+        # 内容级判重集合：仅对 ai / tool 两类生效。
         # 原因：抽屉按「基于 blocks 的指纹」去重，而镜像正文优先用 md；
         # AI 流式生成时 blocks 会增长、指纹随之变化，但 md 最终稳定，
         # 导致同一条消息因指纹漂移被当成新消息、重复入库。
-        # user 消息不纳入：用户可能连发两条相同的话，需保留。
+        # user 不纳入：用户可能连发两条相同的话，需保留。
+        # system 不纳入：指令回执（如两次 /help）内容可能完全相同，
+        #   但那是两次真实执行，都该显示，不能被判重吞掉。
         content_seen = set()
         for m in messages:
             r = m.get("role")
-            if r in ("ai", "tool", "system"):
+            if r in ("ai", "tool"):
                 content_seen.add((r, m.get("text") or ""))
         for it in (items or []):
             sid = str(it.get("source_id") or "")
@@ -211,10 +247,21 @@ def list_since(cursor=0, limit=200):
     messages = state.get("messages") or []
     # 只取 seq 严格大于游标的：等于游标说明已拉过，不重复
     fresh = [m for m in messages if int(m.get("seq") or 0) > cur]
-    # 超过单次上限时截取最新的一批（末尾 limit 条），保证尽量看到最新内容
+    # 超过单次上限时截取最新的一批（末尾 limit 条），保证尽量看到最新内容。
+    # 关键：返回给客户端的游标必须是「本批最后一条」的 seq，而非全局最新 seq。
+    # 否则中间被截断的消息会因游标一步跳到最后而永久拉不到。
+    # 下一轮拉取会从这条之后继续，直到追平全局最新。
     if len(fresh) > limit:
-        fresh = fresh[-limit:]
-    return {"seq": int(state.get("seq") or 0), "messages": fresh}
+        # 取「最旧的一批」而非最新一批：配合返回本批末条 seq 作游标，
+        # 客户端下一轮从此继续，逐批追平，中间消息不会被跳过。
+        # （早前取末尾会让中间段永久拉不到，已由自测发现并改正。）
+        fresh = fresh[:limit]
+    if fresh:
+        next_cursor = int(fresh[-1].get("seq") or 0)
+    else:
+        # 无新消息：游标保持客户端的旧值即可（不推进，也不后退）
+        next_cursor = cur
+    return {"seq": next_cursor, "messages": fresh}
 
 
 def recent(limit=50):
