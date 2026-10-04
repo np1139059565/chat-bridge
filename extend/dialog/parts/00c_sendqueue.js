@@ -44,6 +44,20 @@
   };
 
   /**
+   * 把任意值纯化为可被 postMessage 结构化克隆的普通值。
+   *
+   * 背景：队列条目可能引用来自 Vue 响应式列表的对象/数组（Proxy），
+   * 而 postMessage 的结构化克隆算法无法克隆 Proxy，会抛
+   * 「could not be cloned」并使队列卡死。经一次 JSON 往返即可剥掉代理，
+   * 得到纯对象/数组/字符串；往返失败时退回原值（由调用方 try 兜住）。
+   * @param {*} v 任意值
+   * @returns {*} 纯化后的值
+   */
+  function plain(v) {
+    try { return JSON.parse(JSON.stringify(v)); } catch (e) { return v; }
+  }
+
+  /**
    * 队列泵：取出队首发送，间隔 gap 后继续取下一条，直到队列清空。
    */
   D._pumpSendQueue = function () {
@@ -58,12 +72,17 @@
     let wait = Q.gap;
     try {
       if (item.type === 'auto_send_image') {
-        // 多图兼容：优先传数组 dataUrls，同时保留单张 dataUrl 字段供旧消费端回退
-        const urls = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
-        window.parent.postMessage({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0] || '', text: item.text || '' }, '*');
+        // 多图兼容：优先取数组 dataUrls，缺失则退回单张 dataUrl。
+        // 关键修复：dataUrls 常来自 Vue 响应式列表（Proxy），postMessage 的
+        // 结构化克隆无法克隆 Proxy，会抛「could not be cloned」并卡死队列。
+        // 故逐项 String() 成字符串数组，并用 plain() 兜底剥掉可能的代理外壳。
+        const src = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
+        const urls = [];
+        for (let i = 0; i < src.length; i++) urls.push(String(src[i]));
+        window.parent.postMessage(plain({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0] || '', text: String(item.text || '') }), '*');
         wait = Q.imageGap;
       } else {
-        window.parent.postMessage({ type: 'auto_send', text: item.text || '' }, '*');
+        window.parent.postMessage(plain({ type: 'auto_send', text: String(item.text || '') }), '*');
       }
     } catch (e) {
       // 关键加固：发送步骤一旦抛异常，过去会让 Q.sending 永久停在 true、
