@@ -82,21 +82,64 @@
   };
 
   /**
-   * 判断代码块是否为语音朗读块：内容为 {"type":"bridge-voice","text":...}。
-   * 与工具调用块同一机制——认内容里的 type 字段，不看语言名。
-   * @param {Object} block 代码块
+   * 从一段文本里找出语音朗读块，返回其 text；无则空串。
+   *
+   * 用「定位 {"type":"bridge-voice" 标记 + 大括号配平」切出 JSON，
+   * 与后端 extract_voice_from_blocks 的裸 JSON 兜底同一思路：
+   * 语音块可能漂移成无围栏的裸 JSON（落在段落文本里），
+   * 若只认代码块，检测就取不到、误报「语音缺失」。
+   * @param {string} text 待扫描文本
+   * @returns {string} 朗读文本；无则空串
+   */
+  function pickVoiceJson(text) {
+    const s = String(text || '');
+    const marker = '{"type":"bridge-voice"';
+    let start = s.indexOf(marker);
+    while (start >= 0) {
+      let depth = 0, inStr = false, esc = false, end = -1;
+      for (let i = start; i < s.length; i++) {
+        const ch = s[i];
+        if (inStr) {
+          if (esc) esc = false;
+          else if (ch === '\\') esc = true;
+          else if (ch === '"') inStr = false;
+          continue;
+        }
+        if (ch === '"') inStr = true;
+        else if (ch === '{') depth++;
+        else if (ch === '}') { depth--; if (depth === 0) { end = i + 1; break; } }
+      }
+      if (end > 0) {
+        try {
+          const obj = JSON.parse(s.slice(start, end));
+          if (obj && obj.type === 'bridge-voice') return String(obj.text || '').trim();
+        } catch (e) { /* 继续找下一个标记 */ }
+      }
+      start = s.indexOf(marker, start + 1);
+    }
+    return '';
+  }
+
+  /**
+   * 判断一个块是否为语音朗读块：内容为 {"type":"bridge-voice","text":...}。
+   * 与工具调用块同一机制——认内容里的 type 字段，不看语言名、不要求围栏。
+   * 兼容两种载体：代码块（标准形态）与段落文本（漂移成裸 JSON 时）。
+   * @param {Object} block 块
    * @returns {string} 朗读文本；不是语音块返回空串
    */
   M.parseVoiceBlock = function (block) {
-    if (!block || block.type !== 'code') return '';
-    const src = String(block.code || '').trim();
-    if (!src || src.charAt(0) !== '{') return '';
-    try {
-      const obj = JSON.parse(src);
-      if (obj && obj.type === 'bridge-voice') {
-        return String(obj.text || '').trim();
+    if (!block) return '';
+    if (block.type === 'code') {
+      const src = String(block.code || '').trim();
+      if (src.charAt(0) === '{') {
+        try {
+          const obj = JSON.parse(src);
+          if (obj && obj.type === 'bridge-voice') return String(obj.text || '').trim();
+        } catch (e) { /* 落到下面的扫描 */ }
       }
-    } catch (e) { /* 不是语音块，按普通代码块渲染 */ }
+      return pickVoiceJson(src);
+    }
+    if (block.type === 'paragraph') return pickVoiceJson(block.text);
     return '';
   };
 

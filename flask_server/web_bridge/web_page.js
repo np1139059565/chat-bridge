@@ -4,7 +4,8 @@
  * ============================================================ */
 (function () {
   'use strict';
-  var renderMarkdown = window.WebRender.renderMarkdown, composeBody = window.WebRender.composeBody;
+  var renderMarkdown = window.WebRender.renderMarkdown, composeBody = window.WebRender.composeBody,
+    renderCommandPanel = window.WebRender.renderCommandPanel;
 
   // ---------- 全局状态 ----------
   var cursor = 0;            // 已拉取到的最大 seq
@@ -394,26 +395,18 @@
   var cmdGrid = document.getElementById('cmdGrid');
   var cmdLoaded = false;
 
-  /** 拉取指令快捷键列表并渲染成网格按钮。 */
+  /** 拉取指令快捷键列表并渲染成分区内网格（内置/自定义，各按首字母排序）。 */
   function loadCommands() {
     fetch('/api/web/commands', { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (!data || !data.success) return;
-        var cmds = data.commands || [];
-        cmdGrid.innerHTML = '';
-        cmds.forEach(function (c) {
-          var d = document.createElement('div');
-          d.className = 'cmd-item';
-          d.textContent = c;
-          d.addEventListener('click', function () {
-            // 填入输入框并留一个尾随空格：需要参数的指令（如 /ss 1）便于直接补参数，
-            // 不需要参数的指令发送时会被 trim，无副作用。
-            inputEl.value = c + ' ';
-            inputEl.focus();
-            cmdPanel.classList.remove('on');
-          });
-          cmdGrid.appendChild(d);
+        var groups = data.groups || { builtin: data.commands || [], custom: [] };
+        // 点选即填入输入框并留尾随空格：需要参数的指令便于补参数，其余发送时会被 trim。
+        renderCommandPanel(cmdGrid, groups, function (c) {
+          inputEl.value = c + ' ';
+          inputEl.focus();
+          cmdPanel.classList.remove('on');
         });
       })
       .catch(function () { /* 取不到指令时面板为空，不阻断聊天 */ });

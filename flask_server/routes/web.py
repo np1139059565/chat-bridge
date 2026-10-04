@@ -144,11 +144,13 @@ def web_commands():
         return ("", 204)
     try:
         from remote_bridge import command_registry
-        cmds = command_registry.shortcut_list()
+        groups = command_registry.shortcut_groups()
     except Exception as e:
         print("[web] 读取指令快捷键失败：", e)
-        cmds = []
-    return jsonify(success=True, commands=cmds)
+        groups = {"builtin": [], "custom": []}
+    # 同时回扁平列表（兼容）与分组（新前端按内置/自定义两区渲染）
+    flat = list(groups.get("builtin", [])) + list(groups.get("custom", []))
+    return jsonify(success=True, commands=flat, groups=groups)
 
 
 def _handle_command(text):

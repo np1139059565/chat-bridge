@@ -233,6 +233,14 @@ body {
   gap: 6px;
   padding: 8px 12px;
 }
+/* 分区标题：内置/自定义各一段，跨整行（占满网格所有列） */
+.cmd-grid .cmd-title {
+  grid-column: 1 / -1;
+  color: var(--text-dim);
+  font-size: 11px;
+  padding: 4px 2px 2px;
+  border-bottom: 1px solid var(--line);
+}
 .cmd-grid .cmd-item {
   text-align: center;
   padding: 6px 4px;

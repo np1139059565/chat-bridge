@@ -229,43 +229,52 @@ def help_text():
     return "\n".join(lines)
 
 
-def shortcut_list():
-    """返回全部指令的快捷键列表（内置 + 外部 + 自定义，只含快捷键）。
+def _dedup_sort(items):
+    """去重并按首字母排序（忽略开头的 /，不区分大小写）。
 
-    供网页版「指令展开面板」使用：用户要的是一屏能放下多个的短按钮，
-    故只回快捷键本身，描述等长文本一律不带。
-    顺序与 /help 一致：内置 → 外部（skill 声明）→ 自定义。
-    每条取第一个别名作快捷键；没有别名的用完整命令名兜底。同名去重。
-    @returns 快捷键字符串列表
+    @param items 快捷键字符串列表
+    @returns 去重排序后的列表
     """
-    out = []
+    seen = set()
+    uniq = []
+    for s in items:
+        if s and s not in seen:
+            seen.add(s)
+            uniq.append(s)
+    return sorted(uniq, key=lambda s: s.lstrip("/").lower())
+
+
+def shortcut_groups():
+    """返回分组的快捷键列表：内置区 / 自定义区，各按首字母排序。
+
+    供网页版「指令展开面板」使用：面板分两个区域展示，便于寻找；
+    每区只含快捷键本身，不含描述，各按首字母排序。
+    - 内置区：内置指令 + 外部指令（skill 声明，非用户自定义，归入内置区）
+    - 自定义区：用户在前端配置的自定义指令（含别名）
+    @returns {"builtin": [...], "custom": [...]}
+    """
+    builtin = []
     # 1) 内置指令
     for name, info in BUILTIN.items():
         aliases = info.get("aliases") or []
-        out.append(aliases[0] if aliases else name)
-    # 2) 外部指令（来自各 skill 的声明，与 /help 同源）
+        builtin.append(aliases[0] if aliases else name)
+    # 2) 外部指令（来自各 skill 的声明）：非用户自定义，归入内置区
     try:
         import custom_tools.commands as ext_cmds
         for c in (ext_cmds.list_external_commands() or []):
             pick = c.get("alias") or c.get("name") or ""
             if pick:
-                out.append(pick)
+                builtin.append(pick)
     except Exception as e:
         log("读取外部指令失败：", e)
-    # 3) 自定义指令（用户在前端配置的，含别名）
+    # 3) 自定义指令（用户配置的，含别名）
+    custom = []
     for c in (bridge_store.get_config().get("commands") or []):
         aliases = c.get("aliases") or []
         pick = aliases[0] if aliases else (c.get("name") or "")
         if pick:
-            out.append(pick)
-    # 去重并保持先后顺序
-    seen = set()
-    uniq = []
-    for s in out:
-        if s and s not in seen:
-            seen.add(s)
-            uniq.append(s)
-    return uniq
+            custom.append(pick)
+    return {"builtin": _dedup_sort(builtin), "custom": _dedup_sort(custom)}
 
 
 def register_panel(qq_client):

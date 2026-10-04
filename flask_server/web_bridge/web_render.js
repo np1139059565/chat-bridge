@@ -194,5 +194,37 @@
     return think + audio + rest;
   }
 
-  window.WebRender = { renderMarkdown: renderMarkdown, composeBody: composeBody };
+  /**
+   * 渲染指令面板：分「内置指令」「自定义指令」两区，各按首字母排序。
+   *
+   * 排序键取去掉斜杠后的首字母、忽略大小写，符合用户找指令的直觉。
+   * @param {Element} grid 容器元素
+   * @param {Object} groups { builtin: [...], custom: [...] }
+   * @param {function(string)} onPick 点选回调，传入被点的指令
+   */
+  function renderCommandPanel(grid, groups, onPick) {
+    grid.innerHTML = '';
+    var sections = [['内置指令', groups.builtin || []], ['自定义指令', groups.custom || []]];
+    sections.forEach(function (sec) {
+      var arr = sec[1].slice().sort(function (a, b) {
+        var x = String(a).replace(/^\//, '').toLowerCase();
+        var y = String(b).replace(/^\//, '').toLowerCase();
+        return x < y ? -1 : (x > y ? 1 : 0);
+      });
+      if (!arr.length) return;
+      var title = document.createElement('div');
+      title.className = 'cmd-title';
+      title.textContent = sec[0];
+      grid.appendChild(title);
+      arr.forEach(function (c) {
+        var d = document.createElement('div');
+        d.className = 'cmd-item';
+        d.textContent = c;
+        d.addEventListener('click', function () { onPick(c); });
+        grid.appendChild(d);
+      });
+    });
+  }
+
+  window.WebRender = { renderMarkdown: renderMarkdown, composeBody: composeBody, renderCommandPanel: renderCommandPanel };
 })();
