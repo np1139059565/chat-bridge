@@ -11,9 +11,24 @@
 """
 import base64
 import os
+import threading
 import time
 
 import paths
+
+# 进程内自增序号：仅靠「毫秒」做文件名后缀，同一毫秒内连续保存两次会撞名，
+# 后一张覆盖前一张（实测两张图同名、磁盘只剩一个文件即此因）。
+# 加锁保护自增，保证多线程下序号不重复。
+_seq_lock = threading.Lock()
+_seq = 0
+
+
+def _next_seq():
+    """取下一个进程内唯一序号（线程安全）。"""
+    global _seq
+    with _seq_lock:
+        _seq += 1
+        return _seq
 
 
 def _screenshots_dir():
@@ -38,7 +53,7 @@ def save_data_url(data_url):
         out_dir = _screenshots_dir()
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
-        name = "shot_" + time.strftime("%Y%m%d_%H%M%S") + "_" + str(int(time.time() * 1000) % 1000) + ext
+        name = "shot_" + time.strftime("%Y%m%d_%H%M%S") + "_" + str(int(time.time() * 1000) % 1000) + "_" + str(_next_seq()) + ext
         path = os.path.join(out_dir, name)
         with open(path, "wb") as f:
             f.write(raw)
@@ -65,7 +80,7 @@ def save_web_image(data_url):
         out_dir = str(paths.WEB_IMAGES_DIR)
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
-        name = "web_" + time.strftime("%Y%m%d_%H%M%S") + "_" + str(int(time.time() * 1000) % 1000) + ext
+        name = "web_" + time.strftime("%Y%m%d_%H%M%S") + "_" + str(int(time.time() * 1000) % 1000) + "_" + str(_next_seq()) + ext
         path = os.path.join(out_dir, name)
         with open(path, "wb") as f:
             f.write(raw)
