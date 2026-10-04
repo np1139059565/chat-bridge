@@ -175,7 +175,11 @@ def append_many(items):
     added = []
     with _lock:
         state = _read_state()
-        seen = set(state.get("seen") or [])
+        # seen 用「有序列表 + 集合」双结构：列表保序用于截断，集合用于 O(1) 判定。
+        # 不能用 list(set) 再切片——集合无序，切片会随机丢条目，导致已入库的
+        # source_id 被误删、该消息再次上报时重新入库（user 消息无内容判重兜底，会重复）。
+        seen_list = list(state.get("seen") or [])
+        seen = set(seen_list)
         messages = state.get("messages") or []
         seq = int(state.get("seq") or 0)
         changed = False
@@ -218,8 +222,9 @@ def append_many(items):
             }
             messages.append(msg)
             added.append(msg)
-            if sid:
+            if sid and sid not in seen:
                 seen.add(sid)
+                seen_list.append(sid)   # 有序列表同步追加，供末尾保序截断
             # 同步累加内容级判重集合：同一批内后续的重复条目据此跳过
             if _role in ("ai", "tool", "system"):
                 content_seen.add((_role, _text))
@@ -230,9 +235,9 @@ def append_many(items):
             messages = messages[-MAX_MESSAGES:]
         state["seq"] = seq
         state["messages"] = messages
-        # 已入库源 id 同样限长：只保留与现存消息规模相当的一批，
-        # 避免它本身无界增长（它只是一份去重用的索引）。
-        state["seen"] = list(seen)[-MAX_MESSAGES * 2:]
+        # 已入库源 id 同样限长：只保留最近写入的一批（有序列表保序截断，
+        # 不会像 list(set) 那样随机丢条目），避免它本身无界增长。
+        state["seen"] = seen_list[-MAX_MESSAGES * 2:]
         _write_state(state)
     return added
 

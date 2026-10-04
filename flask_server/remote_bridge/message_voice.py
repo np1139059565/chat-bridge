@@ -166,6 +166,38 @@ def strip_voice_blocks(text):
     return out.strip()
 
 
+# 合成文件名序号：同一毫秒内多条也不会撞名。
+_synth_seq = [0]
+
+
+def synthesize_voice(m):
+    """从消息提取语音文本并合成为 MP3，返回本地路径；无语音或失败返回空串。
+
+    只做合成、不推送：调用方在「锁外」预合成，再把音频与正文按序推送。
+    合成是网络调用，绝不能在 _push_lock 内执行（否则在线服务一卡，
+    锁被占死、线程堆满、服务器拒绝连接，必须重启才恢复）。
+    @param m 消息对象
+    @returns 音频文件绝对路径；无语音/失败空串
+    """
+    if not m:
+        return ""
+    voice_text = extract_voice_from_blocks(m)
+    if not voice_text:
+        return ""
+    import os
+    import paths
+    from . import voice_tts
+    os.makedirs(paths.VOICE_DIR, exist_ok=True)
+    _synth_seq[0] += 1
+    name = "out_%d_%d.mp3" % (int(time.time() * 1000), _synth_seq[0])
+    out_path = str(paths.VOICE_DIR / name)
+    ok, err = voice_tts.text_to_voice(voice_text, out_path)
+    if not ok:
+        log("语音合成失败：", err)
+        return ""
+    return out_path
+
+
 def push_voice(qq_client, openid, path):
     """把一段本地音频推送到 QQ（与图片推送同路，走被动回复窗口）。
 

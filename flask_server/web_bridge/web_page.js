@@ -140,6 +140,8 @@
         // 历史加载（history）不自动播语音；增量拉取的新语音在解锁后自动播。
         var allowAuto = !history;
         msgs.forEach(function (m) { renderMessage(m, allowAuto); });
+        // 新消息渲染后触发一次待合成扫描：把「生成中」的语音自动轮询、就绪即自动连播
+        if (window.WebVoice && window.WebVoice.kick) window.WebVoice.kick();
         // 保持可见区域是最新消息（列表倒序，最新在顶部）
         if (listEl.scrollTop < 40) listEl.scrollTop = 0;
       })

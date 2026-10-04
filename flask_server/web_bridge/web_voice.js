@@ -135,9 +135,10 @@
         encodeURIComponent(m.voice) + '"></audio></div>';
     }
     if (m.voice_text) {
+      // 待合成：显示「生成中」，由 scanPending 自动轮询，无需用户点击。
+      // 合成在后端入库时已自动启动（见 web_mirror.schedule_auto_synth）。
       return '<div class="voice-wrap pending" data-seq="' + seq + '">' +
-        '<span class="voice-flag">未生成</span>' +
-        '<button class="voice-gen" type="button" data-seq="' + seq + '">🔊 点击生成语音</button></div>';
+        '<span class="voice-flag">生成中…</span></div>';
     }
     return '';
   }
@@ -172,50 +173,49 @@
    * 轮询某条语音是否合成完毕；就绪则换成播放器。
    * @param tries 剩余轮询次数（约 1.5 秒一次）
    */
-  function pollVoice(seq, wrap, tries) {
-    if (tries <= 0) { setFlag(wrap, '生成失败，可重试'); return; }
+  function pollVoice(seq, wrap, tries, done) {
+    function finish() { if (done) done(); }
+    if (tries <= 0) { setFlag(wrap, '生成失败'); finish(); return; }
     setTimeout(function () {
       fetch('/api/web/voice-status?seq=' + seq)
         .then(function (r) { return r.json(); })
         .then(function (d) {
-          if (d && d.status === 'ready') { fillReady(wrap, seq, d.name, true); }
-          else { pollVoice(seq, wrap, tries - 1); }
+          if (d && d.status === 'ready') { fillReady(wrap, seq, d.name, true); finish(); }
+          else { pollVoice(seq, wrap, tries - 1, done); }
         })
-        .catch(function () { pollVoice(seq, wrap, tries - 1); });
+        .catch(function () { pollVoice(seq, wrap, tries - 1, done); });
     }, 1500);
   }
 
-  /**
-   * 点播时触发按需合成：接口立即返回，合成在后端后台线程跑。
-   * status=ready 直接播；=processing 轮询等待；否则提示。
-   */
-  function ensureVoice(seq, wrap) {
-    setFlag(wrap, '生成中…');
-    var btn = wrap.querySelector('.voice-gen');
-    if (btn) btn.disabled = true;
-    // 用户点击即视为一次交互：解锁自动播放，合成好后自动接播
-    unlocked = true;
-    lockedByClose = false;
-    fetch('/api/web/voice-ensure?seq=' + seq)
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (!d || !d.success) { setFlag(wrap, '无法生成'); return; }
-        if (d.status === 'ready') { fillReady(wrap, seq, d.name, true); }
-        else if (d.status === 'processing') { pollVoice(seq, wrap, 20); }
-        else { setFlag(wrap, '无语音内容'); }
-      })
-      .catch(function () { setFlag(wrap, '网络错误，可重试'); });
+  // ---------- 自动扫描待合成语音 ----------
+  // 设计要点：合成由后台自动完成，前端只负责「发现有生成中的语音 → 轮询 → 就绪即自动播」。
+  // 全程无需用户点击；网络慢只导致延迟出声，不影响自动连播。
+  var scanning = false;
+
+  /** 扫描页面上所有「生成中」的语音区，逐个轮询直到就绪。 */
+  function scanPending() {
+    if (scanning) return;
+    var wraps = listEl.querySelectorAll('.voice-wrap.pending');
+    if (!wraps.length) return;
+    scanning = true;
+    var pending = 0, done = 0;
+    Array.prototype.forEach.call(wraps, function (wrap) {
+      // 已在轮询中的跳过（用 _polling 标记）
+      if (wrap._polling) return;
+      wrap._polling = true;
+      pending += 1;
+      var seq = parseInt(wrap.getAttribute('data-seq') || '0', 10);
+      // 就绪后自动接播（此时若已解锁，会按队列顺序自动播）
+      pollVoice(seq, wrap, 40, function () {
+        done += 1;
+        if (done >= pending) scanning = false;
+      });
+    });
+    if (!pending) scanning = false;
   }
 
-  // 事件委托：点「生成语音」按钮触发按需合成
-  listEl.addEventListener('click', function (e) {
-    var t = e.target;
-    if (t && t.classList && t.classList.contains('voice-gen')) {
-      var seq = parseInt(t.getAttribute('data-seq') || '0', 10);
-      var wrap = t.closest('.voice-wrap');
-      if (wrap) ensureVoice(seq, wrap);
-    }
-  });
+  // 对外暴露：消息渲染后由页面脚本调用，触发一次扫描
+  function kick() { setTimeout(scanPending, 300); }
 
   // ---------- 播放事件绑定（解锁 / 续播 / 关闭上锁） ----------
   // 规则（用户拍板）：
@@ -264,5 +264,5 @@
   }
 
   // ---------- 对外接口 ----------
-  window.WebVoice = { renderAudio: renderAudio, bind: bind };
+  window.WebVoice = { renderAudio: renderAudio, bind: bind, kick: kick };
 })();

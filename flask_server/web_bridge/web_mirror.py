@@ -17,9 +17,14 @@
 - 合成只在「该消息首次入库」时做一次，避免重复上报反复合成。
 """
 import os
+import threading
 import time
 
 from . import web_inbox
+
+# 后台合成占用集合：避免同一条被重复丢进线程。
+_synth_inflight = set()
+_synth_lock = threading.Lock()
 
 
 def log(*args):
@@ -84,6 +89,42 @@ def synthesize_voice(text):
     except Exception as e:
         log("语音合成异常：", e)
         return ""
+
+
+def _auto_synth(seq, text):
+    """后台自动合成某条消息的语音，完成后回填文件名。
+
+    在上报入库后异步触发，绝不阻塞上报请求；网页端无需任何点击，
+    合成好后前端轮询即可自动接上播放。
+    @param seq  消息序号
+    @param text 待朗读文本
+    """
+    try:
+        name = synthesize_voice(text)
+        if name:
+            web_inbox.set_voice(seq, name)
+    except Exception as e:
+        log("后台自动合成失败：", e)
+    finally:
+        with _synth_lock:
+            _synth_inflight.discard(seq)
+
+
+def schedule_auto_synth(added):
+    """为刚入库、带朗读文本的 AI 消息启动后台自动合成。
+
+    @param added web_inbox.append_many 返回的新增消息列表
+    """
+    for m in (added or []):
+        seq = int(m.get("seq") or 0)
+        text = str(m.get("voice_text") or "")
+        if not seq or not text or m.get("voice"):
+            continue
+        with _synth_lock:
+            if seq in _synth_inflight:
+                continue
+            _synth_inflight.add(seq)
+        threading.Thread(target=_auto_synth, args=(seq, text), daemon=True).start()
 
 
 def _extract_images(m):
@@ -221,4 +262,6 @@ def mirror_report(messages):
     added = web_inbox.append_many(items)
     if added:
         log("镜像入库", len(added), "条")
+        # 入库后立刻在后台自动合成语音：不阻塞上报、网页无需点击即自动连播。
+        schedule_auto_synth(added)
     return len(added)

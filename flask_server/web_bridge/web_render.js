@@ -96,7 +96,9 @@
         while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
           q.push(lines[i].replace(/^\s*>\s?/, '')); i++;
         }
-        html.push('<blockquote>' + inline(q.join('<br>')) + '</blockquote>');
+        // 用 \n 连接、交给 inline 在「转义之后」还原为 <br>：
+        // 若在此直接插 <br>，会被 inline 首步的 esc 转义成字面文本（与段落同类问题）。
+        html.push('<blockquote>' + inline(q.join('\n')) + '</blockquote>');
         continue;
       }
       // 无序列表

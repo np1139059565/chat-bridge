@@ -177,7 +177,8 @@ def push_text(qq_client, openid, text, markdown=False):
 # 使本文件保持在行数上限内；此处按原名导入，保持既有调用不变。
 from .message_voice import (
     extract_voice_from_blocks as _extract_voice_from_blocks,
-    push_voice, maybe_push_voice as _maybe_push_voice,
+    push_voice,
+    synthesize_voice as _synthesize_voice,
 )
 
 
@@ -213,7 +214,7 @@ def _should_push(m, push):
     return not _has_qq_source(m)
 
 
-def _push_one(qq_client, openid, m, push, voice_tasks=None):
+def _push_one(qq_client, openid, m, push, voice_paths=None):
     """尝试推送一条消息到 QQ，返回状态字符串。
 
     三种结果，供调用方决定是否记账：
@@ -223,10 +224,11 @@ def _push_one(qq_client, openid, m, push, voice_tasks=None):
       'fail' —— 尝试推送但失败（窗口关闭 / 网络错误）：**不记账**，
                 留待下轮上报重试，避免消息被永久漏掉。
 
-    @param voice_tasks 语音合成任务收集器（列表）。传入时，本函数只把
-        需合成语音的 AI 消息登记进去，不在此合成——合成是网络调用，
-        绝不能在 _push_lock 内执行（否则在线服务一卡，锁被占死、
-        线程堆满、服务器拒绝新连接，必须重启才能恢复）。
+    @param voice_paths 预合成好的语音路径映射 {消息id: 音频路径}。
+        合成由调用方在 _push_lock 之外预先完成——合成是网络调用，
+        绝不能在锁内执行（否则在线服务一卡，锁被占死、线程堆满、
+        服务器拒绝新连接，必须重启才能恢复）。本函数只负责在正文
+        推送成功后按序推送对应语音。
     """
     if not _should_push(m, push):
         return 'skip'
@@ -238,17 +240,36 @@ def _push_one(qq_client, openid, m, push, voice_tasks=None):
         return 'skip'
     kind = built.get("kind") or _classify(m)
     text = built.get("text") or ""
-    # AI 消息：文本之外若含语音块且开关开，登记待合成（真正的合成在锁外执行）
-    if kind == "ai" and not built.get("is_tool_result"):
-        if voice_tasks is not None:
-            voice_tasks.append((qq_client, openid, m, text, push))
-        else:
-            # 未传收集器（旧调用方）：保持原行为，直接合成
-            _maybe_push_voice(qq_client, openid, m, text, push)
     body = "%s\n%s" % (PREFIX.get(kind, kind), text)
     # seq 由 push_text 内部统一分配，不能在此自行编号：
     # 各轮上报都从 1 重数会导致 (msg_id, msg_seq) 重复、消息被 QQ 丢弃
-    return 'sent' if push_text(qq_client, openid, body, markdown=bool(built.get("markdown"))) else 'fail'
+    ok = push_text(qq_client, openid, body, markdown=bool(built.get("markdown")))
+    # 正文推送成功后，紧跟着推这条消息的语音（音频已由调用方在锁外预合成，
+    # 经 voice_paths 传入）。放在正文之后同一轮里推，恢复「文本→语音」顺序，
+    # 避免一批消息的语音全部被挤到末尾。
+    if kind == "ai" and not built.get("is_tool_result"):
+        path = (voice_paths or {}).get(m.get("id") or "")
+        if path:
+            # 正文推成功才推语音（保持「文本→语音」顺序）；推完即删临时音频。
+            # 正文失败时不推，文件也删掉——下轮重试会重新合成，不留垃圾。
+            if ok:
+                try:
+                    push_voice(qq_client, openid, path)
+                except Exception as e:
+                    log("语音推送失败（不影响主流程）：", e)
+            _remove_voice_file(path)
+    return 'sent' if ok else 'fail'
+
+
+def _remove_voice_file(path):
+    """删除预合成的临时语音文件（推完或正文失败后调用），失败静默。"""
+    if not path:
+        return
+    try:
+        import os
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _resolve_openid(payload):
@@ -316,7 +337,32 @@ def handle_report(qq_client, payload):
     _last_report[conv_id] = payload
 
     push = bridge_store.get_config().get("push") or {}
-    # 整段「读已推集合 → 逐条推送 → 写回」串行执行：
+    # 第一步（锁外）：预合成语音。
+    # 合成是网络调用、可能很慢，绝不能在 _push_lock 内做——否则在线服务一卡
+    # 就会永久占用锁、上报线程堆满、服务器拒绝连接（必须重启才恢复）。
+    # 在锁外先把本轮要推的 AI 语音统统合成好，得到 {消息id: 音频路径}，
+    # 锁内只按序推送，既保住「文本→语音」顺序，又不占锁。
+    voice_paths = {}
+    if push.get("voice"):
+        for m in messages:
+            mid = m.get("id") or ""
+            if not mid or not _should_push(m, push):
+                continue
+            try:
+                from .outbound import build_body
+                built = build_body(m, push)
+                if built.get("kind") != "ai" or built.get("is_tool_result"):
+                    continue
+            except Exception:
+                continue
+            try:
+                path = _synthesize_voice(m)
+                if path:
+                    voice_paths[mid] = path
+            except Exception as e:
+                log("语音预合成失败（不影响主流程）：", e)
+
+    # 第二步（锁内）：整段「读已推集合 → 逐条推送 → 写回」串行执行：
     # 否则多个上报并发会读到同一份集合，导致同一条被推两次（重复）、顺序穿插（乱序）。
     with _push_lock:
         pushed = bridge_store.get_pushed_set(conv_id)
@@ -324,10 +370,6 @@ def handle_report(qq_client, payload):
         seen_keys = []
         # 本轮推送失败的消息：结束后写入待推缓存，供下次上报优先重试。
         failed = []
-        # 语音合成任务清单：锁内只登记、不合成。合成是网络调用，
-        # 绝不能在此锁内执行——否则在线服务卡住会永久占用 _push_lock，
-        # 导致上报线程堆满、服务器拒绝连接（必须重启才恢复）。
-        voice_tasks = []
 
         for m in messages:
             mid = m.get("id") or ""
@@ -335,7 +377,7 @@ def handle_report(qq_client, payload):
             #    工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
             #    否则「消息已推过」会把后来的结果一并挡掉。
             if mid and mid not in pushed:
-                status = _push_one(qq_client, openid, m, push, voice_tasks)
+                status = _push_one(qq_client, openid, m, push, voice_paths)
                 if status == 'sent':
                     sent += 1
                 # 失败不记账：留待下轮重试，避免消息被永久漏掉
@@ -364,11 +406,8 @@ def handle_report(qq_client, payload):
         # 回写待推缓存：本轮失败的消息挂起，下次上报优先重试；
         # 成功 / 跳过的消息不在其中，故会自动移出缓存。
         bridge_store.set_pending(conv_id, failed)
-    # 锁外执行语音合成与推送：网络调用放在 _push_lock 之外，
-    # 在线服务再慢/再卡也不会占住锁、拖垮整台服务。
-    for task in voice_tasks:
-        try:
-            _maybe_push_voice(*task)
-        except Exception as e:
-            log("语音推送失败（不影响主流程）：", e)
+    # 兜底清理：预合成了语音、但正文已推过（未进 _push_one）的，其音频没人删，
+    # 在此统一清掉，避免临时文件堆积。
+    for _mid, _p in voice_paths.items():
+        _remove_voice_file(_p)
     return sent
