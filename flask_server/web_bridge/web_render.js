@@ -177,5 +177,22 @@
     return html + '</table>';
   }
 
-  window.WebRender = { renderMarkdown: renderMarkdown };
+  /**
+   * 把语音播放器插到「思考之下、正文之上」。
+   *
+   * 思考块渲染为 details（恒在正文最前），故把它切出来，中间夹语音，
+   * 后面接剩余正文，用户定位时先看思考、再听语音、最后读正文。
+   * @param {string} body 正文 HTML（可能以 details 思考块开头）
+   * @param {string} audio 语音播放器 HTML（无语音传空串）
+   * @returns {string} 组装后的正文 HTML
+   */
+  function composeBody(body, audio) {
+    if (!audio) return body;
+    var think = '', rest = body || '';
+    var m = /^\s*<details class="code-fold">[\s\S]*?<\/details>/.exec(rest);
+    if (m) { think = m[0]; rest = rest.slice(m[0].length); }
+    return think + audio + rest;
+  }
+
+  window.WebRender = { renderMarkdown: renderMarkdown, composeBody: composeBody };
 })();

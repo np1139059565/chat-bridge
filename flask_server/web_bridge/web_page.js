@@ -4,7 +4,7 @@
  * ============================================================ */
 (function () {
   'use strict';
-  var renderMarkdown = window.WebRender.renderMarkdown;
+  var renderMarkdown = window.WebRender.renderMarkdown, composeBody = window.WebRender.composeBody;
 
   // ---------- 全局状态 ----------
   var cursor = 0;            // 已拉取到的最大 seq
@@ -69,9 +69,10 @@
         '<audio controls preload="none" data-seq="' + (m.seq || 0) + '" src="/api/web/audio/' + encodeURIComponent(m.voice) + '"></audio>' +
         '</div>';
     }
+    // 语音位置：思考之下、正文之上。组装细节见 WebRender.composeBody。
     el.innerHTML =
       '<div class="who">' + who + '<span class="time">' + fmtTime(m.ts) + '</span></div>' +
-      '<div class="body">' + body + '</div>' + audio;
+      '<div class="body">' + composeBody(body, audio) + '</div>';
     // 倒序：最新插入到列表最前面
     if (listEl.firstChild) listEl.insertBefore(el, listEl.firstChild);
     else listEl.appendChild(el);
@@ -257,8 +258,7 @@
   });
 
   // ---------- 拉取消息 ----------
-  // 轮询健壮性：pollBusy 防重入（上轮未回不发新请求）；failCount 连续失败计数，
-  // 偶发一次失败不翻脸，连续多次才显示「连接断开」。
+  // 轮询健壮性：pollBusy 防重入；failCount 连续失败计数（超容差才显示断开）。
   var pollBusy = false, failCount = 0;
   var FAIL_TOLERANCE = 2;
 
