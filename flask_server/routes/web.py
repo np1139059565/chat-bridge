@@ -315,6 +315,84 @@ def web_audio(name):
     return send_file(path, mimetype="audio/mpeg", conditional=True)
 
 
+# 正在后台合成的 seq 集合：避免同一条被多次点播时重复合成。
+_synth_inflight = set()
+_synth_lock = __import__("threading").Lock()
+
+
+def _synth_worker(seq, text):
+    """后台合成线程：合成完成后把文件名回填到收件箱，并释放占用标记。"""
+    try:
+        from web_bridge import web_mirror
+        name = web_mirror.synthesize_voice(text)
+        if name:
+            web_inbox.set_voice(seq, name)
+    except Exception as e:
+        print("[web] 按需合成失败：", e)
+    finally:
+        with _synth_lock:
+            _synth_inflight.discard(seq)
+
+
+@bp.route("/api/web/voice-ensure", methods=["POST", "GET", "OPTIONS"])
+def web_voice_ensure():
+    """按需合成：网页点播某条语音时调用。
+
+    立即返回，不在请求内做合成（合成是网络调用，放这里会阻塞接口）。
+    返回 status：ready（已有音频）/ processing（已启动后台合成）/ not_found（无朗读文本）。
+    前端据 status=processing 轮询 voice-status，就绪后再播放。
+    查询参数：seq（消息序号）
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    try:
+        seq = int(request.args.get("seq", "0"))
+    except (TypeError, ValueError):
+        seq = 0
+    msg = web_inbox.get_by_seq(seq)
+    if not msg:
+        return jsonify(success=False, error="not_found")
+    # 已合成：直接给文件名
+    if msg.get("voice"):
+        return jsonify(success=True, status="ready", name=msg.get("voice"))
+    text = str(msg.get("voice_text") or "")
+    if not text:
+        return jsonify(success=False, error="no_voice_text")
+    # 已在合成中：不重复启动
+    import threading
+    with _synth_lock:
+        if seq in _synth_inflight:
+            return jsonify(success=True, status="processing")
+        _synth_inflight.add(seq)
+    threading.Thread(target=_synth_worker, args=(seq, text), daemon=True).start()
+    return jsonify(success=True, status="processing")
+
+
+@bp.route("/api/web/voice-status", methods=["GET", "OPTIONS"])
+def web_voice_status():
+    """查询某条消息的语音是否已合成完毕，供前端轮询。
+
+    查询参数：seq
+    返回 status：ready（含 name）/ processing / not_found
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    try:
+        seq = int(request.args.get("seq", "0"))
+    except (TypeError, ValueError):
+        seq = 0
+    msg = web_inbox.get_by_seq(seq)
+    if not msg:
+        return jsonify(success=False, error="not_found")
+    if msg.get("voice"):
+        return jsonify(success=True, status="ready", name=msg.get("voice"))
+    with _synth_lock:
+        pending = seq in _synth_inflight
+    if pending or str(msg.get("voice_text") or ""):
+        return jsonify(success=True, status="processing")
+    return jsonify(success=False, error="no_voice_text")
+
+
 def _render_page():
     """读取网页聊天页 HTML 文件并返回。
 

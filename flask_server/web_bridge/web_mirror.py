@@ -56,10 +56,11 @@ def _voice_text_of(m):
     return ""
 
 
-def _synthesize_voice(text):
-    """把朗读文本合成为 MP3，落到网页音频目录，返回文件名。
+def synthesize_voice(text):
+    """按需把朗读文本合成为 MP3，落到网页音频目录，返回文件名。
 
-    失败返回空串：语音是附加能力，合成不了不应影响消息入库。
+    由网页点播时调用（在后台线程内执行），不在上报链路里跑，
+    故不会阻塞服务。失败返回空串：语音是附加能力，合成不了不应影响主流程。
     @param text 待朗读文本
     @returns 音频文件名（相对音频目录）；失败空串
     """
@@ -191,12 +192,13 @@ def mirror_report(messages):
             body = strip_voice_blocks(body)
         except Exception:
             pass
-        # 语音：仅 AI 消息提取并合成
-        voice = ""
+        # 语音：仅 AI 消息提取「待朗读文本」，此处不合成。
+        # 合成为在线网络调用（无超时），若放在上报链路里同步执行，
+        # 会让每轮上报都阻塞在合成上、把服务拖垮。故只存文本，
+        # 真正合成由网页点播时按需触发（见 routes/web.py 的 /api/web/voice-ensure）。
+        voice_text = ""
         if kind == "ai":
-            vtext = _voice_text_of(m)
-            if vtext:
-                voice = _synthesize_voice(vtext)
+            voice_text = _voice_text_of(m)
         # 图片块：消息里的 image 块（网页发图、AI 配图等）存到服务端，
         # 收件箱记文件名，前端与抽屉镜像据此用同一地址取图。
         images = _extract_images(m)
@@ -206,7 +208,8 @@ def mirror_report(messages):
             "source_id": mid,
             "role": role,
             "text": body,
-            "voice": voice,
+            "voice": "",
+            "voice_text": voice_text,
             "image": (images if len(images) > 1 else (images[0] if images else "")),
             "kind": "",
             # key：消息在抽屉消息树里的 key（pid-id 格式），供网页版逐条

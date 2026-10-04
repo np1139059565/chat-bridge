@@ -125,14 +125,15 @@ def _norm_image(image):
     return str(image or "")
 
 
-def append(role, text, voice="", kind="", image=""):
+def append(role, text, voice="", kind="", image="", voice_text=""):
     """向收件箱追加一条消息，返回该消息对象。
 
     @param role  角色：user（网页/QQ 用户）/ ai（AI 回复）/ tool / system
     @param text  正文（网页端直接展示的文本，AI 消息为 Markdown 原文）
-    @param voice 可选，语音文件名（相对音频目录），网页据此自动播放
+    @param voice 可选，已合成的语音文件名（相对音频目录）；为空表示尚未合成
     @param kind  可选，附加类型标记（如 command-image），供前端区分展示
     @param image 可选，图片文件名（相对网页图片目录），前端据此渲染 <img>
+    @param voice_text 可选，待朗读的文本；点播时据此按需合成，不占用上报链路
     @returns 追加后的消息对象（含分配好的 seq 与 id）
     """
     with _lock:
@@ -146,6 +147,7 @@ def append(role, text, voice="", kind="", image=""):
             "role": role or "user",
             "text": str(text or ""),
             "voice": str(voice or ""),
+            "voice_text": str(voice_text or ""),
             "image": _norm_image(image),
             "kind": str(kind or ""),
             "key": "",
@@ -207,6 +209,7 @@ def append_many(items):
                 "role": it.get("role") or "user",
                 "text": str(it.get("text") or ""),
                 "voice": str(it.get("voice") or ""),
+                "voice_text": str(it.get("voice_text") or ""),
                 "image": _norm_image(it.get("image")),
                 "kind": str(it.get("kind") or ""),
                 # key：消息在抽屉消息树里的 key（pid-id 格式），供前端核对块完整性
@@ -246,6 +249,43 @@ def is_seen(source_id):
     with _lock:
         state = _read_state()
     return sid in set(state.get("seen") or [])
+
+
+def set_voice(seq, name):
+    """把某条消息的语音文件名回填（按需合成完成后调用）。
+
+    只改 voice 字段，不动其它内容；消息不存在则静默返回。
+    加锁保证与网页请求线程的读改写互斥。
+    @param seq  消息的 seq
+    @param name 合成后的音频文件名（相对音频目录）
+    @returns 是否真的更新
+    """
+    try:
+        want = int(seq)
+    except (TypeError, ValueError):
+        return False
+    with _lock:
+        state = _read_state()
+        for m in (state.get("messages") or []):
+            if int(m.get("seq") or 0) == want:
+                m["voice"] = str(name or "")
+                _write_state(state)
+                return True
+    return False
+
+
+def get_by_seq(seq):
+    """按 seq 取一条消息；不存在返回 None。供按需合成查询 voice/voice_text。"""
+    try:
+        want = int(seq)
+    except (TypeError, ValueError):
+        return None
+    with _lock:
+        state = _read_state()
+    for m in (state.get("messages") or []):
+        if int(m.get("seq") or 0) == want:
+            return m
+    return None
 
 
 def list_since(cursor=0, limit=200):

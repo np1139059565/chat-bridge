@@ -9,8 +9,6 @@
 
   // ---------- 全局状态 ----------
   var cursor = 0;            // 已拉取到的最大 seq
-  var unlocked = false;      // 语音自动播放是否已解锁
-  var lockedByClose = false; // 是否因用户关闭语音而主动上锁
   var seen = {};             // 已渲染消息 id，防重复
   var lastRenderedTs = 0;    // 最后一条渲染消息的时间戳（判断是否该吸顶）
 
@@ -60,16 +58,8 @@
     } else {
       body = renderMarkdown(m.text || '');
     }
-    // 语音：带 voice 字段时渲染播放器；已播过的加标记（见 playedSeqs）
-    var audio = '';
-    if (m.voice) {
-      var played = isVoicePlayed(m.seq);
-      // data-seq：该消息的时间序号。点播时据此定位「这条之后还有哪些」以续播。
-      audio = '<div class="voice-wrap' + (played ? ' played' : '') + '">' +
-        '<span class="voice-flag">' + (played ? '已播放' : '未播放') + '</span>' +
-        '<audio controls preload="none" data-seq="' + (m.seq || 0) + '" src="/api/web/audio/' + encodeURIComponent(m.voice) + '"></audio>' +
-        '</div>';
-    }
+    // 语音：交给独立语音模块渲染（已合成为播放器，未合成为「生成」按钮）
+    var audio = window.WebVoice ? window.WebVoice.renderAudio(m) : '';
     // 消息 key（pid-id）：显示在角色名旁，供逐条核对消息块是否完整、有无缺块。
     // 旧数据可能没有该字段，缺省不显示，避免出现空标记。
     var keyTag = m.key ? '<span class="msg-key" title="消息 key（pid-id）">' + m.key + '</span>' : '';
@@ -82,170 +72,8 @@
     else listEl.appendChild(el);
     // 语音播放器：绑定解锁与自动播放（历史语音不自动播，见 allowAuto）
     var au = el.querySelector('audio');
-    if (au) bindAudio(au, !!allowAuto);
+    if (au && window.WebVoice) window.WebVoice.bind(au, !!allowAuto);
     return true;
-  }
-
-  // ---------- 语音播放：解锁与自动播放 ----------
-  // 规则（用户拍板）：
-  // - 用户点击任意一条语音播放 → 解锁自动播放，之后新到的语音自动播；
-  // - 用户主动关闭任意一条语音 → 关闭自动播放，重新上锁。
-  //
-  // 自动播放必须「排队」而非「抢播」：增量拉取时多条语音可能同一时刻到达，
-  // 若每条各自调用播放，会出现「前一条没播完，后一条就抢着响」。
-  // 因此用一条队列串起来：当前无人在播时才播队首，一条播完（ended）再播下一条。
-  // ---------- 已播放语音标记（持久化到 localStorage） ----------
-  // 目的：让用户一眼看出哪些语音听过、从哪继续。
-  // 以消息 seq 为键记录；用 localStorage 而非内存，刷新后标记仍在。
-  var PLAYED_KEY = 'webVoicePlayed';
-  var playedSeqs = (function () {
-    try {
-      var raw = localStorage.getItem(PLAYED_KEY);
-      var obj = raw ? JSON.parse(raw) : {};
-      // 兜底：非对象（如旧版存了数组）一律重置为空集合，避免后续判断出错
-      return (obj && typeof obj === 'object' && !Array.isArray(obj)) ? obj : {};
-    } catch (e) { return {}; }
-  })();
-
-  /** 判断某条语音是否已播放。 */
-  function isVoicePlayed(seq) {
-    return !!playedSeqs[String(seq || 0)];
-  }
-
-  /** 标记某条语音已播放，并落盘。 */
-  function markVoicePlayed(seq) {
-    var k = String(seq || 0);
-    if (playedSeqs[k]) return;
-    playedSeqs[k] = 1;
-    try { localStorage.setItem(PLAYED_KEY, JSON.stringify(playedSeqs)); } catch (e) { /* 存不下则仅内存 */ }
-    // 同步更新界面标记（找到对应播放器容器）
-    var au = listEl.querySelector('audio[data-seq="' + seq + '"]');
-    if (au) {
-      var wrap = au.closest('.voice-wrap');
-      if (wrap) {
-        wrap.classList.add('played');
-        var flag = wrap.querySelector('.voice-flag');
-        if (flag) flag.textContent = '已播放';
-      }
-    }
-  }
-
-  var autoQueue = [];   // 待自动播放的音频队列
-  var playing = null;   // 当前正在播放的音频（同一时刻最多一条）
-  // 两条语音之间的停顿（毫秒）：不留间隔会听起来连成一条超长语音。
-  var VOICE_GAP_MS = 700;
-  var gapTimer = null;  // 间隔计时器
-
-  /**
-   * 取「某条及其之后」的全部语音元素，按时间序号升序。
-   * 用途：用户从历史某条点播时，把这条之后的依次续播，而不是只播这一条。
-   * @param au 起点音频元素
-   * @returns 音频元素数组（含起点），按 seq 从小到大
-   */
-  function voicesFrom(au) {
-    var cur = parseInt(au.getAttribute('data-seq') || '0', 10);
-    var all = Array.prototype.slice.call(listEl.querySelectorAll('audio[data-seq]'));
-    all.sort(function (a, b) {
-      return parseInt(a.getAttribute('data-seq') || '0', 10) - parseInt(b.getAttribute('data-seq') || '0', 10);
-    });
-    return all.filter(function (a) {
-      return parseInt(a.getAttribute('data-seq') || '0', 10) >= cur;
-    });
-  }
-
-  /**
-   * 兜底互斥：暂停页面上除 keep 之外所有正在播放的音频。
-   * 不依赖 playing 等状态变量，直接扫 DOM——状态变量与事件时序一旦错位，
-   * 守卫就会失效、多条音频同时出声；直接扫 DOM 从根上杜绝。
-   * @param {HTMLAudioElement} keep 要保持播放的那条
-   */
-  function pauseOthers(keep) {
-    var all = listEl.querySelectorAll('audio');
-    for (var i = 0; i < all.length; i++) {
-      var a = all[i];
-      if (a !== keep && !a.paused) {
-        // 标 _progPause，避免被 pause 处理器当成「用户主动关闭」而上锁
-        a._progPause = true;
-        try { a.pause(); } catch (e) { /* 忽略 */ }
-      }
-    }
-  }
-
-  /** 尝试从队列取出下一条播放。有在播 / 未解锁 / 被关闭上锁时都不播。 */
-  function pumpQueue() {
-    if (playing) return;         // 有在播，等它 ended 再继续
-    if (!unlocked || lockedByClose) return;  // 未解锁或已被用户关闭
-    var au = autoQueue.shift();
-    if (!au) return;
-    playing = au;
-    pauseOthers(au);             // 开播前先把其它全部停掉，确保同一时刻只此一条
-    au._progPlay = true;         // 标记：本次播放由程序发起
-    var p = au.play();
-    if (p && p.catch) p.catch(function () {
-      // 被浏览器拦截（未解锁等）：释放占用、清掉程序标记，等待用户手动点击
-      playing = null;
-      au._progPlay = false;
-      au._progPause = false;
-    });
-  }
-
-  /** 播完一条后，停顿 VOICE_GAP_MS 再播下一条（留出间隔，避免连成一条）。 */
-  function scheduleNext() {
-    if (gapTimer) clearTimeout(gapTimer);
-    gapTimer = setTimeout(function () {
-      gapTimer = null;
-      pumpQueue();
-    }, VOICE_GAP_MS);
-  }
-
-  // @param allowAuto 该条是否允许自动播放（历史语音为 false）
-  function bindAudio(au, allowAuto) {
-    // 播放事件：区分「程序自动播」与「用户手动点击播」。
-    au.addEventListener('play', function () {
-      // 开始播放即标记「已播放」：用户点一下就算听过，不必等播完。
-      markVoicePlayed(au.getAttribute('data-seq'));
-      // 开始播放即自动定位：把正在播放的语音滚进可视区。
-      // block:'nearest' 温和——已在可视区时不动，避免每次小幅跳动。
-      try { au.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 老浏览器忽略 */ }
-      // 程序发起：已在 pumpQueue 里登记，不重复处理
-      if (au._progPlay) { au._progPlay = false; return; }
-      // 用户手动点播：解锁、停掉其余、清空旧队列，
-      // 并把「这条及其之后」的语音依次入队——从历史点播也能顺时间续播。
-      unlocked = true; lockedByClose = false;
-      if (playing && playing !== au) {
-        // 标 _progPause 后交给 pause 事件处理器重置：
-        // pause 事件是异步触发的，若在此同步重置标记，事件到达时会误判为用户主动关闭。
-        playing._progPause = true;
-        try { playing.pause(); } catch (e) { /* 忽略 */ }
-      }
-      playing = au;
-      autoQueue = [];
-      voicesFrom(au).forEach(function (a) {
-        if (a !== au) autoQueue.push(a);   // 当前这条在播，其余排队
-      });
-    });
-    // 暂停事件：区分「程序暂停」与「用户主动关闭」。
-    au.addEventListener('pause', function () {
-      // 程序暂停：不算用户主动关闭，不上锁
-      if (au._progPause) { au._progPause = false; return; }
-      // 用户主动暂停：关闭自动播放、重新上锁，并清空待播队列与间隔计时
-      if (!au.ended) {
-        unlocked = false; lockedByClose = true; autoQueue = [];
-        if (gapTimer) { clearTimeout(gapTimer); gapTimer = null; }
-      }
-      if (playing === au) playing = null;
-    });
-    // 播放结束：标记已播放，释放占用，间隔后再播队列里的下一条（等播完 + 留间隔）。
-    au.addEventListener('ended', function () {
-      markVoicePlayed(au.getAttribute('data-seq'));
-      if (playing === au) playing = null;
-      scheduleNext();
-    });
-    // 自动播放：入队，由队列统一调度，不在这里直接播。
-    if (allowAuto && unlocked && !lockedByClose) {
-      autoQueue.push(au);
-      pumpQueue();
-    }
   }
 
   // ---------- 指令链接：点击复制到输入框 ----------
