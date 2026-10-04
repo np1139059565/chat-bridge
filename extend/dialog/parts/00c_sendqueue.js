@@ -14,7 +14,11 @@
   //  - gap：普通文本条目，发后留出「写入输入框 → 回车 → 复位」的时间；
   //  - imageGap：图片条目，内容脚本贴图后要等约 1500ms 才回车提交，
   //    若仍按 gap 会让紧随其后的文本挤在图片提交前，导致顶掉或乱序。
-  const Q = { items: [], sending: false, gap: 800, imageGap: 1800 };
+  // busySince：本轮「忙」的起始时刻；配合看门狗判断是否卡死。
+  const Q = { items: [], sending: false, gap: 800, imageGap: 1800, busySince: 0 };
+  // 看门狗阈值（毫秒）：正常一轮最长约 imageGap(1800)+余量；
+  // 超过它仍停在「忙」，即视为异常卡死，强制复位，避免队列永久堵死。
+  const STUCK_MS = 15000;
   D.sendQueue = Q;
 
   /**
@@ -27,6 +31,14 @@
     if (!payload || !payload.type) return;
     Q.items.push(payload);
     log('发送队列入列：' + payload.type + '，待发=' + Q.items.length);
+    // 看门狗：若「忙」状态已持续过久（异常未复位 / 定时器丢失），强制复位。
+    // 这样队列即使曾被卡死，下一次入列也能自动救活，不再永久堵死。
+    if (Q.sending && Q.busySince && (Date.now() - Q.busySince) > STUCK_MS) {
+      log('发送队列检测到卡死，强制复位', 'items=' + Q.items.length);
+      if (Q.timer) { clearTimeout(Q.timer); Q.timer = null; }
+      Q.sending = false;
+      Q.busySince = 0;
+    }
     // 空闲时才启动泵；忙碌时入列即返回，由正在进行的泵发完继续取。
     if (!Q.sending) D._pumpSendQueue();
   };
@@ -38,22 +50,33 @@
     if (Q.sending) return;
     if (!Q.items.length) return;
     Q.sending = true;
+    // 记录本轮开始时间：供看门狗判断「忙」是否卡得过久（异常未复位时兜底）
+    Q.busySince = Date.now();
     const item = Q.items.shift();
     log('发送队列出列：' + item.type + '，剩余=' + Q.items.length);
     // 本条的等待间隔：图片条目需更久（贴图后要等回车提交），文本用默认值。
     let wait = Q.gap;
-    if (item.type === 'auto_send_image') {
-      // 多图兼容：优先传数组 dataUrls，同时保留单张 dataUrl 字段供旧消费端回退
-      const urls = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
-      window.parent.postMessage({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0] || '', text: item.text || '' }, '*');
-      wait = Q.imageGap;
-    } else {
-      window.parent.postMessage({ type: 'auto_send', text: item.text || '' }, '*');
+    try {
+      if (item.type === 'auto_send_image') {
+        // 多图兼容：优先传数组 dataUrls，同时保留单张 dataUrl 字段供旧消费端回退
+        const urls = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
+        window.parent.postMessage({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0] || '', text: item.text || '' }, '*');
+        wait = Q.imageGap;
+      } else {
+        window.parent.postMessage({ type: 'auto_send', text: item.text || '' }, '*');
+      }
+    } catch (e) {
+      // 关键加固：发送步骤一旦抛异常，过去会让 Q.sending 永久停在 true、
+      // 整条队列死掉且不自愈（表现为图片发不出、工具结果不回传）。
+      // 这里打印真凶并继续走下方定时器复位，保证队列自愈。
+      log('发送队列出列异常（已自愈）：' + (e && e.message ? e.message : e), '条目=' + item.type);
     }
     // 发送后隔 wait 再取下一条：给网页留出「写入输入框 → 回车发送 → 复位」的时间。
+    // 放在 try 之外：无论发送是否抛异常，都必定安排一次复位，杜绝死队列。
     Q.timer = setTimeout(function () {
       Q.timer = null;
       Q.sending = false;
+      Q.busySince = 0;
       D._pumpSendQueue();
     }, wait);
   };
