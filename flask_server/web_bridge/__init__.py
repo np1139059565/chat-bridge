@@ -60,7 +60,7 @@ class WebBridge:
             log("投递文本卡片失败：", e)
             return ""
 
-    def ingest_images(self, data_urls, text=""):
+    def ingest_images(self, data_urls, text="", image_names=None):
         """把网页发来的一组图片（可含文字）投成一张卡片，由抽屉一次贴进网页 AI。
 
         复用 QQ 图片的逆向流程：图片转 dataURL 放进 qq-image 卡片，
@@ -90,6 +90,10 @@ class WebBridge:
                     "openid": "web-user",
                     "path": "",
                     "text": (text or "").strip() or "用户截图",
+                    # image_names：图片在服务端的文件名（与收件箱同源）。
+                    # 抽屉据此把图片挂到对应消息上，渲染时按名取图显示，
+                    # 不依赖网页 DOM（网页里用户图未必是 img 元素）。
+                    "image_names": [str(n) for n in (image_names or []) if n],
                 },
             )
             log("已投递图片卡片", card.id[:8], "张数=" + str(len(urls)), "等待抽屉取走")

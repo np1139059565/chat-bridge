@@ -131,12 +131,50 @@
   };
 
   /**
-   * 依据切片组装分支 key 列表。
-   * 以切片末条为「最新」：沿消息树从它回溯到根，得到从根到它的路径。
-   * @param {Object} conv 会话记录
-   * @param {Array} slice 有序消息（当前切片）
-   * @returns {Array<string>} 分支 key 列表（有序）
+   * 把「服务端图片名」挂到对应消息节点上（方案 2 的核心）。
+   *
+   * 背景：网页页面里用户发的图常常不是 <img> 元素，content 脚本提取不到，
+   * 抽屉两处因此没图。改法：图片卡片贴图时记下「文字 → 图片名」关联
+   * （见 01e_bridge_actions.sendQqImageCard），本函数在该用户消息入树后，
+   * 按文字匹配把 image 块补进消息的 blocks，渲染时即按名从后端取图。
+   * 不依赖网页 DOM，网页改版也不受影响。
+   * @param {Object} conv 会话对象（含 pendingImages 关联表）
+   * @param {Array} incoming 本轮入树的消息
    */
+  M._attachPendingImages = function (conv, incoming) {
+    const pend = (conv && conv.pendingImages) || [];
+    if (!pend.length) return;
+    const base = (this.config && this.config.flaskUrl) || '';
+    const used = [];
+    (incoming || []).forEach((m) => {
+      if (!m || m.role !== 'user') return;
+      // 取该消息的文字：用户消息多为 paragraph 块
+      const text = (m.blocks || []).filter(function (b) { return b && b.type === 'paragraph'; })
+        .map(function (b) { return b.text || ''; }).join(' ').trim();
+      if (!text) return;
+      for (let i = 0; i < pend.length; i++) {
+        if (used.indexOf(i) >= 0) continue;
+        const p = pend[i];
+        // 按文字包含匹配：网页回显的文字与卡片文字一致即可命中
+        if (p.text && text.indexOf(p.text) >= 0) {
+          used.push(i);
+          (p.names || []).slice().reverse().forEach(function (n) {
+            m.blocks.unshift({
+              type: 'image',
+              src: base + '/api/web/image-file/' + encodeURIComponent(n),
+              alt: '图片'
+            });
+          });
+          break;
+        }
+      }
+    });
+    // 命中的关联移除，避免同一张图被重复挂到后续消息上
+    if (used.length) {
+      conv.pendingImages = pend.filter(function (_, i) { return used.indexOf(i) < 0; });
+    }
+  };
+
   M.assembleBranchKeys = function (conv, slice) {
     const tree = conv.msgTree || {};
     const list = slice || [];
@@ -201,6 +239,9 @@
     //    atBottom 一并传入：末路兜底需要它判断「用户是否正看着最新处」，
     //    只有 generate 且在底部时，才允许把找不到锚点的整片接到分支末端。
     //    beforeNodes 用于判断本轮是否真的有新节点入库（供上报解耦用，见末尾）。
+    // 方案 2：把服务端图片按「文字关联」挂到对应用户消息的块上，
+    // 必须放在入树之前——入树后消息块已被引用，再改可能来不及参与本轮渲染。
+    try { this._attachPendingImages(conv, incoming); } catch (e) { log('挂载图片失败：' + e); }
     const beforeNodes = Object.keys(conv.msgTree).length;
     const up = this.upsertTree(conv, incoming, reason, atBottom);
     const addedNodes = Object.keys(conv.msgTree).length > beforeNodes;

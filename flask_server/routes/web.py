@@ -209,7 +209,6 @@ def web_image():
     text = str(data.get("text") or "").strip()
     if not urls:
         return jsonify(success=False, error="empty_image")
-    card_id = web_bridge.web.ingest_images(urls, text)
     # 图片落盘：网页消息列表、抽屉镜像、抽屉消息列表三处都要能拿到这张图，
     # 故服务端把 dataURL 存成本地文件，三处统一按文件名经 /api/web/image-file 取用。
     names = []
@@ -220,6 +219,8 @@ def web_image():
                 names.append(saved["name"])
         except Exception as e:
             print("[web] 保存网页图片失败：", e)
+    # 先落盘再投卡片：卡片带上图片文件名，抽屉据此把图片挂到对应消息上
+    card_id = web_bridge.web.ingest_images(urls, text, names)
     # 收件箱展示：有文字带文字，并标注图片张数；图片字段带文件名供前端渲染真图
     label = text or "[图片]"
     if len(urls) > 1:

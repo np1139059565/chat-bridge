@@ -91,6 +91,9 @@
       isQqImage: true,
       dataUrls: urls,
       imgText: text,
+      // 图片在服务端的文件名（与收件箱同源）：贴图后据此把图片挂到
+      // 对应消息上，抽屉渲染时按名取图，不依赖网页 DOM。
+      imageNames: (c.payload && c.payload.image_names) || [],
       anchorKey: anchorKey,
       key: (anchorKey ? anchorKey.slice(anchorKey.indexOf('-') + 1) : '0')
         + '-' + ('x' + D.hashStr(c.id)),
@@ -117,6 +120,17 @@
   M.sendQqImageCard = function (card) {
     if (!card || !card.isQqImage) return false;
     const urls = card.dataUrls || [];
+    // 方案 2：记录「这条图文消息的文字 → 服务端图片名」关联。
+    // 图片随文字贴进网页 AI 后，网页回显的消息文字与 imgText 一致；
+    // 待该消息入树时（05_messages._attachPendingImages）按文字匹配把图挂上去。
+    try {
+      if (card.imageNames && card.imageNames.length) {
+        const conv = this.ensureConv(this.activeConv);
+        if (!Array.isArray(conv.pendingImages)) conv.pendingImages = [];
+        conv.pendingImages.push({ text: (card.imgText || '').trim(), names: card.imageNames.slice() });
+        if (this._persist) this._persist();
+      }
+    } catch (e) { /* 记录失败不影响贴图 */ }
     D.enqueueSend({
       type: 'auto_send_image',
       dataUrls: urls,
