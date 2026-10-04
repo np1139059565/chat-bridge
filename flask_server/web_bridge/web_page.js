@@ -70,9 +70,12 @@
         '<audio controls preload="none" data-seq="' + (m.seq || 0) + '" src="/api/web/audio/' + encodeURIComponent(m.voice) + '"></audio>' +
         '</div>';
     }
+    // 消息 key（pid-id）：显示在角色名旁，供逐条核对消息块是否完整、有无缺块。
+    // 旧数据可能没有该字段，缺省不显示，避免出现空标记。
+    var keyTag = m.key ? '<span class="msg-key" title="消息 key（pid-id）">' + m.key + '</span>' : '';
     // 语音位置：思考之下、正文之上。组装细节见 WebRender.composeBody。
     el.innerHTML =
-      '<div class="who">' + who + '<span class="time">' + fmtTime(m.ts) + '</span></div>' +
+      '<div class="who">' + who + keyTag + '<span class="time">' + fmtTime(m.ts) + '</span></div>' +
       '<div class="body">' + composeBody(body, audio) + '</div>';
     // 倒序：最新插入到列表最前面
     if (listEl.firstChild) listEl.insertBefore(el, listEl.firstChild);

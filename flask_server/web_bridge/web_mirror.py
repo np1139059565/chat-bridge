@@ -209,6 +209,9 @@ def mirror_report(messages):
             "voice": voice,
             "image": (images if len(images) > 1 else (images[0] if images else "")),
             "kind": "",
+            # key：消息在抽屉消息树里的 key（pid-id 格式），供网页版逐条
+            # 核对消息块是否完整、有无缺块。缺失时为空串。
+            "key": str((m or {}).get("key") or ""),
         })
     if not items:
         return 0

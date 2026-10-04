@@ -83,6 +83,16 @@ body {
 }
 .msg .who { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
 .msg .time { font-size: 10px; color: var(--text-dim); float: right; margin-left: 8px; }
+/* 消息 key（pid-id）：紧挨角色名的小号等宽标记，供核对消息块完整性 */
+.msg .msg-key {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: rgba(255,255,255,0.05);
+  border-radius: 4px;
+  padding: 0 5px;
+  margin-left: 6px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
 /* Markdown 元素样式 */
 .msg p { margin: 6px 0; }
 .msg h1, .msg h2, .msg h3 { margin: 10px 0 6px; line-height: 1.3; }

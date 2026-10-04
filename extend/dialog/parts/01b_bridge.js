@@ -200,6 +200,9 @@
       // 结果存在节点的 cards 里，不上报的话 QQ 端只看得到调用、看不到结果。
       messages.push({
         id: id, role: node.role, blocks: node.blocks || [], md: node.md || '',
+        // key：消息在树中的 key（pid-id 格式）。供网页版逐条核对消息块是否完整、
+        // 有无缺块——它能唯一定位一条消息，比纯文本更可靠。
+        key: k,
         // source：来源标记（user / assistant / tool），供后端直接读字段定类，
         // 无需再扫字符串反推。缺字段时后端回退到内容判断。
         source: node.source || '',

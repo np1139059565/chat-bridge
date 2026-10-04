@@ -148,6 +148,7 @@ def append(role, text, voice="", kind="", image=""):
             "voice": str(voice or ""),
             "image": _norm_image(image),
             "kind": str(kind or ""),
+            "key": "",
             "ts": int(time.time() * 1000),
         }
         messages = state.get("messages") or []
@@ -208,6 +209,8 @@ def append_many(items):
                 "voice": str(it.get("voice") or ""),
                 "image": _norm_image(it.get("image")),
                 "kind": str(it.get("kind") or ""),
+                # key：消息在抽屉消息树里的 key（pid-id 格式），供前端核对块完整性
+                "key": str(it.get("key") or ""),
                 "ts": int(it.get("ts") or (time.time() * 1000)),
             }
             messages.append(msg)
