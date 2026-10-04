@@ -1,0 +1,209 @@
+<style>
+/* ============ 设计变量：颜色、圆角、字号集中在此 ============ */
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1e222b;
+  --line: #2a2f3a;
+  --text: #e6e8ee;
+  --text-dim: #9aa3b2;
+  --accent: #4f8cff;
+  --user: #2b3a55;
+  --ai: #1e222b;
+  --tool: #33291a;
+  --radius: 12px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { margin: 0; height: 100%; overflow: hidden; }
+/* 移动端关键修正：
+   手机浏览器的 100vh 会把地址栏高度也算进去，实际比可视区高；
+   底部输入框因此被推到可视区之外（电脑无地址栏故正常）。
+   用 position:fixed + inset:0 让容器严格贴合「可视视口」，
+   不依赖 vh 单位，桌面与手机表现一致。 */
+body {
+  position: fixed;
+  inset: 0;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+/* ============ 顶栏 ============ */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.topbar .title { font-weight: 600; font-size: 16px; }
+.topbar .status { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+.topbar .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-right: 5px; }
+.topbar .dot.on { background: #35c56a; }
+/* ============ 消息列表：倒序（新消息在上） ============ */
+.list {
+  flex: 1 1 auto;
+  /* 关键：flex 子项默认 min-height 为 auto，不会自动收缩，
+     内容一多就会把同级输入框顶出屏幕；显式设 0 才允许它收缩并内部滚动。 */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.msg {
+  margin-bottom: 12px;
+  max-width: 92%;
+  border-radius: var(--radius);
+  padding: 9px 12px;
+  position: relative;
+  /* 防止长串（URL、长 JSON、无空格文本）撑破气泡 */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+/* 消息体也约束宽度，内部代码块超宽时横向滚动而非撑破外层 */
+.msg .body { min-width: 0; max-width: 100%; overflow-x: auto; }
+.msg.user { background: var(--user); margin-left: auto; }
+.msg.ai { background: var(--ai); margin-right: auto; border: 1px solid var(--line); }
+.msg.tool { background: var(--tool); margin-right: auto; font-size: 13px; color: #d9c8a8; }
+/* 系统消息：指令回执（如 /help 输出），居中窄条、灰底，与对话气泡区分 */
+.msg.system {
+  background: #23262e;
+  margin: 0 auto 12px;
+  max-width: 96%;
+  font-size: 13px;
+  color: var(--text-dim);
+  border: 1px dashed var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg .who { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.msg .time { font-size: 10px; color: var(--text-dim); float: right; margin-left: 8px; }
+/* Markdown 元素样式 */
+.msg p { margin: 6px 0; }
+.msg h1, .msg h2, .msg h3 { margin: 10px 0 6px; line-height: 1.3; }
+.msg h1 { font-size: 18px; } .msg h2 { font-size: 16px; } .msg h3 { font-size: 15px; }
+.msg ul, .msg ol { margin: 6px 0; padding-left: 22px; }
+.msg li { margin: 2px 0; }
+.msg blockquote { margin: 6px 0; padding: 4px 10px; border-left: 3px solid var(--line); color: var(--text-dim); }
+.msg pre { background: #0b0d11; border: 1px solid var(--line); border-radius: 8px; padding: 9px; overflow-x: auto; margin: 8px 0; }
+.msg code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; }
+.msg :not(pre) > code { background: #0b0d11; border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.msg table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 13px; }
+.msg th, .msg td { border: 1px solid var(--line); padding: 4px 7px; text-align: left; }
+.msg a { color: var(--accent); }
+/* 指令链接：点一下复制到输入框 */
+.cmd-link {
+  display: inline-block;
+  color: #7fb2ff;
+  background: rgba(79,140,255,0.12);
+  border: 1px solid rgba(79,140,255,0.35);
+  border-radius: 6px;
+  padding: 0 6px;
+  margin: 1px 2px;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.cmd-link:active { background: rgba(79,140,255,0.3); }
+/* 语音播放器 */
+.voice-wrap { margin-top: 6px; }
+.voice-wrap audio { width: 100%; height: 34px; }
+/* 播放状态标记：未播放高亮提示，已播放淡化 */
+.voice-flag {
+  display: inline-block;
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  margin-bottom: 4px;
+  background: rgba(79,140,255,0.18);
+  color: #7fb2ff;
+  border: 1px solid rgba(79,140,255,0.35);
+}
+.voice-wrap.played .voice-flag {
+  background: transparent;
+  color: var(--text-dim);
+  border-color: var(--line);
+}
+.voice-wrap.played audio { opacity: 0.7; }
+  .msg .img-badge { display: inline-block;
+  font-size: 12px;
+  color: var(--text-dim);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+  }
+/* ============ 输入区 ============ */
+.composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+.composer textarea {
+  flex: 1 1 auto;
+  resize: none;
+  min-height: 40px;
+  max-height: 120px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font: inherit;
+  outline: none;
+}
+.composer button {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.composer button.send { background: var(--accent); border-color: var(--accent); color: #fff; }
+.composer button:active { filter: brightness(0.85); }
+.composer button.rec { background: #b23b3b; border-color: #b23b3b; color: #fff; }
+/* 录音中的提示 */
+  .rec-tip { position: fixed;
+  left: 50%;
+  top: 20%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  display: none;
+  z-index: 50;
+  }
+.rec-tip.on { display: block; }
+/* 图片预览 */
+.preview { padding: 8px 12px; background: var(--panel-2); border-top: 1px solid var(--line); display: none; }
+.preview.on { display: block; }
+/* 多图预览：横向排列，可横向滚动 */
+.preview-list { display: flex; gap: 8px; overflow-x: auto; }
+.preview .thumb { position: relative; flex: 0 0 auto; }
+.preview img { max-height: 72px; border-radius: 8px; display: block; }
+.preview .rm {
+  position: absolute; top: -6px; right: -6px;
+  width: 20px; height: 20px; line-height: 18px; text-align: center;
+  background: #b23b3b; color: #fff; border-radius: 50%;
+  font-size: 14px; cursor: pointer;
+}

@@ -43,7 +43,9 @@
     // 本条的等待间隔：图片条目需更久（贴图后要等回车提交），文本用默认值。
     let wait = Q.gap;
     if (item.type === 'auto_send_image') {
-      window.parent.postMessage({ type: 'auto_send_image', dataUrl: item.dataUrl, text: item.text || '' }, '*');
+      // 多图兼容：优先传数组 dataUrls，同时保留单张 dataUrl 字段供旧消费端回退
+      const urls = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
+      window.parent.postMessage({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0] || '', text: item.text || '' }, '*');
       wait = Q.imageGap;
     } else {
       window.parent.postMessage({ type: 'auto_send', text: item.text || '' }, '*');

@@ -37,6 +37,23 @@ def log(*args):
 # 线程局部标记：组合指令执行期间的中间步骤，回复会被抑制，避免刷屏。
 _reply_ctx = threading.local()
 
+# 网页版回执出口：{fn(text)}，由网页版路由注册。
+# 指令处理器原本只会把回执发回 QQ；网页版没有 QQ 客户端，
+# 因此在此留一个出口，让同一套指令逻辑的回执也能落到网页收件箱。
+_web_reply_sink = None
+
+# 网页版固定标识：指令回执据此判断「这条来自网页版」。
+WEB_OPENID = "web-user"
+
+
+def set_web_reply_sink(fn):
+    """注册网页版回执出口。
+
+    @param fn 回调，签名 fn(text)；传 None 可注销。
+    """
+    global _web_reply_sink
+    _web_reply_sink = fn
+
 
 def _reply(qq_client, openid, text, markdown=False):
     """用当前窗口回复一条文本。
@@ -45,9 +62,18 @@ def _reply(qq_client, openid, text, markdown=False):
     与推送路径共用同一个计数器，避免 (msg_id, msg_seq) 重复被 QQ 判重丢弃。
     组合指令执行期间（_reply_ctx.suppress 为真）静默跳过，只由组合层统一回执。
     markdown 为真时按 Markdown 消息发送（msg_type=2），供 /help 等富文本回执。
+    来自网页版的指令（openid 为 web-user）改走网页回执出口，不发 QQ。
     """
     if getattr(_reply_ctx, "suppress", False):
         return False
+    # 网页版：没有 QQ 客户端，把回执交给网页出口
+    if openid == WEB_OPENID:
+        if _web_reply_sink:
+            try:
+                _web_reply_sink(text)
+            except Exception as e:
+                log("网页回执失败：", e)
+        return True
     msg_id, seq = message_router.next_seq(openid)
     if not msg_id:
         log("窗口已关闭，无法回复")

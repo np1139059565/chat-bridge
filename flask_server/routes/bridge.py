@@ -55,6 +55,13 @@ def bridge_report():
     if request.method == "OPTIONS":
         return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
+    # 网页版镜像：无论 QQ 是否在线，都把这次切片存一份进网页收件箱，
+    # 让手机网页能拉到 AI 回复。失败不影响 QQ 推送。
+    try:
+        from web_bridge import web_mirror
+        web_mirror.mirror_report(data.get("messages") or [])
+    except Exception as e:
+        print("[web] 镜像上报失败：", e)
     try:
         sent = bridge.report(data)
         return jsonify(success=True, pushed=sent)

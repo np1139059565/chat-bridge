@@ -51,16 +51,21 @@
     // 外部用户消息到达：先中止当前进行中的工具卡片，避免其回传结果与
     // 用户新消息交错（见 abortActiveCards）。
     this.abortActiveCards('QQ 图片到达');
-    const dataUrl = (c.payload && c.payload.data_url) || '';
+    // 多图：优先取数组 data_urls；兼容旧单张 data_url。
+    let urls = (c.payload && c.payload.data_urls) || [];
+    if (!Array.isArray(urls) || !urls.length) {
+      const one = (c.payload && c.payload.data_url) || '';
+      urls = one ? [one] : [];
+    }
     // 同消息文字（图文消息）；纯图片时后端已补「用户截图」。
     const text = (c.payload && c.payload.text) || '';
-    if (dataUrl) {
-      // 交给内容脚本：先贴图，再把文字写进同一输入框，最后只发一次。
+    if (urls.length) {
+      // 交给内容脚本：先把全部图贴进输入框，再把文字写进同一输入框，最后只发一次。
       // 经统一发送队列，避免与工具卡片结果、质量告警同时到达互相顶掉。
-      D.enqueueSend({ type: 'auto_send_image', dataUrl: dataUrl, text: text });
-      this.toast(text ? '已把 QQ 图文贴入网页 AI 输入框' : '已把 QQ 图片贴入网页 AI 输入框');
+      D.enqueueSend({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0], text: text });
+      this.toast(text ? '已把图片与文字贴入网页 AI 输入框' : '已把图片贴入网页 AI 输入框');
     } else {
-      this.toast('QQ 图片数据缺失，无法贴图');
+      this.toast('图片数据缺失，无法贴图');
     }
     // 回执后端：卡片已消费，不再重复投递
     this.confirmCardDelivered(c.id);

@@ -223,26 +223,55 @@
    * 图片写入依赖站点实现，失败时回传提示，由用户手动粘贴。
    * @param {string} dataUrl 图片 dataURL
    */
-  A.pasteImageToWebpageAI = function (dataUrl, text) {
-    const ta = A.findInputBox();
-    if (!ta) {
-      A.warn('pasteImageToWebpageAI: 未找到网页 AI 输入框');
-      A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
-      return;
-    }
+  /** 把单个 dataURL 转成 File 对象；非图片或解析失败返回 null。 */
+  A._dataUrlToFile = function (dataUrl, idx) {
     try {
-      // dataURL → Blob → File
       const parts = String(dataUrl).split(',');
       const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/png';
       const bin = atob(parts[1] || '');
       const arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
       const ext = mime.indexOf('jpeg') >= 0 ? 'jpg' : 'png';
-      const file = new File([arr], 'screenshot.' + ext, { type: mime });
+      return new File([arr], 'image_' + idx + '.' + ext, { type: mime });
+    } catch (e) {
+      return null;
+    }
+  };
+
+  /**
+   * 把一或多张图片贴进网页 AI 输入框并发送，可附一段文字。
+   * 多张图放在同一个 paste 事件里一次性贴入（站点会按多图处理），
+   * 随后写入文字、只回车一次，保证「图文合一、多图一条消息」。
+   * @param {string|string[]} dataUrlOrList 单张 dataURL 或 dataURL 数组
+   * @param {string} text 随图文字（可空）
+   */
+  A.pasteImageToWebpageAI = function (dataUrlOrList, text) {
+    const ta = A.findInputBox();
+    if (!ta) {
+      A.warn('pasteImageToWebpageAI: 未找到网页 AI 输入框');
+      A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
+      return;
+    }
+    // 统一成数组：兼容单张字符串与多张数组两种入参
+    const list = Array.isArray(dataUrlOrList) ? dataUrlOrList : (dataUrlOrList ? [dataUrlOrList] : []);
+    if (!list.length) {
+      A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的图片' });
+      return;
+    }
+    try {
+      // 把全部图片转成 File，一次性放进同一个 DataTransfer
       const dt = new DataTransfer();
-      dt.items.add(file);
+      let added = 0;
+      list.forEach(function (u, i) {
+        const file = A._dataUrlToFile(u, i);
+        if (file) { dt.items.add(file); added++; }
+      });
+      if (!added) {
+        A.post({ type: 'auto_send_result', ok: false, msg: '图片解析失败' });
+        return;
+      }
       ta.focus();
-      // 派发带文件的 paste 事件，交给站点自身处理上传与预览
+      // 一次 paste 事件带全部文件：站点按多图一并接收、一并预览
       ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
       // 图文合一：贴图后不立即回车，先等图片上传 / 预览就绪（固定延时兜底），
       // 再把文字一次性写入输入框（复制粘贴式，非逐字），最后只回车一次。

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>网页版机器人</title>
+<!-- 样式与脚本均外置：无构建步骤，改完刷新即生效 -->
+<link rel="stylesheet" href="/web-bot/web_page.css">
+</head>
+<body>
+
+<!-- 顶栏：标题 + 连接状态 -->
+<div class="topbar">
+  <span class="title">网页版机器人</span>
+  <span class="status"><span class="dot" id="dot"></span><span id="statusText">连接中…</span></span>
+</div>
+
+<!-- 消息列表：脚本倒序插入，最新永远在最上面 -->
+<div class="list" id="list"></div>
+
+<!-- 图片预览条：支持多张，动态生成缩略图 -->
+<div class="preview" id="preview">
+  <div class="preview-list" id="previewList"></div>
+</div>
+
+<!-- 输入区：文字、图片、录音、发送 -->
+<div class="composer">
+  <button id="btnImg" title="发图片">🖼</button>
+  <button id="btnRec" title="按住录音">🎤</button>
+  <textarea id="input" rows="1" placeholder="输入消息…"></textarea>
+  <button id="btnSend" class="send" title="发送">➤</button>
+</div>
+
+<!-- 录音提示 -->
+<div class="rec-tip" id="recTip">● 正在录音…</div>
+<!-- 隐藏的图片选择：multiple 支持一次多选 -->
+<input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+
+<!-- 渲染模块需先于页面脚本加载（页面脚本引用 WebRender.renderMarkdown） -->
+<script src="/web-bot/web_render.js"></script>
+<script src="/web-bot/web_page.js"></script>
+</body>
+</html>

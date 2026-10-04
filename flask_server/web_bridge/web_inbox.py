@@ -1,0 +1,215 @@
+"""网页版机器人 —— 对话收件箱（存储层）
+
+职责：
+1. 把网页版对话的消息按顺序落盘，供手机网页主动拉取
+2. 提供「游标增量拉取」：调用方带着上次拿到的 seq 来，只取之后的新消息
+3. 维护消息数量上限，超出时丢弃最旧的，避免文件无限增长
+
+设计说明：
+- 网页版与 QQ 共用同一场对话（用户拍板 1A），但两者的「推送方式」不同：
+  QQ 走被动回复窗口主动推；网页版走「打开页面后主动拉」。
+  因此本模块只负责「存」，拉取策略由路由层决定。
+- 游标用单调递增的 seq（整数），比时间戳可靠：同一毫秒内多条消息也不会乱序。
+- 所有写操作加锁：消息可能从抽屉上报线程与网页请求线程同时写入。
+"""
+import json
+import threading
+import time
+
+import paths
+
+# 消息数量上限：超出后丢弃最旧的，防止收件箱文件无限膨胀。
+# 手机端只需看最近内容，历史靠 QQ 侧与抽屉存档，无需在此长期留存。
+MAX_MESSAGES = 500
+
+# 用可重入锁：读改写同一份文件，需整体串行。
+_lock = threading.RLock()
+
+
+def _empty_state():
+    """收件箱的初始状态：空消息列表 + 游标归零 + 已入库源 id 集合。
+
+    seen 用于按「源消息 id」去重：抽屉每次上报的是全量可见切片，
+    若不去重，同一轮对话会被反复写进收件箱。
+    """
+    return {"seq": 0, "messages": [], "seen": []}
+
+
+def _read_state():
+    """读取收件箱文件；不存在或损坏时返回空结构。
+
+    损坏时不抛异常：收件箱是「尽力而为」的展示缓存，
+    宁可当作空箱重新开始，也不能让网页版整个不可用。
+    """
+    path = paths.WEB_INBOX_PATH
+    if not path.exists():
+        return _empty_state()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        print("[web] 读取收件箱失败，按空箱处理：", e)
+        return _empty_state()
+    # 字段兜底：外部改坏文件时不至于让后续逻辑崩在 None 上
+    if not isinstance(data, dict):
+        return _empty_state()
+    msgs = data.get("messages")
+    if not isinstance(msgs, list):
+        msgs = []
+    seq = data.get("seq")
+    if not isinstance(seq, int):
+        seq = 0
+    seen = data.get("seen")
+    if not isinstance(seen, list):
+        seen = []
+    return {"seq": seq, "messages": msgs, "seen": seen}
+
+
+def _write_state(state):
+    """把收件箱状态写回磁盘。
+
+    先确保目录存在；写失败只记录——收件箱是缓存，写不进去不应阻断消息流。
+    """
+    path = paths.WEB_INBOX_PATH
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    except Exception as e:
+        print("[web] 写回收件箱失败：", e)
+
+
+def append(role, text, voice="", kind=""):
+    """向收件箱追加一条消息，返回该消息对象。
+
+    @param role  角色：user（网页/QQ 用户）/ ai（AI 回复）/ tool（工具消息）
+    @param text  正文（网页端直接展示的文本，AI 消息为 Markdown 原文）
+    @param voice 可选，语音文件名（相对音频目录），网页据此自动播放
+    @param kind  可选，附加类型标记（如 external-call），供前端区分展示
+    @returns 追加后的消息对象（含分配好的 seq 与 id）
+    """
+    with _lock:
+        state = _read_state()
+        # 游标自增：seq 从 1 开始，作为拉取增量与消息 id 的双重依据
+        state["seq"] = int(state.get("seq") or 0) + 1
+        seq = state["seq"]
+        msg = {
+            "seq": seq,
+            "id": "w-" + str(seq),
+            "role": role or "user",
+            "text": str(text or ""),
+            "voice": str(voice or ""),
+            "kind": str(kind or ""),
+            "ts": int(time.time() * 1000),
+        }
+        messages = state.get("messages") or []
+        messages.append(msg)
+        # 超上限则截断最旧的：保留末尾 MAX_MESSAGES 条
+        if len(messages) > MAX_MESSAGES:
+            messages = messages[-MAX_MESSAGES:]
+        state["messages"] = messages
+        _write_state(state)
+        return msg
+
+
+def append_many(items):
+    """批量入库并去重，返回真正新增的消息列表。
+
+    抽屉上报的是全量切片，同一条消息会被反复上报；本函数按每条 item 的
+    source_id（抽屉里的消息 id）去重，只有首次出现才写进收件箱。
+    整个批次共用一次读改写，避免逐条写盘。
+    @param items 列表，每项 {source_id, role, text, voice, kind}
+    @returns 新增的消息对象列表（按入库顺序）
+    """
+    added = []
+    with _lock:
+        state = _read_state()
+        seen = set(state.get("seen") or [])
+        messages = state.get("messages") or []
+        seq = int(state.get("seq") or 0)
+        changed = False
+        for it in (items or []):
+            sid = str(it.get("source_id") or "")
+            # 无源 id 的条目（如网页自己发的）允许直接入库，不去重
+            if sid and sid in seen:
+                continue
+            seq += 1
+            msg = {
+                "seq": seq,
+                "id": "w-" + str(seq),
+                "role": it.get("role") or "user",
+                "text": str(it.get("text") or ""),
+                "voice": str(it.get("voice") or ""),
+                "kind": str(it.get("kind") or ""),
+                "ts": int(it.get("ts") or (time.time() * 1000)),
+            }
+            messages.append(msg)
+            added.append(msg)
+            if sid:
+                seen.add(sid)
+            changed = True
+        if not changed:
+            return []
+        if len(messages) > MAX_MESSAGES:
+            messages = messages[-MAX_MESSAGES:]
+        state["seq"] = seq
+        state["messages"] = messages
+        # 已入库源 id 同样限长：只保留与现存消息规模相当的一批，
+        # 避免它本身无界增长（它只是一份去重用的索引）。
+        state["seen"] = list(seen)[-MAX_MESSAGES * 2:]
+        _write_state(state)
+    return added
+
+
+def is_seen(source_id):
+    """判断某条源消息是否已入库（用于避免重复做重活，如语音合成）。
+
+    @param source_id 抽屉里的消息 id
+    @returns 已入库为 True
+    """
+    sid = str(source_id or "")
+    if not sid:
+        return False
+    with _lock:
+        state = _read_state()
+    return sid in set(state.get("seen") or [])
+
+
+def list_since(cursor=0, limit=200):
+    """拉取游标之后的新消息（增量）。
+
+    @param cursor 上次拿到的最大 seq；传 0 表示首次拉取
+    @param limit  单次最多返回条数，避免一次拉太多卡住手机
+    @returns {seq, messages}：seq 为当前最新游标，messages 为新消息（按时间正序）
+    """
+    with _lock:
+        state = _read_state()
+    try:
+        cur = int(cursor)
+    except (TypeError, ValueError):
+        cur = 0
+    messages = state.get("messages") or []
+    # 只取 seq 严格大于游标的：等于游标说明已拉过，不重复
+    fresh = [m for m in messages if int(m.get("seq") or 0) > cur]
+    # 超过单次上限时截取最新的一批（末尾 limit 条），保证尽量看到最新内容
+    if len(fresh) > limit:
+        fresh = fresh[-limit:]
+    return {"seq": int(state.get("seq") or 0), "messages": fresh}
+
+
+def recent(limit=50):
+    """取最近的若干条消息（首次打开页面时用于铺满一屏历史）。
+
+    @param limit 条数上限
+    @returns {seq, messages}：messages 按时间正序
+    """
+    with _lock:
+        state = _read_state()
+    messages = state.get("messages") or []
+    if limit and len(messages) > limit:
+        messages = messages[-limit:]
+    return {"seq": int(state.get("seq") or 0), "messages": messages}
+
+
+def clear():
+    """清空收件箱（供调试或用户主动重置）。"""
+    with _lock:
+        _write_state(_empty_state())

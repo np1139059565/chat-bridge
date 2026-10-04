@@ -58,6 +58,11 @@ BRIDGE_STATE_PATH = DATA_DIR / "remote_bridge_state.json"
 VOICE_DIR = DATA_DIR / "voice"
 # QQ 图片目录：用户从 QQ 发来的图片存这里，供镜像扩展取走、贴进网页 AI 输入框。
 QQ_IMAGES_DIR = DATA_DIR / "qq_images"
+# 网页版机器人目录：网页版对话收件箱的存储与音频文件都落这里。
+# 收件箱文件存对话消息（JSON）；音频目录存 TTS 合成的 MP3，供网页直接播放。
+WEB_DIR = DATA_DIR / "web"
+WEB_INBOX_PATH = WEB_DIR / "inbox.json"
+WEB_AUDIO_DIR = WEB_DIR / "audio"
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
 LOGS_DIR = DATA_DIR / "logs"
