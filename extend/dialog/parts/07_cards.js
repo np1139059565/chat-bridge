@@ -266,12 +266,19 @@
     const k = mKey + '-' + j;
     if (block.type === 'heading') return h('div', { class: 'mb-h', key: k }, block.text);
     if (block.type === 'paragraph') return h('p', { class: 'mb-p', key: k }, block.text);
-    // 图片块：直接渲染原图。src 可能是 blob: / https: / dataURL；
-    // blob 地址在抽屉（iframe）里可能无法显示，此时退化为占位提示，不阻断其它块。
+    // 图片块：渲染原图。
+    // 两种来源：① block.name 是服务端文件名（网页用户图），需用后端绝对地址拼；
+    //           ② block.src 是现成地址（blob:/https:/dataURL，来自页面解析）。
+    // 对话框是扩展页（跨源），相对地址会解析到扩展自身，故服务端图必须用绝对地址。
     if (block.type === 'image') {
+      let src = block.src || '';
+      if (block.name) {
+        const base = (ctx.config && ctx.config.flaskUrl) || '';
+        src = base + '/api/web/image-file/' + encodeURIComponent(block.name);
+      }
       return h('div', { class: 'mb-img', key: k }, [
         h('img', {
-          src: block.src,
+          src: src,
           alt: block.alt || '图片',
           onError: (e) => { try { e.target.style.display = 'none'; } catch (err) { /* 忽略 */ } }
         })

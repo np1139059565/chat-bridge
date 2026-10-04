@@ -144,34 +144,40 @@
   M._attachPendingImages = function (conv, incoming) {
     const pend = (conv && conv.pendingImages) || [];
     if (!pend.length) return;
-    const base = (this.config && this.config.flaskUrl) || '';
     const used = [];
-    (incoming || []).forEach((m) => {
+    // 目标 = 本轮 incoming 用户消息 + 树中已有用户消息。含树中已有：
+    // 图片卡片贴图常晚于网页消息入树，等 pendingImages 记录时该消息已进树、
+    // 不再出现在后续切片里，只扫 incoming 会永远匹配不到。
+    const targets = [];
+    (incoming || []).forEach(function (m) { if (m && m.role === 'user') targets.push(m); });
+    Object.keys((conv && conv.msgTree) || {}).forEach(function (k) {
+      const n = conv.msgTree[k];
+      if (n && n.role === 'user') targets.push(n);
+    });
+    targets.forEach((m) => {
       if (!m || m.role !== 'user') return;
-      // 取该消息的文字：用户消息多为 paragraph 块
+      if ((m.blocks || []).some(function (b) { return b && b.type === 'image'; })) return;
       const text = (m.blocks || []).filter(function (b) { return b && b.type === 'paragraph'; })
         .map(function (b) { return b.text || ''; }).join(' ').trim();
       if (!text) return;
       for (let i = 0; i < pend.length; i++) {
         if (used.indexOf(i) >= 0) continue;
         const p = pend[i];
-        // 按文字包含匹配：网页回显的文字与卡片文字一致即可命中
         if (p.text && text.indexOf(p.text) >= 0) {
           used.push(i);
+          // 只存文件名，不存 URL：对话框跨源，URL 必须到渲染时用后端绝对地址拼，
+          // 否则相对地址会解析到扩展自身而加载失败（网页列表同源故无此问题）。
           const imgBlocks = (p.names || []).slice().reverse().map(function (n) {
-            return { type: 'image', src: base + '/api/web/image-file/' + encodeURIComponent(n), alt: '图片' };
+            return { type: 'image', name: n, alt: '图片' };
           });
-          // 双写之一：改本轮 incoming 的消息对象
           imgBlocks.slice().reverse().forEach(function (b) { m.blocks.unshift(b); });
-          // 双写之二：同步到「已在树中」的同一条消息节点。
-          // 必要性：消息可能先于图片卡片入树，而 upsertTree 对「整片已存在」
-          // 的分支直接返回、不更新节点 blocks，只改 incoming 不会反映到镜像区。
+          // 同步到「已在树中」的同一条消息节点（upsertTree 对整片已存在分支不更新 blocks）
           try {
             const tk = this.keyOfId(conv.msgTree, this.msgId(m));
             const tn = tk && conv.msgTree[tk];
             if (tn && tn !== m && Array.isArray(tn.blocks)) {
               imgBlocks.slice().reverse().forEach(function (b) {
-                tn.blocks.unshift({ type: b.type, src: b.src, alt: b.alt });
+                tn.blocks.unshift({ type: b.type, name: b.name, alt: b.alt });
               });
             }
           } catch (e) { log('图片同步到树失败：' + e); }
@@ -179,7 +185,6 @@
         }
       }
     });
-    // 命中的关联移除，避免同一张图被重复挂到后续消息上
     if (used.length) {
       conv.pendingImages = pend.filter(function (_, i) { return used.indexOf(i) < 0; });
     }

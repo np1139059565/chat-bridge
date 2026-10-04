@@ -129,6 +129,20 @@
         if (!Array.isArray(conv.pendingImages)) conv.pendingImages = [];
         conv.pendingImages.push({ text: (card.imgText || '').trim(), names: card.imageNames.slice() });
         if (this._persist) this._persist();
+        // 主动触发挂图：消息可能已先于卡片入树，之后若无新上报，
+        // _attachPendingImages 不会被调用。贴图后延迟几次重试，
+        // 等网页回显该消息后把图挂上并刷新视图。
+        const self = this;
+        [1500, 4000, 8000].forEach(function (delay) {
+          setTimeout(function () {
+            try {
+              if (conv.pendingImages && conv.pendingImages.length) {
+                self._attachPendingImages(conv, []);
+                if (self._persist) self._persist();
+              }
+            } catch (e) { /* 忽略 */ }
+          }, delay);
+        });
       }
     } catch (e) { /* 记录失败不影响贴图 */ }
     D.enqueueSend({
