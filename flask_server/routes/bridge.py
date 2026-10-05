@@ -174,27 +174,24 @@ def _deliver_result_web(text, image):
     return jsonify(success=True)
 
 
-def _deliver_result(client, openid, data):
-    """把回传结果送达对应去向。
+def _deliver_result_qq_sync(client, openid, data):
+    """把 QQ 版回传结果实际投递出去（在后台线程执行，故不构造 HTTP 响应）。
 
-    - 网页版：落进网页收件箱（不进 QQ）；
-    - QQ 版：优先按图片发送，失败则转为文本回退。
-    返回成功响应；无内容可发时也返回成功（回传本身已确认接收）。
+    - 截屏且无文本时优先按图片发送，失败则把错误信息转为文本回退；
+    - 发送是网络调用（图片上传 / 文本发送），放后台线程跑，
+      绝不阻塞 /api/bridge/result 的请求线程。
+    无内容可发时直接返回（回传本身已确认接收）。
     """
     text = data.get("text") or ""
     image = data.get("image") or ""
-    # 网页版：结果落收件箱，不碰 QQ
-    if openid == _WEB_OPENID:
-        return _deliver_result_web(text, image)
-    # QQ 版：截屏且无文本时优先按图片发送；失败则把错误信息转为文本回退
+    # 截屏且无文本时优先按图片发送；失败则把错误信息转为文本回退
     if image and not text:
         fallback = _try_send_image(client, openid, image)
         if fallback is None:
-            return jsonify(success=True, sent="image")
+            return
         text = fallback
     if openid and text:
         _send_text(client, openid, text)
-    return jsonify(success=True)
 
 
 @bp.route("/api/bridge/result", methods=["POST", "OPTIONS"])
@@ -210,7 +207,15 @@ def bridge_result():
     client, openid, err = _take_result_context(data)
     if err is not None:
         return err
-    return _deliver_result(client, openid, data)
+    # 网页版：结果落本地收件箱，快且不涉网络，同步完成即可。
+    if openid == _WEB_OPENID:
+        return _deliver_result_web(data.get("text") or "", data.get("image") or "")
+    # QQ 版：投递要发图片 / 文本（网络调用），放后台线程执行，
+    # 请求立即返回，避免慢网络把 /api/bridge/result 卡住。
+    threading.Thread(
+        target=_deliver_result_qq_sync, args=(client, openid, data), daemon=True
+    ).start()
+    return jsonify(success=True)
 
 
 def _save_data_url(data_url):
