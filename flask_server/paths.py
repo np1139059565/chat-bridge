@@ -65,6 +65,10 @@ WEB_INBOX_PATH = WEB_DIR / "inbox.json"
 WEB_AUDIO_DIR = WEB_DIR / "audio"
 # 网页图片目录：指令结果的截图等存这里，供网页经接口读取展示。
 WEB_IMAGES_DIR = WEB_DIR / "images"
+# 记忆系统目录：结构化记忆数据库（消息树 + 蒸馏 + 事件层）落这里。
+# 单一 SQLite 文件承载全部记忆，启动时加载进内存，供接口读写。
+MEMORY_DB_DIR = DATA_DIR / "memory"
+MEMORY_DB_PATH = MEMORY_DB_DIR / "memory.db"
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
 LOGS_DIR = DATA_DIR / "logs"

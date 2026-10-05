@@ -88,6 +88,29 @@ chat-bridge-main/
 └── docs/                    # 文档
 ```
 
+### 记忆系统（flask_server/core/memory_*.py）
+
+结构化记忆系统，把「消息树 + 蒸馏精华 + 事件关联」落进单个 SQLite 文件，
+启动加载进内存、经 HTTP 接口读写。详见 `docs/记忆机制改进方案.md`。
+
+| 模块 | 职责 |
+|---|---|
+| `memory_db.py` | 连接管理、六张表、向量暴力余弦 |
+| `memory_nodes.py` | 节点表读写（含蒸馏字段） |
+| `memory_edges.py` | 边表读写（树边 / 分支边 / 突触边） |
+| `memory_cards.py` | 卡片表读写（工具执行状态） |
+| `memory_conversations.py` | 会话整体存取（前端走后端查询） |
+| `memory_keywords.py` | 关键词提取（规则 + 可插拔 LLM 精筛） |
+| `memory_distill.py` | 异步蒸馏（按来源提精华） |
+| `memory_decay.py` | 强度计算、自动升降级、边衰减 |
+| `memory_events.py` | 事件聚类、突触建边、三条护栏 |
+| `memory_search.py` | 双接口防幻觉检索 |
+| `memory_loader.py` | 启动加载进内存 |
+| `routes/memory_graph.py` | 记忆系统 HTTP 接口（含 `/memory-graph` 图谱页） |
+
+数据落 `flask_server/data/memory/memory.db`（不入库）；图谱页在 `flask_server/static/memory_graph.html`（入库）。
+
+
 ---
 
 ## 三、两类卡片（核心概念）

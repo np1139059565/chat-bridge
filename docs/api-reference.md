@@ -231,3 +231,67 @@ POST 请求体示例：
 | `run_command` | `language`, `command` | `cwd`, `timeout` |
 
 > 参数命名口径：文件路径统一 `file_path`，目录路径统一 `dir_path`。调用前请先 `get_tool_params` 核对。
+
+---
+
+## 七、记忆系统
+
+结构化记忆系统的 HTTP 接口。数据落 `flask_server/data/memory/memory.db`（单文件 SQLite）。
+所有响应统一 `{ success: bool, ... }`。详见 `docs/记忆机制改进方案.md`。
+
+### 会话（前端走后端查询）
+
+#### GET /memory/conversation
+
+取整个会话的消息树。查询参数 `conv_id`（必填）、`site_key`。
+返回 `{ success, conv }`；会话不存在时 `conv` 为 null。
+
+#### POST /memory/conversation
+
+写整个会话的消息树，写入后触发异步蒸馏。
+请求：`{ conv_id, site_key, conv: { title, page_url, msgTree, visibleKeys, ... } }`。
+返回 `{ success, written }`（写入节点数）。
+
+#### GET /memory/conversations
+
+列出会话摘要。查询参数 `site_key`（可选）。返回 `{ success, conversations: [...] }`。
+
+#### POST /memory/conversation/delete
+
+删除一个会话及其全部节点、边、卡片。请求：`{ conv_id, site_key }`。返回 `{ success, deleted }`。
+
+### 节点
+
+- `GET /memory/node/<node_id>` — 取节点（含其卡片）。
+- `GET /memory/list?conv_id=&site_key=` — 列举某会话全部节点。
+- `POST /memory/delete` — 软删除节点，请求 `{ node_id }`。
+
+### 检索（双接口防幻觉）
+
+#### POST /memory/plan
+
+接口 A：暂存任务计划原文，作为检索真值基准。请求 `{ plan_text, session_id }`。返回 `{ success, plan_id }`。
+
+#### POST /memory/search
+
+接口 B：验证式关联搜索。请求 `{ plan_id, keywords: [...], focus, top_k }`。
+`focus` 取 `relevance`（默认）/ `time` / `strength`。
+返回 `{ success, hits: [...], rejected: [...], plan_found }`。
+`keywords` 中不在计划原文里的词会进 `rejected`，不参与检索。
+
+### 分级 / 事件 / 图谱
+
+- `POST /memory/decay/run` — 触发衰减计算与自动升降级，返回 `{ processed, upgraded, downgraded }`。
+- `GET /memory/events` — 列出事件簇（用户发言按关键词聚类）。
+- `GET /memory/event/history?root_id=` — 取某事件根节点的演化史（修订日志）。
+- `GET /memory/graph?conv_id=&site_key=` — 导出图数据（节点 + 边），供可视化。
+- `POST /memory/load` — 触发一次内存加载（规则 + 记忆摘要）。
+- `GET /memory/fingerprint` — memory 目录内容指纹（判断 AI 是否写入工作记忆）。
+
+### 图谱页面
+
+#### GET /memory-graph
+
+记忆图谱可视化页面（原生 Canvas 力导向图，零外部依赖）。
+节点按分级着色（临时=灰 / 中期=蓝 / 永久=金 / 用户=红），大小反映强度；
+边分树边（灰实线）、分支边（灰虚线）、突触边（金虚线）。支持悬停看精华、拖拽节点。

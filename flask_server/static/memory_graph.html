@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>记忆图谱</title>
+  <style>
+    /* 记忆图谱样式：暗色底，节点按分级着色，突触边虚线 */
+    html, body { margin: 0; padding: 0; height: 100%; background: #14161a; color: #d8dbe0; font-family: system-ui, sans-serif; }
+    #bar { padding: 8px 12px; background: #1c1f25; display: flex; gap: 12px; align-items: center; font-size: 13px; }
+    #bar input { background: #262a31; border: 1px solid #333; color: #d8dbe0; padding: 4px 8px; border-radius: 4px; }
+    #bar button { background: #2d6cdf; border: 0; color: #fff; padding: 5px 12px; border-radius: 4px; cursor: pointer; }
+    #legend { margin-left: auto; display: flex; gap: 10px; font-size: 12px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    #cv { display: block; width: 100%; height: calc(100% - 41px); }
+    #tip {
+      position: fixed; pointer-events: none; background: #000c;
+      padding: 6px 10px; border-radius: 4px; font-size: 12px;
+      max-width: 320px; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="bar">
+    <input id="conv" placeholder="会话 id（留空看全部）" />
+    <button id="reload">加载</button>
+    <span id="stat"></span>
+    <div id="legend">
+      <span><i class="dot" style="background:#888"></i>临时</span>
+      <span><i class="dot" style="background:#3a8dde"></i>中期</span>
+      <span><i class="dot" style="background:#e0b23a"></i>永久</span>
+      <span><i class="dot" style="background:#e05a5a"></i>用户</span>
+    </div>
+  </div>
+  <canvas id="cv"></canvas>
+  <div id="tip"></div>
+  <script>
+  // 记忆图谱：原生 Canvas 力导向图，零外部依赖。
+  // 节点按 tier 着色、大小按 strength；边分树边（灰实线）与突触边（彩虚线）。
+  (function () {
+    'use strict';
+    var cv = document.getElementById('cv');
+    var ctx = cv.getContext('2d');
+    var tip = document.getElementById('tip');
+    var nodes = [], edges = [], W = 0, H = 0, drag = null;
+
+    // 适配设备像素比，保证高清屏不糊
+    function resize() {
+      var dpr = window.devicePixelRatio || 1;
+      W = cv.clientWidth; H = cv.clientHeight;
+      cv.width = W * dpr; cv.height = H * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener('resize', resize);
+
+    // 分级配色：用户发言单独用红色高亮，其余按 tier
+    function colorOf(n) {
+      if (n.source === 'user') return '#e05a5a';
+      if (n.tier === 'perm') return '#e0b23a';
+      if (n.tier === 'mid') return '#3a8dde';
+      return '#888';
+    }
+
+    // 力导向：斥力（节点互推）+ 弹簧（边拉近），迭代收敛
+    function tick() {
+      var i, j, a, b, dx, dy, d2, d, f;
+      for (i = 0; i < nodes.length; i++) {
+        a = nodes[i];
+        for (j = i + 1; j < nodes.length; j++) {
+          b = nodes[j];
+          dx = a.x - b.x; dy = a.y - b.y;
+          d2 = dx * dx + dy * dy + 0.01;
+          f = 800 / d2;
+          d = Math.sqrt(d2);
+          a.vx += dx / d * f; a.vy += dy / d * f;
+          b.vx -= dx / d * f; b.vy -= dy / d * f;
+        }
+        // 向心力：把节点拉向画布中心，避免飘散
+        a.vx += (W / 2 - a.x) * 0.002;
+        a.vy += (H / 2 - a.y) * 0.002;
+      }
+      for (var e = 0; e < edges.length; e++) {
+        var ed = edges[e];
+        var s = ed.s, t = ed.t;
+        if (!s || !t) continue;
+        dx = t.x - s.x; dy = t.y - s.y;
+        d = Math.sqrt(dx * dx + dy * dy) + 0.01;
+        f = (d - 90) * 0.01 * (ed.weight || 1);
+        s.vx += dx / d * f; s.vy += dy / d * f;
+        t.vx -= dx / d * f; t.vy -= dy / d * f;
+      }
+      for (i = 0; i < nodes.length; i++) {
+        a = nodes[i];
+        if (a === drag) continue;
+        a.vx *= 0.85; a.vy *= 0.85;
+        a.x += a.vx; a.y += a.vy;
+      }
+    }
+
+    // 绘制：先边后节点，最后画标签
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      var e, ed;
+      for (e = 0; e < edges.length; e++) {
+        ed = edges[e];
+        if (!ed.s || !ed.t) continue;
+        ctx.beginPath();
+        ctx.moveTo(ed.s.x, ed.s.y);
+        ctx.lineTo(ed.t.x, ed.t.y);
+        if (ed.kind === 'associative') {
+          ctx.setLineDash([4, 4]);
+          ctx.strokeStyle = 'rgba(224,178,58,0.55)';
+        } else if (ed.kind === 'branch') {
+          ctx.setLineDash([2, 3]);
+          ctx.strokeStyle = 'rgba(120,120,120,0.5)';
+        } else {
+          ctx.setLineDash([]);
+          ctx.strokeStyle = 'rgba(100,100,100,0.35)';
+        }
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        var r = 4 + (n.strength || 0.5) * 10;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = colorOf(n);
+        ctx.fill();
+        // 有关键词的节点，在旁标一个短标签
+        if (n.keywords && n.keywords.length) {
+          ctx.fillStyle = 'rgba(200,200,200,0.75)';
+          ctx.font = '11px system-ui';
+          ctx.fillText(n.keywords[0].slice(0, 8), n.x + r + 2, n.y + 3);
+        }
+      }
+    }
+
+    function loop() { tick(); draw(); requestAnimationFrame(loop); }
+
+    // 按 id 建索引，供边绑定节点对象
+    function build(data) {
+      nodes = []; edges = [];
+      var map = {};
+      (data.nodes || []).forEach(function (n) {
+        var o = { id: n.id, source: n.source, tier: n.tier, strength: n.strength,
+                  keywords: n.keywords, essence: n.essence,
+                  x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0 };
+        nodes.push(o); map[n.id] = o;
+      });
+      (data.edges || []).forEach(function (e) {
+        edges.push({ s: map[e.src_node], t: map[e.dst_node], kind: e.kind, weight: e.weight });
+      });
+      document.getElementById('stat').textContent = nodes.length + ' 节点 / ' + edges.length + ' 边';
+    }
+
+    function load() {
+      var conv = document.getElementById('conv').value.trim();
+      var url = '/memory/graph' + (conv ? ('?conv_id=' + encodeURIComponent(conv)) : '');
+      fetch(url).then(function (r) { return r.json(); }).then(build);
+    }
+
+    // 交互：悬停显示精华，按下拖动节点
+    cv.addEventListener('mousemove', function (ev) {
+      var rect = cv.getBoundingClientRect();
+      var mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+      if (drag) { drag.x = mx; drag.y = my; drag.vx = drag.vy = 0; return; }
+      var hit = null;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if ((n.x - mx) * (n.x - mx) + (n.y - my) * (n.y - my) < 100) { hit = n; break; }
+      }
+      if (hit) {
+        tip.style.display = 'block';
+        tip.style.left = (ev.clientX + 12) + 'px';
+        tip.style.top = (ev.clientY + 12) + 'px';
+        tip.textContent = '#' + hit.id + ' [' + (hit.source || '') + '/' + (hit.tier || '') + '] ' + (hit.essence || '');
+        cv.style.cursor = 'pointer';
+      } else { tip.style.display = 'none'; cv.style.cursor = 'default'; }
+    });
+    cv.addEventListener('mousedown', function (ev) {
+      var rect = cv.getBoundingClientRect();
+      var mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if ((n.x - mx) * (n.x - mx) + (n.y - my) * (n.y - my) < 100) { drag = n; break; }
+      }
+    });
+    window.addEventListener('mouseup', function () { drag = null; });
+    document.getElementById('reload').addEventListener('click', load);
+
+    resize(); load(); loop();
+  })();
+  </script>
+</body>
+</html>

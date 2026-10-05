@@ -121,21 +121,21 @@
    */
   M.loadConversation = function (convId, done) {
     const cb = typeof done === 'function' ? done : function () {};
-    const key = this.convKey(convId);
     const self = this;
-    chrome.storage.local.get(key, (res) => {
+    // 后端唯一权威：历史从后端取；后端无此会话时，memFetchConv 内部会
+    // 尝试迁移补丁从本地读一次（临时代码，迁移完成后可删）。
+    this.memFetchConv(convId).then(function (saved) {
       // 期间可能又切换了会话：不再处理，避免把旧会话历史写进新会话
       if (self.activeConv !== convId) { cb(false); return; }
-      const saved = res && res[key];
       const conv = self.ensureConv(convId);
       if (!saved) {
-        log('loadConversation：会话无存档 ' + convId);
+        log('loadConversation：后端与本地均无会话 ' + convId);
         self._convReady = self._convReady || {};
         self._convReady[convId] = true;
         cb(true);
         return;
       }
-      // 消息树：把存档节点并入内存树（存档为准），保留节点自带卡片状态
+      // 消息树：并入内存树（后端为准），保留节点自带卡片状态
       if (saved.msgTree && typeof saved.msgTree === 'object') {
         Object.keys(saved.msgTree).forEach((k) => {
           const node = saved.msgTree[k];
@@ -145,20 +145,18 @@
       }
       if (saved.title) conv.title = conv.title || saved.title;
       if (saved.page_url) conv.page_url = conv.page_url || saved.page_url;
-      // 外部卡片：补齐本地没有的
       if (Array.isArray(saved.externalCards)) {
         const known = new Set((conv.externalCards || []).map((c) => c && c.id));
         saved.externalCards.forEach((c) => {
           if (c && c.id && !known.has(c.id)) conv.externalCards.push(c);
         });
       }
-      // 可见区 key 与分支 key：优先用存档
       conv.visibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : (conv.visibleKeys || []);
       if (Array.isArray(saved.branchKeys)) conv.branchKeys = saved.branchKeys;
       if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
       self._convReady = self._convReady || {};
       self._convReady[convId] = true;
-      log('loadConversation：会话 ' + convId + ' 历史就绪，节点=' + Object.keys(conv.msgTree).length);
+      log('loadConversation：会话 ' + convId + ' 就绪（后端），节点=' + Object.keys(conv.msgTree).length);
       cb(true);
     });
   };
@@ -190,17 +188,12 @@
     const id = convId || this.activeConv;
     const conv = this.conversations[id];
     if (!conv) return;
-    const self = this;
-    const payload = self.buildConvPayload(conv);
-    log('persistConv 写入：会话=' + id + '，节点=' + Object.keys(payload.msgTree || {}).length
+    const payload = this.buildConvPayload(conv);
+    log('persistConv 写入后端：会话=' + id + '，节点=' + Object.keys(payload.msgTree || {}).length
       + '，外部卡片=' + (payload.externalCards || []).length);
-    chrome.storage.local.set({ [self.convKey(id)]: payload }, function () {
-      const err = chrome.runtime.lastError;
-      if (err) {
-        log('persistConv 写入失败：' + (err.message || err));
-        self.toast('会话存档失败：存储空间不足');
-      }
-    });
+    // 后端唯一权威：消息树只写后端，不再写 chrome.storage.local。
+    // 写入是异步的，失败由 memSaveConv 内部提示，不阻塞调用方。
+    if (this.memSaveConv) this.memSaveConv(id, payload);
   };
 
   /**
@@ -209,29 +202,20 @@
    */
   M.scanConversations = function () {
     const self = this;
-    const prefix = 'aiMirrorConv_' + this.siteKey + '__';
-    chrome.storage.local.get(null, function (all) {
+    // 后端唯一权威：会话列表从后端拉取
+    this.memListConvs().then(function (list) {
       const out = {};
-      Object.keys(all || {}).forEach(function (k) {
-        if (k.indexOf(prefix) !== 0) return;
-        const id = k.slice(prefix.length) || '__default__';
-        const saved = all[k] || {};
-        // 消息条数：统计整棵消息树的节点数（不做分支筛选），
-        // 这样不切会话也能一眼看出该会话累积了多少条消息。
-        const tree = saved.msgTree || {};
-        let msgCount = 0;
-        Object.keys(tree).forEach(function (key) {
-          if (tree[key]) msgCount += 1;
-        });
-        out[id] = {
-          title: saved.title || '',
-          pageUrl: saved.page_url || '',
-          updatedAt: saved.updatedAt || 0,
-          msgCount: msgCount
+      (list || []).forEach(function (c) {
+        if (!c || !c.conv_id) return;
+        out[c.conv_id] = {
+          title: c.title || '',
+          pageUrl: c.page_url || '',
+          updatedAt: (c.updated_at || 0) * 1000,
+          msgCount: 0  // 后端列表不返回节点数，切会话后由消息树统计
         };
       });
       self.convScanned = out;
-      log('会话列表已扫描存储：' + Object.keys(out).length + ' 个会话');
+      log('会话列表已从后端加载：' + Object.keys(out).length + ' 个会话');
     });
   };
 
@@ -255,7 +239,6 @@
     if (!skipConfirm && !confirm('确认清空全部会话？所有会话的聊天记录与卡片都会被删除，此操作不可撤销。')) return;
     const self = this;
     const memIds = Object.keys(this.conversations || {});
-    const keys = memIds.map((id) => this.convKey(id));
     memIds.forEach((id) => {
       const c = self.conversations[id];
       if (!c) return;
@@ -266,17 +249,16 @@
         if (ec && ec._cdTimer) { clearTimeout(ec._cdTimer); ec._cdTimer = null; }
       });
     });
-    this.conversations = {};
-    chrome.storage.local.remove(keys, function () {
-      chrome.storage.local.get(null, function (all) {
-        const prefix = 'aiMirrorConv_' + self.siteKey + '__';
-        const remain = Object.keys(all || {}).filter((k) => k.indexOf(prefix) === 0);
-        if (remain.length) {
-          chrome.storage.local.remove(remain, function () { self._afterClearAll(); });
-        } else {
-          self._afterClearAll();
-        }
-      });
+    // 后端唯一权威：逐个删后端会话，删完收尾
+    const dels = memIds.map(function (id) {
+      return D.apiFetch(self, '/memory/conversation/delete', {
+        method: 'POST',
+        body: { conv_id: id, site_key: self.siteKey || '' },
+      }).catch(function () { return null; });
+    });
+    Promise.all(dels).then(function () {
+      self.conversations = {};
+      self._afterClearAll();
     });
   };
 

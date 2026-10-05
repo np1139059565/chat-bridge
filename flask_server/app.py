@@ -22,7 +22,7 @@ from routes.rules import bp as rules_bp
 from routes.cards import bp as cards_bp
 from routes.ext import bp as ext_bp
 from routes.bridge import bp as bridge_bp
-from routes.memory import bp as memory_bp
+from routes.memory_graph import bp as memory_bp
 from routes.web import bp as web_bp
 
 
