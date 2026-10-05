@@ -36,8 +36,10 @@ def save_conversation(conv_id, site_key, conv):
     @param conv 前端会话对象 { title, page_url, msgTree, visibleKeys, ... }
     @return 写入的节点数
     """
-    # 计时放在取连接之前：日志耗时为真实端到端耗时（含取连接）
-    _t0 = time.time()
+    # 计时放在取连接之前：日志耗时为真实端到端耗时（含取连接）。
+    # 用 perf_counter（高精度单调时钟）：Windows 上 time.time() 精度约 15ms，
+    # 会把毫秒级耗时测成 0，用 perf_counter 才能如实反映。
+    _t0 = time.perf_counter()
     conn = get_conn()
     # 进入批量模式：本轮所有写操作攒到最后统一提交，
     # 避免「每节点多次提交」造成的频繁抢写锁。
@@ -48,8 +50,9 @@ def save_conversation(conv_id, site_key, conv):
     finally:
         # 无论成败都退出批量并提交，保证数据落地、不长时间占锁
         end_batch(conn)
-    # 计时放在提交之后：日志耗时含「写入 + 最终提交」，才是真实端到端耗时
-    ms = (time.time() - _t0) * 1000.0
+    # 计时放在提交之后：日志耗时含「写入 + 最终提交」，才是真实端到端耗时。
+    # 与起点同用 perf_counter，两个时钟必须一致。
+    ms = (time.perf_counter() - _t0) * 1000.0
     app_log.info("[mem][save] conv=%s 节点=%d 总耗时=%.1fms" % (conv_id, result, ms))
     return result
 

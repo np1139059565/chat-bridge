@@ -137,7 +137,12 @@
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       try { viewer.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
       if (Object.keys(pointers).length === 1) { moved = 0; viewer.classList.add('grabbing'); }
-      else if (Object.keys(pointers).length === 2) { pinchDist = pinchDistance(); }
+      else if (Object.keys(pointers).length === 2) {
+        pinchDist = pinchDistance();
+        // 双指一出现即视为「已交互」：抬手时不得误判为轻点而关闭浮层。
+        // 此前双指缩放不累加 moved，抬手被当轻点，导致放大后一松手浮层即关。
+        moved = 999;
+      }
     });
 
     // 移动：单指平移，双指缩放

@@ -1,23 +1,38 @@
 """AI 工具调用镜像插件 —— 记忆系统：蒸馏管道
 
-职责：异步从记忆节点提取「精华 + 关键词」，写入节点的蒸馏层字段。
+职责：从记忆节点提取「精华 + 关键词」，写入节点的蒸馏层字段。
 不覆盖原始 blocks，蒸馏可随时重跑。
 
-触发：消息入树上报后，由路由层丢到后台线程调用 distill_async。
+并发模型（关键，务必遵守）：
+- 单工作线程串行：所有蒸馏请求进入同一队列，由一个后台线程顺序处理。
+  此前每次入库都新起线程，多条并发执行「建突触 + 写库」，彼此抢写锁，
+  并把写锁长期占住，导致接口请求死等（曾观察到 90 秒级卡顿）。
+  串行后同一时刻只有一个蒸馏写者，从根上杜绝相互争锁。
+- 短事务：逐节点提交，处理完一个节点即提交，持锁时间短，不长时间阻塞请求线程。
+
+触发：消息入树上报后，由路由层投递到本队列。
 
 提取规则（按来源）：
   - user：原句全文 → 保留原句（不摘要），关键词从原句提；
   - assistant：剔除寒暄与过程描述，留结论/进度；
   - tool：工具名 + 结果摘要。
 
-依赖：memory_nodes、memory_keywords、threading
+依赖：memory_nodes、memory_keywords、memory_events、memory_db、threading、collections
 """
+import collections
 import threading
 
 import memory_nodes
 import memory_keywords as kw
 import memory_events
 from memory_db import begin_batch, end_batch
+
+# ---------- 串行蒸馏队列 ----------
+# 待蒸馏节点（FIFO），元素为 (node_id, use_llm)；_pending_set 用于去重。
+_pending = collections.deque()
+_pending_set = set()
+_queue_lock = threading.Lock()
+_worker_running = False   # 工作线程是否在跑（避免重复启动多个工作线程）
 
 
 def _essence_for(source, text, blocks):
@@ -38,7 +53,6 @@ def _essence_for(source, text, blocks):
     # assistant：剔除寒暄开头，取正文
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     if lines:
-        # 去掉常见寒暄/过渡句开头
         greetings = ("好的", "没问题", "当然", "让我", "我来", "首先", "接下来")
         while lines and lines[0].startswith(greetings):
             lines.pop(0)
@@ -49,6 +63,8 @@ def _essence_for(source, text, blocks):
 def distill_node(node_id, use_llm=False):
     """同步蒸馏单个节点：提取精华与关键词，写入库。
 
+    用单节点短事务包住本节点全部写操作，处理完立即提交；
+    绝不跨节点持有写锁，避免长时间阻塞请求线程。
     @return dict { essence, keywords } 或 None（节点不存在）
     """
     node = memory_nodes.get_node(node_id)
@@ -62,15 +78,12 @@ def distill_node(node_id, use_llm=False):
     keywords = kw.denoise_by_plans(keywords)
     # 生成文本向量，供检索第三路（向量语义近邻）使用
     vector = kw.text_to_vector(essence or text)
-    # 进入批量：把「写精华 + 建突触 + 挂影子」的全部写操作攒成一次提交，
-    # 避免建突触时全表扫描逐个提交、长时间占写锁而拖慢前端请求。
     conn = memory_nodes.get_conn()
+    # 单节点短事务：只包住本节点的写入，处理完立即提交、释放写锁
     begin_batch()
     try:
         memory_nodes.set_essence(node_id, essence, keywords, vector)
-        # 接入事件层（方案 5.1 / 5.2 / 护栏二）：蒸馏完成即自动触发，不再依赖手动接口。
-        # 建突触：与新节点关键词达阈值的已有节点自动连边；
-        # 挂影子：用户发言为事件根，其语义摘要作影子挂在原句上（原句仍完整保留）。
+        # 接入事件层：蒸馏完成即自动建突触、给用户发言挂影子
         try:
             memory_events.build_synapses(node_id)
             if source == "user":
@@ -84,25 +97,49 @@ def distill_node(node_id, use_llm=False):
 
 
 def distill_async(node_ids, use_llm=False):
-    """异步蒸馏一批节点：丢后台线程，不阻塞调用方。
+    """把一批节点投递到串行蒸馏队列（不阻塞调用方）。
 
+    不再为每批新起线程，而是统一入队、由唯一工作线程顺序处理，
+    避免多线程并发写库互抢写锁。
     @param node_ids 节点 id 列表
-    @return 线程对象
+    @return 本次真正新增入队的节点数（已在队列中的不重复计）
     """
-    def _run():
-        # 整批包一次批量提交：逐节点蒸馏的写操作不在中途各自提交，
-        # 攒到整批结束才提交一次，极大缩短后台持写锁的时间。
-        conn = memory_nodes.get_conn()
-        begin_batch()
+    added = 0
+    with _queue_lock:
+        for nid in node_ids:
+            if nid not in _pending_set:
+                _pending.append((nid, use_llm))
+                _pending_set.add(nid)
+                added += 1
+    _ensure_worker()
+    return added
+
+
+def _ensure_worker():
+    """确保串行工作线程在跑（幂等：重复调用只启动一个）。"""
+    global _worker_running
+    with _queue_lock:
+        if _worker_running:
+            return
+        _worker_running = True
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def _worker():
+    """串行工作线程：逐个节点蒸馏，处理完一个再取下一个。
+
+    队列空时退出并复位标志，下次入队会再次拉起，不空转占资源。
+    """
+    global _worker_running
+    while True:
+        with _queue_lock:
+            if not _pending:
+                _worker_running = False
+                return
+            nid, use_llm = _pending.popleft()
+            _pending_set.discard(nid)
         try:
-            for nid in node_ids:
-                try:
-                    distill_node(nid, use_llm=use_llm)
-                except Exception as e:
-                    # 单节点失败不中断整批
-                    print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))
-        finally:
-            end_batch(conn)
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
-    return t
+            distill_node(nid, use_llm=use_llm)
+        except Exception as e:
+            # 单节点失败不中断整批
+            print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))

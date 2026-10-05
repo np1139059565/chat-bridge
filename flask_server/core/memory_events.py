@@ -32,16 +32,18 @@ def build_synapses(new_node_id):
     if not nk:
         return 0
     conn = get_conn()
+    # 一次查出全部候选（id + keywords），不再逐个 get_node；
+    # 此前每建一次突触要全表扫描 + 逐行回查，N 个节点就是 N 次查询，
+    # 在并发入库时把写锁长期占住。改为单查询 + 内存匹配。
     rows = conn.execute(
-        "SELECT id FROM nodes WHERE id!=? AND keywords IS NOT NULL AND keywords!='' AND deleted=0",
+        "SELECT id, keywords FROM nodes WHERE id!=? AND keywords IS NOT NULL AND keywords!='' AND deleted=0",
         (new_node_id,),
     ).fetchall()
     count = 0
     for r in rows:
-        other = memory_nodes.get_node(r["id"])
-        if not other:
+        ok = set(_loads(r["keywords"], []))
+        if not ok:
             continue
-        ok = set(other.get("keywords") or [])
         # 包含式匹配：一个关键词是另一个的子串即算相关（中文短语常有包含关系）
         inter = _related(nk, ok)
         # 自适应交集门槛：关键词数量少时，硬套 3 会永远建不成边。
