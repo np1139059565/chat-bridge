@@ -6,6 +6,8 @@
 - POST /api/bridge/report   抽屉上报消息切片，触发推送
 - POST /api/bridge/result   抽屉回传指令执行结果，转发到 QQ
 """
+import threading
+
 from flask import Blueprint, jsonify, request
 
 import remote_bridge
@@ -13,6 +15,28 @@ import screenshot_store
 from remote_bridge import bridge, bridge_store, command_panel, message_router
 
 bp = Blueprint("bridge", __name__)
+
+# 各会话「推送处理中」标记：QQ 推送是重活（合成 + 逐条发送），放后台线程跑，
+# 请求立即返回，避免堆积切片把请求线程拖死。同一会话若上一轮还在跑，
+# 本轮直接跳过——抽屉每 2.5 秒重报全量切片，跳过不会丢消息，天然形成背压。
+_report_busy = {}
+_report_lock = threading.Lock()
+
+
+def _run_report_async(data):
+    """把 QQ 推送放到后台线程执行，完成后清除该会话的「处理中」标记。"""
+    conv = data.get("conversationId") or "__default__"
+
+    def worker():
+        try:
+            bridge.report(data)
+        except Exception as e:
+            print("[bridge] 后台推送失败：", e)
+        finally:
+            with _report_lock:
+                _report_busy.pop(conv, None)
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 @bp.route("/api/bridge/status", methods=["GET", "OPTIONS"])
@@ -62,11 +86,17 @@ def bridge_report():
         web_mirror.mirror_report(data.get("messages") or [])
     except Exception as e:
         print("[web] 镜像上报失败：", e)
-    try:
-        sent = bridge.report(data)
-        return jsonify(success=True, pushed=sent)
-    except Exception as e:
-        return jsonify(success=False, error=str(e)), 200
+    # QQ 推送放后台线程执行，请求立即返回：合成 + 逐条发送是重活，
+    # 若在请求线程里同步跑，堆积切片会把接口拖死。
+    # 同一会话上一轮仍在处理则跳过——抽屉会重报全量切片，跳过不丢消息，
+    # 同时天然形成背压，避免线程无限堆积。
+    conv = data.get("conversationId") or "__default__"
+    with _report_lock:
+        if conv in _report_busy:
+            return jsonify(success=True, pushed=0, skipped=True)
+        _report_busy[conv] = True
+    _run_report_async(data)
+    return jsonify(success=True, accepted=True)
 
 
 def _try_send_image(client, openid, image):

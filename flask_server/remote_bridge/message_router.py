@@ -42,6 +42,12 @@ _lock = threading.Lock()
 # 推送内部会调 next_seq，后者也要 _lock，复用会自锁死。
 _push_lock = threading.Lock()
 
+# 单次上报最多处理的消息条数：长时间不开 QQ 后重开，抽屉会一次性上报
+# 全量切片（可能几百条）。若全量逐条合成语音 + 推送，会在请求线程里串行
+# 跑几百次网络调用，把接口拖死。故超过此上限时只处理最新的一批，
+# 更旧的直接跳过——符合「堆积很多时只补最后几条即可」。
+MAX_PUSH_PER_REPORT = 30
+
 # 当前活跃的被动回复窗口：{ openid: {"msg_id": ..., "expire": 时间戳} }
 _windows = {}
 
@@ -330,6 +336,11 @@ def handle_report(qq_client, payload):
     # 合并上次推送失败的消息：它们可能已滚出可见区、不再出现在切片里，
     # 靠这份缓存获得重试机会（成功 / 跳过后自动移出，见本函数末尾 set_pending）。
     messages = bridge_store.merge_pending(conv_id, messages)
+    # 条数上限：长时间不开 QQ 后重开，切片可能堆积几百条。只取最新的一批处理，
+    # 更旧的直接丢弃——它们多半已被后续消息覆盖，用户要的也是「最后几条」。
+    # 这一步在合成/推送之前，确保后续的网络调用次数被硬性封顶，接口不会被拖死。
+    if len(messages) > MAX_PUSH_PER_REPORT:
+        messages = messages[-MAX_PUSH_PER_REPORT:]
     # 缓存最近一次切片与客户端：用户续期窗口后据此重放，补推滞后消息。
     # 只存引用，不深拷贝：切片可能很大，且重放时只读。
     global _last_client
