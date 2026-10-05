@@ -16,10 +16,12 @@
 """
 import sqlite3
 import threading
+import time
 
 import numpy as np
 
 import paths
+import app_log
 
 # 线程局部存储：每个线程持有一份独立连接（SQLite 连接不可跨线程共享）
 _local = threading.local()
@@ -84,6 +86,19 @@ _SCHEMA = [
         reason     TEXT,
         created_at INTEGER
     )""",
+    # 笔记表：承载「每日记忆」与「错题本」两类文本记忆（原 Markdown 迁移入此）
+    #   kind='journal'  → 每日记忆条目（按日期组织）
+    #   kind='notebook' → 错题本条目（永久累积）
+    #   day 仅 journal 使用（YYYY-MM-DD）；其余为 NULL
+    """CREATE TABLE IF NOT EXISTS notes (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind       TEXT,
+        day        TEXT,
+        node_id    INTEGER DEFAULT 0,
+        text       TEXT,
+        keywords   TEXT,
+        created_at INTEGER
+    )""",
     # 会话表：存会话级元数据与树结构索引（前端走后端查询时重建消息树用）
     """CREATE TABLE IF NOT EXISTS conversations (
         conv_id        TEXT,
@@ -117,14 +132,54 @@ def get_conn():
         return conn
     # 确保目录存在：记忆库目录可能首次创建
     paths.MEMORY_DB_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(paths.MEMORY_DB_PATH))
+    # timeout=15：连接级等待锁的秒数（默认仅 5 秒）。
+    # 多人/多线程同时写时，5 秒不够就容易直接报 database is locked，
+    # 放宽到 15 秒，给排队等锁的写入更多耐心。
+    conn = sqlite3.connect(str(paths.MEMORY_DB_PATH), timeout=15.0)
     conn.row_factory = sqlite3.Row
     # WAL 模式：读写并发更好，且写入不阻塞读取
     conn.execute("PRAGMA journal_mode=WAL")
+    # busy_timeout：与 timeout 双保险，单位毫秒；遇锁时自旋等待而非立即报错
+    conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA synchronous=NORMAL")
+    # 慢 SQL 追踪：记录执行超过阈值的语句，用于定位「哪条 SQL 卡住」。
+    # 诊断用，不改变查询行为。
+    _install_slow_query_trace(conn)
     _ensure_schema(conn)
     _local.conn = conn
+    app_log.info("[db][%s] 建立记忆库连接" % threading.current_thread().name)
     return conn
+
+
+# 慢 SQL 阈值（毫秒）：超过即记日志
+_SLOW_SQL_MS = 100
+
+
+def _install_slow_query_trace(conn):
+    """给连接装一个 SQL 追踪钩子：执行超阈值的语句落日志。
+
+    SQLite 的 set_trace_callback 在每条语句执行前回调；
+    这里记录语句开始时刻，在下一句或提交时结算耗时，从而发现慢查询。
+    记录里带线程名，便于区分是「请求线程」还是「后台调度线程」在拖。
+    """
+    state = {"t0": None, "sql": ""}
+
+    def _trace(sql):
+        now = time.time()
+        # 结算上一句的耗时
+        if state["t0"] is not None:
+            ms = (now - state["t0"]) * 1000.0
+            if ms >= _SLOW_SQL_MS:
+                app_log.warn("[db][%s] 慢SQL %.1fms: %s" % (
+                    threading.current_thread().name, ms,
+                    " ".join(state["sql"].split())[:120]))
+        state["t0"] = now
+        state["sql"] = sql or ""
+
+    try:
+        conn.set_trace_callback(_trace)
+    except Exception:
+        pass
 
 
 def _ensure_schema(conn):
@@ -144,6 +199,33 @@ def _ensure_schema(conn):
         # FTS5 不可用时降级：检索层会自动回退到 LIKE 匹配
         pass
     conn.commit()
+
+
+# ---------------- 批量提交（延迟提交） ----------------
+# 用途：批量写（如保存整个会话）时，避免每个字段都单独提交一次，
+# 攒到最后一次性提交，大幅减少抢写锁的次数与来回开销。
+# 计数存线程局部：SQLite 连接按线程隔离，提交节奏也应逐线程独立。
+
+
+def begin_batch():
+    """进入批量模式：此后本线程的写操作不再逐个提交。"""
+    n = getattr(_local, "defer", 0)
+    _local.defer = n + 1
+
+
+def end_batch(conn):
+    """退出批量模式；计数归零时统一提交一次。"""
+    n = getattr(_local, "defer", 0)
+    if n > 0:
+        _local.defer = n - 1
+    if getattr(_local, "defer", 0) == 0:
+        conn.commit()
+
+
+def maybe_commit(conn):
+    """按需提交：批量模式中跳过，非批量模式立即提交。"""
+    if getattr(_local, "defer", 0) == 0:
+        conn.commit()
 
 
 def vec_to_blob(vec):

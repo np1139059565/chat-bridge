@@ -5,10 +5,8 @@
 
 接口分组：读写 / 检索 / 分级 / 事件 / 会话 / 可视化 / 加载。
 
-依赖：flask、memory_* 各模块、paths、hashlib
+依赖：flask、memory_* 各模块、paths
 """
-import hashlib
-
 from flask import Blueprint, jsonify, request, send_file
 
 import paths
@@ -21,6 +19,9 @@ import memory_events
 import memory_search
 import memory_loader
 import memory_conversations
+import memory_solidify
+import memory_notes
+import rule_enforce
 
 bp = Blueprint("memory_graph", __name__)
 
@@ -190,6 +191,125 @@ def graph_export():
     return _ok(nodes=nodes, edges=memory_edges.all_edges())
 
 
+# ---------------- 读写层·补充 ----------------
+
+@bp.route("/memory/set", methods=["POST"])
+def node_set():
+    """更新节点内容字段（blocks / essence / keywords）。"""
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    if not nid:
+        return _err("缺少 node_id")
+    ok = memory_nodes.set_content(
+        nid,
+        blocks=data.get("blocks"),
+        essence=data.get("essence"),
+        keywords=data.get("keywords"),
+    )
+    memory_loader.invalidate()
+    return _ok(updated=ok)
+
+
+# ---------------- 分级层·补充 ----------------
+
+@bp.route("/memory/promote", methods=["POST"])
+def node_promote():
+    """手动设置节点分级（temp / mid / perm）。"""
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    tier = data.get("tier")
+    if not nid or tier not in ("temp", "mid", "perm"):
+        return _err("缺少 node_id 或 tier 非法")
+    node = memory_nodes.promote_node(nid, tier)
+    if not node:
+        return _err("节点不存在")
+    memory_loader.invalidate()
+    return _ok(node=node)
+
+
+@bp.route("/memory/strength", methods=["GET"])
+def node_strength():
+    """查询节点当前强度。"""
+    nid = request.args.get("node_id", type=int)
+    if not nid:
+        return _err("缺少 node_id")
+    val = memory_nodes.get_strength(nid)
+    if val is None:
+        return _err("节点不存在")
+    return _ok(node_id=nid, strength=val)
+
+
+# ---------------- 事件层·补充 ----------------
+
+@bp.route("/memory/event/merge", methods=["POST"])
+def event_merge():
+    """把若干事件根节点合并到同一事件。"""
+    data = request.get_json(force=True) or {}
+    root_id = data.get("root_id")
+    members = data.get("member_ids") or []
+    if not root_id:
+        return _err("缺少 root_id")
+    n = memory_events.event_merge(root_id, members, reason=data.get("reason", "manual"))
+    return _ok(merged=n)
+
+
+@bp.route("/memory/event/tree", methods=["GET"])
+def event_tree():
+    """取某事件树（根 + 被并成员 + 子节点）。"""
+    root_id = request.args.get("root_id", type=int)
+    if not root_id:
+        return _err("缺少 root_id")
+    tree = memory_events.event_tree_get(root_id)
+    if tree is None:
+        return _err("事件根不存在")
+    return _ok(tree=tree)
+
+
+# ---------------- 固化层 ----------------
+
+@bp.route("/memory/solidify/rule", methods=["POST"])
+def solidify_rule():
+    """把某节点固化为规则文件。"""
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    rule_name = data.get("rule_name")
+    if not nid or not rule_name:
+        return _err("缺少 node_id 或 rule_name")
+    res = memory_solidify.promote_to_rule(nid, rule_name, title=data.get("title", ""))
+    if res is None:
+        return _err("节点不存在")
+    memory_loader.invalidate()
+    return _ok(**res)
+
+
+@bp.route("/memory/solidify/notebook", methods=["POST"])
+def solidify_notebook():
+    """把某节点写入错题本。"""
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    if not nid:
+        return _err("缺少 node_id")
+    res = memory_solidify.promote_to_notebook(nid, note=data.get("note", ""))
+    if res is None:
+        return _err("节点不存在")
+    return _ok(**res)
+
+
+# ---------------- 规则程序化（方案第九节） ----------------
+
+@bp.route("/memory/rule-check", methods=["POST"])
+def rule_check():
+    """对一组工具调用 / 命令 / 文本跑可机械判定的规则检查。"""
+    data = request.get_json(force=True) or {}
+    res = rule_enforce.run_all(
+        tool_calls=data.get("tool_calls"),
+        command=data.get("command"),
+        target=data.get("target", ""),
+        text=data.get("text"),
+    )
+    return _ok(**res)
+
+
 # ---------------- 加载层 ----------------
 
 @bp.route("/memory/load", methods=["POST"])
@@ -198,27 +318,48 @@ def load():
     return _ok(**memory_loader.load_all())
 
 
-# ---------------- 目录指纹（并入，原 memory.py 功能） ----------------
+# ---------------- 笔记层（每日记忆 + 错题本，全部存库） ----------------
 
-def memory_fingerprint():
-    """计算 memory 目录内容指纹（判断 AI 是否真的写入工作记忆）。"""
-    if not paths.MEMORY_DIR.is_dir():
-        return ""
-    h = hashlib.md5()
-    files = sorted(f for f in paths.MEMORY_DIR.rglob("*") if f.is_file())
-    for f in files:
-        h.update(str(f.relative_to(paths.MEMORY_DIR)).replace("\\", "/").encode("utf-8"))
-        try:
-            h.update(f.read_bytes())
-        except Exception:
-            pass
-    return h.hexdigest()
+@bp.route("/memory/note", methods=["POST"])
+def note_add():
+    """新增一条笔记（journal=每日记忆 / notebook=错题本）。"""
+    data = request.get_json(force=True) or {}
+    kind = data.get("kind")
+    text = (data.get("text") or "").strip()
+    if kind not in ("journal", "notebook"):
+        return _err("kind 非法（应为 journal / notebook）")
+    if not text:
+        return _err("缺少 text")
+    nid = memory_notes.add_note(
+        kind, text, day=data.get("day"), node_id=data.get("node_id") or 0,
+        keywords=data.get("keywords") or [],
+    )
+    return _ok(note_id=nid)
 
 
-@bp.route("/memory/fingerprint", methods=["GET"])
-def get_fingerprint():
-    """返回 memory 目录当前指纹。"""
-    return jsonify({"success": True, "fingerprint": memory_fingerprint()})
+@bp.route("/memory/notes", methods=["GET"])
+def note_list():
+    """列举笔记（可按 kind / day 过滤）。"""
+    kind = request.args.get("kind")
+    day = request.args.get("day")
+    limit = request.args.get("limit", type=int) or 200
+    return _ok(notes=memory_notes.list_notes(kind=kind, day=day, limit=limit))
+
+
+@bp.route("/memory/notes/days", methods=["GET"])
+def note_days():
+    """列出每日记忆有内容的日期（倒序）。"""
+    return _ok(days=memory_notes.list_days())
+
+
+@bp.route("/memory/note/delete", methods=["POST"])
+def note_delete():
+    """删除一条笔记。"""
+    data = request.get_json(force=True) or {}
+    nid = data.get("note_id")
+    if not nid:
+        return _err("缺少 note_id")
+    return _ok(deleted=memory_notes.delete_note(nid))
 
 
 @bp.route("/memory-graph", methods=["GET"])

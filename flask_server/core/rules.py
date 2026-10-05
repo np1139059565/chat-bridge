@@ -6,6 +6,9 @@
 - AI 通过工具 list_rules / read_rule 按需读取规则内容（不全部塞进 System Prompt）；
 - 优先级写入 System Prompt 的规则列表，由 AI 据此决定何时读取。
 
+规则程序化：可机械判定的规则由 rule_enforce.py 强制检查（写后回读 / 破坏性操作 / 禁用词），
+语义性规则仍由 AI 判断；本模块只负责规则的增删改与优先级管理。
+
 文件名即规则名，仅允许 [A-Za-z0-9_-]，扩展名固定 .md。
 """
 import json

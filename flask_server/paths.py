@@ -76,7 +76,8 @@ LOGS_DIR = DATA_DIR / "logs"
 # ---------- 工程级目录 ----------
 RULES_DIR = PROJECT_ROOT / "rules"
 SKILLS_ROOT = PROJECT_ROOT / "skills"
-# 工作记忆目录：AI 按日期写入进度文件；指纹用于判断是否真有写入
+# 历史记忆目录：早期每日记忆与错题本的 Markdown 存放处。
+# 内容已全部迁入记忆库 notes 表，代码不再读写此目录（保留常量供自测引用）。
 MEMORY_DIR = PROJECT_ROOT / "memory"
 
 # 供错误定位做前缀匹配用（字符串形式）

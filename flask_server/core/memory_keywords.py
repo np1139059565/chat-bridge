@@ -110,7 +110,12 @@ def _split_phrases(seg):
     切出的每块是一个语义单元。块内不再细分。
     """
     # 切分边界：单字虚词（这些字单独出现时多为连接/助词，不宜作关键词）
-    boundaries = set("的 了 和 与 或 要 是 在 我 你 他 它 们 把 被 给 对 从 到 为 就 都 也 很 还 并 及 以 之 其 这 那 有 无 不 没 会 能 可 请 让 使 于 而 且 但 因 由 如 若 则 等 着 过 向 往 同 跟 按 依 据 靠 用 拿 取 做 干 搞 将 来 里 时 后 前 上 下 中 内 外 地 得 再 又 才 只 更 最 太 好 多 少 个 些 位 件 次 种 点 并 及 把 让 使 令")
+    boundaries = set(
+        "的 了 和 与 或 要 是 在 我 你 他 它 们 把 被 给 对 从 到 为 就 都 也 很 还 "
+        "并 及 以 之 其 这 那 有 无 不 没 会 能 可 请 让 使 于 而 且 但 因 由 如 若 "
+        "则 等 着 过 向 往 同 跟 按 依 据 靠 用 拿 取 做 干 搞 将 来 里 时 后 前 上 "
+        "下 中 内 外 地 得 再 又 才 只 更 最 太 好 多 少 个 些 位 件 次 种 点 令"
+    )
     blocks = []
     cur = []
     for ch in seg:
@@ -140,3 +145,59 @@ def extract_from_blocks(blocks):
         if t:
             parts.append(str(t))
     return "\n".join(parts)
+
+
+def denoise_by_plans(keywords, threshold=0.8, recent=20):
+    """跨计划去噪（方案 4.3 第 4 步）：剔除区分度太低的关键词。
+
+    某关键词在近期计划里出现频率超过阈值，说明它几乎每轮都出现，
+    对区分不同任务没有价值，予以剔除。plans 为空时不处理。
+    @param keywords 候选关键词
+    @param threshold 出现频率上限（超过则剔除）
+    @param recent 取最近多少条计划参与统计
+    @return 去噪后的关键词列表
+    """
+    from memory_db import get_conn
+    try:
+        rows = get_conn().execute(
+            "SELECT text FROM plans ORDER BY created_at DESC LIMIT ?", (recent,)
+        ).fetchall()
+    except Exception:
+        return keywords
+    texts = [r["text"] or "" for r in rows]
+    if not texts:
+        return keywords
+    n = len(texts)
+    kept = []
+    for k in keywords:
+        freq = sum(1 for t in texts if k in t) / n
+        if freq > threshold:
+            continue
+        kept.append(k)
+    return kept
+
+
+def text_to_vector(text, dim=256):
+    """把文本映射为定长向量（hashing trick，零依赖）。
+
+    中文按 2-gram、英文按标识符切分，用 CRC32 稳定映射到 dim 维桶，
+    计数后做 L2 归一化，供余弦相似度检索。用 CRC32 而非内置 hash，
+    保证跨进程、跨重启的桶索引一致。
+    @return numpy float32 向量（dim 维）
+    """
+    import zlib
+    import numpy as np
+    vec = np.zeros(dim, dtype=np.float32)
+    if not text:
+        return vec
+    tokens = [m.lower() for m in _RE_IDENT.findall(text)]
+    for seg in _RE_CJK.findall(text):
+        for i in range(len(seg) - 1):
+            tokens.append(seg[i:i + 2])
+    for tok in tokens:
+        idx = zlib.crc32(tok.encode("utf-8")) % dim
+        vec[idx] += 1.0
+    norm = float(np.linalg.norm(vec))
+    if norm > 0:
+        vec /= norm
+    return vec

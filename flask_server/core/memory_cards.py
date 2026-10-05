@@ -7,7 +7,7 @@
 """
 import json
 
-from memory_db import get_conn
+from memory_db import get_conn, maybe_commit
 
 
 def upsert_card(node_id, block_id, tool=None, status=None, result=None, finished_at=None):
@@ -26,14 +26,14 @@ def upsert_card(node_id, block_id, tool=None, status=None, result=None, finished
             "UPDATE cards SET tool=?, status=?, result=?, finished_at=? WHERE id=?",
             (tool, status, result_json, finished_at, row["id"]),
         )
-        conn.commit()
+        maybe_commit(conn)
         return row["id"]
     cur = conn.execute(
         "INSERT INTO cards (node_id, block_id, tool, status, result, finished_at)"
         " VALUES (?,?,?,?,?,?)",
         (node_id, block_id, tool, status, result_json, finished_at),
     )
-    conn.commit()
+    maybe_commit(conn)
     return cur.lastrowid
 
 

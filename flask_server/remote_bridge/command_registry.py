@@ -60,7 +60,7 @@ BUILTIN = {
     # —— 语音 ——
     "/voice-ok": {"desc": "确认语音识别文字并转给 AI", "aliases": ["/vo"], "group": "语音"},
     # —— 工作记忆 ——
-    "/memory": {"desc": "读取最新工作记忆文件并发送", "aliases": ["/mem"], "group": "工作记忆"},
+    "/memory": {"desc": "读取最新每日记忆并发送", "aliases": ["/mem"], "group": "工作记忆"},
     # —— 帮助 ——
     "/help": {"desc": "显示指令列表", "aliases": ["/h"], "group": "帮助"},
 }

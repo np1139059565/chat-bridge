@@ -19,6 +19,7 @@ import time
 
 import memory_nodes
 import memory_edges
+from memory_db import begin_batch, end_batch
 
 # 各分级的底子系数
 TIER_BASE = {"temp": 0.3, "mid": 0.6, "perm": 1.0}
@@ -53,24 +54,31 @@ def recompute_all():
     conn = memory_nodes.get_conn()
     rows = conn.execute("SELECT id FROM nodes WHERE deleted=0").fetchall()
     upgraded = downgraded = 0
-    for r in rows:
-        nid = r["id"]
-        node = memory_nodes.get_node(nid)
-        if not node:
-            continue
-        wsum = memory_edges.associative_weight_sum(nid)
-        strength = compute_strength(node, wsum)
-        memory_nodes.set_strength(nid, strength)
-        # 自动升降级
-        new_tier = _next_tier(node, strength)
-        if new_tier != node.get("tier"):
-            memory_nodes.set_tier(nid, new_tier)
-            if TIER_BASE.get(new_tier, 0) > TIER_BASE.get(node.get("tier"), 0):
-                upgraded += 1
-            else:
-                downgraded += 1
-    # 顺带驱动一次边衰减
-    memory_edges.decay_edges()
+    # 进入批量模式：逐节点写强度不再各提交一次，攒到最后统一提交，
+    # 缩短后台任务持写锁的时间，减少与前端请求抢锁。
+    begin_batch()
+    try:
+        for r in rows:
+            nid = r["id"]
+            node = memory_nodes.get_node(nid)
+            if not node:
+                continue
+            wsum = memory_edges.associative_weight_sum(nid)
+            strength = compute_strength(node, wsum)
+            memory_nodes.set_strength(nid, strength)
+            # 自动升降级
+            new_tier = _next_tier(node, strength)
+            if new_tier != node.get("tier"):
+                memory_nodes.set_tier(nid, new_tier)
+                if TIER_BASE.get(new_tier, 0) > TIER_BASE.get(node.get("tier"), 0):
+                    upgraded += 1
+                else:
+                    downgraded += 1
+        # 顺带驱动一次边衰减（同在批量内）
+        memory_edges.decay_edges()
+    finally:
+        # 无论成败都提交，保证强度落库
+        end_batch(conn)
     return len(rows), upgraded, downgraded
 
 

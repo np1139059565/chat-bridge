@@ -14,7 +14,7 @@
 """
 import time
 
-from memory_db import get_conn
+from memory_db import get_conn, maybe_commit
 
 
 def _now():
@@ -33,7 +33,7 @@ def add_edge(src, dst, kind, weight=1.0):
         " last_active_at=excluded.last_active_at",
         (src, dst, kind, float(weight), _now(), _now()),
     )
-    conn.commit()
+    maybe_commit(conn)
 
 
 def reinforce_edge(src, dst, kind="associative", delta=0.2):
@@ -44,7 +44,7 @@ def reinforce_edge(src, dst, kind="associative", delta=0.2):
         " last_active_at=? WHERE src_node=? AND dst_node=? AND kind=?",
         (float(delta), _now(), src, dst, kind),
     )
-    conn.commit()
+    maybe_commit(conn)
 
 
 def get_neighbors(node_id, kind=None):
@@ -103,7 +103,7 @@ def decay_edges(half_life_days=30, floor=0.1):
             new_w = 0.0
         conn.execute("UPDATE edges SET weight=? WHERE id=?", (new_w, r["id"]))
         changed += 1
-    conn.commit()
+    maybe_commit(conn)
     return changed
 
 

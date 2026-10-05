@@ -295,30 +295,23 @@ def _h_voice_ok(qq_client, openid, arg, msg_id):
 
 
 def _h_memory(qq_client, openid, arg, msg_id):
-    """读取 memory 目录下最新的工作记忆文件，把内容发送到 QQ，供用户检查。
+    """读取数据库中最新的每日记忆，把内容发送到 QQ，供用户检查。
 
-    记忆文件按文件名（日期）排序取最新一份；内容过长时截断，
-    避免超过 QQ 单条消息长度上限导致整条发送失败。
+    每日记忆存于记忆库 notes 表（kind=journal）；取最新一天的内容，
+    内容过长时截断，避免超过 QQ 单条消息长度上限导致整条发送失败。
     """
-    import paths
-    mem_dir = paths.MEMORY_DIR
-    if not mem_dir.is_dir():
-        _reply(qq_client, openid, "未找到记忆目录：" + str(mem_dir))
+    import memory_notes
+    days = memory_notes.list_days(kind="journal", limit=1)
+    if not days:
+        _reply(qq_client, openid, "记忆库中暂无每日记忆")
         return
-    files = sorted(mem_dir.glob("*.md"))
-    if not files:
-        _reply(qq_client, openid, "记忆目录下暂无文件")
-        return
-    latest = files[-1]
-    try:
-        text = latest.read_text(encoding="utf-8")
-    except Exception as e:
-        _reply(qq_client, openid, "读取记忆文件失败：%s" % e)
-        return
+    day = days[0]
+    notes = memory_notes.list_notes(kind="journal", day=day)
+    text = "\n\n".join(n.get("text", "") for n in notes)
     # 过长截断：QQ 单条文本有长度限制，截断并提示，保证能送达
     if len(text) > 3000:
-        text = text[:3000] + "\n…（已截断，完整内容见 " + latest.name + "）"
-    _reply(qq_client, openid, "【" + latest.name + "】\n" + text, markdown=True)
+        text = text[:3000] + "\n…（已截断，完整内容见记忆库）"
+    _reply(qq_client, openid, "【每日记忆 " + day + "】\n" + text, markdown=True)
 
 
 # 内置指令分发表：主命令名 → 处理函数。

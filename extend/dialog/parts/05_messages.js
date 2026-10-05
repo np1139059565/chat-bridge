@@ -237,9 +237,6 @@
       log('ingestMessages：切片为空，忽略');
       return;
     }
-    // 记忆检查：出现「新的」真实用户发言则打开计数窗口（工具结果回传不算用户发言，
-    // 同一用户发言重复出现不会重复开窗）。窗口内由 memoryIssueForRound 数 AI 发言轮次。
-    this.noteUserTurn(incoming);
     // 打印过滤后各条指纹：与 sendPage 的 ids 同源，便于两边逐条比对。
     log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
       + '，来源=' + (reason || 'generate')
@@ -272,10 +269,6 @@
     // 3) 组装分支：以切片末条为最新
     conv.branchKeys = this.assembleBranchKeys(conv, incoming);
 
-    // 记忆检查：采样 memory 目录指纹并推进计数（细节见 05d_memory.js）。
-    // 异步：需等后端指纹返回；带超时保护，后端不可达时不阻塞入库。
-    const memoryIssue = await this.memoryIssueForRound(incoming, reason);
-
     // 「本轮是否属 AI 新鲜回复」——检测与上报共用同一判定。
     // 原漏告警根因：检测只看 reason（非 generate 直接跳过），上报却强制 generate，
     // 轮询错过「生成中→空闲」跳变、消息以 scroll 采集时，两者分叉：
@@ -285,7 +278,7 @@
     const isFreshReply = (reason === 'generate') || (addedNodes && lastIsAssistant);
 
     // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见 05g_cards.js 与下方收尾）
-    const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly, isFreshReply);
+    const collected = this._buildCardsForIncoming(conv, incoming, reason, scrollOnly, isFreshReply);
     this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom);
 
     log('本轮处理完成：消息=' + incoming.length

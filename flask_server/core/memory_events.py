@@ -11,7 +11,7 @@
 import json
 import time
 
-from memory_db import get_conn
+from memory_db import get_conn, maybe_commit
 import memory_nodes
 import memory_edges
 
@@ -38,25 +38,28 @@ def build_synapses(new_node_id):
     ).fetchall()
     count = 0
     for r in rows:
-        # 无向去重：只处理 id 较小的一方，避免同一对节点建出双向重复边
-        if r["id"] < new_node_id:
-            continue
         other = memory_nodes.get_node(r["id"])
         if not other:
             continue
         ok = set(other.get("keywords") or [])
         # 包含式匹配：一个关键词是另一个的子串即算相关（中文短语常有包含关系）
         inter = _related(nk, ok)
-        # 自适应阈值：短文本关键词少，硬套 3 会永远建不成边；
-        # 取「3」与「关键词较少一方总数」的较小值，保证短文本也能关联。
-        need = min(SYNAPSE_MIN_INTERSECT, min(len(nk), len(ok)))
+        # 自适应交集门槛：关键词数量少时，硬套 3 会永远建不成边。
+        # 取「关键词较少一方的一半（向上取整）」与 3 的较小值，下限 1：
+        #   各 1~2 个词 → 门槛 1；各 3~4 个词 → 门槛 2；各 ≥5 个词 → 门槛 3。
+        # 仍由下方 Jaccard 门槛兜底，避免少量巧合词就建边。
+        need = min(SYNAPSE_MIN_INTERSECT, max(1, (min(len(nk), len(ok)) + 1) // 2))
         if len(inter) < need:
             continue
         union = len(nk) + len(ok) - len(inter)
         jac = len(inter) / union if union else 0
         if jac < SYNAPSE_MIN_JACCARD:
             continue
-        memory_edges.add_edge(new_node_id, r["id"], "associative", weight=float(len(inter)))
+        # 无向去重：同一对节点只建一条边，以较小 id 为 src 规范化。
+        # 此前用「跳过 id 较小的一方」实现去重，方向写反，导致新节点
+        # （id 总是更大）对全部已有节点都跳过，突触永远建不成。
+        lo, hi = (new_node_id, r["id"]) if new_node_id < r["id"] else (r["id"], new_node_id)
+        memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)))
         count += 1
     return count
 
@@ -153,7 +156,7 @@ def _log_revision(node_id, old_text, new_text, reason):
         " VALUES (?,?,?,?,?)",
         (node_id, old_text, new_text, reason, int(time.time())),
     )
-    conn.commit()
+    maybe_commit(conn)
 
 
 def event_history(root_id):
@@ -163,6 +166,81 @@ def event_history(root_id):
         "SELECT * FROM revision_log WHERE node_id=? ORDER BY created_at", (root_id,)
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def event_merge(root_id, member_ids, reason="manual"):
+    """把若干事件根节点合并到同一事件（接口 event_merge 的落点）。
+
+    事件层全自动，但保留人工合并入口。合并动作写入 revision_log 留痕，
+    并在每条被并入的根上登记归属，使 event_tree_get 能按根聚合。
+    @param root_id 目标事件根节点 id
+    @param member_ids 要并入的其它根节点 id 列表
+    @return 实际并入的节点数
+    """
+    conn = get_conn()
+    merged = 0
+    for mid in (member_ids or []):
+        if not mid or mid == root_id:
+            continue
+        conn.execute(
+            "INSERT INTO revision_log (node_id, old_text, new_text, reason, created_at)"
+            " VALUES (?,?,?,?,?)",
+            (mid, "", str(root_id), "merge:%s" % reason, int(time.time())),
+        )
+        merged += 1
+    maybe_commit(conn)
+    return merged
+
+
+def event_tree_get(root_id):
+    """取某事件树：根节点 + 被并入的成员根 + 全部相关节点（接口 event_tree_get 的落点）。
+
+    组装三部分：根节点本身、revision_log 里登记归属该根的被并节点、
+    以及根节点下的子节点（parent_id 指向根）。
+    @return dict { root, members, children }；根不存在返回 None
+    """
+    root = memory_nodes.get_node(root_id)
+    if not root:
+        return None
+    conn = get_conn()
+    member_rows = conn.execute(
+        "SELECT node_id FROM revision_log WHERE new_text=? AND reason LIKE 'merge:%'",
+        (str(root_id),),
+    ).fetchall()
+    members = []
+    for r in member_rows:
+        m = memory_nodes.get_node(r["node_id"])
+        if m:
+            members.append(m)
+    child_rows = conn.execute(
+        "SELECT id FROM nodes WHERE parent_id=? AND deleted=0 ORDER BY created_at, id",
+        (root_id,),
+    ).fetchall()
+    children = []
+    for r in child_rows:
+        c = memory_nodes.get_node(r["id"])
+        if c:
+            children.append(c)
+    return {"root": root, "members": members, "children": children}
+
+
+def set_shadow(root_id, summary):
+    """护栏二·语义化延迟：把语义摘要作为影子挂在原句根节点上。
+
+    原句始终保留在节点 blocks 里，影子只记摘要文本，检索优先返回原句。
+    影子以 revision_log 记录（reason=shadow），不覆盖原节点任何字段。
+    """
+    _log_revision(root_id, "", summary or "", "shadow")
+
+
+def get_shadow(root_id):
+    """取某节点的最新影子摘要；无则返回 None。"""
+    row = get_conn().execute(
+        "SELECT new_text FROM revision_log WHERE node_id=? AND reason='shadow'"
+        " ORDER BY created_at DESC LIMIT 1",
+        (root_id,),
+    ).fetchone()
+    return row["new_text"] if row else None
 
 
 def _loads(text, default):

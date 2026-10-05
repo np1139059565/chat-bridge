@@ -18,10 +18,11 @@
 import json
 import time
 
-from memory_db import get_conn
+from memory_db import get_conn, maybe_commit, begin_batch, end_batch
 from memory_nodes import upsert_node, get_by_msg_id, set_parent
 from memory_edges import add_edge
 from memory_cards import upsert_card
+import app_log
 
 
 def _now():
@@ -36,6 +37,19 @@ def save_conversation(conv_id, site_key, conv):
     @return 写入的节点数
     """
     conn = get_conn()
+    _t0 = time.time()
+    # 进入批量模式：本轮所有写操作攒到最后统一提交，
+    # 避免「每节点多次提交」造成的频繁抢写锁。
+    begin_batch()
+    try:
+        return _save_conversation_inner(conn, conv_id, site_key, conv, _t0)
+    finally:
+        # 无论成败都退出批量并提交，保证数据落地、不长时间占锁
+        end_batch(conn)
+
+
+def _save_conversation_inner(conn, conv_id, site_key, conv, _t0):
+    """保存会话的实际写入逻辑（在批量提交包裹内执行）。"""
     tree = (conv.get("msgTree") or {})
     # 预扫：建 msg_id → 节点 映射，并统计每个父节点的子边数（判 branch）
     node_by_msg = {}    # msg_id → 前端节点对象
@@ -93,7 +107,10 @@ def save_conversation(conv_id, site_key, conv):
          json.dumps(conv.get("orphanSlice") or [], ensure_ascii=False),
          _now()),
     )
-    conn.commit()
+    maybe_commit(conn)
+    ms = (time.time() - _t0) * 1000.0
+    # 记录规模与耗时：节点数突增或耗时飙升时，一眼看出保存变慢
+    app_log.info("[mem][save] conv=%s 节点=%d 耗时=%.1fms" % (conv_id, n_written, ms))
     return n_written
 
 
@@ -174,7 +191,7 @@ def delete_conversation(conv_id, site_key):
         conn.execute("DELETE FROM cards WHERE node_id=?", (nid,))
     conn.execute("DELETE FROM nodes WHERE conv_id=? AND site_key=?", (conv_id, site_key))
     conn.execute("DELETE FROM conversations WHERE conv_id=? AND site_key=?", (conv_id, site_key))
-    conn.commit()
+    maybe_commit(conn)
     return len(ids)
 
 

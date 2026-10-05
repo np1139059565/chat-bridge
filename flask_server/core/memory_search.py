@@ -15,6 +15,7 @@ import uuid
 from memory_db import get_conn, cosine_topk, blob_to_vec
 import memory_nodes
 import memory_edges
+import memory_keywords
 
 
 def plan_submit(plan_text, session_id=""):
@@ -55,11 +56,29 @@ def memory_search(plan_id, keywords, focus="relevance", top_k=10):
         return {"hits": [], "rejected": rejected, "plan_found": bool(plan)}
     # 第 2 步：三路并行检索
     fts_hits = _fts_search(valid, top_k * 3)
+    vec_hits = _vector_search(valid, top_k * 3)
     graph_hits = _graph_search([h[0] for h in fts_hits[:3]], top_k * 3)
     # 第 3 步：RRF 融合 + 关键词交集置信度
-    scores = _rrf_fuse([fts_hits, graph_hits])
+    scores = _rrf_fuse([fts_hits, vec_hits, graph_hits])
     hits = _rank(scores, valid, focus, top_k)
     return {"hits": hits, "rejected": rejected, "plan_found": bool(plan)}
+
+
+def _vector_search(keywords, limit):
+    """向量语义近邻检索：用关键词拼成查询向量，暴力余弦取近邻。
+
+    这是方案第六节的第三路。查询向量由有效关键词拼接后哈希生成，
+    与蒸馏时对节点生成的向量同源同法，保证可比。无向量节点时返回空。
+    @return [(node_id, rank)]
+    """
+    if not keywords:
+        return []
+    try:
+        q = memory_keywords.text_to_vector(" ".join(keywords))
+        scored = memory_nodes.search_vectors(q, limit)
+    except Exception:
+        return []
+    return [(nid, i) for i, (nid, _sim) in enumerate(scored)]
 
 
 def _fts_search(keywords, limit):
