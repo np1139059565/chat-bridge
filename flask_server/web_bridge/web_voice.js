@@ -245,10 +245,15 @@
   // - 点任意一条语音播放 → 解锁自动播放，之后新到的语音自动播；
   // - 主动关闭任意一条语音 → 关闭自动播放，重新上锁。
   function bind(au, allowAuto) {
+    // playing 事件：真正开始出声时才标记「已播放」。
+    // 不能用 play 事件标记——play 只表示「播放请求已发出」，
+    // 音频没加载好（时长 0、进度不动）时也会触发，导致「假播放」：
+    // 标记成已播放，实际没声音。
+    au.addEventListener('playing', function () {
+      markVoicePlayed(au.getAttribute('data-seq'));
+    });
     // 播放事件：区分「程序自动播」与「用户手动点击播」
     au.addEventListener('play', function () {
-      // 开始播放即标记已播放（点一下就算听过，不必等播完）
-      markVoicePlayed(au.getAttribute('data-seq'));
       // 开始播放即自动定位：把正在播放的语音滚进可视区
       try { au.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { /* 老浏览器忽略 */ }
       if (au._progPlay) { au._progPlay = false; return; }   // 程序发起，已在队列登记
