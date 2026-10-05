@@ -61,15 +61,26 @@ def _register_cors(app):
         return resp
 
 
+# 进行中的请求登记表：{ req_id: {start, method, path} }，供看门狗巡检。
+# 由 _register_request_logging 的钩子写入，看门狗线程读取。
+_inflight = {}
+_inflight_lock = None
+
+
 def _register_request_logging(app):
     """请求耗时日志：记录每个请求的开始、结束与耗时。
 
     目的：接口卡死时，日志能回答「哪个请求进来了、有没有出去、卡了多久」。
     慢请求（超过 SLOW_MS）额外以 WARN 打一条，便于一眼捞出卡点。
+    同时把进行中的请求登记到 _inflight，供看门狗在卡死时 dump 线程堆栈。
     """
     import time as _time
     import app_log
     import uuid as _uuid
+    import threading as _th
+
+    global _inflight_lock
+    _inflight_lock = _th.Lock()
 
     # 慢请求阈值（毫秒）：超过即告警，便于排查阻塞
     SLOW_MS = 1000
@@ -80,6 +91,11 @@ def _register_request_logging(app):
         from flask import g, request
         g._req_t0 = _time.time()
         g._req_id = _uuid.uuid4().hex[:8]
+        with _inflight_lock:
+            _inflight[g._req_id] = {
+                "start": g._req_t0, "method": request.method, "path": request.path,
+                "thread": _th.current_thread().name,
+            }
         app_log.debug("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
 
     @app.after_request
@@ -89,6 +105,8 @@ def _register_request_logging(app):
         rid = getattr(g, "_req_id", "?")
         if t0 is None:
             return resp
+        with _inflight_lock:
+            _inflight.pop(rid, None)
         ms = (_time.time() - t0) * 1000.0
         # 慢请求升级为 WARN，正常请求走 DEBUG（避免刷屏）
         line = "[req][%s] <- %s %s %d %.1fms" % (
@@ -98,6 +116,49 @@ def _register_request_logging(app):
         else:
             app_log.debug(line)
         return resp
+
+
+def _register_watchdog(app, hang_seconds=15):
+    """卡死看门狗：请求超过 hang_seconds 未返回时，dump 全部线程堆栈。
+
+    目的：卡死时抓现场。此前只能看到「请求卡了多久」，看不到「卡在哪一行」；
+    看门狗在超时后打印所有线程的调用栈，直接指出阻塞位置。
+    @param hang_seconds 判定卡死的阈值（秒）
+    """
+    import time as _time
+    import threading as _th
+    import sys as _sys
+    import traceback as _tb
+    import app_log
+
+    # 已 dump 过的请求 id：避免同一卡死请求每轮都刷日志
+    dumped = set()
+
+    def _dump_stacks(reason):
+        """打印所有线程的调用栈到日志。"""
+        frames = _sys._current_frames()
+        for tid, frame in frames.items():
+            stack = "".join(_tb.format_stack(frame))
+            app_log.error("[watchdog] %s 线程tid=%s 堆栈:\n%s" % (reason, tid, stack))
+
+    def _loop():
+        while True:
+            _time.sleep(3)
+            now = _time.time()
+            with _inflight_lock:
+                snapshot = list(_inflight.items())
+            for rid, info in snapshot:
+                if now - info["start"] < hang_seconds:
+                    continue
+                if rid in dumped:
+                    continue
+                dumped.add(rid)
+                app_log.error(
+                    "[watchdog] 请求疑似卡死 %s %s（线程=%s，已 %.0fs），dump 全部线程堆栈"
+                    % (info["method"], info["path"], info["thread"], now - info["start"]))
+                _dump_stacks("卡死现场")
+
+    _th.Thread(target=_loop, daemon=True, name="watchdog").start()
 
 
 def _register_error_logging(app):
@@ -144,6 +205,8 @@ def create_app():
     _register_cors(app)
     # 请求耗时日志：排查接口卡死时，靠它还原「哪个请求卡了多久」
     _register_request_logging(app)
+    # 卡死看门狗：请求超时未返回时 dump 全部线程堆栈，直接指出卡在哪一行
+    _register_watchdog(app)
     # 全局异常日志：未捕获异常也落盘，避免只看到 500 却不知原因
     _register_error_logging(app)
     # 启动加载：把规则与记忆摘要一次性读进内存（方案核心目的）。
