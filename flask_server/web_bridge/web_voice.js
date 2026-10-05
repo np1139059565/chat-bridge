@@ -33,9 +33,13 @@
   /** 标记某条语音已播放，并落盘、同步界面标记。 */
   function markVoicePlayed(seq) {
     var k = String(seq || 0);
-    if (playedSeqs[k]) return;
-    playedSeqs[k] = 1;
-    try { localStorage.setItem(PLAYED_KEY, JSON.stringify(playedSeqs)); } catch (e) { /* 存不下则仅内存 */ }
+    // 落盘只在首次写入，避免重复写 localStorage；
+    // 但「界面同步」必须每次都执行——重试成功、或被提前标记过的情况下，
+    // 若因已记录而直接 return，界面会卡在旧文案（如「加载中，自动重试…」）。
+    if (!playedSeqs[k]) {
+      playedSeqs[k] = 1;
+      try { localStorage.setItem(PLAYED_KEY, JSON.stringify(playedSeqs)); } catch (e) { /* 存不下则仅内存 */ }
+    }
     var au = listEl.querySelector('audio[data-seq="' + seq + '"]');
     if (au) {
       var wrap = au.closest('.voice-wrap');
