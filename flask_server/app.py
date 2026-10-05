@@ -50,7 +50,14 @@ def _register_cors(app):
         resp.headers["Access-Control-Allow-Origin"] = "*"
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
         resp.headers["Access-Control-Allow-Methods"] = "GET,POST,PUT,DELETE,OPTIONS"
-        resp.headers["Cache-Control"] = "no-store"
+        # 默认禁缓存：工具上下线、技能说明等状态变化需即时反映到前端。
+        # 例外：音频 / 图片文件名唯一、内容不变，放行以便浏览器长期缓存
+        # （断网后可复播语音、免去重复下载）；这些接口已自带 max-age。
+        from flask import request
+        p = request.path or ""
+        cacheable = p.startswith("/api/web/audio/") or p.startswith("/api/web/image-file/")
+        if not cacheable:
+            resp.headers["Cache-Control"] = "no-store"
         return resp
 
 

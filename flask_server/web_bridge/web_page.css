@@ -213,12 +213,34 @@ body {
   justify-content: center;
   z-index: 100;
   padding: 12px;
+  overflow: hidden;         /* 缩放平移时图片不撑出滚动条 */
+  touch-action: none;       /* 手势自行处理：禁掉浏览器默认的滚动/双指缩放 */
+  cursor: grab;
 }
 .img-viewer.on { display: flex; }
+.img-viewer.grabbing { cursor: grabbing; }
+/* 图片用 transform 缩放平移：只改渲染、不改布局，手势跟手不卡 */
 .img-viewer-img {
   max-width: 100%;
   max-height: 100%;
   border-radius: 8px;
+  transform-origin: center center;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* 缩放操作提示：浮层底部一行小字，首次可见，操作后淡出 */
+.img-viewer-tip {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #fff;
+  font-size: 12px;
+  background: rgba(0,0,0,0.5);
+  padding: 4px 12px;
+  border-radius: 12px;
+  pointer-events: none;
 }
 /* ============ 输入区 ============ */
 .composer {

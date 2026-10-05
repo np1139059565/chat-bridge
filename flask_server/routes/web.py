@@ -313,8 +313,10 @@ def web_audio(name):
     path = _safe_audio_path(name)
     if not path:
         return jsonify(success=False, error="not_found"), 404
-    # conditional=True 支持 Range 请求，手机浏览器拖动进度条也能正常响应
-    return send_file(path, mimetype="audio/mpeg", conditional=True)
+    # max_age：音频文件名唯一（时间戳+序号）、内容不变，故设强缓存，
+    # 让浏览器留住已下载副本，断网后仍可复播同一条语音。
+    # conditional=True 支持 Range 请求，手机浏览器拖动进度条也能正常响应。
+    return send_file(path, mimetype="audio/mpeg", conditional=True, max_age=604800)
 
 
 # 正在后台合成的 seq 集合：避免同一条被多次点播时重复合成。
