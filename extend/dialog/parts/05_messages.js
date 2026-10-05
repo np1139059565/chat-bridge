@@ -144,7 +144,9 @@
   M._attachPendingImages = function (conv, incoming) {
     const pend = (conv && conv.pendingImages) || [];
     if (!pend.length) return;
-    const base = (this.config && this.config.flaskUrl) || '';
+    // 图片地址用「相对路径」：浏览器按当前访问的主机自动解析，
+    // 手机 / 别的电脑访问也能取到图。此前拼 config.flaskUrl（多为 127.0.0.1），
+    // 跨设备时该地址指向设备自身，图片必然加载失败。
     const used = [];
     (incoming || []).forEach((m) => {
       if (!m || m.role !== 'user') return;
@@ -159,7 +161,7 @@
         if (p.text && text.indexOf(p.text) >= 0) {
           used.push(i);
           const imgBlocks = (p.names || []).slice().reverse().map(function (n) {
-            return { type: 'image', src: base + '/api/web/image-file/' + encodeURIComponent(n), alt: '图片' };
+            return { type: 'image', src: '/api/web/image-file/' + encodeURIComponent(n), alt: '图片' };
           });
           // 双写之一：改本轮 incoming 的消息对象
           imgBlocks.slice().reverse().forEach(function (b) { m.blocks.unshift(b); });

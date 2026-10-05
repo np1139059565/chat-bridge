@@ -126,7 +126,13 @@ _INDEXES = [
 
 
 def get_conn():
-    """取得当前线程的记忆库连接；首次调用时建库、建表、建索引。"""
+    """取得当前线程的记忆库连接；首次调用时建立连接。
+
+    建表（含 FTS5 虚拟表）只在进程内做一次，不在每个新连接上重复执行。
+    原因：Flask 每个请求开新线程，每个新线程首次连库若都跑一遍建表语句，
+    在有数据量后 CREATE VIRTUAL TABLE ... fts5 会耗时数秒并拿写锁，
+    把全部请求堵死（曾观察到单条建表语句 8-13 秒、请求几十秒超时）。
+    """
     conn = getattr(_local, "conn", None)
     if conn is not None:
         return conn
@@ -137,18 +143,62 @@ def get_conn():
     # 放宽到 15 秒，给排队等锁的写入更多耐心。
     conn = sqlite3.connect(str(paths.MEMORY_DB_PATH), timeout=15.0)
     conn.row_factory = sqlite3.Row
-    # WAL 模式：读写并发更好，且写入不阻塞读取
-    conn.execute("PRAGMA journal_mode=WAL")
+    # WAL 是数据库级设置（写入文件头，永久生效），只需设一次。
+    # 每个新连接都设一遍会在多线程同时连库时互相冲突、报 database is locked。
+    _ensure_wal_once(conn)
     # busy_timeout：与 timeout 双保险，单位毫秒；遇锁时自旋等待而非立即报错
     conn.execute("PRAGMA busy_timeout=15000")
     conn.execute("PRAGMA synchronous=NORMAL")
     # 慢 SQL 追踪：记录执行超过阈值的语句，用于定位「哪条 SQL 卡住」。
     # 诊断用，不改变查询行为。
     _install_slow_query_trace(conn)
-    _ensure_schema(conn)
+    # 建表只在进程内做一次（详见 _ensure_schema_once）
+    _ensure_schema_once(conn)
     _local.conn = conn
     app_log.info("[db][%s] 建立记忆库连接" % threading.current_thread().name)
     return conn
+
+
+# 进程级 WAL 设置标志：WAL 是库级设置，只设一次，避免多线程连库时冲突。
+_wal_lock = threading.Lock()
+_wal_ready = False
+
+
+def _ensure_wal_once(conn):
+    """把 journal_mode 设为 WAL，只在进程内做一次。
+
+    WAL 写入数据库文件头、永久生效；多线程各自执行会在并发连库时报
+    database is locked。故加锁只做一次，其余连接直接跳过。
+    """
+    global _wal_ready
+    if _wal_ready:
+        return
+    with _wal_lock:
+        if _wal_ready:
+            return
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.OperationalError:
+            # 已被其它进程设为 WAL 或暂时锁住：不阻断，继续用连接
+            pass
+        _wal_ready = True
+
+
+# 进程级建表标志：确保建表语句（含 FTS5 虚拟表）全程只执行一次。
+_schema_lock = threading.Lock()
+_schema_ready = False
+
+
+def _ensure_schema_once(conn):
+    """建表只在进程内做一次；后续新线程连接直接跳过，避免重复建表拖垮请求。"""
+    global _schema_ready
+    if _schema_ready:
+        return
+    with _schema_lock:
+        if _schema_ready:
+            return
+        _ensure_schema(conn)
+        _schema_ready = True
 
 
 # 慢 SQL 阈值（毫秒）：超过即记日志

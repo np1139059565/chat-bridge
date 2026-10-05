@@ -269,9 +269,16 @@
     // 图片块：直接渲染原图。src 可能是 blob: / https: / dataURL；
     // blob 地址在抽屉（iframe）里可能无法显示，此时退化为占位提示，不阻断其它块。
     if (block.type === 'image') {
+      // 图片块存相对路径（跨设备通用）；抽屉是扩展环境，相对路径会指向
+      // 扩展自身，需补上后端地址才能取到图。网页版同源，直接用相对路径即可。
+      let imgSrc = block.src || '';
+      if (imgSrc.charAt(0) === '/') {
+        const base = (ctx.config && ctx.config.flaskUrl) || '';
+        imgSrc = base.replace(/\/+$/, '') + imgSrc;
+      }
       return h('div', { class: 'mb-img', key: k }, [
         h('img', {
-          src: block.src,
+          src: imgSrc,
           alt: block.alt || '图片',
           onError: (e) => { try { e.target.style.display = 'none'; } catch (err) { /* 忽略 */ } }
         })
