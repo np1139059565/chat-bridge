@@ -162,15 +162,6 @@
     A.log('已进入元素选择模式');
   };
 
-  /**
-   * 按选择器点击一个元素（供 QQ 指令「点击元素」执行时调用）。
-   *
-   * 返回结构化结果，便于把失败原因回传 QQ：
-   *  - 未找到元素：页面结构可能已变，或选择器已失效
-   *  - 命中多个：选择器不够精确，无法确定点哪个（拒绝执行，避免误点）
-   * @param {string} selector CSS 选择器
-   * @returns {Object} { ok, reason, count }
-   */
   // 主世界 hook（injected_clipboard.js）由 manifest 以 world:MAIN 声明式注入，
   // 在 document_start 就跑，早于页面自身脚本。
   // 注意：不要改回用 script 标签注入——那会被页面 CSP 拦掉，
@@ -185,61 +176,93 @@
     A.post({ type: 'clip_copied', text: d.text || '' });
   });
 
+  // ---------- 元素点击：经主世界执行 ----------
+  // 求值必须在主世界做：隔离世界受扩展 CSP 限制（无 unsafe-eval），
+  // new Function 会抛错，导致任何带 JS 的表达式都误报「语法无效」。
+  // 主世界脚本（injected_clipboard.js）收到表达式后求值、点击并回传结果。
+
+  // 待回传登记：reqId → { cb, timer }；主世界回传后据此转交抽屉。
+  const _execPending = {};
+  let _execSeq = 0;
+  // 主世界回传超时：主世界脚本未注入 / 不回传时，看门狗兜底，
+  // 避免回调永不触发、QQ 指令永久挂起。
+  const EXEC_TIMEOUT = 3000;
+
+  /**
+   * 请求主世界执行表达式并点击。
+   * 表达式由用户自由填写，不限定写法——只要求值得到符合要求的元素即可。
+   * @param {string} expr 选择器或任意 JS 表达式
+   * @param {string} mode 'unique'（默认，须一个且唯一）| 'last'（取最后一个）
+   * @param {Function} onResult 结果回调 (ok, reason, count)
+   * @returns {string} reqId
+   */
+  A.execClick = function (expr, mode, onResult) {
+    const reqId = 'e' + (++_execSeq) + '_' + Date.now();
+    const cb = onResult || null;
+    // 看门狗：超时未回传则按「无法求值」收尾，保证回调一定被调用一次
+    const timer = setTimeout(function () {
+      const p = _execPending[reqId];
+      if (!p) return;
+      delete _execPending[reqId];
+      if (p.cb) p.cb(false, 'timeout', 0);
+    }, EXEC_TIMEOUT);
+    _execPending[reqId] = { cb: cb, timer: timer };
+    try {
+      window.postMessage({
+        source: 'ai-mirror-exec', type: 'click',
+        reqId: reqId, expr: String(expr == null ? '' : expr), mode: mode || 'unique'
+      }, '*');
+    } catch (e) {
+      clearTimeout(timer);
+      delete _execPending[reqId];
+      if (cb) cb(false, 'invalid', 0);
+    }
+    return reqId;
+  };
+
+  // 接收主世界回传的点击结果，转交对应回调。
+  window.addEventListener('message', function (e) {
+    const d = e.data;
+    if (!d || d.source !== 'ai-mirror-exec' || d.type !== 'click_result') return;
+    const p = _execPending[d.reqId];
+    if (!p) return;
+    delete _execPending[d.reqId];
+    clearTimeout(p.timer);   // 已回传：取消看门狗
+    if (p.cb) p.cb(!!d.ok, d.reason || '', d.count || 0);
+  });
+
   /**
    * 点击页面的「复制按钮」，截获它写入剪贴板的 Markdown 内容。
    *
-   * 流程：点一下按钮 → 页面执行 clipboard.writeText(md) → 主世界 hook 截获
-   * → 回传到本脚本 → 再转交抽屉。这样拿到的就是带格式的原始 Markdown。
-   * @param {string} selector 复制按钮的选择器
-   * @returns {boolean} 是否找到按钮并点击
+   * 流程：请求主世界点击按钮 → 页面执行 clipboard.writeText(md)
+   * → 主世界 hook 截获 → 回传本脚本 → 再转交抽屉。
+   * @param {string} selector 复制按钮的选择器或表达式
    */
   A.clickCopyButton = function (selector) {
-    // 空选择器：直接判定失败，交由调用方回传空结果
-    if (!selector) { A.warn('clickCopyButton：选择器为空'); return false; }
-    // 统一走「选择器表达式」解析：兼容纯选择器与完整调用写法，
-    // 后者可在选择器后接 JS 微调以命中唯一元素。
-    const r = A.resolveSelectorExpr(selector);
-    const list = r.list;
-    if (r.error === 'invalid') {
-      A.warn('clickCopyButton：选择器语法无效', selector);
-      return false;
-    }
-    // 未命中任何元素：页面结构可能已变，或选择器已失效
-    if (!list.length) { A.warn('clickCopyButton：未找到复制按钮', selector); return false; }
-    // 命中多个时取最后一个：采集场景面向「最新一条回复」的复制按钮
-    const el = list[list.length - 1];
-    // 点击前先滚动到可见位置，避免点到视口外
-    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* 忽略 */ }
-    el.click();
-    A.log('已点击复制按钮：' + selector + '（命中 ' + list.length + ' 个）');
-    return true;
+    if (!selector) { A.warn('clickCopyButton：选择器为空'); return; }
+    // 采集面向「最新一条回复」的复制按钮：命中多个取最后一个
+    A.execClick(selector, 'last', function (ok, reason) {
+      // 点击失败：回传空结果，让抽屉的采集流程照常收尾
+      if (!ok) A.post({ type: 'clip_copied', text: '', error: reason || 'button_not_found' });
+    });
   };
 
-  A.clickBySelector = function (selector) {
-    if (!selector) return { ok: false, reason: 'empty_selector', count: 0 };
-    // 统一走「选择器表达式」解析：兼容纯选择器与 document.querySelectorAll(...) 等
-    // 完整调用写法，后者可在选择器后接 JS 微调以命中唯一元素。
-    const r = A.resolveSelectorExpr(selector);
-    let list = r.list;
-    if (r.error === 'invalid') {
-      return { ok: false, reason: 'invalid_selector', count: 0 };
+  /**
+   * 点击页面元素（供 QQ 指令「点击元素」调用）。
+   * 表达式由用户自由填写；只要求值得到「一个且唯一」的元素即视为生效。
+   * @param {string} selector 选择器或任意 JS 表达式
+   * @param {Object} extra 回传抽屉时一并带上的字段（如 selector / request_id）
+   */
+  A.clickBySelector = function (selector, extra) {
+    if (!selector) {
+      A.post(Object.assign(
+        { type: 'click_result', ok: false, reason: 'empty_selector', count: 0 }, extra || {}));
+      return;
     }
-    // 未找到：选择器失效或页面结构变了
-    if (!list.length) {
-      A.warn('clickBySelector：未找到元素', selector);
-      return { ok: false, reason: 'not_found', count: 0 };
-    }
-    // 命中多个：选择器不唯一，拒绝执行以免误点
-    if (list.length > 1) {
-      A.warn('clickBySelector：命中多个元素，已拒绝', selector, list.length);
-      return { ok: false, reason: 'not_unique', count: list.length };
-    }
-    const el = list[0];
-    // 点击前先滚动到可见位置，避免点到视口外
-    try { el.scrollIntoView({ block: 'center', inline: 'center' }); } catch (e) { /* 忽略 */ }
-    el.click();
-    A.log('已点击元素：' + selector);
-    return { ok: true, reason: '', count: 1 };
+    A.execClick(selector, 'unique', function (ok, reason, count) {
+      A.post(Object.assign(
+        { type: 'click_result', ok: ok, reason: reason, count: count }, extra || {}));
+    });
   };
 
   /**

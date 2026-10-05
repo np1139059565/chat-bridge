@@ -267,5 +267,5 @@ bridge:
     page_url: ''
   - name: /reai1
     label: 消息频繁失败后重发
-    selector: div.ds-button.ds-button--warning:nth-child(3)
+    selector: Array.from(document.querySelectorAll("div.ds-button.ds-button--warning:nth-child(3)")).reverse()[0]
     page_url: ''

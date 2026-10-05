@@ -347,12 +347,9 @@
     }
     if (d.type === 'picker_result') {
       this.bridgePicking = false;
-      // 选择器统一包装成「完整调用表达式」：输入框因此显示为
-      // document.querySelectorAll(".a.b")，用户可在其后接 JS 微调。
-      // 纯选择器由执行端兼容，故对旧数据无影响。
-      const wrapped = d.selector
-        ? 'document.querySelectorAll(' + JSON.stringify(d.selector) + ')'
-        : '';
+      // 选择器原样填入：拾取到的就是一个稳定的 CSS 选择器，
+      // 用户可自由改写为任意表达式——执行端只要求值得到元素即可。
+      const wrapped = d.selector || '';
       // 处于「修改选择器」模式：直接覆盖对应指令的选择器并保存
       if (this.bridgeEditIdx !== null && this.bridgeEditIdx !== undefined) {
         const cmd = (this.bridgeCommands || [])[this.bridgeEditIdx];

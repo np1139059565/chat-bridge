@@ -50,14 +50,10 @@
       A.pickerStop();
     }
     else if (d.type === 'bridge_click_element') {
-      // QQ 指令「点击元素」：按选择器点击页面元素。
-      // 带上 request_id，抽屉据此把执行结果（含失败）发回 QQ。
-      const res = A.clickBySelector(d.selector || '');
-      A.post({
-        type: 'click_result',
-        ok: !!res.ok,
-        reason: res.reason || '',
-        count: res.count || 0,
+      // QQ 指令「点击元素」：按表达式点击页面元素。
+      // 求值与点击在主世界完成，结果异步回传；这里带上 request_id
+      // 与原始表达式，抽屉据此把执行结果（含失败）发回 QQ。
+      A.clickBySelector(d.selector || '', {
         selector: d.selector || '',
         request_id: d.request_id || ''
       });
@@ -68,9 +64,9 @@
     }
     else if (d.type === 'bridge_copy_md') {
       // 抽屉请求：点页面的复制按钮，取带格式的 Markdown。
-      // 点击后由主世界 hook 截获剪贴板内容，经 clip_copied 回传抽屉。
-      const ok = A.clickCopyButton(d.selector || '');
-      if (!ok) A.post({ type: 'clip_copied', text: '', error: 'button_not_found' });
+      // 点击由主世界执行，成功后经剪贴板 hook 回传 clip_copied；
+      // 失败由 clickCopyButton 内部回传错误结果，这里无需再判返回值。
+      A.clickCopyButton(d.selector || '');
     }
     else if (d.type === 'bridge_refresh_page') {
       // QQ 指令「刷新页面」：先记标记，刷新后据此自动打开抽屉。

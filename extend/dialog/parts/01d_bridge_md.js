@@ -130,14 +130,16 @@
     const sel = d.selector || '';
     if (d.ok) return '已点击：' + sel;
     if (d.reason === 'not_found') {
-      return '点击失败：页面上找不到元素\n' + sel + '\n（页面结构可能已变，请重新选择元素）';
+      return '点击失败：页面上找不到元素\n' + sel;
     }
     if (d.reason === 'not_unique') {
-      return '点击失败：该选择器命中 ' + (d.count || 0) + ' 个元素，无法确定点哪个\n' + sel
-        + '\n（请重新选择更精确的元素）';
+      return '点击失败：命中 ' + (d.count || 0) + ' 个元素，未得到唯一元素\n' + sel;
     }
-    if (d.reason === 'invalid_selector') {
-      return '点击失败：选择器语法无效\n' + sel;
+    if (d.reason === 'invalid' || d.reason === 'invalid_selector') {
+      return '点击失败：表达式无法求值\n' + sel;
+    }
+    if (d.reason === 'timeout') {
+      return '点击失败：执行超时（主世界脚本未响应）\n' + sel;
     }
     if (d.reason === 'empty_selector') {
       return '点击失败：该指令没有绑定选择器';

@@ -224,17 +224,13 @@
           ? h('span', { class: 'hint' }, '组合指令无需选择元素')
           : h('button', {
             onClick: () => ctx.bridgePicking ? ctx.stopPickElement() : ctx.startPickElement()
-          }, ctx.bridgePicking ? '取消选择' : '选择元素'),
-        (!ctx.bridgeNewCmdIsCombo)
-          ? h('span', { class: 'hint' }, '也可直接在下方输入/编辑选择器或表达式')
-          : null
+          }, ctx.bridgePicking ? '取消选择' : '选择元素')
       ]),
       // 选择器输入框：点「选择元素」会自动填入，也可直接打字修改。
-      // 支持两种写法：纯选择器（如 .a.b）或完整调用表达式
-      // （如 document.querySelectorAll(".a.b")，可在其后接 JS 微调以命中唯一元素）。
+      // 内容原样传给执行端求值，写法不限。
       (!ctx.bridgeNewCmdIsCombo) ? h('input', {
         type: 'text', class: 'bridge-sel-input',
-        placeholder: '选择器或表达式，如 #btn-go 或 document.querySelectorAll(".a.b")',
+        placeholder: '选择器或表达式',
         value: ctx.bridgePicked ? (ctx.bridgePicked.selector || '') : '',
         onInput: (e) => {
           // 直接编辑选择器：保留原 page_url，清掉 tag（不再对应某个具体元素）
