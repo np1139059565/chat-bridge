@@ -17,6 +17,7 @@ import threading
 import memory_nodes
 import memory_keywords as kw
 import memory_events
+from memory_db import begin_batch, end_batch
 
 
 def _essence_for(source, text, blocks):
@@ -61,17 +62,24 @@ def distill_node(node_id, use_llm=False):
     keywords = kw.denoise_by_plans(keywords)
     # 生成文本向量，供检索第三路（向量语义近邻）使用
     vector = kw.text_to_vector(essence or text)
-    memory_nodes.set_essence(node_id, essence, keywords, vector)
-    # 接入事件层（方案 5.1 / 5.2 / 护栏二）：蒸馏完成即自动触发，不再依赖手动接口。
-    # 建突触：与新节点关键词达阈值的已有节点自动连边；
-    # 挂影子：用户发言为事件根，其语义摘要作影子挂在原句上（原句仍完整保留）。
+    # 进入批量：把「写精华 + 建突触 + 挂影子」的全部写操作攒成一次提交，
+    # 避免建突触时全表扫描逐个提交、长时间占写锁而拖慢前端请求。
+    conn = memory_nodes.get_conn()
+    begin_batch()
     try:
-        memory_events.build_synapses(node_id)
-        if source == "user":
-            memory_events.set_shadow(node_id, essence)
-    except Exception as e:
-        # 事件层失败不影响蒸馏本身（蒸馏结果已落库）
-        print("[memory] 事件层触发失败 node=%s: %s" % (node_id, e))
+        memory_nodes.set_essence(node_id, essence, keywords, vector)
+        # 接入事件层（方案 5.1 / 5.2 / 护栏二）：蒸馏完成即自动触发，不再依赖手动接口。
+        # 建突触：与新节点关键词达阈值的已有节点自动连边；
+        # 挂影子：用户发言为事件根，其语义摘要作影子挂在原句上（原句仍完整保留）。
+        try:
+            memory_events.build_synapses(node_id)
+            if source == "user":
+                memory_events.set_shadow(node_id, essence)
+        except Exception as e:
+            # 事件层失败不影响蒸馏本身（蒸馏结果已落库）
+            print("[memory] 事件层触发失败 node=%s: %s" % (node_id, e))
+    finally:
+        end_batch(conn)
     return {"essence": essence, "keywords": keywords}
 
 
@@ -82,12 +90,19 @@ def distill_async(node_ids, use_llm=False):
     @return 线程对象
     """
     def _run():
-        for nid in node_ids:
-            try:
-                distill_node(nid, use_llm=use_llm)
-            except Exception as e:
-                # 单节点失败不中断整批
-                print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))
+        # 整批包一次批量提交：逐节点蒸馏的写操作不在中途各自提交，
+        # 攒到整批结束才提交一次，极大缩短后台持写锁的时间。
+        conn = memory_nodes.get_conn()
+        begin_batch()
+        try:
+            for nid in node_ids:
+                try:
+                    distill_node(nid, use_llm=use_llm)
+                except Exception as e:
+                    # 单节点失败不中断整批
+                    print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))
+        finally:
+            end_batch(conn)
     t = threading.Thread(target=_run, daemon=True)
     t.start()
     return t

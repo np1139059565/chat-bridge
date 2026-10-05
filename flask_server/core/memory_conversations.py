@@ -36,16 +36,22 @@ def save_conversation(conv_id, site_key, conv):
     @param conv 前端会话对象 { title, page_url, msgTree, visibleKeys, ... }
     @return 写入的节点数
     """
-    conn = get_conn()
+    # 计时放在取连接之前：日志耗时为真实端到端耗时（含取连接）
     _t0 = time.time()
+    conn = get_conn()
     # 进入批量模式：本轮所有写操作攒到最后统一提交，
     # 避免「每节点多次提交」造成的频繁抢写锁。
     begin_batch()
+    result = None
     try:
-        return _save_conversation_inner(conn, conv_id, site_key, conv, _t0)
+        result = _save_conversation_inner(conn, conv_id, site_key, conv, _t0)
     finally:
         # 无论成败都退出批量并提交，保证数据落地、不长时间占锁
         end_batch(conn)
+    # 计时放在提交之后：日志耗时含「写入 + 最终提交」，才是真实端到端耗时
+    ms = (time.time() - _t0) * 1000.0
+    app_log.info("[mem][save] conv=%s 节点=%d 总耗时=%.1fms" % (conv_id, result, ms))
+    return result
 
 
 def _save_conversation_inner(conn, conv_id, site_key, conv, _t0):
@@ -108,9 +114,6 @@ def _save_conversation_inner(conn, conv_id, site_key, conv, _t0):
          _now()),
     )
     maybe_commit(conn)
-    ms = (time.time() - _t0) * 1000.0
-    # 记录规模与耗时：节点数突增或耗时飙升时，一眼看出保存变慢
-    app_log.info("[mem][save] conv=%s 节点=%d 耗时=%.1fms" % (conv_id, n_written, ms))
     return n_written
 
 
