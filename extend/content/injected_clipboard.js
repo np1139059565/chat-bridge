@@ -60,29 +60,19 @@
       source: 'ai-mirror-exec', type: 'click_result',
       reqId: d.reqId, ok: false, reason: '', count: 0
     };
+    // 统一语法：表达式一律按 JS 求值（选择器用 document.querySelectorAll('...') 写法）。
+    // 不再对纯 CSS 选择器做回退——旧数据已迁移到新语法，执行端只认一套，
+    // 避免「兼容两套」带来的歧义与误判。
     const exprStr = String(d.expr == null ? '' : d.expr);
     let val;
-    let jsErr = null;
     try {
-      // 先按 JS 表达式求值：支持 Array.from(...)、函数调用等任意写法
       val = (new Function('return (' + exprStr + ');'))();
     } catch (err) {
-      jsErr = err;
-    }
-    if (jsErr) {
-      // JS 求值失败 → 回退按 CSS 选择器查。
-      // 纯 CSS 选择器（如 div.foo.bar）当 JS 跑时变量未定义会抛错，
-      // 但它本就是一个合法选择器，必须支持；此前缺这层回退，导致所有
-      // 纯 CSS 选择器被误报「表达式无法求值」。
-      try {
-        val = document.querySelectorAll(exprStr);
-      } catch (err2) {
-        // 两条路都失败：如实回传原因，不误报、不隐瞒
-        result.reason = 'invalid';
-        result.error = String(jsErr);
-        window.postMessage(result, '*');
-        return;
-      }
+      // 求值失败：如实回传原因，不误报、不隐瞒
+      result.reason = 'invalid';
+      result.error = String(err);
+      window.postMessage(result, '*');
+      return;
     }
     const list = collectElements(val);
     result.count = list.length;

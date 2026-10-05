@@ -233,12 +233,11 @@ custom_tools:
     enabled: true
 bridge:
   intents: 0
-  md_selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
-    div[role="button"]:has(.ds-cross-fade)
+  md_selector: document.querySelectorAll('.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)')
   commands:
   - name: /new
     label: 开启新对话
-    selector: div._5a8ac7a.a084f19e
+    selector: document.querySelectorAll('div._5a8ac7a.a084f19e')
     page_url: ''
   - name: /new1
     label: 新建1
@@ -262,8 +261,7 @@ bridge:
     interval: 5
   - name: /reai
     label: 重新生成
-    selector: .ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child
-      [role="button"][aria-disabled="false"]
+    selector: document.querySelectorAll('.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child [role="button"][aria-disabled="false"]')
     page_url: ''
   - name: /reai1
     label: 消息频繁失败后重发

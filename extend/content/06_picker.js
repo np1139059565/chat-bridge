@@ -120,6 +120,19 @@
   };
 
   /**
+   * 把拾取到的裸 CSS 选择器包装成执行端的新语法。
+   * 执行端只按 JS 表达式求值，不再兼容裸选择器；拾取即产出新语法。
+   * @param {string} selector 裸选择器
+   * @returns {string} document.querySelectorAll('...') 形式的表达式
+   */
+  A.wrapPickerExpr = function (selector) {
+    if (!selector) return '';
+    // 转义反斜杠与单引号，保证嵌入单引号字符串后仍是合法 JS
+    const escaped = String(selector).split('\\').join('\\\\').split("'").join("\\'");
+    return "document.querySelectorAll('" + escaped + "')";
+  };
+
+  /**
    * 进入选择模式。
    * 悬停高亮、点击选中并把选择器回传抽屉、Esc 退出。
    */
@@ -143,10 +156,12 @@
       e.preventDefault();
       e.stopPropagation();
       const info = A.pickerSelector(el);
+      // 包成执行端的新语法（细节见 A.wrapPickerExpr）
+      const expr = A.wrapPickerExpr(info.selector);
       // 把选择结果回传抽屉
       A.post({
         type: 'picker_result',
-        selector: info.selector,
+        selector: expr,
         confidence: info.confidence,
         page_url: location.href,
         tag: el.tagName.toLowerCase()
