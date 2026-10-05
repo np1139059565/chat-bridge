@@ -67,10 +67,11 @@
     if (node) m.cards = holder.cards;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
     const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks);
-    // 告警按严重度分流（落点见 _decideIssueTarget）：
-    //   · 补充类（advisory，如语音缺失 / 思考非中文 / 只含代码块 / 记忆滞后）→ 暂存，
-    //     搭到卡片上作附注，不阻止工具执行；无卡片才独立回传。
-    //   · 致命类（fatal，如多个调用块）→ 直接作为卡片的 preIssue，接管执行、不调用工具。
+    // 告警一律作为质量门禁：任何告警都不执行工具，直接把告警当作卡片结果回传
+    // ——告警与工具结果互斥，只留一个。两条路径最终都落成卡片的 preIssue：
+    //   · 致命类（fatal，如多个调用块）→ 随建卡作为 blockIssue（见下方 blockIssue）。
+    //   · 补充类（advisory，如语音缺失 / 思考非中文 / 只含代码块 / 记忆滞后）→ 先暂存，
+    //     建卡后由 _decideIssueTarget 统一决定落到哪张卡片上。
     if (issue && issue.severity === 'advisory') {
       state.pendingMsgIssue = issue;
       state.pendingHolder = holder;
@@ -118,23 +119,20 @@
   };
 
   /**
-   * 消息级告警落点决策：告警是卡片的补充能力，不是独立通道。
-   * 规则：有工具卡片可搭就搭卡片；没有卡片（纯文字回复）才独立回传。
+   * 消息级告警落点决策：告警一律作为质量门禁。
+   * 规则：有工具卡片可搭，就把告警挂成该卡片的 preIssue（执行时被拦下、
+   * 直接回传告警，不调用工具）；没有卡片（纯文字回复）才走独立回传。
    */
   M._decideIssueTarget = function (autoCandidates, state, reason) {
     if (!state.pendingMsgIssue) return;
-    // 补充类告警要挂到「本轮会被自动执行的那张卡片」上，否则挂在未执行的卡片上
+    // 告警要挂到「本轮会被自动执行的那张卡片」上，否则挂在未执行的卡片上
     // 会导致告警丢失。自动执行取候选末位（最新），故优先挂候选末位；无候选时退回
     // 第一张工具卡片（如滚动轮次只建卡不自动执行）。
     const target = (autoCandidates.length ? autoCandidates[autoCandidates.length - 1] : state.firstToolCard);
     if (target) {
-      if (state.pendingMsgIssue.severity === 'fatal') {
-        // 致命类：接管卡片，执行时直接作为结果，不调用工具。
-        if (!target.preIssue) target.preIssue = state.pendingMsgIssue;
-      } else {
-        // 补充类：不阻止执行，挂到卡片上，结果回传时附带提醒。
-        if (!target.advisory) target.advisory = state.pendingMsgIssue;
-      }
+      // 质量门禁：一旦检出问题就不执行工具，直接把告警当作卡片结果回传
+      //（告警与工具结果互斥，只留一个）。这样「必须经质量检查通过才执行卡片」。
+      if (!target.preIssue) target.preIssue = state.pendingMsgIssue;
     } else {
       // 无卡片可搭：走独立回传（纯文字回复也能被提醒）。
       this._scheduleMessageIssue(state.pendingHolder, state.pendingMsgIssue, reason);
