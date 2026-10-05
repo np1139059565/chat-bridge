@@ -16,6 +16,7 @@
 """
 import asyncio
 import os
+import threading
 
 from . import bridge_log
 
@@ -27,6 +28,16 @@ def log(*args):
 
 # 默认中文音色：晓晓（女声，通用场景自然）
 DEFAULT_VOICE = os.environ.get("EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
+
+# 单次合成的超时（秒）：edge-tts 是在线服务，网络差时会长时间挂住。
+# 不加超时，每个挂住的合成都占一条线程不放，堆积起来会把服务拖垮，
+# 尤其在网络抖动、多条语音同时排队时。
+SYNTH_TIMEOUT = 20
+
+# 并发合成上限：同时最多 N 条在线合成，其余排队。
+# 既防一次性打爆在线服务，也防线程数无上限增长。
+MAX_CONCURRENT_SYNTH = 3
+_synth_sem = threading.Semaphore(MAX_CONCURRENT_SYNTH)
 
 
 def _ensure_import(name):
@@ -52,14 +63,20 @@ def text_to_voice(text, out_path, voice=None):
     if edge_tts is None:
         return False, "未安装 edge-tts，无法合成语音"
     voice = voice or DEFAULT_VOICE
-    try:
-        # Communicate.save 是协程：用 asyncio.run 包成同步调用
-        async def _do():
-            comm = edge_tts.Communicate(text, voice=voice)
-            await comm.save(out_path)
-        asyncio.run(_do())
-    except Exception as e:
-        return False, "edge-tts 合成失败：%s" % e
+    # 并发闸门：最多 MAX_CONCURRENT_SYNTH 条同时在线合成，其余排队等待。
+    # 拿不到闸门就等——排队胜过无限开线程打爆服务。
+    with _synth_sem:
+        try:
+            # Communicate.save 是协程：用 asyncio.run 包成同步调用。
+            # 用 wait_for 强制超时：网络差时不让合成无限挂住线程。
+            async def _do():
+                comm = edge_tts.Communicate(text, voice=voice)
+                await asyncio.wait_for(comm.save(out_path), timeout=SYNTH_TIMEOUT)
+            asyncio.run(_do())
+        except asyncio.TimeoutError:
+            return False, "edge-tts 合成超时（%d 秒）" % SYNTH_TIMEOUT
+        except Exception as e:
+            return False, "edge-tts 合成失败：%s" % e
     # 合成结果为空文件也算失败，避免发一个空语音
     if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
         return False, "edge-tts 未产出有效音频"

@@ -97,16 +97,35 @@
     playing = au;
     pauseOthers(au);                         // 开播前先把其它全部停掉
     au._progPlay = true;                     // 标记：本次播放由程序发起
+    au._tries = au._tries || 0;
     var p = au.play();
-    if (p && p.catch) p.catch(function () {
-      // 被浏览器拦截或瞬时加载失败：释放占用。不再静默丢弃——
-      // 复位后该条仍在列表里，用户可再点一次；并在 flag 上给出提示。
+    if (p && p.catch) p.catch(function (err) {
+      // 释放占用、清程序标记
       playing = null;
       au._progPlay = false;
       au._progPause = false;
       var wrap = au.closest('.voice-wrap');
       var flag = wrap && wrap.querySelector('.voice-flag');
-      if (flag) flag.textContent = '播放受阻，请再点一次';
+      // 区分失败原因：
+      //  - NotAllowedError：浏览器自动播放策略拦截，须用户交互，无法自动重试；
+      //  - 其它（网络/解码/文件未就绪）：多半是音频还没加载好，稍后重试一次。
+      var name = (err && (err.name || err.code)) || '';
+      var blocked = (name === 'NotAllowedError' || name === 11);
+      if (!blocked && au._tries < 2) {
+        // 音频源可能尚未就绪：等一小会儿让浏览器加载，再自动重试一次。
+        au._tries += 1;
+        if (flag) flag.textContent = '加载中，自动重试…';
+        try { au.load(); } catch (e) { /* 忽略 */ }
+        setTimeout(function () {
+          playing = null;               // 确保队列能再取这条
+          autoQueue.unshift(au);
+          pumpQueue();
+        }, 800);
+        return;
+      }
+      // 仍失败：给出可操作的提示，并恢复手动播放能力。
+      // 用户点原生播放键即可再试——bind 里的 play 事件会照常触发。
+      if (flag) flag.textContent = blocked ? '请点播放键开始' : '播放失败，请点播放键重试';
     });
   }
 

@@ -19,6 +19,11 @@ import uuid
 # 卡片状态常量：外部卡片采用「发送即结束」，登记后即处于待投递态。
 STATUS_PENDING = "pending"
 
+# 卡片总数上限：_cards 只增不减会内存泄漏（图片卡片还含完整 base64，
+# 一张可达 1MB+）。超过此上限时，优先丢弃「已被确认展示」的最旧卡片，
+# 始终保留未确认的（不能丢，否则永远送不出去）。
+MAX_CARDS = 200
+
 
 class Card:
     """单张卡片的数据载体。
@@ -73,11 +78,30 @@ class CardBus:
         self._cards = {}
 
     def create(self, source, card_type, title, content, payload):
-        """登记一张卡片，返回卡片对象。"""
+        """登记一张卡片，返回卡片对象。
+
+        登记后按上限裁剪：优先丢弃「已被确认展示」的最旧卡片，
+        未确认的始终保留，避免 _cards 无界增长导致内存泄漏。
+        """
         card = Card(source, card_type, title, content, payload)
         with self._lock:
             self._cards[card.id] = card
+            self._trim_locked()
         return card
+
+    def _trim_locked(self):
+        """按上限裁剪已确认的旧卡片（调用方须已持锁）。
+
+        只删 delivered=True 的卡片，从最旧的开始；未确认的卡片一张不删。
+        """
+        if len(self._cards) <= MAX_CARDS:
+            return
+        # 已确认的卡片按创建时间升序，删最旧的一批，直到回到上限内
+        delivered = [c for c in self._cards.values() if c.delivered]
+        delivered.sort(key=lambda c: c.created_at)
+        need = len(self._cards) - MAX_CARDS
+        for c in delivered[:need]:
+            self._cards.pop(c.id, None)
 
     def claim_pending(self):
         """取走尚未被确认的卡片（镜像插件轮询用）。
