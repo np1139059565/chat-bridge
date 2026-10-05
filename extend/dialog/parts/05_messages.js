@@ -276,8 +276,16 @@
     // 异步：需等后端指纹返回；带超时保护，后端不可达时不阻塞入库。
     const memoryIssue = await this.memoryIssueForRound(incoming, reason);
 
+    // 「本轮是否属 AI 新鲜回复」——检测与上报共用同一判定。
+    // 原漏告警根因：检测只看 reason（非 generate 直接跳过），上报却强制 generate，
+    // 轮询错过「生成中→空闲」跳变、消息以 scroll 采集时，两者分叉：
+    // 网页看得到这条消息，语音缺失却不告警。此处统一判定，两条路同进同出。
+    const lastIsAssistant = incoming.length
+      && incoming[incoming.length - 1].role === 'assistant';
+    const isFreshReply = (reason === 'generate') || (addedNodes && lastIsAssistant);
+
     // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见 05g_cards.js 与下方收尾）
-    const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly);
+    const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly, isFreshReply);
     this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom);
 
     log('本轮处理完成：消息=' + incoming.length
@@ -285,18 +293,19 @@
       + '，分支=' + conv.branchKeys.length
       + '，自动候选=' + collected.autoCandidates.length);
     if (this._persist) this._persist();
-    // 上报给远程桥接层。
-    // 原实现只在 generate 来源上报，问题：若生成态轮询错过了「生成中→空闲」跳变，
-    // 新消息会以 scroll 来源采集，此时不上报，导致最后一轮推送被漏、直到下次才补。
-    // 解耦为「本轮确属 AI 新增内容即上报」：只要本轮真的有新节点入库，
-    // 且切片末尾是 assistant（AI 刚说完的话），就以 generate 语义上报。
-    // 后端按消息 id 去重，重复上报不会造成重复推送，代价可忽略。
-    const lastIsAssistant = incoming.length
-      && incoming[incoming.length - 1].role === 'assistant';
-    const shouldReport = (reason === 'generate') || (addedNodes && lastIsAssistant);
-    if (shouldReport) {
-      this.reportToBridgeWithMd('generate');
-    }
+    // 上报给远程桥接层（条件与去重细节见 _reportFreshReply）
+    this._reportFreshReply(isFreshReply);
+  };
+
+  /**
+   * 本轮若属 AI 新鲜回复，则上报给远程桥接层。
+   * 抽成子函数以控制 ingestMessages 行数；判定与质量检测共用同一 isFreshReply。
+   * 原实现只在 generate 来源上报，轮询错过「生成中→空闲」跳变、消息以 scroll
+   * 采集时会漏报；解耦为「本轮确属 AI 新增内容即上报」，后端按消息 id 去重。
+   * @param {boolean} isFreshReply 本轮是否属 AI 新鲜回复
+   */
+  M._reportFreshReply = function (isFreshReply) {
+    if (isFreshReply) this.reportToBridgeWithMd('generate');
   };
 
   /**

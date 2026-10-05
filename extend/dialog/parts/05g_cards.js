@@ -29,7 +29,7 @@
    * 不入树的消息：卡片直接写在切片消息上（供手动操作）。
    * @returns {Object} { autoCandidates, armedLast, rerunCard }
    */
-  M._buildCardsForIncoming = function (conv, incoming, reason, memoryIssue, scrollOnly) {
+  M._buildCardsForIncoming = function (conv, incoming, reason, memoryIssue, scrollOnly, isFreshReply) {
     const autoCandidates = [];
     // 状态集中到一个对象，便于把「单条消息建卡」抽成子函数，控制主函数行数。
     const state = {
@@ -37,7 +37,10 @@
       rerunCard: null,        // 重复卡片重跑候选（严格受限旁路，见下方判定）
       pendingMsgIssue: null,  // 消息级补充告警暂存：建卡后统一决定落点
       pendingHolder: null,    // 该告警所属消息的承载对象
-      firstToolCard: null     // 本轮第一张工具卡片（告警无候选可搭时退回它）
+      firstToolCard: null,    // 本轮第一张工具卡片（告警无候选可搭时退回它）
+      // isFreshReply：本轮是否属 AI 新鲜回复（与上报同一判定）。
+      // 检测/回传用它取代「reason==='generate'」，避免采集来源漂移时漏检测。
+      isFreshReply: !!isFreshReply
     };
     incoming.forEach((m, mi) => {
       this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
@@ -66,7 +69,7 @@
     holder.cards = holder.cards || {};
     if (node) m.cards = holder.cards;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks);
+    const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks, state.isFreshReply);
     // 告警一律作为质量门禁：任何告警都不执行工具，直接把告警当作卡片结果回传
     // ——告警与工具结果互斥，只留一个。两条路径最终都落成卡片的 preIssue：
     //   · 致命类（fatal，如多个调用块）→ 随建卡作为 blockIssue（见下方 blockIssue）。
@@ -135,7 +138,8 @@
       if (!target.preIssue) target.preIssue = state.pendingMsgIssue;
     } else {
       // 无卡片可搭：走独立回传（纯文字回复也能被提醒）。
-      this._scheduleMessageIssue(state.pendingHolder, state.pendingMsgIssue, reason);
+      // 判定与上报一致，用 isFreshReply 而非 reason，避免采集来源漂移时漏回传。
+      this._scheduleMessageIssue(state.pendingHolder, state.pendingMsgIssue, state.isFreshReply);
     }
   };
 
@@ -144,8 +148,10 @@
    * 只在 AI 生产结束（generate）场景检测，其它场景不该给已有卡片贴问题标签。
    * @returns {Object|null} { error, message } 或 null
    */
-  M._messageIssue = function (m, mi, total, reason, memoryIssue, blocks) {
-    if (reason !== 'generate') return null;
+  M._messageIssue = function (m, mi, total, reason, memoryIssue, blocks, isFreshReply) {
+    // 判定改为「本轮是否属 AI 新鲜回复」（与上报同一条件），而非看采集来源。
+    // 采集来源会因轮询错过跳变而漂移成 scroll，原判定会整体跳过检测、导致漏告警。
+    if (!isFreshReply) return null;
     let toolCallCount = 0;
     if (m.role === 'assistant') {
       blocks.forEach((b) => {
@@ -228,9 +234,9 @@
    * @param {Object} issue 问题描述 { error, message, scope }
    * @param {string} reason 触发来源
    */
-  M._scheduleMessageIssue = function (holder, issue, reason) {
-    // 只在「AI 刚说完新话」时回传：滚动、切换等来源不重复提醒
-    if (reason !== 'generate') return;
+  M._scheduleMessageIssue = function (holder, issue, isFreshReply) {
+    // 只在「AI 刚说完新话」时回传：与上报同一判定，避免采集来源漂移时漏回传
+    if (!isFreshReply) return;
     // 与工具卡片的自动回传保持一致：自动开关关闭时不回传，避免打扰
     if (!this.autoSendEnabled) return;
     const mid = window.AIMirrorDomUtils.messageFingerprint(holder);
