@@ -217,7 +217,10 @@
   // ---------- 拉取消息 ----------
   // 轮询健壮性：pollBusy 防重入；failCount 连续失败计数（超容差才显示断开）。
   var pollBusy = false, failCount = 0;
-  var FAIL_TOLERANCE = 2;
+  // 容差：连续失败达到此值才判定断开。原值 2 太小——后端偶发慢一次，
+  // 再叠加一次就显示断开，用户体验为「时不时断十几秒」。放宽到 4，
+  // 并配合更短的超时，让「真断开」也能较快识别、偶发抖动能扛过去。
+  var FAIL_TOLERANCE = 4;
 
   function fetchMessages(history) {
     if (pollBusy) return;   // 上一轮未完成：跳过本轮，避免并发堆积
@@ -225,8 +228,10 @@
     var url = '/api/web/messages?cursor=' + cursor + '&limit=200';
     if (history) url += '&history=1';
     // 加超时：卡住的请求主动中断，否则 pollBusy 会永久为真、轮询停摆。
+    // 由 10 秒收紧到 6 秒：轮询每 2.5 秒一次，6 秒足够正常请求完成；
+    // 更短超时让偶发卡顿更快被跳过、更快进入下一轮重试，减少「断开」停留时长。
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 10000);
+    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 6000);
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.json(); })
       .then(function (data) {
