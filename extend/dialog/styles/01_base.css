@@ -147,5 +147,7 @@ textarea:focus-visible,
   border-radius: var(--cb-r-lg);
   font-size: var(--cb-fs-sm);
   z-index: var(--cb-z-toast);
-  pointer-events: none;
+  /* 允许鼠标事件：悬浮到提示上时暂停自动消失，便于阅读 */
+  pointer-events: auto;
+  cursor: default;
 }

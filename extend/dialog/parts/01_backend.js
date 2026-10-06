@@ -10,13 +10,6 @@
   // 渲染函数依赖 Vue 全局构建提供的 h
   const h = Vue.h;
 
-  /** 轻提示：显示一条短消息，1.6 秒后自动消失。 */
-  M.toast = function (msg) {
-    this.toastMsg = msg;
-    clearTimeout(this._toastTimer);
-    this._toastTimer = setTimeout(() => { this.toastMsg = ''; }, 1600);
-  };
-
   /** 切换抽屉挂靠侧：右 ⇄ 左。外框位置由内容脚本负责（iframe 运行在页面上下文）。 */
   M.switchPanelSide = function () {
     const next = this.panelSide === 'left' ? 'right' : 'left';

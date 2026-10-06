@@ -363,10 +363,13 @@ def note_delete():
 
 
 @bp.route("/memory-graph", methods=["GET"])
+@bp.route("/memory_graph.html", methods=["GET"])
 def graph_page():
     """记忆图谱可视化页面（原生 Canvas 力导向图）。
 
     页面放在 static/（入库），不放 data/（被忽略），否则他人拉取后页面缺失。
+    两个路径都指向同一页面：/memory-graph（规范）与 /memory_graph.html（别名，
+    与页面文件名一致，便于直接记忆与访问）。
     """
     page = paths.APP_DIR / "static" / "memory_graph.html"
     if not page.is_file():

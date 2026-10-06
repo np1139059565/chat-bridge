@@ -79,12 +79,13 @@
     if (!list.length) {
       result.reason = 'not_found';
     } else if (d.mode === 'last') {
+      // 采集 Markdown 等场景：面向最新一条，取最后一个
       clickEl(list[list.length - 1]);
       result.ok = true;
-    } else if (list.length > 1) {
-      // 唯一性要求：得到多个元素即不算「一个且唯一」，如实报告
-      result.reason = 'not_unique';
     } else {
+      // 默认：不追究表达式得到几个元素，取第一个点击。
+      // 表达式可以是单个元素、也可以是列表，怎么写都行——
+      // 执行端负责规整成一个元素来点，把自由度留给用户。
       clickEl(list[0]);
       result.ok = true;
     }

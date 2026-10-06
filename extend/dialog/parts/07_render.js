@@ -79,7 +79,12 @@
       ]),
       D.renderSettings(ctx),
       body,
-      ctx.toastMsg ? h('div', { class: 'toast' }, ctx.toastMsg) : null
+      // 轻提示：鼠标移入暂停自动消失，移出重新计时，便于从容阅读
+      ctx.toastMsg ? h('div', {
+        class: 'toast',
+        onMouseenter: () => ctx.toastEnter(),
+        onMouseleave: () => ctx.toastLeave()
+      }, ctx.toastMsg) : null
     ]);
   };
 })();
