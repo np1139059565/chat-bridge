@@ -4,7 +4,7 @@
   接口 A（plan_submit）：把任务计划原文存入 plans 表，作为检索的真值基准。
   接口 B（memory_search）：验证式关联搜索，三步固定顺序——
     1. 锚定验证：关键词必须逐字出现在计划原文里，否则拒绝；
-    2. 三路并行检索：FTS5 精确匹配 + 向量近邻 + 图遍历；
+    2. 三路检索：关键词 LIKE 子串匹配 + 向量近邻 + 以关键词路结果为种子的图遍历；
     3. 交叉验证 + RRF 融合，再乘关键词交集置信度，按 focus 排序。
 
 依赖：memory_db、memory_nodes、memory_edges、uuid、time

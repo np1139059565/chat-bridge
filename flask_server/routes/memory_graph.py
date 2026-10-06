@@ -13,7 +13,6 @@ import paths
 import memory_nodes
 import memory_edges
 import memory_cards
-import memory_distill
 import memory_decay
 import memory_events
 import memory_search
@@ -95,11 +94,12 @@ def conversation_put():
     conv = data.get("conv") or {}
     if not conv_id:
         return _err("缺少 conv_id")
-    n = memory_conversations.save_conversation(conv_id, site_key, conv)
-    # 落库后触发异步蒸馏（决策 3B）
-    _distill_new(conv_id, site_key)
+    # 保存为异步：只把请求投入后台保存队列即返回，真正的写库与后续蒸馏
+    # 由后台线程串行执行。请求线程不再被全量写库占用，也不再持有写锁，
+    # 从而不拖慢其它界面接口请求（硬约束：任何操作禁止占用界面接口请求）。
+    memory_conversations.save_conversation(conv_id, site_key, conv)
     memory_loader.invalidate()
-    return _ok(written=n)
+    return _ok(accepted=True)
 
 
 @bp.route("/memory/conversations", methods=["GET"])
@@ -115,21 +115,6 @@ def conversation_delete():
     data = request.get_json(force=True) or {}
     n = memory_conversations.delete_conversation(data.get("conv_id", ""), data.get("site_key", ""))
     return _ok(deleted=n)
-
-
-def _distill_new(conv_id, site_key):
-    """对尚未蒸馏的节点异步蒸馏（决策 3B）。
-
-    只按 conv_id 取待蒸馏节点，不强制 site_key 匹配：
-    前端上送的 site_key 与写库时若不一致（站点切换时序、首屏为空等），
-    强匹配会查出 0 个节点、蒸馏永不触发，表现为「AI 从来不写记忆」。
-    @param conv_id  会话 id
-    @param site_key 站点标识（保留入参以兼容调用方，不参与过滤）
-    """
-    nodes = memory_nodes.list_by_conv(conv_id, None)
-    pending = [n["id"] for n in nodes if not n.get("essence")]
-    if pending:
-        memory_distill.distill_async(pending)
 
 
 # ---------------- 检索层（双接口） ----------------

@@ -20,6 +20,7 @@
 依赖：memory_nodes、memory_keywords、memory_events、memory_db、threading、collections
 """
 import collections
+import json
 import threading
 
 import memory_nodes
@@ -35,6 +36,29 @@ _queue_lock = threading.Lock()
 _worker_running = False   # 工作线程是否在跑（避免重复启动多个工作线程）
 
 
+def _tool_essence(text):
+    """工具结果精华：优先解析 JSON 取「工具名 + 结果摘要」，失败退回文本截断。
+
+    工具节点的 blocks 多为 bridge-chat-res 的 JSON 原文，直接截断会得到
+    腰斩的 JSON 片段（无检索价值）。解析出 tool 与 result 才能得到
+    「工具名 + 结果摘要」这一设计文档要求的形态。
+    @param text blocks 抽出的纯文本
+    @return 精华字符串（最长 200 字符）
+    """
+    raw = (text or "").strip()
+    try:
+        obj = json.loads(raw)
+    except Exception:
+        return raw.replace("\n", " ")[:200]
+    if not isinstance(obj, dict):
+        return raw.replace("\n", " ")[:200]
+    tool = obj.get("tool") or ""
+    result = obj.get("result")
+    brief = json.dumps(result, ensure_ascii=False) if result is not None else ""
+    head = ("%s：%s" % (tool, brief)).strip("：") if tool else brief
+    return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
+
+
 def _essence_for(source, text, blocks):
     """按来源生成精华文本。
 
@@ -47,9 +71,8 @@ def _essence_for(source, text, blocks):
         # 用户发言：原句即精华，不摘要（保留原句是防语义漂移的底线）
         return text.strip()
     if source == "tool":
-        # 工具结果：取工具名 + 前若干字符摘要
-        head = text.strip().replace("\n", " ")
-        return head[:200]
+        # 工具结果：优先解析出「工具名 + 结果摘要」，解析失败再退回文本截断
+        return _tool_essence(text)
     # assistant：剔除寒暄开头，取正文
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
     if lines:

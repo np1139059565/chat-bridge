@@ -21,8 +21,17 @@ def _now():
     return int(time.time())
 
 
+# 初始分级映射（设计文档 4.4）：用户发言 perm、AI 回复 temp、工具结果 mid
+_INITIAL_TIER = {"user": "perm", "assistant": "temp", "tool": "mid"}
+
+
+def _initial_tier(source):
+    """按来源取节点初始分级；未知来源回退 temp。"""
+    return _INITIAL_TIER.get(source or "", "temp")
+
+
 def upsert_node(identity, fields, created_at=None):
-    """按 msg_id 幂等写入节点；已存在则更新内容字段，不动蒸馏字段。
+    """按 msg_id 幂等写入节点；已存在则更新 blocks 与 parent_id，不动蒸馏字段。
 
     参数拆成两段，避免长参数列表：
     @param identity { msg_id, conv_id, site_key } 定位该节点的三要素
@@ -36,12 +45,14 @@ def upsert_node(identity, fields, created_at=None):
     conn = get_conn()
     ts = created_at or _now()
     blocks_json = json.dumps(fields.get("blocks") or [], ensure_ascii=False)
+    # 初始分级按来源设定（user→perm / assistant→temp / tool→mid）
+    tier = _initial_tier(fields.get("source"))
     cur = conn.execute(
-        "INSERT INTO nodes (msg_id, conv_id, site_key, parent_id, source, role, name, blocks, created_at)"
-        " VALUES (?,?,?,?,?,?,?,?,?)"
+        "INSERT INTO nodes (msg_id, conv_id, site_key, parent_id, source, role, name, blocks, tier, created_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?)"
         " ON CONFLICT(msg_id) DO UPDATE SET blocks=excluded.blocks, parent_id=excluded.parent_id",
         (msg_id, conv_id, site_key, parent_id, fields.get("source"),
-         fields.get("role", ""), fields.get("name", ""), blocks_json, ts),
+         fields.get("role", ""), fields.get("name", ""), blocks_json, tier, ts),
     )
     maybe_commit(conn)
     if cur.lastrowid:

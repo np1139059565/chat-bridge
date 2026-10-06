@@ -281,6 +281,7 @@
     const lastIsAssistant = incoming.length
       && incoming[incoming.length - 1].role === 'assistant';
     const isFreshReply = (reason === 'generate') || (addedNodes && lastIsAssistant);
+    this._logQualityDiagnosis(reason, addedNodes, lastIsAssistant, isFreshReply, incoming);
 
     // 3.5) 记忆确认提醒：数 AI 生成轮次，达到阈值则产出提醒（细节见 05d_memory.js）。
     // 纯轮次计数，不做异步指纹采样，故不再需要在入库前 await。
@@ -297,6 +298,29 @@
     if (this._persist) this._persist();
     // 上报给远程桥接层（条件与去重细节见 _reportFreshReply）
     this._reportFreshReply(isFreshReply);
+  };
+
+  /**
+   * 诊断日志：记录新鲜回复判定要素与末条消息的块类型。
+   * 用途——排查「AI 回复只含代码块却不告警」：质量检测入口首行为
+   * if (!isFreshReply) return null，本判定为 false 时全部检测被跳过。
+   * 消息滚动快、来不及抓现场，故把关键取值落进日志，事后可查。
+   * @param {string} reason 采集来源
+   * @param {boolean} addedNodes 本轮是否有新增节点
+   * @param {boolean} lastIsAssistant 末条是否为助手消息
+   * @param {boolean} isFreshReply 新鲜回复判定结果
+   * @param {Array} incoming 本轮消息切片
+   */
+  M._logQualityDiagnosis = function (reason, addedNodes, lastIsAssistant, isFreshReply, incoming) {
+    try {
+      const tail = incoming.length ? incoming[incoming.length - 1] : null;
+      const tailTypes = tail
+        ? window.AIMirrorDomUtils.toArray(tail.blocks).map((b) => (b && b.type) || '?').join(',')
+        : '';
+      log('质量诊断：reason=' + reason + ' addedNodes=' + addedNodes
+        + ' lastIsAssistant=' + lastIsAssistant + ' isFreshReply=' + isFreshReply
+        + ' 末条role=' + (tail && tail.role) + ' 块类型=[' + tailTypes + ']');
+    } catch (e) { /* 诊断日志失败不影响主流程 */ }
   };
 
   /**

@@ -96,8 +96,7 @@ def cluster_events(min_shared=2):
     """把跨会话讲同一件事的用户发言聚成事件。
 
     做法：以关键词共享数为相似度，对 user 节点做并查集聚类；
-    同一簇内的根节点共享一个 event_id（写入节点的 name 字段前缀不便，
-    改用 revision_log 记录聚类事件 + 在返回里给映射）。
+    同一簇内的根节点共享一个 event_id，聚类结果仅内存返回，不落库。
 
     @return { event_id: [root_node_id, ...] }
     """

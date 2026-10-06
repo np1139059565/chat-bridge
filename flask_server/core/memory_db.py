@@ -2,9 +2,9 @@
 
 职责：
   1. 管理记忆库 SQLite 连接（单文件、进程内、线程安全）；
-  2. 建表：nodes / edges / cards / plans / revision_log 五张表；
-  3. 建 FTS5 全文索引（关键词检索）；
-  4. 提供向量存取与暴力余弦检索（numpy 实现，零外部依赖）。
+  2. 建表：nodes / edges / cards / plans / revision_log / notes / conversations 七张表；
+  3. 建 FTS5 虚表（仅保留兼容，关键词检索实际走 LIKE，见 memory_search）；
+  4. 提供向量序列化与暴力余弦检索（numpy 实现，零外部依赖）。
 
 设计要点：
   - 全库只有一个 SQLite 文件（paths.MEMORY_DB_PATH），启动即可用；
@@ -26,7 +26,7 @@ import app_log
 # 线程局部存储：每个线程持有一份独立连接（SQLite 连接不可跨线程共享）
 _local = threading.local()
 
-# 建表语句：五张表一次建齐，IF NOT EXISTS 保证幂等
+# 建表语句：七张表一次建齐，IF NOT EXISTS 保证幂等
 _SCHEMA = [
     # 节点表：对应消息树 msgTree 的 value，另含蒸馏层字段
     """CREATE TABLE IF NOT EXISTS nodes (
@@ -287,8 +287,9 @@ def _ensure_schema(conn):
         conn.execute(sql)
     for sql in _INDEXES:
         conn.execute(sql)
-    # FTS5 全文索引：把「精华 + 关键词」做全文检索用。
-    # 用外部内容表关联 nodes，避免重复存储。
+    # FTS5 虚表：仅保留兼容（外部内容表关联 nodes）。
+    # 关键词检索实际走 LIKE 子串匹配——FTS5 默认分词器把连续汉字当单词元，
+    # 中文短语匹配失效，详见 memory_search._fts_search 的说明。
     try:
         conn.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5("
@@ -376,7 +377,11 @@ def reset_for_tests(db_path):
     调用方需先把 paths.MEMORY_DB_PATH 指向临时文件，再调本函数。
     @param db_path 临时库路径（Path）
     """
-    global _local
+    global _local, _schema_ready, _wal_ready
+    # 复位建表 / WAL 标志：否则切到临时库后 _ensure_schema_once 直接返回，
+    # 临时库不会建表（真实库若已建过表，本进程内 _schema_ready 恒为 True）。
+    _schema_ready = False
+    _wal_ready = False
     # 关闭当前线程的旧连接，丢弃线程局部，使下次 get_conn 用新路径重连
     old = getattr(_local, "conn", None)
     if old is not None:

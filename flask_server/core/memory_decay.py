@@ -91,5 +91,6 @@ def _next_tier(node, strength):
         return "mid"
     if tier == "mid" and hit >= 10 and strength >= 0.8:
         return "perm"
-    # perm 不降级；temp/mid 也不主动降（降级由衰减把强度压低后再评估）
+    # 当前仅实现升级路径：perm 不降级，temp/mid 也不主动降。
+    # 故 recompute_all 的 downgraded 计数恒为 0。
     return tier

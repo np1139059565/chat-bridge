@@ -55,14 +55,14 @@ def get_neighbors(node_id, kind=None):
     conn = get_conn()
     if kind:
         rows = conn.execute(
-            "SELECT dst_node AS nid FROM edges WHERE src_node=? AND kind=?"
-            " UNION SELECT src_node AS nid FROM edges WHERE dst_node=? AND kind=?",
+            "SELECT dst_node AS nid FROM edges WHERE src_node=? AND kind=? AND weight > 0"
+            " UNION SELECT src_node AS nid FROM edges WHERE dst_node=? AND kind=? AND weight > 0",
             (node_id, kind, node_id, kind),
         ).fetchall()
     else:
         rows = conn.execute(
-            "SELECT dst_node AS nid FROM edges WHERE src_node=?"
-            " UNION SELECT src_node AS nid FROM edges WHERE dst_node=?",
+            "SELECT dst_node AS nid FROM edges WHERE src_node=? AND weight > 0"
+            " UNION SELECT src_node AS nid FROM edges WHERE dst_node=? AND weight > 0",
             (node_id, node_id),
         ).fetchall()
     return [r["nid"] for r in rows]
