@@ -227,30 +227,56 @@ def _ensure_schema_once(conn):
 # 慢 SQL 阈值（毫秒）：超过即记日志
 _SLOW_SQL_MS = 100
 
+# 进度回调粒度：SQLite 每执行多少条虚拟机指令回调一次。
+# 取值偏大以减少回调开销；短语句可能一次都不触发，自然不计时、不告警——
+# 这正是期望行为（短查询本就不该告警）。
+_SQL_PROGRESS_INTERVAL = 2000
+
 
 def _install_slow_query_trace(conn):
-    """给连接装一个 SQL 追踪钩子：执行超阈值的语句落日志。
+    """给连接装慢 SQL 追踪：只统计语句「真正执行」的时间，不含线程空闲。
 
-    SQLite 的 set_trace_callback 在每条语句执行前回调；
-    这里记录语句开始时刻，在下一句或提交时结算耗时，从而发现慢查询。
+    为什么不能只用 set_trace_callback：
+        它只在每条语句「执行前」回调一次。若用「两次回调的时间差」当作
+        上一条 SQL 的耗时，就把两条语句之间线程的全部空闲时间也算了进去——
+        后台调度线程跑完一轮后 sleep(1800) 约 30 分钟，这 30 分钟会被误记到
+        它上一条 SQL 头上，产生「慢SQL 1800000ms」这类假告警。
+
+    改用 set_progress_handler 计时：
+        它在语句「执行过程中」周期性回调，只在 SQL 真运行时触发，sleep 期间
+        不会触发。一次执行期内「首次回调 → 末次回调」的时间差即为真实执行
+        时长，不含任何空闲。结算时机沿用「下一条语句执行前」（trace 回调里）。
     记录里带线程名，便于区分是「请求线程」还是「后台调度线程」在拖。
     """
-    state = {"t0": None, "sql": ""}
+    state = {"sql": "", "first_tick": None, "last_tick": None}
 
-    def _trace(sql):
-        now = time.time()
-        # 结算上一句的耗时
-        if state["t0"] is not None:
-            ms = (now - state["t0"]) * 1000.0
+    def _settle():
+        """结算当前语句：只有发生过进度回调（即真的执行过）才计时与告警。"""
+        if state["first_tick"] is not None:
+            ms = (state["last_tick"] - state["first_tick"]) * 1000.0
             if ms >= _SLOW_SQL_MS:
                 app_log.warn("[db][%s] 慢SQL %.1fms: %s" % (
                     threading.current_thread().name, ms,
                     " ".join(state["sql"].split())[:120]))
-        state["t0"] = now
+
+    def _trace(sql):
+        # 语句执行前：先结算上一条，再开始记录新一条
+        _settle()
         state["sql"] = sql or ""
+        state["first_tick"] = None
+        state["last_tick"] = None
+
+    def _progress():
+        # 语句执行中：记录首次与末次进度时刻；返回 0 表示不中止查询
+        now = time.time()
+        if state["first_tick"] is None:
+            state["first_tick"] = now
+        state["last_tick"] = now
+        return 0
 
     try:
         conn.set_trace_callback(_trace)
+        conn.set_progress_handler(_progress, _SQL_PROGRESS_INTERVAL)
     except Exception:
         pass
 
