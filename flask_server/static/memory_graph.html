@@ -10,11 +10,12 @@
     body { display: flex; flex-direction: column; }
     #bar {
       flex: 0 0 auto; padding: 8px 12px; background: #1c1f25;
-      display: flex; gap: 12px; align-items: center; font-size: 13px; flex-wrap: wrap;
+      display: flex; gap: 10px; align-items: center; font-size: 13px; flex-wrap: wrap;
     }
-    #bar input { background: #262a31; border: 1px solid #333; color: #d8dbe0; padding: 4px 8px; border-radius: 4px; }
+    #bar select, #bar input { background: #262a31; border: 1px solid #333; color: #d8dbe0; padding: 4px 8px; border-radius: 4px; }
     #bar button { background: #2d6cdf; border: 0; color: #fff; padding: 5px 12px; border-radius: 4px; cursor: pointer; }
     #bar button.ghost { background: #333a44; }
+    #bar label { user-select: none; cursor: pointer; }
     #legend { margin-left: auto; display: flex; gap: 10px; font-size: 12px; }
     .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
     #cv { flex: 1 1 auto; display: block; width: 100%; }
@@ -23,15 +24,39 @@
       padding: 6px 10px; border-radius: 4px; font-size: 12px;
       max-width: 320px; display: none;
     }
+    /* 详情弹框 */
+    #detail {
+      position: fixed; inset: 0; background: #000a; display: none; z-index: 10;
+      align-items: center; justify-content: center;
+    }
+    #detailBody {
+      background: #1c1f25; border: 1px solid #333; border-radius: 8px;
+      padding: 16px; width: 640px; max-width: 92vw; max-height: 88vh; overflow: auto;
+    }
+    .dt-row { margin: 8px 0; font-size: 13px; }
+    .dt-in { width: 100%; background: #262a31; border: 1px solid #333; color: #d8dbe0; padding: 5px; border-radius: 4px; }
+    .dt-ta {
+      width: 100%; height: 90px; background: #262a31; border: 1px solid #333;
+      color: #d8dbe0; padding: 6px; border-radius: 4px; font-size: 12px; resize: vertical;
+    }
+    .dt-actions { margin-top: 12px; display: flex; gap: 8px; }
+    .dt-actions button { background: #2d6cdf; border: 0; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; }
+    .dt-actions button.ghost { background: #333a44; }
+    .dt-actions button.danger { background: #b33; }
   </style>
 </head>
 <body>
   <div id="bar">
-    <input id="conv" placeholder="会话 id（留空看全部）" />
+    <select id="conv"><option value="">（全部会话）</option></select>
     <button id="reload">加载</button>
+    <input id="search" placeholder="搜索关键词/精华" style="width:150px" />
     <button id="modeForce" class="ghost">力导向图</button>
     <button id="modeRadial" class="ghost">径向树</button>
-    <input id="rootId" placeholder="根节点 id（径向树用，留空自动取用户发言）" style="width:220px" />
+    <button id="modeTimeline" class="ghost">时间轴</button>
+    <input id="rootId" placeholder="根节点 id（径向树用）" style="width:180px" />
+    <label><input type="checkbox" id="edge-parent_child" checked /> 树边</label>
+    <label><input type="checkbox" id="edge-branch" checked /> 分支边</label>
+    <label><input type="checkbox" id="edge-associative" checked /> 突触边</label>
     <span id="stat"></span>
     <div id="legend">
       <span><i class="dot" style="background:#888"></i>临时</span>
@@ -42,278 +67,12 @@
   </div>
   <canvas id="cv"></canvas>
   <div id="tip"></div>
-  <script>
-  // 记忆图谱：原生 Canvas 渲染，零外部依赖，提供两种视图。
-  // 视图一·力导向图：节点按 tier 着色、大小按 strength；边分树边（灰实线）与突触边（彩虚线）。
-  // 视图二·径向树：以某个用户发言为根，沿关联边逐层向外辐射，展示事件演化脉络。
-  (function () {
-    'use strict';
-    var cv = document.getElementById('cv');
-    var ctx = cv.getContext('2d');
-    var tip = document.getElementById('tip');
-    var nodes = [], edges = [], W = 0, H = 0, drag = null;
-    var MODE = 'force';   // 当前视图：force（力导向）/ radial（径向树）
-
-    // 适配设备像素比，保证高清屏不糊
-    function resize() {
-      var dpr = window.devicePixelRatio || 1;
-      W = cv.clientWidth; H = cv.clientHeight;
-      cv.width = W * dpr; cv.height = H * dpr;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    window.addEventListener('resize', resize);
-
-    // 分级配色：用户发言单独用红色高亮，其余按 tier
-    function colorOf(n) {
-      if (n.source === 'user') return '#e05a5a';
-      if (n.tier === 'perm') return '#e0b23a';
-      if (n.tier === 'mid') return '#3a8dde';
-      return '#888';
-    }
-
-    // 力导向：斥力（节点互推）+ 弹簧（边拉近），迭代收敛
-    function tick() {
-      var i, j, a, b, dx, dy, d2, d, f;
-      for (i = 0; i < nodes.length; i++) {
-        a = nodes[i];
-        for (j = i + 1; j < nodes.length; j++) {
-          b = nodes[j];
-          dx = a.x - b.x; dy = a.y - b.y;
-          d2 = dx * dx + dy * dy + 0.01;
-          f = 800 / d2;
-          d = Math.sqrt(d2);
-          a.vx += dx / d * f; a.vy += dy / d * f;
-          b.vx -= dx / d * f; b.vy -= dy / d * f;
-        }
-        // 向心力：把节点拉向画布中心，避免飘散
-        a.vx += (W / 2 - a.x) * 0.002;
-        a.vy += (H / 2 - a.y) * 0.002;
-      }
-      for (var e = 0; e < edges.length; e++) {
-        var ed = edges[e];
-        var s = ed.s, t = ed.t;
-        if (!s || !t) continue;
-        dx = t.x - s.x; dy = t.y - s.y;
-        d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-        f = (d - 90) * 0.01 * (ed.weight || 1);
-        s.vx += dx / d * f; s.vy += dy / d * f;
-        t.vx -= dx / d * f; t.vy -= dy / d * f;
-      }
-      for (i = 0; i < nodes.length; i++) {
-        a = nodes[i];
-        if (a === drag) continue;
-        a.vx *= 0.85; a.vy *= 0.85;
-        a.x += a.vx; a.y += a.vy;
-      }
-    }
-
-    // 构建节点邻接表：径向树 BFS 用（无向，突触边与树边一视同仁）
-    function buildAdj() {
-      var adj = {};
-      nodes.forEach(function (n) { adj[n.id] = []; });
-      edges.forEach(function (ed) {
-        if (!ed.s || !ed.t) return;
-        adj[ed.s.id].push(ed.t.id);
-        adj[ed.t.id].push(ed.s.id);
-      });
-      return adj;
-    }
-
-    // 径向树布局：以 rootId 为根做 BFS 分层，深度定半径、同级均分角度
-    function layoutRadial(rootId) {
-      var byId = {};
-      nodes.forEach(function (n) { byId[n.id] = n; });
-      if (!byId[rootId]) return;              // 根不存在则不布局
-      var adj = buildAdj();
-      var depth = {}; depth[rootId] = 0;
-      var order = [rootId];                   // BFS 队列
-      var visited = {}; visited[rootId] = true;
-      for (var qi = 0; qi < order.length; qi++) {
-        var cur = order[qi];
-        (adj[cur] || []).forEach(function (nb) {
-          if (visited[nb]) return;            // 防环：已访问跳过
-          visited[nb] = true;
-          depth[nb] = depth[cur] + 1;
-          order.push(nb);
-        });
-      }
-      // 按深度分组
-      var levels = {};
-      Object.keys(depth).forEach(function (id) {
-        var dpt = depth[id];
-        (levels[dpt] = levels[dpt] || []).push(parseInt(id, 10));
-      });
-      var cx = W / 2, cy = H / 2;
-      var maxDepth = 0;
-      Object.keys(levels).forEach(function (k) { maxDepth = Math.max(maxDepth, parseInt(k, 10)); });
-      var ringGap = maxDepth > 0 ? (Math.min(W, H) / 2 - 40) / maxDepth : 0;
-      Object.keys(levels).forEach(function (k) {
-        var dpt = parseInt(k, 10);
-        var ids = levels[k];
-        var r = dpt * ringGap;
-        for (var i = 0; i < ids.length; i++) {
-          // 从正上方（-90°）起，同层节点均匀铺满圆周
-          var ang = -Math.PI / 2 + (ids.length === 1 ? 0 : (i / ids.length) * Math.PI * 2);
-          var nd = byId[ids[i]];
-          if (!nd) continue;
-          nd.x = cx + r * Math.cos(ang);
-          nd.y = cy + r * Math.sin(ang);
-          nd.vx = nd.vy = 0;
-        }
-      });
-    }
-
-    // 绘制：先边后节点，最后画标签
-    function draw() {
-      ctx.clearRect(0, 0, W, H);
-      var e, ed;
-      for (e = 0; e < edges.length; e++) {
-        ed = edges[e];
-        if (!ed.s || !ed.t) continue;
-        ctx.beginPath();
-        ctx.moveTo(ed.s.x, ed.s.y);
-        ctx.lineTo(ed.t.x, ed.t.y);
-        if (ed.kind === 'associative') {
-          ctx.setLineDash([4, 4]);
-          ctx.strokeStyle = 'rgba(224,178,58,0.55)';
-        } else if (ed.kind === 'branch') {
-          ctx.setLineDash([2, 3]);
-          ctx.strokeStyle = 'rgba(120,120,120,0.5)';
-        } else {
-          ctx.setLineDash([]);
-          ctx.strokeStyle = 'rgba(100,100,100,0.35)';
-        }
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      for (var i = 0; i < nodes.length; i++) {
-        var n = nodes[i];
-        var r = 4 + (n.strength || 0.5) * 10;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = colorOf(n);
-        ctx.fill();
-        // 有关键词的节点，在旁标一个短标签
-        if (n.keywords && n.keywords.length) {
-          ctx.fillStyle = 'rgba(200,200,200,0.75)';
-          ctx.font = '11px system-ui';
-          ctx.fillText(n.keywords[0].slice(0, 8), n.x + r + 2, n.y + 3);
-        }
-      }
-    }
-
-    function loop() {
-      if (MODE === 'force') tick();   // 径向树是静态布局，不必每帧重算
-      draw();
-      requestAnimationFrame(loop);
-    }
-
-    // 按 id 建索引，供边绑定节点对象
-    // 节点显示上限：海量节点一次性做力导向布局会把浏览器拖死，故截断到上限。
-    // 只保证页面不卡死；要看更多请缩小会话范围或分段查看。
-    var MAX_NODES = 500;
-
-    function build(data) {
-      nodes = []; edges = [];
-      var map = {};
-      var allNodes = data.nodes || [];
-      var truncated = allNodes.length > MAX_NODES;
-      allNodes = allNodes.slice(0, MAX_NODES);
-      allNodes.forEach(function (n) {
-        var o = { id: n.id, source: n.source, tier: n.tier, strength: n.strength,
-                  keywords: n.keywords, essence: n.essence,
-                  x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0 };
-        nodes.push(o); map[n.id] = o;
-      });
-      (data.edges || []).forEach(function (e) {
-        var s = map[e.src_node], t = map[e.dst_node];
-        // 两端都在已显示节点内才收：节点被截断时，避免收进悬空边
-        if (!s || !t) return;
-        edges.push({ s: s, t: t, kind: e.kind, weight: e.weight });
-      });
-      var note = truncated
-        ? ('（节点超 ' + MAX_NODES + '，仅显示前 ' + MAX_NODES + ' 个）')
-        : '';
-      document.getElementById('stat').textContent =
-        nodes.length + ' 节点 / ' + edges.length + ' 边' + note;
-      applyMode();
-    }
-
-    // 选根：优先用输入框 id，否则取第一个用户发言节点
-    function pickRoot() {
-      var raw = document.getElementById('rootId').value.trim();
-      if (raw) return parseInt(raw, 10);
-      for (var i = 0; i < nodes.length; i++) {
-        if (nodes[i].source === 'user') return nodes[i].id;
-      }
-      return nodes.length ? nodes[0].id : 0;
-    }
-
-    // 应用当前视图：径向树时立即重排并高亮按钮
-    function applyMode() {
-      document.getElementById('modeForce').className = MODE === 'force' ? '' : 'ghost';
-      document.getElementById('modeRadial').className = MODE === 'radial' ? '' : 'ghost';
-      if (MODE === 'radial') layoutRadial(pickRoot());
-    }
-
-    function load() {
-      var conv = document.getElementById('conv').value.trim();
-      var url = '/memory/graph' + (conv ? ('?conv_id=' + encodeURIComponent(conv)) : '');
-      fetch(url).then(function (r) { return r.json(); }).then(build);
-    }
-
-    // 默认加载「最新会话」，而非全库。
-    // 全库节点海量时，一次性取回并做力导向布局会把浏览器拖死；
-    // 故初始不查全库，先取会话列表，自动填入最近一个会话再加载。
-    // 用户仍可清空输入框手动查看全部（见 build 的节点上限保护）。
-    function loadDefaultConv() {
-      fetch('/memory/conversations').then(function (r) { return r.json(); }).then(function (d) {
-        var list = (d && d.conversations) || [];
-        if (list.length) {
-          document.getElementById('conv').value = list[0].conv_id || '';
-          load();
-        } else {
-          document.getElementById('stat').textContent = '暂无会话';
-        }
-      }).catch(function () {
-        document.getElementById('stat').textContent = '加载会话列表失败';
-      });
-    }
-
-    // 交互：悬停显示精华，按下拖动节点（仅力导向图）
-    cv.addEventListener('mousemove', function (ev) {
-      var rect = cv.getBoundingClientRect();
-      var mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-      if (drag && MODE === 'force') { drag.x = mx; drag.y = my; drag.vx = drag.vy = 0; return; }
-      var hit = null;
-      for (var i = 0; i < nodes.length; i++) {
-        var n = nodes[i];
-        if ((n.x - mx) * (n.x - mx) + (n.y - my) * (n.y - my) < 100) { hit = n; break; }
-      }
-      if (hit) {
-        tip.style.display = 'block';
-        tip.style.left = (ev.clientX + 12) + 'px';
-        tip.style.top = (ev.clientY + 12) + 'px';
-        tip.textContent = '#' + hit.id + ' [' + (hit.source || '') + '/' + (hit.tier || '') + '] ' + (hit.essence || '');
-        cv.style.cursor = 'pointer';
-      } else { tip.style.display = 'none'; cv.style.cursor = 'default'; }
-    });
-    cv.addEventListener('mousedown', function (ev) {
-      if (MODE !== 'force') return;   // 径向树为静态布局，不响应拖动
-      var rect = cv.getBoundingClientRect();
-      var mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-      for (var i = 0; i < nodes.length; i++) {
-        var n = nodes[i];
-        if ((n.x - mx) * (n.x - mx) + (n.y - my) * (n.y - my) < 100) { drag = n; break; }
-      }
-    });
-    window.addEventListener('mouseup', function () { drag = null; });
-    document.getElementById('reload').addEventListener('click', load);
-    document.getElementById('modeForce').addEventListener('click', function () { MODE = 'force'; applyMode(); });
-    document.getElementById('modeRadial').addEventListener('click', function () { MODE = 'radial'; applyMode(); });
-
-    resize(); loadDefaultConv(); loop();
-  })();
-  </script>
+  <div id="detail"><div id="detailBody"></div></div>
+  <!-- 脚本按依赖顺序加载：核心 → 绘制 → 交互 → 数据 → 入口 -->
+  <script src="/memory-graph-assets/mg_core.js"></script>
+  <script src="/memory-graph-assets/mg_render.js"></script>
+  <script src="/memory-graph-assets/mg_interact.js"></script>
+  <script src="/memory-graph-assets/mg_data.js"></script>
+  <script src="/memory-graph-assets/mg_main.js"></script>
 </body>
 </html>

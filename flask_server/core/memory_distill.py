@@ -53,6 +53,12 @@ def _tool_essence(text):
         return raw.replace("\n", " ")[:200]
     tool = obj.get("tool") or ""
     result = obj.get("result")
+    # 告警类结果（形如 {"issue":"...","message":"..."}）：直接用 message 当摘要。
+    # 否则整段 JSON 会作为精华，机器味重且难检索。
+    if isinstance(result, dict) and result.get("issue"):
+        msg = str(result.get("message") or result.get("issue") or "").strip()
+        head = ("%s：%s" % (tool, msg)).strip("：") if tool else msg
+        return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
     brief = json.dumps(result, ensure_ascii=False) if result is not None else ""
     head = ("%s：%s" % (tool, brief)).strip("：") if tool else brief
     return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]

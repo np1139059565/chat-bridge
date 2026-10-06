@@ -147,6 +147,21 @@ def soft_delete(node_id):
     maybe_commit(conn)
 
 
+def hard_delete(node_id):
+    """硬删除：真删节点行，并清掉它的边与卡片，不可恢复。
+
+    调用方须先做二次确认（前端弹框）。删节点时一并删除 src/dst 指向它的边、
+    挂在它名下的卡片，避免留下悬空边与孤儿卡片。
+    @return 被删除的节点数（0 表示节点不存在）
+    """
+    conn = get_conn()
+    conn.execute("DELETE FROM edges WHERE src_node=? OR dst_node=?", (node_id, node_id))
+    conn.execute("DELETE FROM cards WHERE node_id=?", (node_id,))
+    cur = conn.execute("DELETE FROM nodes WHERE id=?", (node_id,))
+    maybe_commit(conn)
+    return cur.rowcount
+
+
 def set_content(node_id, blocks=None, essence=None, keywords=None):
     """更新节点的内容字段（接口 memory_set 的落点）。
 

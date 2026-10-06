@@ -70,6 +70,18 @@ def node_delete():
     return _ok()
 
 
+@bp.route("/memory/node/delete", methods=["POST"])
+def node_hard_delete():
+    """硬删一个节点（不可恢复）。前端须先做二次确认。"""
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    if not nid:
+        return _err("缺少 node_id")
+    n = memory_nodes.hard_delete(nid)
+    memory_loader.invalidate()
+    return _ok(deleted=n)
+
+
 # ---------------- 会话层（前端走后端查询） ----------------
 
 @bp.route("/memory/conversation", methods=["GET"])
@@ -194,6 +206,8 @@ def graph_export():
             "id": n["id"], "source": n["source"], "tier": n.get("tier"),
             "strength": n.get("strength"), "essence": n.get("essence"),
             "keywords": n.get("keywords"),
+            # created_at：时间轴视图按时间排布节点需要
+            "created_at": n.get("created_at") or 0,
         })
     return _ok(nodes=nodes, edges=edges)
 
@@ -382,3 +396,18 @@ def graph_page():
     if not page.is_file():
         return _err("图谱页面不存在")
     return send_file(str(page), mimetype="text/html")
+
+
+@bp.route("/memory-graph-assets/<path:name>", methods=["GET"])
+def graph_asset(name):
+    """记忆图谱页面的脚本资源（static 目录下 mg_*.js）。
+
+    只允许 mg_ 前缀的 .js 文件名，拦截目录穿越，避免暴露 static 下其它文件。
+    """
+    import os
+    if not name.startswith("mg_") or not name.endswith(".js") or "/" in name or "\\" in name or ".." in name:
+        return _err("非法资源名")
+    js = paths.APP_DIR / "static" / name
+    if not js.is_file():
+        return _err("图谱脚本不存在")
+    return send_file(str(js), mimetype="application/javascript")

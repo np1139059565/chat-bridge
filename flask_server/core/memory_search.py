@@ -159,5 +159,9 @@ def _rank(scores, valid_keywords, focus, top_k):
             "score": round(final, 4),
             "jaccard": round(jac, 4),
             "conv_id": node.get("conv_id"),
+            # 强度与创建时间：供调用方判断新旧与优先级——旧需求虽相关但
+            # 强度随时间衰减，AI 据此可优先采用更新、更强的记忆。
+            "strength": round(float(node.get("strength") or 0.0), 4),
+            "created_at": node.get("created_at") or 0,
         })
     return out
