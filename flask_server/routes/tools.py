@@ -124,6 +124,49 @@ def tools():
     return jsonify({"tools": builtin + custom + external})
 
 
+@bp.route("/tool/command_task", methods=["GET"])
+def command_task():
+    """查询 run_command 异步任务的状态与结果。
+
+    用法：GET /tool/command_task?task_id=xxx
+    返回 { success, task_id, status, result?, error? }；
+    status 取值 pending（排队中）/ running（执行中）/ done / failed。
+    任务不存在返回 404，前端据此提示任务已过期或被清理。
+    """
+    task_id = (request.args.get("task_id") or "").strip()
+    if not task_id:
+        return jsonify(success=False, error="缺少 task_id"), 400
+    import command_tasks
+    t = command_tasks.get(task_id)
+    if t is None:
+        return jsonify(success=False, error="任务不存在或已过期", task_id=task_id), 404
+    return jsonify(
+        success=True,
+        task_id=task_id,
+        status=t["status"],
+        result=t.get("result"),
+        error=t.get("error"),
+        created_at=t.get("created_at"),
+        finished_at=t.get("finished_at"),
+    )
+
+
+def _is_async_requested(params):
+    """判断本次调用是否要求异步执行。
+
+    识别 async / is_async 两种键名，真值形式包括布尔 True 与字符串 true/1/yes。
+    命中后从 params 中剔除该键，避免它被当作命令参数传给工具实现。
+    @param params 工具参数字典（就地修改：移除 async 键）
+    @return 是否异步
+    """
+    for key in ("async", "is_async"):
+        if key in params:
+            raw = params.pop(key)
+            if raw is True or str(raw).strip().lower() in ("true", "1", "yes"):
+                return True
+    return False
+
+
 def _call_builtin(name, params):
     """调用内置工具。未注册或已下线时返回 None，交由调用方继续分派。"""
     fn = runtime.DISPATCH.get(name)
@@ -131,6 +174,13 @@ def _call_builtin(name, params):
         return None
     if not runtime.is_tool_enabled(name):
         return disabled_resp(name)
+    # run_command 异步模式：带 async=true 时，命令投入后台队列，立即返回任务号，
+    # 请求线程不再干等命令跑完。前端用 /tool/command_task 轮询结果。
+    if name == "run_command" and _is_async_requested(params):
+        import command_tasks
+        task_id = command_tasks.submit(params)
+        return jsonify(success=True, tool=name, async_mode=True,
+                       task_id=task_id, status="pending")
     try:
         # 独立线程 + 超时兜底：工具卡住时返回错误而非无限挂起请求
         result = _run_with_timeout(fn, params, BUILTIN_TOOL_TIMEOUT)

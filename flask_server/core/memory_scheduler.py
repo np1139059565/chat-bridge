@@ -19,6 +19,7 @@ import threading
 import time
 
 import app_log
+import memory_wal
 import memory_decay
 import memory_events
 
@@ -34,7 +35,7 @@ def run_once():
 
     @return dict { decay, events, errors }
     """
-    result = {"decay": None, "events": None, "errors": []}
+    result = {"decay": None, "events": None, "checkpoint": None, "errors": []}
     t0 = time.time()
     # 记开始：后台重活若与请求抢锁，日志里能看出「它正在跑」
     app_log.info("[mem][sched] 维护轮次开始")
@@ -46,6 +47,13 @@ def run_once():
         result["events"] = memory_events.cluster_events()
     except Exception as e:
         result["errors"].append("events: %s" % e)
+    # WAL checkpoint：把 -wal 合并回主库并截断回收。
+    # 放在最后做——此时前面的重活已结束，锁竞争最小。
+    # 拿不到独占锁时返回 ok=False，不抛异常，下轮再试。
+    try:
+        result["checkpoint"] = memory_wal.wal_checkpoint("TRUNCATE")
+    except Exception as e:
+        result["errors"].append("checkpoint: %s" % e)
     # 记结束与耗时：这轮跑了多久，直接决定它占锁时间
     app_log.info("[mem][sched] 维护轮次结束 耗时=%.1fms errors=%s" % (
         (time.time() - t0) * 1000.0, result["errors"] or "无"))

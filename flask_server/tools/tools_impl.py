@@ -39,6 +39,27 @@ from memory_quality_impl import t_memory_inspect, t_memory_refine
 
 # 工具目录：元数据定义在 tool_meta.py，此处直接引用，保持「声明」与「实现」分离
 
+
+def t_command_task(p):
+    """查询 run_command 异步任务的状态与结果。
+
+    供 AI 在提交异步命令（run_command 带 async=true）后，凭 task_id 回查。
+    @param p 参数：task_id
+    @return { task_id, status, result?, error? }；任务不存在抛参数错误
+    """
+    _require(p, "task_id")
+    task_id = str(p.get("task_id") or "").strip()
+    import command_tasks
+    t = command_tasks.get(task_id)
+    if t is None:
+        raise ToolParamError("任务不存在或已过期：%s" % task_id)
+    return {
+        "task_id": task_id,
+        "status": t["status"],
+        "result": t.get("result"),
+        "error": t.get("error"),
+    }
+
 # 搜索类工具默认跳过的目录：这些目录体积大或属运行时产物，
 # 递归扫描它们既慢又无意义（如 models/ 是 1.36G 模型、.git/ 是版本库内部）。
 # 跳过可避免 search_file / search_content 在大工程里卡死。
@@ -390,6 +411,7 @@ DISPATCH = {
     "list_rules": t_list_rules,
     "read_rule": t_read_rule,
     "run_command": t_run_command,
+    "command_task": t_command_task,
     "memory_search": t_memory_search,
     "memory_inspect": t_memory_inspect,
     "memory_refine": t_memory_refine,

@@ -133,7 +133,19 @@ TOOLS = {
             },
             {"name": "command", "type": "string", "required": True, "description": "要执行的命令或代码块内容"},
             {"name": "cwd", "type": "string", "required": False, "description": "工作目录，默认使用当前工程目录"},
-            {"name": "timeout", "type": "integer", "required": False, "description": "超时秒数，默认 60 秒"},
+            {"name": "timeout", "type": "integer", "required": False, "description": "超时秒数，默认 45 秒"},
+            {"name": "async", "type": "boolean", "required": False,
+             "description": "异步执行：true 时立即返回 task_id，命令在后台运行；"
+                            "随后用 get_tool_params 里的 command_task 工具或 GET /tool/command_task 轮询结果。"
+                            "适合预计耗时较长、不想让调用方干等的命令"},
+        ],
+    },
+
+    # ---------- 执行类：查询 run_command 异步任务的状态与结果 ----------
+    "command_task": {
+        "description": "查询 run_command 异步任务的状态与结果：传入 task_id，返回 pending/running/done/failed 及结果",
+        "parameters": [
+            {"name": "task_id", "type": "string", "required": True, "description": "run_command 异步调用返回的任务号"},
         ],
     },
 
