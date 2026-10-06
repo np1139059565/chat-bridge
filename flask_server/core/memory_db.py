@@ -159,6 +159,29 @@ def get_conn():
     return conn
 
 
+def close_conn():
+    """关闭当前线程的记忆库连接，并从线程局部清除。
+
+    用途：请求线程处理完毕后及时释放连接，不再依赖「线程退出 + GC」的
+    隐式回收时机。幂等：未建连接或重复调用均安全。
+
+    只关闭「当前线程」的连接——后台长期线程（调度、工具池）各自的连接
+    不受影响，它们照常复用。关闭后本线程再次 get_conn 会重建新连接。
+    """
+    conn = getattr(_local, "conn", None)
+    if conn is not None:
+        try:
+            conn.close()
+        except Exception:
+            # 关闭失败不影响调用方（连接本就要丢弃）
+            pass
+        # 清除线程局部引用，确保下次 get_conn 重建
+        try:
+            del _local.conn
+        except Exception:
+            _local.conn = None
+
+
 # 进程级 WAL 设置标志：WAL 是库级设置，只设一次，避免多线程连库时冲突。
 _wal_lock = threading.Lock()
 _wal_ready = False

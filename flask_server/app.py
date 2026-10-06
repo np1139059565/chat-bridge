@@ -186,6 +186,25 @@ def _register_error_logging(app):
         return ({"success": False, "error": str(e)}, 500)
 
 
+def _register_db_teardown(app):
+    """请求结束时关闭本线程的记忆库连接。
+
+    目的：请求线程用过的 SQLite 连接及时释放，不再依赖「线程退出 + GC」
+    的隐式回收时机。只关当前请求线程的连接，后台长期线程（调度、工具池）
+    各自的连接不受影响。关闭后该线程下次再访问记忆库会按需重建。
+    失败不阻断：连接关闭异常不影响响应返回。
+    """
+    @app.teardown_request
+    def _close_db_conn(exc=None):
+        try:
+            import memory_db
+            memory_db.close_conn()
+        except Exception as e:
+            # 关连接失败不应影响请求收尾
+            import app_log
+            app_log.debug("[db] 请求结束关闭连接失败：%s" % e)
+
+
 def _init_runtime():
     """初始化运行期状态：工具实现、工具表、配置与外部提供方。"""
     # 1) 注入工具实现模块，直接建立工具表与派发表
@@ -212,6 +231,8 @@ def create_app():
     _register_watchdog(app)
     # 全局异常日志：未捕获异常也落盘，避免只看到 500 却不知原因
     _register_error_logging(app)
+    # 请求结束关闭本线程的记忆库连接：及时释放，不依赖 GC 时机
+    _register_db_teardown(app)
     # 启动加载：把规则与记忆摘要一次性读进内存（方案核心目的）。
     # 失败不阻断启动：记忆库首次创建、或库损坏时，服务仍应可用。
     try:
