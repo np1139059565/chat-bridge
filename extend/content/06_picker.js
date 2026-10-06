@@ -123,13 +123,15 @@
    * 把拾取到的裸 CSS 选择器包装成执行端的新语法。
    * 执行端只按 JS 表达式求值，不再兼容裸选择器；拾取即产出新语法。
    * @param {string} selector 裸选择器
-   * @returns {string} document.querySelectorAll('...') 形式的表达式
+   * @returns {string} document.querySelector('...') 形式的表达式（单元素）
    */
   A.wrapPickerExpr = function (selector) {
     if (!selector) return '';
     // 转义反斜杠与单引号，保证嵌入单引号字符串后仍是合法 JS
     const escaped = String(selector).split('\\').join('\\\\').split("'").join("\\'");
-    return "document.querySelectorAll('" + escaped + "')";
+    // 生成 querySelector：拾取到的选择器已保证唯一，直接得到单个 DOM 元素。
+    // 不用 querySelectorAll——那返回列表，多元素时点击必然失败。
+    return "document.querySelector('" + escaped + "')";
   };
 
   /**
