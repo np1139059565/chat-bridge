@@ -9,5 +9,6 @@
   window.addEventListener('resize', MG.resize);
   MG.bindAll();
   MG.loadDefaultConv();
+  MG.startIncrement();   // 启动增量轮询：随 AI 生成逐个增加节点
   MG.loop();
 })();

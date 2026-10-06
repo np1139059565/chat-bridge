@@ -22,6 +22,8 @@
   MG.edgeOn = { parent_child: true, branch: true, associative: true };  // 边类型开关
   MG.keywordFilter = '';     // 关键词过滤
   MG.settled = false;        // 力导向是否已收敛（收敛后停帧省性能）
+  MG.maxId = 0;              // 已加载的最大节点 id，用于增量轮询
+  MG._incTimer = null;       // 增量轮询定时器
   MG.alpha = 1;              // 力导向衰减系数：每帧衰减，到 0 即静止
   MG.ALPHA_DECAY = 0.985;    // 每帧衰减比；越小收敛越快
   MG.ALPHA_MIN = 0.005;      // 低于此值视为收敛，停帧

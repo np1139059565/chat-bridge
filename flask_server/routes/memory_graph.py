@@ -195,6 +195,9 @@ def graph_export():
     """
     conv_id = request.args.get("conv_id", "")
     site_key = request.args.get("site_key") or None
+    # since_id：增量拉取——只返回 id 大于它的新节点，及「至少一端是新节点」的边，
+    # 供页面「随 AI 生成逐个增加节点」的轮询使用；0 或未传表示全量。
+    since_id = request.args.get("since_id", type=int) or 0
     if conv_id:
         raw_nodes = memory_nodes.list_by_conv(conv_id, site_key)
         node_ids = [n["id"] for n in raw_nodes]
@@ -202,6 +205,13 @@ def graph_export():
     else:
         raw_nodes = memory_nodes.list_all()
         edges = memory_edges.all_edges()
+    max_id = max([n["id"] for n in raw_nodes], default=0)
+    if since_id:
+        raw_nodes = [n for n in raw_nodes if n["id"] > since_id]
+        keep = set(n["id"] for n in raw_nodes)
+        # 只保留「至少一端是新节点」的边，避免重复下发旧边
+        edges = [e for e in edges
+                 if e.get("src_node") in keep or e.get("dst_node") in keep]
     nodes = []
     for n in raw_nodes:
         nodes.append({
@@ -221,7 +231,8 @@ def graph_export():
                 e["keywords"] = []
         else:
             e["keywords"] = []
-    return _ok(nodes=nodes, edges=edges)
+    # max_id 供前端记下，下次轮询带上，实现增量
+    return _ok(nodes=nodes, edges=edges, max_id=max_id)
 
 
 # ---------------- 读写层·补充 ----------------

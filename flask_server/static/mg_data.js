@@ -35,9 +35,59 @@
     var note = truncated ? ('（节点超 ' + MG.MAX_NODES + '，仅显示前 ' + MG.MAX_NODES + ' 个）') : '';
     document.getElementById('stat').textContent =
       MG.nodes.length + ' 节点 / ' + MG.edges.length + ' 边' + note;
+    // 记录最大节点 id，供增量轮询从此之后拉取
+    MG.maxId = data.max_id || 0;
     MG.selected = null; MG.selectedSet = {};
     MG.settled = false; MG.alpha = 1;   // 新数据：重置衰减，重新布局
     MG.applyMode();
+  };
+
+  // 增量更新：拉取 id 大于 MG.maxId 的新节点，追加进图。
+  // 只加不重排——新节点给一个靠近中心的初始位置 + 很小的 alpha，
+  // 让图轻微调整而非整图重排，实现「随 AI 生成逐个增加」的静态更新。
+  MG.pollIncrement = function () {
+    var conv = document.getElementById('conv') ? document.getElementById('conv').value.trim() : '';
+    var url = '/memory/graph?since_id=' + encodeURIComponent(MG.maxId)
+      + (conv ? ('&conv_id=' + encodeURIComponent(conv)) : '');
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      var newNodes = (data && data.nodes) || [];
+      if (!newNodes.length) return;
+      var map = {};
+      MG.nodes.forEach(function (n) { map[n.id] = n; });
+      var added = 0;
+      newNodes.forEach(function (n) {
+        if (map[n.id]) return;   // 已存在，跳过
+        if (MG.nodes.length >= MG.MAX_NODES) return;   // 超上限不再加
+        var o = { id: n.id, source: n.source, tier: n.tier, strength: n.strength,
+                  keywords: n.keywords, essence: n.essence, created_at: n.created_at,
+                  // 从中心附近出现，随力导向轻微散开
+                  x: MG.W / 2 + (Math.random() - 0.5) * 40,
+                  y: MG.H / 2 + (Math.random() - 0.5) * 40, vx: 0, vy: 0 };
+        MG.nodes.push(o); map[n.id] = o; added++;
+      });
+      ((data && data.edges) || []).forEach(function (e) {
+        var s = map[e.src_node], t = map[e.dst_node];
+        if (!s || !t) return;
+        MG.edges.push({ s: s, t: t, kind: e.kind, weight: e.weight, keywords: e.keywords || [] });
+      });
+      MG.maxId = data.max_id || MG.maxId;
+      if (added) {
+        document.getElementById('stat').textContent =
+          MG.nodes.length + ' 节点 / ' + MG.edges.length + ' 边（持续增加中）';
+        // 很小的 alpha：新节点轻微落位，不打乱已稳定的布局
+        MG.alpha = Math.max(MG.alpha, 0.25);
+        MG.settled = false;
+      }
+    }).catch(function () { /* 后端未就绪时静默重试 */ });
+  };
+
+  // 启动/停止增量轮询（幂等）
+  MG.startIncrement = function () {
+    if (MG._incTimer) return;
+    MG._incTimer = setInterval(MG.pollIncrement, 3000);
+  };
+  MG.stopIncrement = function () {
+    if (MG._incTimer) { clearInterval(MG._incTimer); MG._incTimer = null; }
   };
 
   // 选根：优先输入框 id，否则取第一个用户发言节点
