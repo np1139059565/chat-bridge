@@ -1,4 +1,4 @@
-"""全局日志异步化：测试（对应修复方向 4）。
+"""全局日志异步化：测试。
 
 背景（走查发现）：
     app_log.write 在 _write_lock 内做磁盘 open + write + close。

@@ -26,8 +26,8 @@ from tool_helpers import ToolParamError, abspath as _abspath
 RUN_COMMAND_SUPPORTED_LANGUAGES = ["cmd", "powershell", "shell", "git", "python"]
 
 # 默认超时（秒）：单次命令执行超过该时长即返回超时结果，避免长时间挂起。
-# 由 60 下调为 45（与修复方向 2-A 一致），配合外层兜底超时同步缩短，
-# 减少单次调用占住请求线程与工具线程池的时长。
+# 该值须小于外层兜底超时（routes/tools.BUILTIN_TOOL_TIMEOUT），
+# 以免正常慢命令先被外层误杀、拿不到自身超时的结构化结果。
 RUN_COMMAND_TIMEOUT = 45
 
 # 语言 → 解释器命令前缀。

@@ -22,7 +22,7 @@ bp = Blueprint("tools", __name__)
 # 单独执行的脚本 / 命令类工具有各自的子进程超时；此值是其外层的最后一道保险丝。
 # 取值需大于脚本类工具自身的超时，避免把正常慢命令误判为超时。
 # 脚本类工具自身超时为 45 秒（run_command_impl.RUN_COMMAND_TIMEOUT），
-# 本值由 120 下调为 60（修复方向 2-A），仍大于内层，缩短单请求占线程时长。
+# 本值须严格大于内层，以免正常慢命令被外层误杀。
 BUILTIN_TOOL_TIMEOUT = 60
 
 # 执行内置工具的线程池：用独立线程跑工具函数，主线程按超时等待，
@@ -32,10 +32,9 @@ BUILTIN_TOOL_TIMEOUT = 60
 # 继续跑到自然结束、一直占着 worker。若池子过小，几个慢工具就能占满，
 # 后续工具调用全部排队——前端表现为「点指令卡住服务端」。
 #
-# 容量由 16 上调为 64（修复方向 1），并配合「超时后重建池」：一旦有工具
-# 超时，说明已有 worker 被不可终止的卡死线程占用，此时整池重建、换用全新
-# worker，把被卡住的旧 worker 连同旧池一起抛弃（shutdown 不等待），避免它们
-# 长期挤占坑位、拖垮后续调用。
+# 容量留足余量，并配合「超时后重建池」：一旦有工具超时，说明已有 worker
+# 被不可终止的卡死线程占用，此时整池重建、换用全新 worker，把被卡住的旧
+# worker 连同旧池一起抛弃（shutdown 不等待），避免它们长期挤占坑位、拖垮后续调用。
 _TOOL_POOL_MAX_WORKERS = 64
 
 # 线程池「代次」：每次重建 +1。用于观测重建次数，也供测试断言。
@@ -76,7 +75,7 @@ def _run_with_timeout(fn, params, timeout):
 
     注意：Python 无法强制终止正在运行的线程，超时后该线程会继续跑到自然结束，
     但调用方（HTTP 请求）能立即拿到超时错误，不会无限挂起——这正是本兜底的目的。
-    超时时额外重建线程池（修复方向 1）：抛弃可能已被卡死线程占用的旧 worker，
+    超时时额外重建线程池：抛弃可能已被卡死线程占用的旧 worker，
     避免它们长期挤占坑位，导致后续工具调用全部排队。
     @returns 工具函数的返回值
     @raises TimeoutError 超时未返回
@@ -135,6 +134,14 @@ def _call_builtin(name, params):
     try:
         # 独立线程 + 超时兜底：工具卡住时返回错误而非无限挂起请求
         result = _run_with_timeout(fn, params, BUILTIN_TOOL_TIMEOUT)
+        # 结果体积统一兜底：内置工具结果必须过体积检查，避免超大结果
+        # （如命令输出、整目录内容）直接回传前端导致浏览器卡死。
+        # 放在统一出口，不依赖每个工具自行调用 enforce_size_limit。
+        from tool_helpers import enforce_size_limit
+        enforce_size_limit(
+            result,
+            "请缩小范围后重试：如限制读取行数、缩小搜索范围、加文件类型过滤、"
+            "或对命令输出做 head/tail 截断。")
         return jsonify(success=True, tool=name, result=result)
     except Exception as e:
         return tool_error(name, e)

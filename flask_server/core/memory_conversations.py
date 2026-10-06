@@ -166,19 +166,18 @@ def _save_conversation_sync(conv_id, site_key, conv):
     return result
 
 
-def _save_conversation_inner(conn, conv_id, site_key, conv):
-    """保存会话的实际写入逻辑（在批量提交包裹内执行）。
+def _scan_tree(conv):
+    """预扫消息树：建映射并统计父子关系。
 
-    增量策略：逐节点比对内容签名，未变化者跳过节点写库及其边、卡片写入，
-    只写新增或内容变化的节点，从而缩短提交时间、减少写锁占用。
-    @return 本轮实际写入（新增或变化）的节点数
+    @param conv 前端会话对象
+    @return (node_by_msg, parent_of, child_count, edges_raw)
+        node_by_msg: msg_id → 前端节点对象
+        parent_of:   子 msg_id → 父 msg_id
+        child_count: 父 msg_id → 子边数（判 branch）
+        edges_raw:   [(父msg_id, 子msg_id)]
     """
     tree = (conv.get("msgTree") or {})
-    # 预扫：建 msg_id → 节点 映射，记录父节点指纹，统计子边数（判 branch）
-    node_by_msg = {}    # msg_id → 前端节点对象
-    parent_of = {}      # 子 msg_id → 父 msg_id
-    child_count = {}    # 父 msg_id → 子边数
-    edges_raw = []      # [(父msg_id, 子msg_id)]
+    node_by_msg, parent_of, child_count, edges_raw = {}, {}, {}, []
     for key, node in tree.items():
         if "-" not in key or not node:
             continue
@@ -187,17 +186,22 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
         parent_of[cid] = pid
         child_count[pid] = child_count.get(pid, 0) + 1
         edges_raw.append((pid, cid))
-    # 第一遍：写节点；未变化的复用缓存中的库 id，不写库
-    id_map = {}         # msg_id → 库 node id
-    changed = set()     # 本轮内容变化、需重写边与卡片的 msg_id
+    return node_by_msg, parent_of, child_count, edges_raw
+
+
+def _write_nodes(node_by_msg, parent_of, conv_id, site_key):
+    """写节点：内容签名未变的复用缓存 id 跳过写库，只写新增/变化者。
+
+    @return (id_map, changed)：msg_id → 库 id；本轮内容变化的 msg_id 集合
+    """
+    id_map, changed = {}, set()
     for mid, node in node_by_msg.items():
         sig = _node_sig(node, parent_of.get(mid))
         cache_key = (conv_id, site_key, mid)
         with _sig_lock:
             cached = _saved_sig.get(cache_key)
         if cached and cached[0] == sig:
-            # 内容未变：直接复用已存库 id，跳过写库
-            id_map[mid] = cached[1]
+            id_map[mid] = cached[1]      # 内容未变：复用已存库 id，跳过写库
             continue
         nid = upsert_node(
             {"msg_id": mid, "conv_id": conv_id, "site_key": site_key},
@@ -209,7 +213,14 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
         changed.add(mid)
         with _sig_lock:
             _saved_sig[cache_key] = (sig, nid)
-    # 第二遍：只对内容变化的节点回填父子关系、建边、写卡片
+    return id_map, changed
+
+
+def _write_edges_and_cards(edges_raw, id_map, changed, child_count, node_by_msg):
+    """对内容变化的节点回填父子关系、建边、写卡片。
+
+    @return 本轮处理（内容变化）的节点数
+    """
     n_written = 0
     for pid, cid in edges_raw:
         if cid not in changed:
@@ -225,12 +236,15 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
             if child_count.get(pid, 0) >= 2:
                 add_edge(src_id, nid, "branch")
         n_written += 1
-        # 写卡片
         for bid, card in (node_by_msg.get(cid, {}).get("cards") or {}).items():
             if card:
                 upsert_card(nid, bid, card.get("tool"), card.get("status"),
                             card.get("result"), card.get("finishedAt"))
-    # 2) 写会话级元数据
+    return n_written
+
+
+def _write_meta(conn, conv_id, site_key, conv):
+    """写会话级元数据（标题 / 页面地址 / 可见切片等）。"""
     conn.execute(
         "INSERT INTO conversations (conv_id, site_key, title, page_url, visible_keys,"
         " branch_keys, external_cards, orphan_slice, updated_at)"
@@ -247,6 +261,19 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
          json.dumps(conv.get("orphanSlice") or [], ensure_ascii=False),
          _now()),
     )
+
+
+def _save_conversation_inner(conn, conv_id, site_key, conv):
+    """保存会话的实际写入逻辑（在批量提交包裹内执行）。
+
+    增量策略：逐节点比对内容签名，未变化者跳过节点写库及其边、卡片写入，
+    只写新增或内容变化的节点，从而缩短提交时间、减少写锁占用。
+    @return 本轮实际写入（新增或变化）的节点数
+    """
+    node_by_msg, parent_of, child_count, edges_raw = _scan_tree(conv)
+    id_map, changed = _write_nodes(node_by_msg, parent_of, conv_id, site_key)
+    n_written = _write_edges_and_cards(edges_raw, id_map, changed, child_count, node_by_msg)
+    _write_meta(conn, conv_id, site_key, conv)
     maybe_commit(conn)
     return n_written
 

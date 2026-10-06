@@ -32,9 +32,8 @@ def build_synapses(new_node_id):
     if not nk:
         return 0
     conn = get_conn()
-    # 一次查出全部候选（id + keywords），不再逐个 get_node；
-    # 此前每建一次突触要全表扫描 + 逐行回查，N 个节点就是 N 次查询，
-    # 在并发入库时把写锁长期占住。改为单查询 + 内存匹配。
+    # 一次查出全部候选（id + keywords）做内存匹配，不逐个 get_node，
+    # 避免 N 个节点触发 N 次查询、在并发入库时把写锁长期占住。
     rows = conn.execute(
         "SELECT id, keywords FROM nodes WHERE id!=? AND keywords IS NOT NULL AND keywords!='' AND deleted=0",
         (new_node_id,),
@@ -58,8 +57,6 @@ def build_synapses(new_node_id):
         if jac < SYNAPSE_MIN_JACCARD:
             continue
         # 无向去重：同一对节点只建一条边，以较小 id 为 src 规范化。
-        # 此前用「跳过 id 较小的一方」实现去重，方向写反，导致新节点
-        # （id 总是更大）对全部已有节点都跳过，突触永远建不成。
         lo, hi = (new_node_id, r["id"]) if new_node_id < r["id"] else (r["id"], new_node_id)
         memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)))
         count += 1

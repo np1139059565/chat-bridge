@@ -50,7 +50,10 @@
    * @returns {Object|null} 命中项
    */
   M._checkCodeOnly = function (blocks) {
-    if ((this.bridgePush || {}).check_code_only === false) return null;
+    // 保守判定：仅当开关明确为 true 才检测。
+    // 用 !== true 而非 === false：配置未加载 / 缺键（undefined）时行为与界面
+    // 显示一致（都当关），避免「界面显示关、检测却照跑」的错位。
+    if ((this.bridgePush || {}).check_code_only !== true) return null;
     const hasCode = blocks.some((b) => b && b.type === 'code');
     const hasText = blocks.some((b) => {
       if (!b || b.type === 'code' || b.type === 'thinking') return false;
@@ -76,7 +79,8 @@
    * @returns {Object|null} 命中项
    */
   M._checkThinkingEnglish = function (blocks) {
-    if ((this.bridgePush || {}).check_thinking === false) return null;
+    // 保守判定：仅当开关明确为 true 才检测（理由同 _checkCodeOnly）。
+    if ((this.bridgePush || {}).check_thinking !== true) return null;
     const think = blocks.find((b) => b && b.type === 'thinking');
     if (!think) return null;
     const t = String(think.text || '');

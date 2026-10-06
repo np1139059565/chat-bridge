@@ -74,9 +74,16 @@
       // 它是配置项而非自定义指令——内置指令本就不可由用户增删。
       this.bridgeMdSelector = cfg.md_selector || '';
       this.bridgeConnected = !!st.connected;
+      // 标记配置已成功加载：状态轮询据此判断是否需要重试加载。
+      this._bridgePushLoaded = true;
     } catch (e) {
-      // 桥接未启用 / 后端不可达：保持默认值，不打扰用户
+      // 后端不可达：本次配置未取到，开关停留在默认值。
+      // 标记未加载，交由状态轮询自动重试，直至取到后端配置——
+      // 否则初始化时后端未就绪，开关会永久停在默认值，出现
+      // 「后端已关某检测、前端仍按默认开跑」的错位。
       this.bridgeConnected = false;
+      this._bridgePushLoaded = false;
+      log('桥接配置加载失败（将由状态轮询重试）：' + e);
     }
     // 指令说明文本从后端拉取（与 /h 同源），避免设置页手写说明与指令表漂移。
     try {
@@ -111,7 +118,12 @@
     }
   };
 
-  /** 刷新桥接连接状态（轻量请求，仅取状态）。 */
+  /** 刷新桥接连接状态（轻量请求，仅取状态）。
+   *
+   * 兼作「配置加载失败」的兜底重试：初始化时后端可能尚未就绪，
+   * loadBridge 会失败、开关停在默认值且永不更新。此处借每 5 秒的心跳，
+   * 在检测到配置从未成功加载时重新拉取一次，直到取到后端真值为止。
+   */
   M.refreshBridgeStatus = async function () {
     try {
       const data = await D.apiFetch(this, '/api/bridge/status', {
@@ -120,6 +132,10 @@
       this.bridgeConnected = !!data.connected;
       this.bridgeLastEvent = data.lastEvent || '';
       this.bridgeIntents = data.intents || 0;
+      // 配置从未成功加载：借心跳补拉一次（成功后 _bridgePushLoaded 置真，不再重试）
+      if (this._bridgePushLoaded === false) {
+        await this.loadBridge();
+      }
     } catch (e) {
       this.bridgeConnected = false;
     }

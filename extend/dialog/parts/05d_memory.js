@@ -160,8 +160,8 @@
    */
   M.memoryIssueForRound = function (incoming, isFreshReply) {
     if (!isFreshReply) return null;
-    // 检测开关：关闭时不检测记忆（默认开，显式关才跳过）。
-    if ((this.bridgePush || {}).check_memory === false) return null;
+    // 保守判定：仅当开关明确为 true 才检测（与 05e_quality 各检测一致）。
+    if ((this.bridgePush || {}).check_memory !== true) return null;
     const st = this.memoryCheck;
     if (!st || !st.armed) return null;
     // 先判 AI 是否自觉抽检：抽检了则清标记、计数归零，本轮不告警

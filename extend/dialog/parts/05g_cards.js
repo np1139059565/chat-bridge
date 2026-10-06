@@ -158,7 +158,8 @@
         if (b && b.type === 'code' && b.id && this.parseToolCall(b)) toolCallCount += 1;
       });
     }
-    if (toolCallCount > 1 && (this.bridgePush || {}).check_multi_call !== false) {
+    // 保守判定：仅当开关明确为 true 才检测（理由同 05e_quality 的检测）
+    if (toolCallCount > 1 && (this.bridgePush || {}).check_multi_call === true) {
       return {
         error: 'multiple_tool_calls',
         // 天生依赖代码块（工具调用块），留在卡片级回传。

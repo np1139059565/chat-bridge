@@ -55,9 +55,8 @@ def recompute_all():
     rows = conn.execute("SELECT id FROM nodes WHERE deleted=0").fetchall()
     upgraded = downgraded = 0
     # 短事务：每个节点处理完立即提交、释放写锁。
-    # 关键教训——后台任务绝不可跨节点长时间持锁：曾用「整批一次提交」，
-    # 结果后台抱着写锁不放，前台请求全部死等（观察到请求卡到 90 秒）。
-    # 逐节点短事务让前台请求能在节点间隙插入，从根上避免长时间阻塞。
+    # 后台任务不跨节点长时间持锁，让前台请求能在节点间隙插入，
+    # 避免后台抱着写锁不放、前台请求全部死等。
     for r in rows:
         nid = r["id"]
         node = memory_nodes.get_node(nid)
