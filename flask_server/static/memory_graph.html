@@ -209,19 +209,33 @@
     }
 
     // 按 id 建索引，供边绑定节点对象
+    // 节点显示上限：海量节点一次性做力导向布局会把浏览器拖死，故截断到上限。
+    // 只保证页面不卡死；要看更多请缩小会话范围或分段查看。
+    var MAX_NODES = 500;
+
     function build(data) {
       nodes = []; edges = [];
       var map = {};
-      (data.nodes || []).forEach(function (n) {
+      var allNodes = data.nodes || [];
+      var truncated = allNodes.length > MAX_NODES;
+      allNodes = allNodes.slice(0, MAX_NODES);
+      allNodes.forEach(function (n) {
         var o = { id: n.id, source: n.source, tier: n.tier, strength: n.strength,
                   keywords: n.keywords, essence: n.essence,
                   x: Math.random() * W, y: Math.random() * H, vx: 0, vy: 0 };
         nodes.push(o); map[n.id] = o;
       });
       (data.edges || []).forEach(function (e) {
-        edges.push({ s: map[e.src_node], t: map[e.dst_node], kind: e.kind, weight: e.weight });
+        var s = map[e.src_node], t = map[e.dst_node];
+        // 两端都在已显示节点内才收：节点被截断时，避免收进悬空边
+        if (!s || !t) return;
+        edges.push({ s: s, t: t, kind: e.kind, weight: e.weight });
       });
-      document.getElementById('stat').textContent = nodes.length + ' 节点 / ' + edges.length + ' 边';
+      var note = truncated
+        ? ('（节点超 ' + MAX_NODES + '，仅显示前 ' + MAX_NODES + ' 个）')
+        : '';
+      document.getElementById('stat').textContent =
+        nodes.length + ' 节点 / ' + edges.length + ' 边' + note;
       applyMode();
     }
 
@@ -246,6 +260,24 @@
       var conv = document.getElementById('conv').value.trim();
       var url = '/memory/graph' + (conv ? ('?conv_id=' + encodeURIComponent(conv)) : '');
       fetch(url).then(function (r) { return r.json(); }).then(build);
+    }
+
+    // 默认加载「最新会话」，而非全库。
+    // 全库节点海量时，一次性取回并做力导向布局会把浏览器拖死；
+    // 故初始不查全库，先取会话列表，自动填入最近一个会话再加载。
+    // 用户仍可清空输入框手动查看全部（见 build 的节点上限保护）。
+    function loadDefaultConv() {
+      fetch('/memory/conversations').then(function (r) { return r.json(); }).then(function (d) {
+        var list = (d && d.conversations) || [];
+        if (list.length) {
+          document.getElementById('conv').value = list[0].conv_id || '';
+          load();
+        } else {
+          document.getElementById('stat').textContent = '暂无会话';
+        }
+      }).catch(function () {
+        document.getElementById('stat').textContent = '加载会话列表失败';
+      });
     }
 
     // 交互：悬停显示精华，按下拖动节点（仅力导向图）
@@ -280,7 +312,7 @@
     document.getElementById('modeForce').addEventListener('click', function () { MODE = 'force'; applyMode(); });
     document.getElementById('modeRadial').addEventListener('click', function () { MODE = 'radial'; applyMode(); });
 
-    resize(); load(); loop();
+    resize(); loadDefaultConv(); loop();
   })();
   </script>
 </body>
