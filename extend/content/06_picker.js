@@ -302,6 +302,13 @@
     const timer = setTimeout(() => finish({ ok: false, error: 'SCREENSHOT_TIMEOUT' }), 5000);
     try {
       chrome.runtime.sendMessage({ type: 'bridge_capture_tab' }, function (resp) {
+        // 后台 service worker 未就绪时，回调的 resp 为空且 lastError 被设置。
+        // 必须读取它，否则 Chrome 报 Unchecked runtime.lastError（控制台噪音，
+        // 且被误判为「扩展连接失败」）。这里转为明确的失败回执。
+        if (chrome.runtime.lastError) {
+          finish({ ok: false, error: String(chrome.runtime.lastError.message || '') });
+          return;
+        }
         const ok = !!(resp && resp.ok);
         finish({
           ok: ok,
