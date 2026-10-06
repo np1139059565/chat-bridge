@@ -1,35 +1,45 @@
 // 模块：extend/dialog/parts/05d_memory.js
-// 用途：记忆确认提醒：检测到用户发言后开始数 AI 的生成轮次，
-//       连续多轮未确认记忆时产出与「回复质量检查」同形态的提醒，
-//       随卡片结果回传给 AI，促其调用 memory_search 确认一次记忆情况。
+// 用途：记忆蒸馏质量提醒：把控「过往记忆的蒸馏效果」是否被 AI 主动抽检。
+//       检测到用户发言后，期望 AI 立即抽检一次；此后每五轮再抽检一次。
+//       AI 若主动调用了记忆工具，则视为「自觉遵守」，本窗口免告警；
+//       长时间未抽检（脱离掌控）才产出提醒，随卡片结果回传给 AI。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 //
-// 与旧版（文件记忆系统）的差异：
-//   旧版靠比对 memory/ 目录「内容指纹」判断 AI 有没有写记忆文件——
-//   因为那时记忆由 AI 主动写文件维护。新系统改为后端自动蒸馏入库，
-//   AI 不再主动写文件，文件指纹判据失效，故本版改为「纯轮次计数」：
-//   用户发言即开窗，此后每轮 AI 生成都计数，达到阈值就提醒一次，
-//   引导 AI 用 memory_search 工具回查记忆，而非去写文件。
+// 设计（自遵守优先，告警兜底）：
+//   规则已写入 rules/work-memory.md：AI 应在用户发言后立即 memory_inspect 抽检，
+//   此后每五轮再抽检一次，发现问题用 memory_refine 修正。
+//   本检测只是「兜底」——AI 自觉就不打扰，脱离掌控才提醒。
+//   这与旧版「数三轮看有没有写文件」的思路一致（主动做了就不警告），
+//   但检视对象从「有没有写」升级为「蒸馏质量好不好」。
 //
-// 计数语义（关键）：
-//   - 用户发言 = 打开一个计数窗口（重置计数），此后开始数 AI 的生成轮次；
-//   - 窗口内每轮 AI 生成都计数；
-//   - 一个窗口内最多提醒一次（notified 标记）：提醒后不再重复打扰，
-//     直到用户下一次发言才重开窗口。这样用户停止说话、AI 一直跑工具时，
-//     不会被反复提醒。
+// 计数语义：
+//   - 用户发言 = 打开窗口，置「待抽检」标记（immediatePending）；
+//   - 每轮 AI 输出：若本轮调用了记忆工具 → 判为自觉，清标记、计数归零；
+//   - 未调用：若仍在「待抽检」（用户发言后首次）→ 立即提醒；
+//             否则计数 +1，满五轮提醒一次。
+//   - 一个「待抽检」只提醒一次；五轮周期提醒后重新计数，避免反复打扰。
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
   const log = D.log;
   const M = D.methods;
 
-  // 连续多少轮 AI 生成未确认记忆即触发提醒（用户要求：三轮）
-  const MEMORY_IDLE_LIMIT = 3;
+  // 距上次抽检超过多少轮 AI 输出未抽检即提醒（用户要求：五轮）
+  const MEMORY_IDLE_LIMIT = 5;
+
+  // 记忆类工具名：AI 调用其中任一，即视为「主动抽检记忆」
+  const MEMORY_TOOLS = { memory_search: 1, memory_inspect: 1, memory_refine: 1 };
 
   /** 初始化记忆检查状态（不存在时）。 */
   M._ensureMemoryState = function () {
     if (!this.memoryCheck) {
-      this.memoryCheck = { armed: false, idle: 0, lastUserId: '', notified: false };
+      this.memoryCheck = {
+        armed: false,          // 是否处于计数窗口（用户发言后开启）
+        lastUserId: '',        // 上次开窗的用户发言指纹（幂等去重）
+        immediatePending: false, // 用户发言后是否仍在「待首次抽检」
+        sinceCheck: 0,         // 距上次抽检经过的 AI 轮数
+        notifiedImmediate: false, // 本窗口的「立即提醒」是否已发过
+      };
     }
     return this.memoryCheck;
   };
@@ -62,13 +72,11 @@
   M.isRealUserMessage = function (m) {
     if (!m || m.role !== 'user') return false;
     // 统一走 msgSource 判定来源（唯一入口）：只有非工具结果才算真实用户发言。
-    // 注意 msgSource 仅对工具结果（bridge-chat-res）返回 'tool'；
-    // 外部卡片（external-call）返回 'user'，故外部卡片仍算用户发言（既定要求）。
     return this.msgSource(m) !== 'tool';
   };
 
   /**
-   * 处理本轮的用户发言：若出现「新的」真实用户发言，则打开一个新计数窗口。
+   * 处理本轮的用户发言：若出现「新的」真实用户发言，则打开一个新窗口。
    * 幂等：同一用户发言重复出现时不会重复重置；工具轮（无真实发言）直接跳过。
    * @param {Array} incoming 本轮消息切片
    * @returns {boolean} 本轮是否打开了新窗口
@@ -78,21 +86,36 @@
     const uid = this._lastRealUserId(incoming);
     if (!uid) return false;                       // 本轮无真实用户发言
     if (uid === st.lastUserId) return false;      // 与上一条相同，非新发言
-    // 新的用户发言：打开新计数窗口
+    // 新的用户发言：打开新窗口，等待 AI 首次抽检
     st.armed = true;
-    st.idle = 0;
     st.lastUserId = uid;
-    st.notified = false;
-    log('记忆检查：检测到新用户发言，打开计数窗口');
+    st.immediatePending = true;
+    st.sinceCheck = 0;
+    st.notifiedImmediate = false;
+    log('记忆检查：检测到新用户发言，等待 AI 首次抽检');
     return true;
   };
 
   /**
-   * 推进一轮计数：窗口开启中则 +1。
+   * 检测本轮切片中 AI 是否调用了记忆类工具。
+   * 扫描 assistant 消息的代码块，解析工具调用，看工具名是否属记忆类。
+   * @param {Array} incoming 本轮消息切片
+   * @returns {boolean} 本轮 AI 是否主动抽检了记忆
    */
-  M.tickMemoryCheck = function () {
-    if (!this.memoryCheck || !this.memoryCheck.armed) return;
-    this.memoryCheck.idle += 1;
+  M._touchedMemoryThisRound = function (incoming) {
+    const list = incoming || [];
+    for (let i = 0; i < list.length; i++) {
+      const m = list[i];
+      if (!m || m.role !== 'assistant') continue;
+      const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+      for (let j = 0; j < blocks.length; j++) {
+        const b = blocks[j];
+        if (!b || b.type !== 'code' || !b.id) continue;
+        const call = this.parseToolCall(b);
+        if (call && MEMORY_TOOLS[call.tool]) return true;
+      }
+    }
+    return false;
   };
 
   /**
@@ -106,9 +129,31 @@
   };
 
   /**
+   * 构造一条记忆质量提醒。
+   * @param {string} why 触发原因（immediate / periodic）
+   * @returns {Object} { error, scope, severity, message }
+   */
+  M._memoryIssue = function (why) {
+    const head = (why === 'immediate')
+      ? '用户已提出新需求，但你尚未抽检记忆的蒸馏质量。'
+      : '已连续多轮未抽检记忆的蒸馏质量。';
+    return {
+      error: 'memory_stale',
+      // 与代码块无关：记忆质量是整条回复的属性，走消息级回传。
+      scope: 'message',
+      // 补充类告警：不阻止工具执行，仅作提醒，附在卡片结果后一起回传。
+      severity: 'advisory',
+      message: head
+        + '请调用 memory_inspect 抽检「过往」记忆节点的蒸馏效果（对比原文与精华，'
+        + '重点看上次用户输入到本轮之间的记忆），若发现精华失真、遗漏要点或'
+        + '关键词无效，用 memory_refine 直接修正；确认无误后再继续。'
+    };
+  };
+
+  /**
    * 整轮记忆检查：仅在本轮为 AI 新鲜回复时判定。
-   * 每轮推进计数；达到阈值且本轮有可承载提醒的卡片时才产出提醒。
-   * 一个窗口内最多提醒一次（notified 标记），避免用户没说话时反复打扰。
+   * 每轮先判 AI 是否主动抽检：抽检则清标记、计数归零；未抽检则按
+   * 「待首次抽检 → 立即提醒」「否则每五轮提醒」两种节奏产出提醒。
    * @param {Array} incoming 本轮消息切片
    * @param {boolean} isFreshReply 本轮是否属 AI 新鲜回复
    * @returns {Object|null} { error, scope, severity, message } 或 null
@@ -117,26 +162,31 @@
     if (!isFreshReply) return null;
     // 检测开关：关闭时不检测记忆（默认开，显式关才跳过）。
     if ((this.bridgePush || {}).check_memory === false) return null;
-    if (!this.memoryCheck || !this.memoryCheck.armed) return null;
-    // 一个窗口内最多提醒一次：提醒过就跳过，等用户下次发言再重开窗口
-    if (this.memoryCheck.notified) return null;
-    this.tickMemoryCheck();
-    if (this.memoryCheck.idle < MEMORY_IDLE_LIMIT) return null;
+    const st = this.memoryCheck;
+    if (!st || !st.armed) return null;
+    // 先判 AI 是否自觉抽检：抽检了则清标记、计数归零，本轮不告警
+    if (this._touchedMemoryThisRound(incoming)) {
+      st.immediatePending = false;
+      st.sinceCheck = 0;
+      st.notifiedImmediate = true;   // 视为已完成首次抽检
+      log('记忆检查：AI 已主动抽检，免告警并重置计数');
+      return null;
+    }
+    // 未抽检：若仍在「待首次抽检」，则立即提醒一次
+    if (st.immediatePending && !st.notifiedImmediate) {
+      if (!this.hasDeliverableToolCard(incoming)) return null;
+      st.immediatePending = false;
+      st.notifiedImmediate = true;
+      st.sinceCheck = 0;
+      log('记忆检查：用户发言后尚未抽检，立即提醒');
+      return this._memoryIssue('immediate');
+    }
+    // 否则累加计数，满阈值提醒一次
+    st.sinceCheck += 1;
+    if (st.sinceCheck < MEMORY_IDLE_LIMIT) return null;
     if (!this.hasDeliverableToolCard(incoming)) return null;
-    // 已产出提醒：计数清零并置 notified，本轮窗口不再重复提醒
-    this.memoryCheck.idle = 0;
-    this.memoryCheck.notified = true;
-    log('记忆检查：连续多轮未确认记忆，触发提醒');
-    return {
-      error: 'memory_stale',
-      // 与代码块无关：记忆确认是整条回复的属性，走消息级回传。
-      scope: 'message',
-      // 补充类告警：不阻止工具执行，仅作提醒，附在卡片结果后一起回传。
-      // 缺此字段会导致 05g_cards 落点判定两条分支都不进、告警被静默丢弃。
-      severity: 'advisory',
-      message: '已连续多轮未确认记忆情况。请调用 memory_search 工具，'
-        + '以当前任务原文为 query 检索一次历史记忆，确认是否与用户此前的'
-        + '表述、已定方案一致，再继续。'
-    };
+    st.sinceCheck = 0;
+    log('记忆检查：连续多轮未抽检，周期提醒');
+    return this._memoryIssue('periodic');
   };
 })();

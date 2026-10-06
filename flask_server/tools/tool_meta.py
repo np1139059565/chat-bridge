@@ -148,4 +148,22 @@ TOOLS = {
             {"name": "top_k", "type": "integer", "required": False, "description": "返回条数，默认 10，上限 50"},
         ],
     },
+    "memory_inspect": {
+        # 抽检过往记忆的蒸馏质量：返回「原文 vs 蒸馏精华/关键词」对照，供 AI 判断是否失真。
+        "description": "抽检记忆的蒸馏质量：返回指定节点（或某会话最近节点）的原文与蒸馏精华/关键词对照，供判断蒸馏是否失真、关键词是否有效",
+        "parameters": [
+            {"name": "node_ids", "type": "array", "required": False, "description": "要抽检的节点 id 列表（整数）；不传则按 conv_id 或全库取最近节点"},
+            {"name": "conv_id", "type": "string", "required": False, "description": "按会话取最近节点抽检（未给 node_ids 时生效）"},
+            {"name": "limit", "type": "integer", "required": False, "description": "未给 node_ids 时，抽检最近多少个节点，默认 5，上限 20"},
+        ],
+    },
+    "memory_refine": {
+        # 修正蒸馏结果：AI 抽检发现偏差大时，直接改写该节点的精华与关键词。
+        "description": "修正某节点的蒸馏结果：改写其精华与关键词（原始内容不动），用于蒸馏失真时纠正",
+        "parameters": [
+            {"name": "node_id", "type": "integer", "required": True, "description": "要修正的节点 id"},
+            {"name": "essence", "type": "string", "required": False, "description": "修正后的精华文本（与 keywords 至少提供一个）"},
+            {"name": "keywords", "type": "array", "required": False, "description": "修正后的关键词列表"},
+        ],
+    },
 }
