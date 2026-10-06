@@ -118,14 +118,12 @@
         if (this.consumeQqImage(c)) return;
         // 抽屉命令卡片：不下发网页 AI，直接执行本地动作（桥接指令）
         if (this.consumeBridgeCommand(c)) return;
-        // 类型白名单：通用路径只处理明确的外部消息卡片（external-call）。
-        // 指令类卡片（drawer-command）的内容是 {"action","params"} 的 JSON，
-        // 一旦因类型不符漏过上面的消费分支，就会掉进这里、被当作消息
-        // 下发给网页 AI，造成「指令泄露」。此处按类型闸门兜底：
-        // 非 external-call 一律不入列、不下发，确认收货后跳过。
-        if (c.type !== 'external-call') {
+        // 黑名单兜底：只拦指令卡片（drawer-command），防其漏过上面的消费分支后
+        // 被当消息下发给 AI（指令泄露）。用黑名单而非白名单，因卡片总线是开放
+        // 接口、外部系统可投任意 type，白名单会误伤。
+        if (c.type === 'drawer-command') {
           this.confirmCardDelivered(c.id);
-          log('跳过非消息卡片：type=' + (c.type || '(空)') + ' id=' + c.id);
+          log('拦截指令卡片（防泄露）：id=' + c.id);
           return;
         }
         if (this.externalCards.some((x) => x.id === c.id)) return;
