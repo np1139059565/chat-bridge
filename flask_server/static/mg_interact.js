@@ -38,10 +38,13 @@
     return best;
   };
 
-  // 边的可读说明：类型 + 含义（悬停连线时展示，解释「为什么连这条线」）
+  // 边的可读说明：类型 + 含义 + 触发关键词（悬停连线时展示，解释「为什么连这条线」）
   MG.edgeLabel = function (ed) {
     var w = (ed.weight || 0).toFixed(2);
-    if (ed.kind === 'associative') return '突触边：关键词相关（权重 ' + w + '）';
+    if (ed.kind === 'associative') {
+      var kw = (ed.keywords || []).join('、');
+      return '突触边：关键词相关（权重 ' + w + '）' + (kw ? ('\n关键词：' + kw) : '\n（该边建立于旧版本，未记录关键词）');
+    }
     if (ed.kind === 'branch') return '分支边：同一问题生成多个回答';
     if (ed.kind === 'parent_child') return '树边：消息回复关系';
     return '边类型：' + (ed.kind || '未知');
@@ -81,8 +84,12 @@
       }
       var g = MG.toGraph(mx, my);
       if (MG.drag && MG.MODE === 'force') {
+        // 拖动期间：直接设定被拖节点位置，并把 alpha 维持在小值，
+        // 让周围节点轻微让位；松手后 alpha 继续衰减、图自然静止。
         MG.drag.x = g.x; MG.drag.y = g.y; MG.drag.vx = MG.drag.vy = 0;
-        MG.settled = false; return;
+        MG.alpha = Math.max(MG.alpha, 0.3);
+        MG.settled = false;
+        return;
       }
       var hit = MG.hitNodeAt(g.x, g.y);
       if (hit) {
@@ -102,7 +109,15 @@
       var rect = MG.cv.getBoundingClientRect();
       var g = MG.toGraph(ev.clientX - rect.left, ev.clientY - rect.top);
       var hit = MG.hitNodeAt(g.x, g.y);
-      if (hit) { if (MG.MODE === 'force') { MG.drag = hit; MG.settled = false; } }
+      if (hit) {
+        if (MG.MODE === 'force') {
+          MG.drag = hit;
+          MG.settled = false;
+          // 拖动时把 alpha 抬到一个小值：其他节点轻微让位，但不剧烈重排。
+          // 松手后 alpha 继续按 decay 衰减到 0，图自然静止。
+          MG.alpha = Math.max(MG.alpha, 0.3);
+        }
+      }
       else { MG.panning = true; MG.panLast = { x: ev.clientX - rect.left, y: ev.clientY - rect.top }; }
     });
     window.addEventListener('mouseup', function () { MG.drag = null; MG.panning = false; });
@@ -136,21 +151,28 @@
     });
   };
 
+  // 安全绑定：元素不存在时静默跳过，绝不让缺元素抛错拖垮整段初始化。
+  // （曾因缓存旧页面缺少某按钮，getElementById 返回 null，
+  //   addEventListener 抛错导致后续初始化全部不执行、页面空白。）
+  function on(id, evt, fn) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener(evt, fn);
+  }
+
   // ---------- 顶栏控件 ----------
   MG.bindBar = function () {
-    document.getElementById('reload').addEventListener('click', MG.load);
-    document.getElementById('modeForce').addEventListener('click', function () { MG.MODE = 'force'; MG.applyMode(); });
-    document.getElementById('modeRadial').addEventListener('click', function () { MG.MODE = 'radial'; MG.applyMode(); });
-    document.getElementById('modeTimeline').addEventListener('click', function () { MG.MODE = 'timeline'; MG.applyMode(); });
-    document.getElementById('search').addEventListener('input', function (ev) {
+    on('reload', 'click', MG.load);
+    on('modeForce', 'click', function () { MG.MODE = 'force'; MG.applyMode(); });
+    on('modeRadial', 'click', function () { MG.MODE = 'radial'; MG.applyMode(); });
+    on('modeTimeline', 'click', function () { MG.MODE = 'timeline'; MG.applyMode(); });
+    on('search', 'input', function (ev) {
       MG.keywordFilter = ev.target.value.trim();
       MG.load();   // 重新拉取并按关键词过滤
     });
     ['parent_child', 'branch', 'associative'].forEach(function (k) {
-      var el = document.getElementById('edge-' + k);
-      if (el) el.addEventListener('change', function (ev) {
+      on('edge-' + k, 'change', function (ev) {
         MG.edgeOn[k] = ev.target.checked;
-        MG.settled = false; MG.settleCount = 0;
+        MG.settled = false; MG.alpha = 1;
       });
     });
   };

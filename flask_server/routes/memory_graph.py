@@ -7,6 +7,8 @@
 
 依赖：flask、memory_* 各模块、paths
 """
+import json
+
 from flask import Blueprint, jsonify, request, send_file
 
 import paths
@@ -209,6 +211,16 @@ def graph_export():
             # created_at：时间轴视图按时间排布节点需要
             "created_at": n.get("created_at") or 0,
         })
+    # 边的 keywords 存的是 JSON 字符串，转为数组供前端直接使用
+    for e in edges:
+        kw = e.get("keywords")
+        if isinstance(kw, str) and kw:
+            try:
+                e["keywords"] = json.loads(kw)
+            except Exception:
+                e["keywords"] = []
+        else:
+            e["keywords"] = []
     return _ok(nodes=nodes, edges=edges)
 
 
@@ -395,7 +407,12 @@ def graph_page():
     page = paths.APP_DIR / "static" / "memory_graph.html"
     if not page.is_file():
         return _err("图谱页面不存在")
-    return send_file(str(page), mimetype="text/html")
+    # 禁用缓存：页面与脚本改动频繁，缓存旧页会导致「引用已删脚本→白屏」。
+    resp = send_file(str(page), mimetype="text/html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 
 @bp.route("/memory-graph-assets/<path:name>", methods=["GET"])
@@ -410,4 +427,9 @@ def graph_asset(name):
     js = paths.APP_DIR / "static" / name
     if not js.is_file():
         return _err("图谱脚本不存在")
-    return send_file(str(js), mimetype="application/javascript")
+    # 脚本同样禁用缓存：否则浏览器混用新旧脚本会直接报错、页面空白。
+    resp = send_file(str(js), mimetype="application/javascript")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp

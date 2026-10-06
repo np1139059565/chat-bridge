@@ -29,13 +29,14 @@
     (data.edges || []).forEach(function (e) {
       var s = map[e.src_node], t = map[e.dst_node];
       if (!s || !t) return;   // 节点被截断时，避免收进悬空边
-      MG.edges.push({ s: s, t: t, kind: e.kind, weight: e.weight });
+      // keywords：导致关联的关键词，供悬停连线时说明「因哪些词相连」
+      MG.edges.push({ s: s, t: t, kind: e.kind, weight: e.weight, keywords: e.keywords || [] });
     });
     var note = truncated ? ('（节点超 ' + MG.MAX_NODES + '，仅显示前 ' + MG.MAX_NODES + ' 个）') : '';
     document.getElementById('stat').textContent =
       MG.nodes.length + ' 节点 / ' + MG.edges.length + ' 边' + note;
     MG.selected = null; MG.selectedSet = {};
-    MG.settled = false; MG.settleCount = 0;
+    MG.settled = false; MG.alpha = 1;   // 新数据：重置衰减，重新布局
     MG.applyMode();
   };
 
@@ -56,7 +57,7 @@
     document.getElementById('modeTimeline').className = MG.MODE === 'timeline' ? '' : 'ghost';
     if (MG.MODE === 'radial') MG.layoutRadial(MG.pickRoot());
     else if (MG.MODE === 'timeline') MG.layoutTimeline();
-    else { MG.settled = false; MG.settleCount = 0; }   // 回力导向需重新收敛
+    else { MG.settled = false; MG.alpha = 1; }   // 回力导向需重新布局
   };
 
   // 按当前下拉选择拉取图数据

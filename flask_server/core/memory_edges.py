@@ -10,8 +10,9 @@
   - 突触边有饱和式强化与时间衰减；
   - 边权重参与节点的衰减率计算（见 memory_decay）。
 
-依赖：memory_db（连接）、time
+依赖：memory_db（连接）、json、time
 """
+import json
 import time
 
 from memory_db import get_conn, maybe_commit
@@ -22,16 +23,21 @@ def _now():
     return int(time.time())
 
 
-def add_edge(src, dst, kind, weight=1.0):
-    """建边；已存在则强化权重，不新增行。"""
+def add_edge(src, dst, kind, weight=1.0, keywords=None):
+    """建边；已存在则强化权重并合并关键词，不新增行。
+
+    @param keywords 导致关联的关键词列表（仅突触边用），存为 JSON，供前端解释连线原因。
+    """
     conn = get_conn()
+    kw_json = json.dumps(keywords or [], ensure_ascii=False) if keywords else None
     conn.execute(
-        "INSERT INTO edges (src_node, dst_node, kind, weight, created_at, last_active_at)"
-        " VALUES (?,?,?,?,?,?)"
+        "INSERT INTO edges (src_node, dst_node, kind, weight, keywords, created_at, last_active_at)"
+        " VALUES (?,?,?,?,?,?,?)"
         " ON CONFLICT(src_node, dst_node, kind) DO UPDATE SET"
         " weight=MIN(1.0, edges.weight + 0.2 * (1.0 - edges.weight)),"
+        " keywords=COALESCE(excluded.keywords, edges.keywords),"
         " last_active_at=excluded.last_active_at",
-        (src, dst, kind, float(weight), _now(), _now()),
+        (src, dst, kind, float(weight), kw_json, _now(), _now()),
     )
     maybe_commit(conn)
 

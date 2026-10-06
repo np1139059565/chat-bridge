@@ -39,19 +39,30 @@
 
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
-      var r = MG.radiusOf(n);
+      var isSel = hasSel && n.id === MG.selected.id;
+      var isNb = hasSel && !isSel && MG.selectedSet[n.id];
+      // 高亮时放大：选中 1.6 倍、邻居 1.25 倍，其余原尺寸
+      var r = MG.radiusOf(n) * (isSel ? 1.6 : (isNb ? 1.25 : 1));
+      // 发光：选中/邻居先画一圈半透明大光晕，再画实体，视觉更醒目
+      if (isSel || isNb) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + (isSel ? 10 : 6), 0, Math.PI * 2);
+        ctx.fillStyle = isSel ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.14)';
+        ctx.fill();
+      }
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
       ctx.fillStyle = MG.colorOf(n);
       ctx.fill();
-      // 选中节点和一跳邻居描圈高亮；其余节点照常，不淡化
-      if (hasSel && (n.id === MG.selected.id || MG.selectedSet[n.id])) {
-        ctx.lineWidth = n.id === MG.selected.id ? 3 : 2;
-        ctx.strokeStyle = n.id === MG.selected.id ? '#fff' : 'rgba(255,255,255,0.6)';
+      // 描边：选中亮白加粗、邻居淡白
+      if (isSel || isNb) {
+        ctx.lineWidth = isSel ? 3 : 2;
+        ctx.strokeStyle = isSel ? '#fff' : 'rgba(255,255,255,0.7)';
         ctx.stroke();
         ctx.lineWidth = 1;
       }
-      if (n.keywords && n.keywords.length) {
+      // 关键词标签：仅非高亮状态显示，高亮时避免遮挡
+      if (!hasSel && n.keywords && n.keywords.length) {
         ctx.fillStyle = 'rgba(200,200,200,0.75)';
         ctx.font = '11px system-ui';
         ctx.fillText(n.keywords[0].slice(0, 8), n.x + r + 2, n.y + 3);

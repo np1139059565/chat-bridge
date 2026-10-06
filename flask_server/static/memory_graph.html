@@ -68,6 +68,18 @@
   <canvas id="cv"></canvas>
   <div id="tip"></div>
   <div id="detail"><div id="detailBody"></div></div>
+  <div id="bootErr" style="display:none;padding:20px;color:#f88;"></div>
+  <script>
+  // 启动看门狗：若脚本未在 1.5 秒内完成初始化，说明加载/执行出错，
+  // 直接显示错误而非白屏，便于排查（曾因缓存旧页面引用已删脚本而白屏）。
+  window.setTimeout(function () {
+    if (!window.MG || !window.MG.cv) {
+      var e = document.getElementById('bootErr');
+      e.style.display = 'block';
+      e.textContent = '页面脚本未加载成功。请强制刷新（Ctrl+F5）清缓存后重试；若仍失败，检查 /memory-graph-assets/ 下的脚本能否访问。';
+    }
+  }, 1500);
+  </script>
   <!-- 脚本按依赖顺序加载：核心 → 绘制 → 交互 → 数据 → 入口 -->
   <script src="/memory-graph-assets/mg_core.js"></script>
   <script src="/memory-graph-assets/mg_render.js"></script>

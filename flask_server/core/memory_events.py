@@ -58,7 +58,9 @@ def build_synapses(new_node_id):
             continue
         # 无向去重：同一对节点只建一条边，以较小 id 为 src 规范化。
         lo, hi = (new_node_id, r["id"]) if new_node_id < r["id"] else (r["id"], new_node_id)
-        memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)))
+        # 把导致关联的关键词一并存入：前端悬停连线时据此说明「因哪些词相连」。
+        memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)),
+                              keywords=sorted(inter))
         count += 1
     return count
 

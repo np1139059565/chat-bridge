@@ -50,12 +50,14 @@ _SCHEMA = [
         last_hit_at INTEGER
     )""",
     # 边表：对应消息树 msgTree 的 key，另含突触边
+    #   keywords：导致关联的关键词（JSON 数组），仅突触边使用，供前端解释连线原因
     """CREATE TABLE IF NOT EXISTS edges (
         id             INTEGER PRIMARY KEY AUTOINCREMENT,
         src_node       INTEGER,
         dst_node       INTEGER,
         kind           TEXT,
         weight         REAL DEFAULT 1.0,
+        keywords       TEXT,
         created_at     INTEGER,
         last_active_at INTEGER,
         UNIQUE(src_node, dst_node, kind)
@@ -281,12 +283,31 @@ def _install_slow_query_trace(conn):
         pass
 
 
+def _migrate_columns(conn):
+    """兼容迁移：为已存在的旧库补「后加的列」。
+
+    CREATE TABLE IF NOT EXISTS 只对「表不存在」时建表；表已存在时它不改动，
+    故后加的列必须显式 ALTER TABLE ADD COLUMN。此函数幂等：列已存在则跳过。
+    """
+    # (表名, 列名, 列定义) —— 新增列时在此登记一行即可
+    migrations = [
+        ("edges", "keywords", "TEXT"),   # 突触边：导致关联的关键词（JSON 数组）
+    ]
+    for table, col, decl in migrations:
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(%s)" % table).fetchall()]
+        if col not in cols:
+            conn.execute("ALTER TABLE %s ADD COLUMN %s %s" % (table, col, decl))
+
+
 def _ensure_schema(conn):
     """建表、建索引、建 FTS5 全文索引（全部幂等）。"""
     for sql in _SCHEMA:
         conn.execute(sql)
     for sql in _INDEXES:
         conn.execute(sql)
+    # 兼容迁移：为已存在的旧库补「后加的列」。
+    # CREATE TABLE IF NOT EXISTS 不会改动已存在的表，故新列必须显式 ALTER。
+    _migrate_columns(conn)
     # FTS5 虚表：仅保留兼容（外部内容表关联 nodes）。
     # 关键词检索实际走 LIKE 子串匹配——FTS5 默认分词器把连续汉字当单词元，
     # 中文短语匹配失效，详见 memory_search._fts_search 的说明。

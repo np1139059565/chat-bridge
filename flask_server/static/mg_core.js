@@ -22,7 +22,9 @@
   MG.edgeOn = { parent_child: true, branch: true, associative: true };  // 边类型开关
   MG.keywordFilter = '';     // 关键词过滤
   MG.settled = false;        // 力导向是否已收敛（收敛后停帧省性能）
-  MG.settleCount = 0;        // 连续稳定帧数
+  MG.alpha = 1;              // 力导向衰减系数：每帧衰减，到 0 即静止
+  MG.ALPHA_DECAY = 0.985;    // 每帧衰减比；越小收敛越快
+  MG.ALPHA_MIN = 0.005;      // 低于此值视为收敛，停帧
 
   // 初始化 DOM 引用（脚本在 body 末尾加载，元素已就绪）
   MG.initDom = function () {
@@ -38,7 +40,8 @@
     MG.W = cv.clientWidth; MG.H = cv.clientHeight;
     cv.width = MG.W * dpr; cv.height = MG.H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    MG.settled = false; MG.settleCount = 0;   // 尺寸变化后重新收敛
+    // 尺寸变化后重新布局：重置衰减系数，让图重新收敛
+    MG.settled = false; MG.alpha = 1;
   };
 
   // 屏幕坐标 → 图坐标（考虑缩放平移）
@@ -59,23 +62,26 @@
 
   // ---------- 力导向 ----------
   // 斥力（节点互推）+ 弹簧（边拉近）+ 向心力，迭代收敛。
+  // 力导向：斥力 + 弹簧 + 向心力，力的大小乘以衰减系数 alpha。
+  // 关键：alpha 每帧衰减，力随之趋零，图自然静止——
+  // 缺了这一步，力会持续叠加、节点永不停息（曾出现的「拼命跳」）。
   MG.tick = function () {
     var nodes = MG.nodes, edges = MG.edges;
     var i, j, a, b, dx, dy, d2, d, f;
-    var maxSpeed = 0;
+    var alpha = MG.alpha;
     for (i = 0; i < nodes.length; i++) {
       a = nodes[i];
       for (j = i + 1; j < nodes.length; j++) {
         b = nodes[j];
         dx = a.x - b.x; dy = a.y - b.y;
         d2 = dx * dx + dy * dy + 0.01;
-        f = 800 / d2;
+        f = 800 / d2 * alpha;          // 斥力随 alpha 衰减
         d = Math.sqrt(d2);
         a.vx += dx / d * f; a.vy += dy / d * f;
         b.vx -= dx / d * f; b.vy -= dy / d * f;
       }
-      a.vx += (MG.W / 2 - a.x) * 0.002;
-      a.vy += (MG.H / 2 - a.y) * 0.002;
+      a.vx += (MG.W / 2 - a.x) * 0.002 * alpha;
+      a.vy += (MG.H / 2 - a.y) * 0.002 * alpha;
     }
     for (var e = 0; e < edges.length; e++) {
       var ed = edges[e];
@@ -84,23 +90,22 @@
       if (!s || !t) continue;
       dx = t.x - s.x; dy = t.y - s.y;
       d = Math.sqrt(dx * dx + dy * dy) + 0.01;
-      f = (d - 90) * 0.01 * (ed.weight || 1);
+      f = (d - 90) * 0.01 * (ed.weight || 1) * alpha;
       s.vx += dx / d * f; s.vy += dy / d * f;
       t.vx -= dx / d * f; t.vy -= dy / d * f;
     }
     for (i = 0; i < nodes.length; i++) {
       a = nodes[i];
       if (a === MG.drag) continue;
-      a.vx *= 0.9; a.vy *= 0.9;      // 阻尼：加快速度衰减，减少弹跳
+      a.vx *= 0.6; a.vy *= 0.6;      // 阻尼：抑制速度，配合 alpha 衰减更快静止
       a.x += a.vx; a.y += a.vy;
-      var sp = Math.abs(a.vx) + Math.abs(a.vy);
-      if (sp > maxSpeed) maxSpeed = sp;
     }
-    // 收敛判定：整体速度极小即视为稳定，停帧省性能
-    if (maxSpeed < 0.05) {
-      MG.settleCount += 1;
-      if (MG.settleCount > 30) MG.settled = true;
-    } else { MG.settleCount = 0; }
+    // alpha 衰减到阈值以下：视为收敛，停帧省性能
+    MG.alpha *= MG.ALPHA_DECAY;
+    if (MG.alpha < MG.ALPHA_MIN) {
+      MG.alpha = 0;
+      MG.settled = true;
+    }
   };
 
   // 构建无向邻接表（径向树 BFS 用，树边与突触边一视同仁）
@@ -115,47 +120,68 @@
     return adj;
   };
 
-  // 径向树布局：以 rootId 为根 BFS 分层，深度定半径、同级均分角度
+  // 径向树布局：以 rootId 为根建树，按「子树叶子数」分配角度扇区。
+  // 子树大的占更宽扇区、小的占窄扇区，保持树形结构、避免同层节点挤成一圈。
   MG.layoutRadial = function (rootId) {
     var nodes = MG.nodes;
     var byId = {};
     nodes.forEach(function (n) { byId[n.id] = n; });
     if (!byId[rootId]) return;
     var adj = MG.buildAdj();
+    // 1) BFS 建树：确立父子关系（首次访问即定为父）
+    var children = {};
     var depth = {}; depth[rootId] = 0;
     var order = [rootId];
     var visited = {}; visited[rootId] = true;
+    nodes.forEach(function (n) { children[n.id] = []; });
     for (var qi = 0; qi < order.length; qi++) {
       var cur = order[qi];
       (adj[cur] || []).forEach(function (nb) {
         if (visited[nb]) return;
         visited[nb] = true;
         depth[nb] = depth[cur] + 1;
+        children[cur].push(nb);
         order.push(nb);
       });
     }
-    var levels = {};
-    Object.keys(depth).forEach(function (id) {
-      var dpt = depth[id];
-      (levels[dpt] = levels[dpt] || []).push(parseInt(id, 10));
-    });
+    // 2) 逆 BFS 序算子树叶子数（子节点先算好，父节点再累加）
+    var leaf = {};
+    for (var ri = order.length - 1; ri >= 0; ri--) {
+      var rid = order[ri];
+      var ch = children[rid];
+      if (!ch.length) { leaf[rid] = 1; continue; }
+      var sum = 0;
+      for (var ci = 0; ci < ch.length; ci++) sum += leaf[ch[ci]];
+      leaf[rid] = sum;
+    }
+    // 3) 自上而下按叶子数比例切分父扇区，节点落在自己扇区中点
     var cx = MG.W / 2, cy = MG.H / 2;
     var maxDepth = 0;
-    Object.keys(levels).forEach(function (k) { maxDepth = Math.max(maxDepth, parseInt(k, 10)); });
+    Object.keys(depth).forEach(function (k) { maxDepth = Math.max(maxDepth, depth[k]); });
     var ringGap = maxDepth > 0 ? (Math.min(MG.W, MG.H) / 2 - 40) / maxDepth : 0;
-    Object.keys(levels).forEach(function (k) {
-      var dpt = parseInt(k, 10);
-      var ids = levels[k];
-      var r = dpt * ringGap;
-      for (var i = 0; i < ids.length; i++) {
-        var ang = -Math.PI / 2 + (ids.length === 1 ? 0 : (i / ids.length) * Math.PI * 2);
-        var nd = byId[ids[i]];
-        if (!nd) continue;
-        nd.x = cx + r * Math.cos(ang);
-        nd.y = cy + r * Math.sin(ang);
+    var span = {};
+    span[rootId] = { start: -Math.PI / 2, size: Math.PI * 2 };
+    for (var oi = 0; oi < order.length; oi++) {
+      var nid = order[oi];
+      var sp = span[nid];
+      var nd = byId[nid];
+      if (nd) {
+        var mid = sp.start + sp.size / 2;
+        var r = depth[nid] * ringGap;
+        nd.x = cx + r * Math.cos(mid);
+        nd.y = cy + r * Math.sin(mid);
         nd.vx = nd.vy = 0;
       }
-    });
+      var kids = children[nid];
+      var total = leaf[nid] || 1;
+      var acc = sp.start;
+      for (var ki = 0; ki < kids.length; ki++) {
+        var kk = kids[ki];
+        var ks = sp.size * (leaf[kk] / total);
+        span[kk] = { start: acc, size: ks };
+        acc += ks;
+      }
+    }
   };
 
   // 时间轴布局：按创建时间沿水平轴排布，纵轴按来源分三道
