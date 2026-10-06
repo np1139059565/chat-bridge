@@ -118,11 +118,14 @@ def _register_request_logging(app):
         return resp
 
 
-def _register_watchdog(app, hang_seconds=15):
+def _register_watchdog(app, hang_seconds=150):
     """卡死看门狗：请求超过 hang_seconds 未返回时，dump 全部线程堆栈。
 
     目的：卡死时抓现场。此前只能看到「请求卡了多久」，看不到「卡在哪一行」；
     看门狗在超时后打印所有线程的调用栈，直接指出阻塞位置。
+
+    阈值必须大于「工具调用的最长正常耗时」，否则正常的慢工具会被误报为卡死：
+    内置工具兜底超时 120 秒（routes/tools.py），故取 150 秒留出余量。
     @param hang_seconds 判定卡死的阈值（秒）
     """
     import time as _time

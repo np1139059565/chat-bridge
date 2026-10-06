@@ -77,6 +77,14 @@ def list_by_conv(conv_id, site_key=None):
     return [_row_to_dict(r) for r in rows]
 
 
+def list_all():
+    """列出全库未删除节点，按创建时间升序（图谱「留空看全部」用）。"""
+    rows = get_conn().execute(
+        "SELECT * FROM nodes WHERE deleted=0 ORDER BY created_at, id"
+    ).fetchall()
+    return [_row_to_dict(r) for r in rows]
+
+
 def set_essence(node_id, essence, keywords, vector=None):
     """写入蒸馏结果：精华、关键词、向量。不覆盖 blocks。"""
     conn = get_conn()

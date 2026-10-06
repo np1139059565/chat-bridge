@@ -118,8 +118,15 @@ def conversation_delete():
 
 
 def _distill_new(conv_id, site_key):
-    """对尚未蒸馏的节点异步蒸馏（决策 3B）。"""
-    nodes = memory_nodes.list_by_conv(conv_id, site_key or None)
+    """对尚未蒸馏的节点异步蒸馏（决策 3B）。
+
+    只按 conv_id 取待蒸馏节点，不强制 site_key 匹配：
+    前端上送的 site_key 与写库时若不一致（站点切换时序、首屏为空等），
+    强匹配会查出 0 个节点、蒸馏永不触发，表现为「AI 从来不写记忆」。
+    @param conv_id  会话 id
+    @param site_key 站点标识（保留入参以兼容调用方，不参与过滤）
+    """
+    nodes = memory_nodes.list_by_conv(conv_id, None)
     pending = [n["id"] for n in nodes if not n.get("essence")]
     if pending:
         memory_distill.distill_async(pending)
@@ -180,15 +187,30 @@ def event_history():
 
 @bp.route("/memory/graph", methods=["GET"])
 def graph_export():
-    """导出图数据（节点 + 边），供 D3 渲染。"""
+    """导出图数据（节点 + 边），供 D3 渲染。
+
+    节点与边同口径：
+      - 会话 id 留空：两边都返回全库（页面输入框语义「留空看全部」）；
+      - 会话 id 非空：节点按该会话过滤，边只保留两端都在该会话节点集合内的边。
+    避免出现「0 节点却配全库边」的口径错位。
+    """
+    conv_id = request.args.get("conv_id", "")
+    site_key = request.args.get("site_key") or None
+    if conv_id:
+        raw_nodes = memory_nodes.list_by_conv(conv_id, site_key)
+        node_ids = [n["id"] for n in raw_nodes]
+        edges = memory_edges.edges_within(node_ids)
+    else:
+        raw_nodes = memory_nodes.list_all()
+        edges = memory_edges.all_edges()
     nodes = []
-    for n in memory_nodes.list_by_conv(request.args.get("conv_id", ""), request.args.get("site_key") or None):
+    for n in raw_nodes:
         nodes.append({
             "id": n["id"], "source": n["source"], "tier": n.get("tier"),
             "strength": n.get("strength"), "essence": n.get("essence"),
             "keywords": n.get("keywords"),
         })
-    return _ok(nodes=nodes, edges=memory_edges.all_edges())
+    return _ok(nodes=nodes, edges=edges)
 
 
 # ---------------- 读写层·补充 ----------------

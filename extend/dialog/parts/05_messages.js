@@ -239,6 +239,9 @@
       log('ingestMessages：切片为空，忽略');
       return;
     }
+    // 记忆检查：出现「新的」真实用户发言则打开计数窗口（工具结果回传不算用户发言，
+    // 同一用户发言重复出现不会重复开窗）。窗口内由 memoryIssueForRound 数 AI 生成轮次。
+    this.noteUserTurn(incoming);
     // 打印过滤后各条指纹：与 sendPage 的 ids 同源，便于两边逐条比对。
     log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
       + '，来源=' + (reason || 'generate')
@@ -279,8 +282,12 @@
       && incoming[incoming.length - 1].role === 'assistant';
     const isFreshReply = (reason === 'generate') || (addedNodes && lastIsAssistant);
 
+    // 3.5) 记忆确认提醒：数 AI 生成轮次，达到阈值则产出提醒（细节见 05d_memory.js）。
+    // 纯轮次计数，不做异步指纹采样，故不再需要在入库前 await。
+    const memoryIssue = this.memoryIssueForRound(incoming, isFreshReply);
+
     // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见 05g_cards.js 与下方收尾）
-    const collected = this._buildCardsForIncoming(conv, incoming, reason, scrollOnly, isFreshReply);
+    const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly, isFreshReply);
     this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom);
 
     log('本轮处理完成：消息=' + incoming.length

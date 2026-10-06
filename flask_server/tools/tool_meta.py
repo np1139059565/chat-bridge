@@ -136,4 +136,16 @@ TOOLS = {
             {"name": "timeout", "type": "integer", "required": False, "description": "超时秒数，默认 60 秒"},
         ],
     },
+
+    # ---------- 记忆类：回查历史记忆（结构化记忆系统的读取侧入口） ----------
+    "memory_search": {
+        # 没有这个工具，AI 只能「写」记忆、无法「读」记忆，记忆库沦为死数据。
+        "description": "检索历史记忆：传入当前任务或问题原文，返回相关的历史记忆节点（供回忆用户说过什么、之前怎么解决同类问题）",
+        "parameters": [
+            {"name": "query", "type": "string", "required": True, "description": "查询原文（当前任务/问题），同时作为关键词锚定基准"},
+            {"name": "keywords", "type": "array", "required": False, "description": "检索关键词；不传则自动从 query 提取"},
+            {"name": "focus", "type": "string", "required": False, "description": "排序焦点：relevance（相关度，默认）/ time（时间新）/ strength（强度高）"},
+            {"name": "top_k", "type": "integer", "required": False, "description": "返回条数，默认 10，上限 50"},
+        ],
+    },
 }

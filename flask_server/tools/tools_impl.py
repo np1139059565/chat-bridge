@@ -31,6 +31,8 @@ from run_command_impl import (
     t_run_command,
     _load_run_command_languages,
 )
+# memory_search 同样拆到独立模块，重导出其入口，保持「声明与实现分离」
+from memory_search_impl import t_memory_search
 
 
 # 工具目录：元数据定义在 tool_meta.py，此处直接引用，保持「声明」与「实现」分离
@@ -386,4 +388,5 @@ DISPATCH = {
     "list_rules": t_list_rules,
     "read_rule": t_read_rule,
     "run_command": t_run_command,
+    "memory_search": t_memory_search,
 }

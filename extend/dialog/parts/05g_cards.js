@@ -29,7 +29,7 @@
    * 不入树的消息：卡片直接写在切片消息上（供手动操作）。
    * @returns {Object} { autoCandidates, armedLast, rerunCard }
    */
-  M._buildCardsForIncoming = function (conv, incoming, reason, scrollOnly, isFreshReply) {
+  M._buildCardsForIncoming = function (conv, incoming, reason, memoryIssue, scrollOnly, isFreshReply) {
     const autoCandidates = [];
     // 状态集中到一个对象，便于把「单条消息建卡」抽成子函数，控制主函数行数。
     const state = {
@@ -43,7 +43,7 @@
       isFreshReply: !!isFreshReply
     };
     incoming.forEach((m, mi) => {
-      this._buildCardsForOne(conv, m, mi, incoming, reason, scrollOnly, autoCandidates, state);
+      this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
     });
     this._decideIssueTarget(autoCandidates, state, reason);
     return { autoCandidates: autoCandidates, armedLast: state.armedLast, rerunCard: state.rerunCard };
@@ -53,7 +53,7 @@
    * 处理单条消息的建卡：定位节点、检测告警、为代码块建卡并收集候选。
    * 状态经 state 对象回写，供主函数汇总与落点决策。
    */
-  M._buildCardsForOne = function (conv, m, mi, incoming, reason, scrollOnly, autoCandidates, state) {
+  M._buildCardsForOne = function (conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state) {
     // 定位本条在本轮切片中的真实 key：优先用切片内相邻边 '上一条-本条'。
     // 为什么不用 keyOfId：内容指纹碰撞时，keyOfId 返回「第一个右段匹配」的
     // 更早旧 key，会把新消息指向旧节点——旧节点上已有同 id 卡片且可能已执行，
@@ -69,7 +69,7 @@
     holder.cards = holder.cards || {};
     if (node) m.cards = holder.cards;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
-    const issue = this._messageIssue(m, mi, incoming.length, reason, blocks, state.isFreshReply);
+    const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks, state.isFreshReply);
     // 告警一律作为质量门禁：任何告警都不执行工具，直接把告警当作卡片结果回传
     // ——告警与工具结果互斥，只留一个。两条路径最终都落成卡片的 preIssue：
     //   · 致命类（fatal，如多个调用块）→ 随建卡作为 blockIssue（见下方 blockIssue）。
@@ -148,7 +148,7 @@
    * 只在 AI 生产结束（generate）场景检测，其它场景不该给已有卡片贴问题标签。
    * @returns {Object|null} { error, message } 或 null
    */
-  M._messageIssue = function (m, mi, total, reason, blocks, isFreshReply) {
+  M._messageIssue = function (m, mi, total, reason, memoryIssue, blocks, isFreshReply) {
     // 判定改为「本轮是否属 AI 新鲜回复」（与上报同一条件），而非看采集来源。
     // 采集来源会因轮询错过跳变而漂移成 scroll，原判定会整体跳过检测、导致漏告警。
     if (!isFreshReply) return null;
@@ -172,6 +172,12 @@
     if (m.role === 'assistant') {
       const issue = this.assistantQualityIssue(m);
       if (issue) return issue;
+      // 记忆确认提醒：仅贴在本轮最后一条助手输出上（更早的消息已无提醒意义）
+      // 与代码块无关：记忆确认是整条回复的属性，走消息级回传。
+      if (mi === total - 1 && memoryIssue) {
+        if (!memoryIssue.scope) memoryIssue.scope = 'message';
+        return memoryIssue;
+      }
     }
     return null;
   };

@@ -123,3 +123,22 @@ def all_edges():
     """取全部边（可视化用）。"""
     rows = get_conn().execute("SELECT * FROM edges").fetchall()
     return [dict(r) for r in rows]
+
+
+def edges_within(node_ids):
+    """取两端都在给定节点集合内的边（图谱按会话过滤用）。
+
+    用于让边与节点同口径：只保留 src、dst 均在该集合中的边，
+    避免出现「0 节点却配全库边」的口径错位。
+    @param node_ids 节点 id 的可迭代集合
+    @return 边 dict 列表；集合为空时返回空列表
+    """
+    ids = list(node_ids)
+    if not ids:
+        return []
+    placeholders = ",".join("?" for _ in ids)
+    rows = get_conn().execute(
+        "SELECT * FROM edges WHERE src_node IN (%s) AND dst_node IN (%s)" % (placeholders, placeholders),
+        ids + ids,
+    ).fetchall()
+    return [dict(r) for r in rows]

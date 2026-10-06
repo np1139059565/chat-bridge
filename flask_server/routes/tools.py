@@ -24,7 +24,11 @@ BUILTIN_TOOL_TIMEOUT = 120
 
 # 执行内置工具的线程池：用独立线程跑工具函数，主线程按超时等待，
 # 从而在工具卡住时仍能返回错误响应，而不是永久阻塞请求。
-_TOOL_POOL = _futures.ThreadPoolExecutor(max_workers=4)
+#
+# 容量须留足余量：Python 无法强制终止运行中的线程，超时后该线程仍会
+# 继续跑到自然结束、一直占着 worker。若池子过小，几个慢工具就能占满，
+# 后续工具调用全部排队——前端表现为「点指令卡住服务端」。
+_TOOL_POOL = _futures.ThreadPoolExecutor(max_workers=16, thread_name_prefix="tool")
 
 
 def _run_with_timeout(fn, params, timeout):
