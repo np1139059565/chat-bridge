@@ -107,20 +107,23 @@ def distill_node(node_id, use_llm=False):
     # 生成文本向量，供检索第三路（向量语义近邻）使用
     vector = kw.text_to_vector(essence or text)
     conn = memory_nodes.get_conn()
-    # 单节点短事务：只包住本节点的写入，处理完立即提交、释放写锁
+    # 第一步·短事务：只写本节点的精华/关键词/向量，写完立即提交、释放写锁。
+    # 建突触等重活必须留到事务外：否则会在持写锁的同时做全表扫描 + 两两匹配，
+    # 既占写锁又占解释器锁，把其它请求一并拖住（见 build_synapses 说明）。
     begin_batch()
     try:
         memory_nodes.set_essence(node_id, essence, keywords, vector)
-        # 接入事件层：蒸馏完成即自动建突触、给用户发言挂影子
-        try:
-            memory_events.build_synapses(node_id)
-            if source == "user":
-                memory_events.set_shadow(node_id, essence)
-        except Exception as e:
-            # 事件层失败不影响蒸馏本身（蒸馏结果已落库）
-            print("[memory] 事件层触发失败 node=%s: %s" % (node_id, e))
     finally:
         end_batch(conn)
+    # 第二步·事务外：接入事件层（建突触、给用户发言挂影子）。
+    # 这些是只读扫描 + 内存计算 + 逐条短事务写边，不再长时间持有写锁。
+    try:
+        memory_events.build_synapses(node_id)
+        if source == "user":
+            memory_events.set_shadow(node_id, essence)
+    except Exception as e:
+        # 事件层失败不影响蒸馏本身（蒸馏结果已落库）
+        print("[memory] 事件层触发失败 node=%s: %s" % (node_id, e))
     return {"essence": essence, "keywords": keywords}
 
 

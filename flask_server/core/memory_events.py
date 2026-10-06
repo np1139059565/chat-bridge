@@ -19,6 +19,10 @@ import memory_edges
 SYNAPSE_MIN_INTERSECT = 3
 SYNAPSE_MIN_JACCARD = 0.3
 
+# 分批让出解释器锁的粒度：每处理这么多条就 sleep(0) 让出一次执行权。
+# 纯 CPU 的两两匹配会长时间霸占 GIL，把并发请求一并卡住；定期让出可避免。
+_YIELD_EVERY = 50
+
 
 def build_synapses(new_node_id):
     """为新节点与已有节点按关键词交集建突触边。
@@ -39,7 +43,13 @@ def build_synapses(new_node_id):
         (new_node_id,),
     ).fetchall()
     count = 0
-    for r in rows:
+    # 分批让出解释器锁：关键词两两匹配是纯 CPU 计算，节点多时会长时间霸占
+    # GIL，把其它请求线程一并卡住（表现为多个不相关接口同时卡、同时放行）。
+    # 每处理 _YIELD_EVERY 个候选就 sleep(0) 主动让出一次执行权，
+    # 让并发的接口请求有机会插进来跑，避免「连卡十几秒」。
+    for idx, r in enumerate(rows):
+        if idx and idx % _YIELD_EVERY == 0:
+            time.sleep(0)
         ok = set(_loads(r["keywords"], []))
         if not ok:
             continue
@@ -79,6 +89,26 @@ def _related(nk, ok):
             if a in b or b in a:
                 hits.add(a if len(a) <= len(b) else b)
     return hits
+
+
+def _grams(word):
+    """取一个词的全部 1~2 字子串，用于倒排索引分桶（保证不漏匹配）。
+
+    为什么含单字：包含式匹配（a in b）命中时，若 a 是单字，则 a 本身
+    就是命中证据；只取 bigram 会让单字关键词落不进任何桶、被漏判。
+    因此对每个词取「所有长度 1 和 2 的连续子串」，任意两词的包含关系
+    必导致它们共享至少一个 gram，剪枝不漏真匹配。
+    @param word 关键词字符串
+    @return 子串集合
+    """
+    s = str(word or "")
+    grams = set()
+    n = len(s)
+    for i in range(n):
+        grams.add(s[i])              # 单字
+        if i + 2 <= n:
+            grams.add(s[i:i + 2])    # 双字
+    return grams
 
 
 def reinforce_by_hits(hit_ids):
@@ -122,11 +152,31 @@ def cluster_events(min_shared=2):
         if ra != rb:
             parent[ra] = rb
 
-    for i in range(len(roots)):
-        for j in range(i + 1, len(roots)):
-            # 包含式匹配：与突触建边同一套判定，避免「精确相等」漏掉真实关联
-            if len(_related(roots[i][1], roots[j][1])) >= min_shared:
-                union(roots[i][0], roots[j][0])
+    # 倒排索引剪枝：按关键词的二元字符组建「bigram → 节点下标」映射，
+    # 只在共享 bigram 的节点对之间做精判，避免 O(N²) 全量两两比较。
+    # 保真性：包含式匹配命中时，两词必有公共长度≥2 的子串，故必共享 bigram；
+    # 此剪枝只排除「必然不可能匹配」的对，不漏掉任何真匹配。
+    bucket = {}
+    for idx, (_nid, kwset) in enumerate(roots):
+        grams = set()
+        for kw in kwset:
+            grams |= _bigrams(kw)
+        for g in grams:
+            bucket.setdefault(g, []).append(idx)
+    seen_pairs = set()
+    for _g, idxs in bucket.items():
+        for a in range(len(idxs)):
+            for b in range(a + 1, len(idxs)):
+                i, j = idxs[a], idxs[b]
+                if (i, j) in seen_pairs:
+                    continue
+                seen_pairs.add((i, j))
+                # 包含式匹配：与突触建边同一套判定，避免「精确相等」漏掉真实关联
+                if len(_related(roots[i][1], roots[j][1])) >= min_shared:
+                    union(roots[i][0], roots[j][0])
+        # 分批让出解释器锁：聚类是后台重活，定期让出避免长时间霸占 GIL
+        time.sleep(0)
+    # 兜底：仅单节点自身的词不足 min_shared 时不会被任何桶连上，保持独立（正确）
     clusters = {}
     for nid, _ in roots:
         clusters.setdefault(find(nid), []).append(nid)
