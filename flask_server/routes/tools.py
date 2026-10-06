@@ -5,6 +5,7 @@
 - POST /tool    调用工具（内置 / 自定义脚本 / 外部提供方）
 """
 import concurrent.futures as _futures
+import threading
 
 from flask import Blueprint, jsonify, request
 
@@ -19,8 +20,10 @@ bp = Blueprint("tools", __name__)
 # 内置工具执行的兜底超时（秒）：内置工具（读文件、搜索等）在 Flask 请求线程里
 # 同步执行，若某次调用因异常输入陷入长时间循环，会一直占用请求线程、令调用方无限挂起。
 # 单独执行的脚本 / 命令类工具有各自的子进程超时；此值是其外层的最后一道保险丝。
-# 取值需大于脚本类工具自身的超时（60 秒），避免把正常慢命令误判为超时。
-BUILTIN_TOOL_TIMEOUT = 120
+# 取值需大于脚本类工具自身的超时，避免把正常慢命令误判为超时。
+# 脚本类工具自身超时为 45 秒（run_command_impl.RUN_COMMAND_TIMEOUT），
+# 本值由 120 下调为 60（修复方向 2-A），仍大于内层，缩短单请求占线程时长。
+BUILTIN_TOOL_TIMEOUT = 60
 
 # 执行内置工具的线程池：用独立线程跑工具函数，主线程按超时等待，
 # 从而在工具卡住时仍能返回错误响应，而不是永久阻塞请求。
@@ -28,7 +31,44 @@ BUILTIN_TOOL_TIMEOUT = 120
 # 容量须留足余量：Python 无法强制终止运行中的线程，超时后该线程仍会
 # 继续跑到自然结束、一直占着 worker。若池子过小，几个慢工具就能占满，
 # 后续工具调用全部排队——前端表现为「点指令卡住服务端」。
-_TOOL_POOL = _futures.ThreadPoolExecutor(max_workers=16, thread_name_prefix="tool")
+#
+# 容量由 16 上调为 64（修复方向 1），并配合「超时后重建池」：一旦有工具
+# 超时，说明已有 worker 被不可终止的卡死线程占用，此时整池重建、换用全新
+# worker，把被卡住的旧 worker 连同旧池一起抛弃（shutdown 不等待），避免它们
+# 长期挤占坑位、拖垮后续调用。
+_TOOL_POOL_MAX_WORKERS = 64
+
+# 线程池「代次」：每次重建 +1。用于观测重建次数，也供测试断言。
+_pool_generation = 0
+_pool_lock = threading.Lock()
+
+
+def _make_tool_pool():
+    """创建一个新的工具线程池。"""
+    return _futures.ThreadPoolExecutor(
+        max_workers=_TOOL_POOL_MAX_WORKERS, thread_name_prefix="tool")
+
+
+_TOOL_POOL = _make_tool_pool()
+
+
+def _rebuild_tool_pool():
+    """重建工具线程池：抛弃旧池，换用全新 worker。
+
+    Python 无法强制终止运行中的线程，故不等待旧池任务结束（shutdown 不等待），
+    直接弃用并新建。旧池中被卡住的线程会继续跑到自然结束，但不再影响新调用的排队。
+    @returns 新的线程池
+    """
+    global _TOOL_POOL, _pool_generation
+    with _pool_lock:
+        old = _TOOL_POOL
+        _TOOL_POOL = _make_tool_pool()
+        _pool_generation += 1
+        try:
+            old.shutdown(wait=False)
+        except Exception:
+            pass
+        return _TOOL_POOL
 
 
 def _run_with_timeout(fn, params, timeout):
@@ -36,13 +76,18 @@ def _run_with_timeout(fn, params, timeout):
 
     注意：Python 无法强制终止正在运行的线程，超时后该线程会继续跑到自然结束，
     但调用方（HTTP 请求）能立即拿到超时错误，不会无限挂起——这正是本兜底的目的。
+    超时时额外重建线程池（修复方向 1）：抛弃可能已被卡死线程占用的旧 worker，
+    避免它们长期挤占坑位，导致后续工具调用全部排队。
     @returns 工具函数的返回值
     @raises TimeoutError 超时未返回
     """
-    future = _TOOL_POOL.submit(fn, params)
+    pool = _TOOL_POOL
+    future = pool.submit(fn, params)
     try:
         return future.result(timeout=timeout)
     except _futures.TimeoutError:
+        # 该 worker 已被不可终止的慢任务占用，重建池以换用全新 worker
+        _rebuild_tool_pool()
         raise TimeoutError("工具执行超过 %d 秒未返回" % timeout)
 
 

@@ -301,14 +301,28 @@ def _naming_issue(node):
     return None
 
 
+# 命名检查豁免的目录前缀（相对工程根，正斜杠）。
+# 测试目录整体豁免：unittest 的用例类与生命周期钩子（setUp / tearDown /
+# setUpClass 等）是框架约定名，不适用 snake_case / PascalCase 规则。
+NAMING_EXEMPT_PREFIXES = ("flask_server/tests/",)
+
+
 def check_py_naming(root):
-    """检查 9：Python 命名规范（函数 snake_case、类 PascalCase）。"""
+    """检查 9：Python 命名规范（函数 snake_case、类 PascalCase）。
+
+    测试目录（flask_server/tests/）整体豁免：其用例类与框架钩子遵循
+    unittest 约定，不适用本规则。
+    """
     out = []
     for p in qcommon.iter_files(root, (".py",)):
+        rel = os.path.relpath(p, root)
+        norm = rel.replace("\\", "/")
+        # 测试目录整体跳过命名检查
+        if any(norm.startswith(pref) for pref in NAMING_EXEMPT_PREFIXES):
+            continue
         tree = _py_parse(p)
         if tree is None:
             continue
-        rel = os.path.relpath(p, root)
         for node in ast.walk(tree):
             issue = _naming_issue(node)
             if issue:

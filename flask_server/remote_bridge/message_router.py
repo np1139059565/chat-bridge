@@ -36,11 +36,31 @@ PREFIX = {
 
 _lock = threading.Lock()
 
-# 推送串行锁：handle_report 的「读已推集合 → 逐条推送 → 写回」
-# 必须整体串行，否则多个上报并发时会：读到同一份集合 → 同一条被推两次（重复）、
-# 推送顺序互相穿插（乱序）。用独立锁，不能复用 _lock——
+# 推送串行锁（按会话隔离）：handle_report 的「读已推集合 → 逐条推送 → 写回」
+# 对同一会话必须整体串行，否则多个上报并发时会：读到同一份集合 → 同一条被推
+# 两次（重复）、推送顺序互相穿插（乱序）。用独立锁，不能复用 _lock——
 # 推送内部会调 next_seq，后者也要 _lock，复用会自锁死。
-_push_lock = threading.Lock()
+#
+# 之所以「按会话」而非「全局一把」：锁内包含 QQ 网络推送，若全局共用，
+# 一个慢会话会长时间持有该锁，把其它所有会话的推送一并拖住（串行排队）。
+# 按会话分锁后，不同会话互不阻塞，同一会话仍保持串行。
+_conv_locks = {}                      # conversationId -> threading.Lock
+_conv_locks_lock = threading.Lock()   # 保护 _conv_locks 字典本身的增删
+
+
+def _lock_for(conv_id):
+    """取某会话的推送锁；不存在则创建。
+
+    返回的锁只保证「同一会话内」的推送串行，不同会话各用各的锁，互不阻塞。
+    @param conv_id 会话标识
+    @returns 该会话的 threading.Lock
+    """
+    with _conv_locks_lock:
+        lock = _conv_locks.get(conv_id)
+        if lock is None:
+            lock = threading.Lock()
+            _conv_locks[conv_id] = lock
+        return lock
 
 # 单次上报最多处理的消息条数：长时间不开 QQ 后重开，抽屉会一次性上报
 # 全量切片（可能几百条）。若全量逐条合成语音 + 推送，会在请求线程里串行
@@ -231,7 +251,7 @@ def _push_one(qq_client, openid, m, push, voice_paths=None):
                 留待下轮上报重试，避免消息被永久漏掉。
 
     @param voice_paths 预合成好的语音路径映射 {消息id: 音频路径}。
-        合成由调用方在 _push_lock 之外预先完成——合成是网络调用，
+        合成由调用方在会话推送锁之外预先完成——合成是网络调用，
         绝不能在锁内执行（否则在线服务一卡，锁被占死、线程堆满、
         服务器拒绝新连接，必须重启才能恢复）。本函数只负责在正文
         推送成功后按序推送对应语音。
@@ -349,8 +369,8 @@ def handle_report(qq_client, payload):
 
     push = bridge_store.get_config().get("push") or {}
     # 第一步（锁外）：预合成语音。
-    # 合成是网络调用、可能很慢，绝不能在 _push_lock 内做——否则在线服务一卡
-    # 就会永久占用锁、上报线程堆满、服务器拒绝连接（必须重启才恢复）。
+    # 合成是网络调用、可能很慢，绝不能在本会话推送锁内做——否则该会话一卡
+    # 就会长时间占用其推送锁、上报线程堆满、服务器拒绝连接（必须重启才恢复）。
     # 在锁外先把本轮要推的 AI 语音统统合成好，得到 {消息id: 音频路径}，
     # 锁内只按序推送，既保住「文本→语音」顺序，又不占锁。
     voice_paths = {}
@@ -373,9 +393,10 @@ def handle_report(qq_client, payload):
             except Exception as e:
                 log("语音预合成失败（不影响主流程）：", e)
 
-    # 第二步（锁内）：整段「读已推集合 → 逐条推送 → 写回」串行执行：
-    # 否则多个上报并发会读到同一份集合，导致同一条被推两次（重复）、顺序穿插（乱序）。
-    with _push_lock:
+    # 第二步（会话锁内）：整段「读已推集合 → 逐条推送 → 写回」对同一会话串行执行：
+    # 否则同会话多个上报并发会读到同一份集合，导致同一条被推两次（重复）、顺序穿插（乱序）。
+    # 按会话分锁：不同会话各用各的锁，一个慢会话不会拖住其它会话的推送。
+    with _lock_for(conv_id):
         pushed = bridge_store.get_pushed_set(conv_id)
         sent = 0
         seen_keys = []

@@ -316,6 +316,10 @@ class ProviderHub:
         「执行了一个没人要的任务、真正的新任务却被排在后面」的错位。
         """
         self._events.pop(request_id, None)
+        # 一并清掉结果表里的可能残留：若提供方恰在「超时判定」与「善后执行」
+        # 之间的瞬间回传，resolve 会把结果写进 _results[request_id]，而等待方
+        # 已离场，该结果将永远无人取走。在此清掉，堵住这条内存泄漏路径。
+        self._results.pop(request_id, None)
         queue = self._queues.get(provider)
         if queue:
             self._queues[provider] = [c for c in queue
