@@ -11,8 +11,8 @@ skill 是「一组能力 + 说明」的封装。宿主扫描 `skills/` 目录，
 把每个 skill 的工具、指令、说明纳入系统。
 
 目前 skill 可提供：
-- **工具**（`tool.json` 的 `tools`）
-- **指令**（`tool.json` 的 `commands`，见外部指令规范，待实现）
+- **工具**（`tool.json` 的 `tools`，供 AI 调用）
+- **指令**（`tool.json` 的 `commands`，供用户使用；其执行端声明在 `command_actions`，见外部指令规范）
 - **说明**（`tool.json` 的 `prompt` + `SKILL.md`）
 
 ---
@@ -21,7 +21,7 @@ skill 是「一组能力 + 说明」的封装。宿主扫描 `skills/` 目录，
 
 ```
 skills/<name>/
-├── tool.json      # 声明文件：provider、工具、指令、注入说明
+├── tool.json      # 声明文件：provider、AI 工具、指令执行端、指令、注入说明
 ├── SKILL.md       # 技能说明文档（供 AI 读取）
 ├── README.md      # 面向人的简介（可选）
 └── extension/     # 扩展代码（若为浏览器扩展，可选）
@@ -35,8 +35,9 @@ skills/<name>/
 {
   "provider": "debug_chrome",
   "prompt": "本技能提供……（注入给 AI 的处理要求）",
-  "tools": [ /* 见外部工具规范 */ ],
-  "commands": [ /* 见外部指令规范 */ ]
+  "tools": [ /* AI 工具，见外部工具规范 */ ],
+  "command_actions": [ /* 指令执行端，见外部指令规范 */ ],
+  "commands": [ /* 指令声明，见外部指令规范 */ ]
 }
 ```
 
@@ -44,8 +45,9 @@ skills/<name>/
 |---|---|---|
 | `provider` | 是 | 提供方标识，扩展轮询命令时用它认领 |
 | `prompt` | 否 | 注入 System Prompt 的说明 |
-| `tools` | 否 | 工具数组 |
-| `commands` | 否 | 指令数组（外部指令规范，待实现） |
+| `tools` | 否 | AI 工具数组（进 AI 工具目录与 System Prompt） |
+| `command_actions` | 否 | 指令执行端数组（对 AI 透明，执行通道与工具共用） |
+| `commands` | 否 | 指令声明数组（供 QQ 用户使用，见外部指令规范） |
 
 ---
 
