@@ -200,15 +200,21 @@
     if (fn) fn();
   };
 
-  /** 切换自动回传开关（远程指令无确认框，直接切换）。 */
+  /**
+   * 切换自动回传开关（远程指令无确认框，直接切换）。
+   * 由指令 /sa 触发：开启时带起的卡片执行结果不回传 AI。
+   */
   M._bridgeToggleAuto = function () {
-    this.setAutoSendEnabled(!this.autoSendEnabled);
+    this.setAutoSendEnabled(!this.autoSendEnabled, true);
     this.toast('自动回传已' + (this.autoSendEnabled ? '开启' : '关闭'));
   };
 
-  /** 显式设置自动回传开关（幂等）：/sa on 或 /sa off。 */
+  /**
+   * 显式设置自动回传开关（幂等）：/sa on 或 /sa off。
+   * 由指令触发：开启时带起的卡片执行结果不回传 AI（fromCommand=true）。
+   */
   M._bridgeSetAuto = function (on) {
-    if (on !== this.autoSendEnabled) this.setAutoSendEnabled(on);
+    if (on !== this.autoSendEnabled) this.setAutoSendEnabled(on, true);
     this.toast('自动回传已' + (on ? '开启' : '关闭'));
   };
 
@@ -301,23 +307,35 @@
     return latest;
   };
 
-  /** 复制最新卡片结果：走倒计时回传流程，与卡片上的「复制结果」按钮一致。 */
+  /**
+   * 复制最新卡片结果：走倒计时回传流程，与卡片上的「复制结果」按钮一致。
+   *
+   * 【隔离铁律】本动作由指令 /cp 触发，属「指令触发」：
+   * 卡片结果【不回传 AI】。给卡片打标记，回传环节据此拦截。
+   */
   M._bridgeCopyLatest = function () {
     const card = this._latestCard();
     if (!card) { this.toast('没有可复制的卡片'); return; }
     if (card.result == null && !card.error) { this.toast('最新卡片还没有结果'); return; }
+    card._cmdTriggered = true;   // 指令触发：禁止回传 AI
     // 与 onResultClick 的倒计时分支一致：进入 send 阶段，倒计时结束回传
     this.scheduleAutoSend(card);
     this.toast('已开始回传最新结果…');
   };
 
-  /** 重新执行最新卡片：倒计时执行，执行完自动回传（与「自动」开关下的行为一致）。 */
+  /**
+   * 重新执行最新卡片：倒计时执行，执行完自动回传（与「自动」开关下的行为一致）。
+   *
+   * 【隔离铁律】本动作由指令 /rr 触发，属「指令触发」：
+   * 执行结果【不回传 AI】。给卡片打标记，回传环节据此拦截。
+   */
   M._bridgeRerunLatest = function () {
     const card = this._latestCard();
     if (!card) { this.toast('没有可执行的卡片'); return; }
     // 清掉旧状态，让它重新进入执行流程
     card.skipped = false;
-    this.executeCard(card, true);
+    // 第 3 个参数 fromCommand=true：指令触发，执行结果禁止回传 AI
+    this.executeCard(card, true, true);
     this.toast('已开始重新执行…');
   };
 

@@ -34,10 +34,13 @@
    * 执行一张工具卡片：调用后端 /tool，记录结果或失败诊断信息。
    * 失败时保留完整堆栈与错误分类，供 AI 区分参数问题与工具代码缺陷。
    */
-  M.executeCard = async function (card, isAuto) {
+  M.executeCard = async function (card, isAuto, fromCommand) {
     const cid = card.id || '(无 id)';
+    // 【隔离铁律】标记本次执行是否由指令触发：指令触发的执行结果不回传 AI。
+    // 非指令触发（用户手动点击、卡片自然到达）显式清除标记，避免旧标记残留误拦。
+    card._cmdTriggered = !!fromCommand;
     log('卡片执行开始：id=' + cid + ' 工具=' + (card.tool || '(非工具)')
-      + ' 方式=' + (isAuto ? '自动' : '手动'));
+      + ' 方式=' + (isAuto ? '自动' : '手动') + (fromCommand ? '（指令触发）' : ''));
     // 建卡阶段已检测出致命告警：直接作为结果，不调用本地工具
     if (card.preIssue) {
       log('卡片执行跳过：id=' + cid + ' 原因=致命告警接管（' + card.preIssue.error + '），不调用工具');
@@ -163,8 +166,8 @@
    * 全局「自动」开关：开启时未执行的工具卡片自动倒计时触发；关闭时取消所有倒计时。
    * 外部卡片与工具卡片共用该开关与延迟，不做特殊化。
    */
-  M.setAutoSendEnabled = function (on) {
-    log('自动回传开关：' + (on ? '开启' : '关闭'));
+  M.setAutoSendEnabled = function (on, fromCommand) {
+    log('自动回传开关：' + (on ? '开启' : '关闭') + (fromCommand ? '（指令触发）' : ''));
     this.autoSendEnabled = on;
     // 卡片状态存在消息树节点内：这里汇总当前会话全部卡片
     const cardMap = this.allCards();
@@ -172,24 +175,26 @@
       // 保护：开启自动时只自动执行「最新的一张」待执行卡片。
       // 会话记录被清理或长时间未执行时可能积压大量旧卡片，全部自动执行会造成
       // 误操作与结果刷屏。旧卡片保留待执行态，由用户手动点击执行。
-      // 按入列顺序取最新：工具卡片取卡片表里的末位，外部卡片取列表末位；
-      // 外部卡片入列更晚，故两者都在时优先外部卡片。
+      // 按入列顺序取最新：工具卡片取卡片表里的末位，外部卡片取列表末位。
+      //
+      // 【隔离铁律】执行本身是正常流程，不禁止；但若本次开启由指令触发
+      // （/sa on），被它带起来的卡片要打上「指令触发」标记，
+      // 其执行结果【不回传 AI】——触发源是用户指令，指令的产物不得流向 AI。
       let newest = null;
       Object.keys(cardMap).forEach((id) => {
         const c = cardMap[id];
         if (!c || !c.isTool || c.executed || c.skipped || c._cdTimer) return;
-        // 只自动执行仍存在于网页对话镜像中的卡片（拦截幽灵卡片）
         if (!this.cardInMirror(c)) return;
         newest = { card: c, ext: false };
       });
-      // 未发送且未跳过的外部卡片一并参与「最新一张」比较
       this.externalCards.forEach((c) => {
         if (!c || c.status !== 'pending' || c.executed || c.skipped || c._cdTimer) return;
         newest = { card: c, ext: true };
       });
       if (newest) {
+        // 工具卡片：把「指令触发」一路传到执行环节（否则 executeCard 会清掉标记）
         if (newest.ext) this.scheduleExternalSend(newest.card);
-        else this.scheduleExecute(newest.card);
+        else this.scheduleExecute(newest.card, fromCommand);
       }
     } else {
       Object.keys(cardMap).forEach((id) => {
@@ -252,6 +257,14 @@
    * @param {Object} card 工具卡片
    */
   M.postCardResult = function (card) {
+    // 【隔离铁律】指令触发的执行，其结果【不回传 AI】。
+    // 触发源是用户指令（/sa on 带起、/cp、/rr 等），指令的产物不得流向 AI。
+    // 只回传 AI 主动调用工具产生的结果；指令来源一律跳过（结果仍留在卡片上）。
+    // 详见 docs/command-tool-isolation.md。
+    if (card && card._cmdTriggered) {
+      log('指令触发的执行：结果不回传 AI', card.tool || card.id || '');
+      return;
+    }
     const shot = D.extractScreenshot(card.result);
     if (shot) {
       // 图片：交给内容脚本写进输入框并发送。统一经发送队列，避免与告警抢跑。
@@ -310,11 +323,14 @@
     return n;
   };
 
-  /** 倒计时后自动执行（与自动发送共享 autoSendDelay）。 */
-  M.scheduleExecute = function (card) {
+  /** 倒计时后自动执行（与自动发送共享 autoSendDelay）。
+   * @param {boolean} [fromCommand] 本次执行是否由指令触发（结果不回传 AI）
+   */
+  M.scheduleExecute = function (card, fromCommand) {
     // 倒计时状态机由 D.startCountdown 统一提供（工具卡片与外部卡片共用）
-    // 自动流程：isAuto=true，执行完会按开关回传结果
-    D.startCountdown(this, card, 'exec', () => this.executeCard(card, true));
+    // 自动流程：isAuto=true，执行完会按开关回传结果；
+    // fromCommand 一路透传到 executeCard，确保「指令触发」标记不被冲掉。
+    D.startCountdown(this, card, 'exec', () => this.executeCard(card, true, fromCommand));
   };
 
   /** 倒计时后把结果写回网页 AI 输入框并触发发送。 */
