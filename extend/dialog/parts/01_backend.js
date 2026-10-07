@@ -121,6 +121,8 @@
         // 黑名单兜底：只拦指令卡片（drawer-command），防其漏过上面的消费分支后
         // 被当消息下发给 AI（指令泄露）。用黑名单而非白名单，因卡片总线是开放
         // 接口、外部系统可投任意 type，白名单会误伤。
+        // 【隔离铁律】指令卡片一旦漏过消费分支，这里必须兜住并确认消费，
+        // 绝不能让它落进 externalCards 被下发 AI。详见 docs/command-tool-isolation.md。
         if (c.type === 'drawer-command') {
           this.confirmCardDelivered(c.id);
           log('拦截指令卡片（防泄露）：id=' + c.id);

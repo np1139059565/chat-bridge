@@ -88,6 +88,10 @@ def all_meta():
 def all_meta_full():
     """全部自定义【AI 工具】（含未上线），用于设置页管理 UI。
 
+    【隔离铁律】只取 kind=tool：指令执行端（kind=command_action）是指令的内部实现，
+    不进设置页、不进任何给 AI 看的视图。凡是新增「列出工具」的视图，都必须这样过滤，
+    否则指令会再次入侵工具列表。详见 docs/command-tool-isolation.md。
+
     只含 kind=tool 的条目：指令执行端（kind=command_action）是指令的内部实现，
     不属于用户可管理的 AI 工具，一律不进此视图 —— 设置页因此不再出现指令。
     """

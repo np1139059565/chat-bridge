@@ -243,6 +243,12 @@
   /**
    * 把卡片结果回传到网页 AI：结果是截图时发图片，否则发文本。
    * 统一入口，供「复制结果」跳过倒计时、自动回传两处共用。
+   *
+   * 【隔离铁律】本函数只处理【AI 主动调用的工具卡片】的结果。
+   * 指令（用户在 QQ / 网页发的 /xxx）是另一条链路，其执行端是 command_actions，
+   * 其回执走 /api/bridge/result → QQ / 网页收件箱，【绝不】进入本函数、
+   * 【绝不】流向 AI。详见 docs/command-tool-isolation.md。
+   * 若新增逻辑让指令结果走到这里，即为严重泄露缺陷。
    * @param {Object} card 工具卡片
    */
   M.postCardResult = function (card) {

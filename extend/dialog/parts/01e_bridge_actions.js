@@ -15,6 +15,12 @@
    * 后端通过卡片总线（type=drawer-command）下发远程指令，
    * 内容形如 {action, params}。这类卡片不下发网页 AI，直接在抽屉里执行，
    * 执行完回执后端、不入 externalCards 列表。
+   *
+   * 【隔离铁律】指令卡片（drawer-command）只能在此消费、只能执行本地动作，
+   * 其结果经 /api/bridge/result 回执给 QQ / 网页，【绝不】流向 AI。
+   * 本函数返回 true 即代表「这张卡片已按指令处理完毕」；调用方见到 true
+   * 必须直接跳过，不得再把它当消息下发给网页 AI。详见
+   * docs/command-tool-isolation.md。
    * @param {Object} c 后端下发的卡片
    * @returns {boolean} 是否为命令卡片（是则调用方跳过后续处理）
    */

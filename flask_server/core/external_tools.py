@@ -138,6 +138,11 @@ class ProviderHub:
         就出现在目录中，调用时排队等待提供方取走执行。
         过滤 kind=command_action 的条目：它们是指令的执行端，对 AI 透明，
         不进工具目录；但仍留在 _providers 里，供 find_tool / dispatch 找到并执行。
+
+        【隔离铁律】这就是「执行通道共用、展示通道分开」的落点：
+        指令执行端与 AI 工具共用 provider hub（find_tool 能找到），
+        但给 AI 的目录（本函数）过滤掉指令执行端。详见
+        docs/command-tool-isolation.md。
         """
         out = []
         with self._lock:

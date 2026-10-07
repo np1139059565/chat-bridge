@@ -87,6 +87,12 @@ def _reply(qq_client, openid, text, markdown=False):
 def _dispatch(action, params=None, openid="", screenshot=False):
     """把一条抽屉命令通过卡片总线下发。
 
+    【隔离铁律】本函数是指令的唯一源头。指令面向用户（QQ / 网页），
+    其卡片类型固定为 drawer-command、回执走 /api/bridge/result，
+    【任何情况都不得流向 AI】——不产生工具卡片、不进 /tool、不回传 AI。
+    与 AI 工具（走 external-call 卡片、结果回传 AI）是两条独立链路。
+    详见 docs/command-tool-isolation.md。
+
     卡片类型为 drawer-command：抽屉轮询取到后按 action 执行本地动作，
     不发送给网页 AI。
     @param action 动作名：clear_all_sessions / clear_messages /

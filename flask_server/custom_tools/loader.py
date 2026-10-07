@@ -378,6 +378,13 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"):
 def parse_skill(skill_dir):
     """解析一个 skill 目录的 tool.json，返回规范化后的条目字典列表（已校验）。
 
+    【隔离铁律】本函数是指令与工具「源头分开」的关键点：
+      - tools            → kind=tool，AI 工具，进 AI 目录与 System Prompt；
+      - command_actions  → kind=command_action，指令执行端，对 AI 透明。
+    两者的 kind 由所在数组自动标注，视图层据此天然分流，无需任何过滤标记。
+    严禁把指令执行端放回 tools 数组，或再引入「标记字段 + 过滤」的旧写法。
+    详见 docs/command-tool-isolation.md。
+
     两类条目各从独立数组解析，天然分流、互不混入：
       - tools            → kind=tool，真正的 AI 工具；
       - command_actions  → kind=command_action，指令的执行端。
