@@ -65,6 +65,48 @@ BUILTIN = {
     "/help": {"desc": "显示指令列表", "aliases": ["/h"], "group": "帮助"},
 }
 
+# 内置指令的可配置参数表：主命令名（不带 /）→ 参数声明列表。
+#
+# 设计意图：让「内置指令需要用户配置的参数」走统一的通用机制，
+# 而不是给某条指令单独开输入框。前端据此渲染通用的「内置指令参数」区块，
+# 配置值统一存在 bridge 配置的 command_params 里（键为指令名、不带 /）。
+# 目前只有 /md 需要参数，将来若有别的内置指令需要配置，在此登记一行即可。
+#
+# 每项字段：
+#   key         —— 参数键（存入 command_params[cmd][key]）
+#   label       —— 前端展示名
+#   placeholder —— 输入框占位提示
+#   hint        —— 输入框下方的补充说明
+BUILTIN_PARAMS = {
+    "md": [
+        {
+            "key": "selector",
+            "label": "Markdown 复制按钮选择器",
+            "placeholder": '如 .ds-virtual-list--printable ... :has(.ds-cross-fade)',
+            "hint": "/md 用它采集带格式原文；留空则关闭",
+        },
+    ],
+}
+
+
+def builtin_param_defs():
+    """返回内置指令参数声明的扁平列表，供前端渲染通用配置区块。
+
+    @return [ {cmd, key, label, placeholder, hint} ]，cmd 不带 /。
+    """
+    out = []
+    for cmd, items in BUILTIN_PARAMS.items():
+        for it in items:
+            out.append({
+                "cmd": cmd,
+                "key": it.get("key", ""),
+                "label": it.get("label", ""),
+                "placeholder": it.get("placeholder", ""),
+                "hint": it.get("hint", ""),
+            })
+    return out
+
+
 # 别名 → 主命令 的反查表：一次构建，之后直接查
 _ALIAS_MAP = {}
 for _main, _info in BUILTIN.items():

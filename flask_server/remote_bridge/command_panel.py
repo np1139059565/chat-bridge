@@ -217,10 +217,15 @@ def _h_restart(qq_client, openid, arg, msg_id):
 
 
 def _h_md(qq_client, openid, arg, msg_id):
-    """采集当前 AI 回复的 Markdown 原文（手动触发一次）。"""
-    sel = bridge_store.get_config().get("md_selector") or ""
+    """采集当前 AI 回复的 Markdown 原文（手动触发一次）。
+
+    选择器从「内置指令参数」通用配置里取（command_params.md.selector），
+    与设置页的展示口径一致，不再是 /md 专属的字段。
+    """
+    params = (bridge_store.get_config().get("command_params") or {}).get("md") or {}
+    sel = params.get("selector") or ""
     if not sel:
-        _reply(qq_client, openid, "未配置 Markdown 选择器（设置页可填）"); return
+        _reply(qq_client, openid, "未配置 Markdown 选择器（设置页「内置指令参数」可填）"); return
     _dispatch("collect_md", {"selector": sel})
     _reply(qq_client, openid, "已下发：采集 Markdown")
 

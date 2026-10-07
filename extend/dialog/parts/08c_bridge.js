@@ -87,18 +87,6 @@
         placeholder: '开放平台应用的 AppSecret',
         onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
       })]),
-      // Markdown 复制按钮选择器：内置指令 /md 使用它采集带格式原文。
-      // 推送 QQ 时优先用采集到的 Markdown，没有则退回纯文本。留空则关闭。
-      h('label', ['Markdown 复制按钮选择器（对应内置指令 /md，留空则关闭）', h('input', {
-        type: 'text', class: 'bridge-sel-input',
-        value: ctx.bridgeMdSelector,
-        placeholder: '如 .ds-virtual-list--printable ... :has(.ds-cross-fade)',
-        onInput: (e) => { ctx.bridgeMdSelector = e.target.value; }
-      })]),
-      h('div', { class: 'bridge-pick-row' }, [
-        h('button', { onClick: () => ctx.testMdSelector() }, '采集测试'),
-        h('span', { class: 'hint' }, '用当前选择器试采一次，看能否取到内容')
-      ]),
       h('div', [
         h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
         h('span', { class: 'hint' }, '保存后自动重建 QQ 长连接')
@@ -148,11 +136,50 @@
   function renderCmdBlock(ctx) {
     return h('div', [
       h('div', { class: 'card-head' }, [h('span', 'QQ 指令')]),
-      // 指令说明从后端拉取（与 /h 同源），不再手写，避免与指令表漂移
-      h('div', { class: 'hint' }, '内置指令（与 /h 同源）：'),
-      h('pre', { class: 'bridge-help' }, ctx.bridgeHelpText || '（未加载，检查后端连接）'),
+      // 先放指令编辑器与自定义指令列表，最后再列可用内置指令的提示文本：
+      // 用户添加/查看自定义指令是主要动作，内置指令说明属参考信息，放末尾不挡路。
       renderCmdEditor(ctx),
-      renderCmdList(ctx)
+      renderCmdList(ctx),
+      // 内置指令参数：通用渲染，声明来自后端，前端不写死任何指令名。
+      renderBuiltinParams(ctx),
+      // 指令说明从后端拉取（与 /h 同源），不再手写，避免与指令表漂移
+      h('div', { class: 'hint' }, '可用指令（与 /h 同源）：'),
+      h('pre', { class: 'bridge-help' }, ctx.bridgeHelpText || '（未加载，检查后端连接）')
+    ]);
+  }
+
+  /**
+   * 渲染「内置指令参数」区：遍历后端返回的参数声明，逐项渲染输入框。
+   *
+   * 关键：这是通用机制——前端不写死「/md」或「选择器」，只按声明渲染。
+   * 参数值统一存在 ctx.bridgeCmdParams[cmd][key]，与设置页保存的 command_params 同构。
+   * 这样内置指令的配置项展示不再特殊化，新增带参数的内置指令时后端登记一行即可。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode|null} 参数区节点；无声明时返回 null
+   */
+  function renderBuiltinParams(ctx) {
+    const defs = ctx.bridgeCmdParamDefs || [];
+    if (!defs.length) return null;
+    return h('div', { class: 'bridge-builtin-params' }, [
+      h('div', { class: 'hint' }, '内置指令参数：'),
+      ...defs.map((d) => h('label', { key: d.cmd + '.' + d.key }, [
+        d.label + '（指令 /' + d.cmd + '）',
+        h('input', {
+          type: 'text', class: 'bridge-sel-input',
+          value: ((ctx.bridgeCmdParams[d.cmd] || {})[d.key]) || '',
+          placeholder: d.placeholder || '',
+          onInput: (e) => {
+            if (!ctx.bridgeCmdParams[d.cmd]) ctx.bridgeCmdParams[d.cmd] = {};
+            ctx.bridgeCmdParams[d.cmd][d.key] = e.target.value;
+          }
+        }),
+        d.hint ? h('span', { class: 'hint' }, d.hint) : null
+      ])),
+      // 采集测试：验证当前选择器能否取到内容。放参数区末尾，不单独特殊化展示。
+      h('div', { class: 'bridge-pick-row' }, [
+        h('button', { onClick: () => ctx.testMdSelector() }, '测试采集'),
+        h('span', { class: 'hint' }, '用当前参数试采一次，看能否取到内容')
+      ])
     ]);
   }
 

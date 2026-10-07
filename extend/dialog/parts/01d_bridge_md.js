@@ -14,13 +14,15 @@
    * 触发采集：请求内容脚本点击页面的复制按钮。
    * @param {string} msgId 目标消息 id（内容指纹）
    */
-  M.captureMarkdown = function (msgId) {
+  M.captureMarkdown = function (msgId, selectorOverride) {
     if (!msgId) return;
-    if (!this.bridgeMdSelector) return;   // 未配置选择器，跳过
+    // 选择器来源：显式传入（自定义采集指令自带的）优先；否则取内置指令 /md 的参数。
+    const sel = selectorOverride || D.cmdParam(this, 'md', 'selector');
+    if (!sel) return;   // 未配置选择器，跳过
     this._mdCaptureTarget = msgId;
     window.parent.postMessage({
       type: 'bridge_copy_md',
-      selector: this.bridgeMdSelector
+      selector: sel
     }, '*');
     // 兜底：3 秒没等到回传就清掉目标，避免内容误挂到别的消息上
     clearTimeout(this._mdCaptureTimer);
@@ -32,12 +34,13 @@
    * 便于确认选择器是否有效、是否命中了唯一按钮。
    */
   M.testMdSelector = function () {
-    if (!this.bridgeMdSelector) { this.toast('请先填写选择器'); return; }
+    const sel = D.cmdParam(this, 'md', 'selector');
+    if (!sel) { this.toast('请先填写选择器'); return; }
     this._mdTest = true;
     this._mdCaptureTarget = '__test__';
     window.parent.postMessage({
       type: 'bridge_copy_md',
-      selector: this.bridgeMdSelector
+      selector: sel
     }, '*');
     clearTimeout(this._mdCaptureTimer);
     this._mdCaptureTimer = setTimeout(() => {
@@ -81,7 +84,7 @@
    */
   M.reportToBridgeWithMd = function (reason) {
     // 非 generate、未配选择器、面板不可见：直接按原路走
-    if (reason !== 'generate' || !this.bridgeMdSelector || !this.panelVisible) {
+    if (reason !== 'generate' || !D.cmdParam(this, 'md', 'selector') || !this.panelVisible) {
       this.reportToBridge(reason);
       return;
     }

@@ -252,6 +252,20 @@ def bridge_help():
     return jsonify(success=True, help=command_panel.help_text())
 
 
+@bp.route("/api/bridge/command_params", methods=["GET", "OPTIONS"])
+def bridge_command_params():
+    """返回内置指令的参数声明列表，供设置页渲染通用「内置指令参数」区块。
+
+    声明来自 command_registry.BUILTIN_PARAMS，与具体指令解耦：
+    前端不写死任何指令名，新增带参数的内置指令时后端登记一行即可。
+    @returns { success, defs: [ {cmd, key, label, placeholder, hint} ] }
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    from remote_bridge import command_registry
+    return jsonify(success=True, defs=command_registry.builtin_param_defs())
+
+
 @bp.route("/api/bridge/commands", methods=["GET", "POST", "DELETE", "OPTIONS"])
 def bridge_commands():
     """指令的增删改：独立接口，避免与 saveBridge 的全量覆盖互相干扰。

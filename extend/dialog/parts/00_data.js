@@ -223,7 +223,10 @@ window.AIMirrorDialog = (function () {
       // 指令录入（拆多行以避免超长行）
       bridgeNewCmdName: '', bridgeNewCmdLabel: '', bridgeNewCmdIsCombo: false,
       bridgeNewCmdKeepCollect: false, bridgeNewCmdSteps: '', bridgeNewCmdInterval: '1',
-      bridgeMdSelector: '', _mdCaptureTarget: '', _mdCaptureTimer: null, _afterMd: null, _mdReportTimer: null,  // Markdown
+      // 内置指令参数（通用机制）：值来自后端配置，键为指令名不带 /；
+      // 声明（有哪些内置指令有参数）来自后端，前端不写死指令名。
+      bridgeCmdParams: {}, bridgeCmdParamDefs: [],
+      _mdCaptureTarget: '', _mdCaptureTimer: null, _afterMd: null, _mdReportTimer: null,  // Markdown
       _bridgeStatusTimer: null, bridgeLastEvent: '', bridgeIntents: 0,  // 轮询/诊断
       rules: [],
       rulesDir: '',

@@ -259,8 +259,8 @@
     if (!selector) { this.toast('该采集指令没有绑定选择器'); return; }
     const lastId = this._lastAssistantId();
     if (!lastId) { this.toast('没有可采集的 AI 回复'); return; }
-    this.bridgeMdSelector = selector;   // 手动采集用指令里的选择器
-    this.captureMarkdown(lastId);
+    // 手动采集用指令自带的选择器，显式传给采集函数，不污染内置指令参数
+    this.captureMarkdown(lastId, selector);
   };
 
   /**

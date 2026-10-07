@@ -31,7 +31,9 @@ BRIDGE_STATE_PATH = paths.BRIDGE_STATE_PATH
 # 密钥字段：与运行时同写 runtime.yaml（不入库）
 SECRET_KEYS = ("app_id", "app_secret")
 # 定义字段：写 definition.yaml 的 bridge 分区（入库，换机器应保留）
-SETTING_KEYS = ("intents", "md_selector", "commands")
+#   command_params：内置指令的参数（键为指令名不带 /，如 {"md": {"selector": "..."}}）。
+#   md_selector 为旧字段，保留在兼容列表里，读取时归并进 command_params。
+SETTING_KEYS = ("intents", "md_selector", "command_params", "commands")
 # 运行时字段：写 runtime.yaml 的 bridge 分区（不入库，随本机状态变）
 RUNTIME_KEYS = ("enabled", "push")
 
@@ -63,10 +65,14 @@ def _default_config():
             "check_multi_call": True,
             "check_memory": True,
         },
-        # Markdown 复制按钮选择器：AI 回复完成后点它，截获带格式的原文，
-        # 推送 QQ 时优先使用。留空则关闭格式增强，退回纯文本。
-        # 对应内置指令 /md（可手动触发一次采集）。
-        "md_selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
+        # 内置指令的通用参数：键为指令名（不带 /），值为该指令的参数字典。
+        # 让「内置指令需要配置」走统一机制，而非给某条指令单独开输入框。
+        # 目前只有 /md：selector 是 Markdown 复制按钮选择器，留空则关闭格式增强。
+        "command_params": {
+            "md": {
+                "selector": '.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child div[role="button"]:has(.ds-cross-fade)',
+            },
+        },
         # 指令列表：{name, label, selector, page_url} 或组合指令 {name, label, steps, interval}
         "commands": [],
     }
@@ -106,9 +112,17 @@ def load_config():
         raw = _read_merged()
         cfg = _default_config()
         # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
+        for k in ("enabled", "app_id", "app_secret", "intents"):
             if k in raw:
                 cfg[k] = raw[k]
+        # 内置指令参数：以默认值为基底逐指令、逐键合并，文件值优先
+        if isinstance(raw.get("command_params"), dict):
+            for cmd, params in raw["command_params"].items():
+                if isinstance(params, dict):
+                    cfg["command_params"].setdefault(cmd, {}).update(params)
+        # 兼容旧字段 md_selector：归并进 command_params.md.selector（新字段未设时才用）
+        if raw.get("md_selector") and not (cfg["command_params"].get("md") or {}).get("selector"):
+            cfg["command_params"].setdefault("md", {})["selector"] = raw["md_selector"]
         if isinstance(raw.get("push"), dict):
             cfg["push"].update(raw["push"])
         if isinstance(raw.get("commands"), list):
@@ -142,9 +156,17 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents", "md_selector"):
+        for k in ("enabled", "app_id", "app_secret", "intents"):
             if k in patch:
                 cfg[k] = patch[k]
+        # 内置指令参数：逐指令、逐键合并（patch 只覆盖给到的键，不整体替换）
+        if isinstance(patch.get("command_params"), dict):
+            for cmd, params in patch["command_params"].items():
+                if isinstance(params, dict):
+                    cfg["command_params"].setdefault(cmd, {}).update(params)
+        # 兼容旧字段：写入 command_params.md.selector
+        if "md_selector" in patch:
+            cfg["command_params"].setdefault("md", {})["selector"] = patch["md_selector"]
         if isinstance(patch.get("push"), dict):
             cfg["push"].update(patch["push"])
         if isinstance(patch.get("commands"), list):

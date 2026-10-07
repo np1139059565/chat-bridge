@@ -12,6 +12,20 @@
   const M = D.methods;
 
   /**
+   * 取某内置指令的某个参数值（内置指令参数的通用读取口）。
+   *
+   * 前端不写死指令名与参数键：二者都来自后端参数声明。
+   * @param {Object} ctx Vue 实例
+   * @param {string} cmd 指令名（不带 /）
+   * @param {string} key 参数键
+   * @returns {string} 参数值；无则空串
+   */
+  D.cmdParam = function (ctx, cmd, key) {
+    const p = ((ctx && ctx.bridgeCmdParams) || {})[cmd] || {};
+    return p[key] || '';
+  };
+
+  /**
    * 提取卡片结果里的本地图片路径；没有则返回空串。
    * 截图结果结构：{ data: { screenshot: '...', saved: { name, path } } }
    * @param {Object} result 卡片结果
@@ -70,10 +84,19 @@
       // 开关显示成「关」（真值判定）、检测却照跑（!== false 判定），出现「没开也告警」。
       this.bridgePush = Object.assign({}, D.DEFAULT_BRIDGE_PUSH, cfg.push || {});
       this.bridgeCommands = cfg.commands || [];
-      // Markdown 采集选择器：来自配置（对应内置指令 /md）。
-      // 它是配置项而非自定义指令——内置指令本就不可由用户增删。
-      this.bridgeMdSelector = cfg.md_selector || '';
+      // 内置指令参数：来自配置，键为指令名（不带 /），值为该指令的参数字典。
+      // 走通用机制，不针对某条指令特殊化（如 /md 的 selector 就在这里）。
+      this.bridgeCmdParams = cfg.command_params || {};
       this.bridgeConnected = !!st.connected;
+      // 参数声明（有哪些内置指令有参数）：从后端拉取，前端不写死指令名。
+      try {
+        const pd = await D.apiFetch(this, '/api/bridge/command_params', {
+          headers: { 'Accept': 'application/json' }
+        });
+        this.bridgeCmdParamDefs = (pd && pd.defs) || [];
+      } catch (e) {
+        this.bridgeCmdParamDefs = [];
+      }
       // 标记配置已成功加载：状态轮询据此判断是否需要重试加载。
       this._bridgePushLoaded = true;
     } catch (e) {
@@ -157,7 +180,8 @@
           enabled: this.bridgeEnabled,
           app_id: this.bridgeAppId,
           app_secret: this.bridgeAppSecret,
-          md_selector: this.bridgeMdSelector,
+          // 内置指令参数：通用字段，不针对某条指令特殊化
+          command_params: this.bridgeCmdParams,
           push: this.bridgePush
         }
       });
