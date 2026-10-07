@@ -160,7 +160,7 @@ def cluster_events(min_shared=2):
     for idx, (_nid, kwset) in enumerate(roots):
         grams = set()
         for kw in kwset:
-            grams |= _bigrams(kw)
+            grams |= _grams(kw)
         for g in grams:
             bucket.setdefault(g, []).append(idx)
     seen_pairs = set()
