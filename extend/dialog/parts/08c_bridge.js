@@ -124,7 +124,20 @@
       pushRow(ctx, 'check_code_only', '只含代码块、无文字说明'),
       pushRow(ctx, 'check_thinking', '思考内容非中文'),
       pushRow(ctx, 'check_multi_call', '多个工具调用块'),
-      pushRow(ctx, 'check_memory', '记忆滞后（连续多轮未写记忆）')
+      pushRow(ctx, 'check_memory', '记忆滞后（连续多轮未写记忆）'),
+      // 记忆检查的轮次间隔：可调，默认 20 轮。改动即时保存。
+      h('label', { class: 'bridge-push-row' }, [
+        h('span', { class: 'bridge-push-label' }, '记忆检查间隔（轮）'),
+        h('input', {
+          type: 'number', min: '1', step: '1',
+          value: ctx.bridgePush.check_memory_interval || 20,
+          onInput: (e) => {
+            const v = parseInt(e.target.value, 10);
+            ctx.bridgePush.check_memory_interval = (v > 0 ? v : 20);
+          },
+          onChange: () => ctx.saveBridge()
+        })
+      ])
     ]);
   };
 

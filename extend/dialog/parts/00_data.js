@@ -51,7 +51,9 @@ window.AIMirrorDialog = (function () {
   // 导致「未定义」被误当作「开」、或保存时把开关配置悄悄抹掉。
   D.DEFAULT_BRIDGE_PUSH = {
     user: true, tool: true, ai: true, thinking: false, voice: false,
-    check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true
+    check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true,
+    // 记忆检查的轮次间隔（默认 20 轮），可在设置页调整。
+    check_memory_interval: 20
   };
 
   /**

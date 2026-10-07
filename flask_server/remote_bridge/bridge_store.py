@@ -64,6 +64,8 @@ def _default_config():
             "check_thinking": True,
             "check_multi_call": True,
             "check_memory": True,
+            # 记忆检查的轮次间隔（默认 20 轮），可在设置页调整；下限 1。
+            "check_memory_interval": 20,
         },
         # 内置指令的通用参数：键为指令名（不带 /），值为该指令的参数字典。
         # 让「内置指令需要配置」走统一机制，而非给某条指令单独开输入框。
