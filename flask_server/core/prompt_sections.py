@@ -24,6 +24,9 @@ def _tools_by_skill():
     for t in ct.load_tools().values():
         if not t.get("enabled"):
             continue
+        # 只统计真正的 AI 工具：指令执行端（kind=command_action）不进 System Prompt
+        if (t.get("kind") or "tool") != "tool":
+            continue
         name = t.get("skill_name") or ""
         if not name:
             continue
@@ -72,6 +75,9 @@ def _manage_tools_by_skill():
     """
     by_skill = {}
     for t in ct.load_tools().values():
+        # 只归集真正的 AI 工具：指令执行端（kind=command_action）不进设置页技能区
+        if (t.get("kind") or "tool") != "tool":
+            continue
         name = t.get("skill_name") or ""
         if not name:
             continue

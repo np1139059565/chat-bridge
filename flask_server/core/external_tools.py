@@ -136,14 +136,14 @@ class ProviderHub:
 
         在线状态仅用于界面提示，不影响工具是否可被调用：只要工具已注册，
         就出现在目录中，调用时排队等待提供方取走执行。
-        过滤 command_only 工具：它们是指令的执行端，对 AI 透明，不进工具目录；
-        但仍留在 _providers 里，供 find_tool / dispatch 找到并执行。
+        过滤 kind=command_action 的条目：它们是指令的执行端，对 AI 透明，
+        不进工具目录；但仍留在 _providers 里，供 find_tool / dispatch 找到并执行。
         """
         out = []
         with self._lock:
             for _provider, tools in self._providers.items():
                 for t in tools:
-                    if t.get("command_only"):
+                    if (t.get("kind") or "tool") == "command_action":
                         continue
                     out.append(t)
         return out

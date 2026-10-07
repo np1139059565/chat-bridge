@@ -33,10 +33,11 @@ def external_providers():
         # wakeup：唤醒类工具随命令透传给 hub，供 poll 在抽屉关闭时放行
         if t.get("wakeup"):
             entry["wakeup"] = True
-        # command_only：标记「仅供指令执行」的工具，供 /tools 侧过滤，
-        # 但仍注册进 hub —— 指令 dispatch 要靠 find_tool 找到它（读 wakeup 等）。
-        if t.get("command_only"):
-            entry["command_only"] = True
+        # kind=command_action：指令的执行端。仍需注册进 hub（执行通道与工具共用，
+        # 指令 dispatch 要靠 find_tool 找到它读 wakeup 等）；但不进 AI 工具目录，
+        # 由 provider_tools() 按 kind 过滤。
+        if (t.get("kind") or "tool") == "command_action":
+            entry["kind"] = "command_action"
         groups.setdefault(provider, []).append(entry)
     return groups
 
@@ -77,14 +78,19 @@ def all_meta():
 
     上线即在此返回，与执行端是否在线无关：executor=external 的工具若提供方离线，
     调用时返回离线错误，但不从工具列表撤出。
-    排除 command_only 工具：它们是指令的执行端，对 AI 透明，不进 AI 工具目录。
+    只含 kind=tool 的条目：指令执行端（kind=command_action）对 AI 透明，
+    不进 AI 工具目录。源头已在声明层分开，此处按来源身份天然分流。
     """
     return [public_meta(t) for t in load_tools().values()
-            if t.get("enabled") and not t.get("command_only")]
+            if t.get("enabled") and (t.get("kind") or "tool") == "tool"]
 
 
 def all_meta_full():
-    """全部自定义工具（含未上线），用于设置页管理 UI。"""
+    """全部自定义【AI 工具】（含未上线），用于设置页管理 UI。
+
+    只含 kind=tool 的条目：指令执行端（kind=command_action）是指令的内部实现，
+    不属于用户可管理的 AI 工具，一律不进此视图 —— 设置页因此不再出现指令。
+    """
     return [{
         "name": t.get("name"),
         "description": t.get("description", ""),
@@ -96,4 +102,4 @@ def all_meta_full():
         "enabled": bool(t.get("enabled")),
         "parameters": t.get("parameters") or [],
         "fixed_args": t.get("fixed_args") or [],
-    } for t in load_tools().values()]
+    } for t in load_tools().values() if (t.get("kind") or "tool") == "tool"]

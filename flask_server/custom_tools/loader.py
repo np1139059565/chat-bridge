@@ -139,13 +139,15 @@ def _dump_tool_entry(t):
     for key in _TOOL_STR_FIELDS:
         if t.get(key) not in (None, ""):
             out.append("    %s: %s" % (key, quote(t[key])))
-    # silent / wakeup / command_only 为布尔标记，仅在为真时写出
+    # silent / wakeup 为布尔标记，仅在为真时写出
     if t.get("silent"):
         out.append("    silent: true")
     if t.get("wakeup"):
         out.append("    wakeup: true")
-    if t.get("command_only"):
-        out.append("    command_only: true")
+    # kind：来源身份（tool / command_action）。仅在为 command_action 时写出，
+    # 普通 AI 工具默认即 tool，不必写出，保持存储精简、diff 稳定。
+    if (t.get("kind") or "tool") == "command_action":
+        out.append("    kind: command_action")
     # 说明：上下线开关（enabled）是运行时状态，不入本文件，
     # 由 registry 单独写入 custom_tools_runtime.yaml（排除出版本库）。
     out += _dump_fixed_args(t.get("fixed_args") or [])
@@ -329,8 +331,12 @@ def _resolve_interpreter(raw, script):
     return ""
 
 
-def _build_tool_entry(raw, d, provider, skill_prompt, seen):
-    """校验并构建单个工具的规范化字典（工具名由 _validate_tool_name 解析）。"""
+def _build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"):
+    """校验并构建单个条目的规范化字典（工具名由 _validate_tool_name 解析）。
+
+    @param kind 条目来源身份：tool（AI 工具）/ command_action（指令执行端）；
+                由调用方按所在数组传入，解析层据此天然分流。
+    """
     name = _validate_tool_name(raw, seen)
     desc = (raw.get("description") or "").strip()
     if not desc:
@@ -358,23 +364,40 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen):
         # wakeup：唤醒类工具（如 open_drawer），允许在「抽屉关闭」时由待命轮询取走执行。
         # 普通工具只在抽屉打开时可被取走，唤醒类工具打破该限制。
         "wakeup": bool(raw.get("wakeup")),
-        # command_only：仅供「外部指令」执行的工具，不对 AI 暴露。
-        # 这类工具是指令（供 QQ 用户使用）的执行端，对 AI 透明，
-        # 不进入 AI 工具目录、不写入 System Prompt；但仍注册到 provider hub，
-        # 指令经 hub.dispatch 调用时才能找到它（含 wakeup 等属性）。
-        "command_only": bool(raw.get("command_only")),
+        # kind：本条目的「来源身份」，由解析层按所在数组自动标注，非人工声明。
+        #   tool           —— 来自 tools 数组，真正的 AI 工具；
+        #   command_action —— 来自 command_actions 数组，指令的执行端。
+        # 视图层据此天然分流，无需任何「过滤标记」：指令执行端不进 AI 工具目录，
+        # 也不写入 System Prompt；但仍注册到 provider hub，指令经 hub.dispatch
+        # 调用时才能找到它（执行通道与工具共用，避免重复实现）。
+        "kind": kind,
         "enabled": False,
     }
 
 
 def parse_skill(skill_dir):
-    """解析一个 skill 目录的 tool.json，返回规范化后的工具字典列表（已校验）。"""
+    """解析一个 skill 目录的 tool.json，返回规范化后的条目字典列表（已校验）。
+
+    两类条目各从独立数组解析，天然分流、互不混入：
+      - tools            → kind=tool，真正的 AI 工具；
+      - command_actions  → kind=command_action，指令的执行端。
+    两者共用同一套字段校验与执行通道，仅在「来源身份」上区分，
+    从而避免重复实现，又不让指令执行端混进 AI 工具集合。
+    """
     d = resolve_to_abs(skill_dir)
     spec, provider, skill_prompt = _read_tool_spec(d)
-    raw_list = _normalize_raw_list(spec)
     seen = set()
-    tools = []
-    for raw in raw_list:
-        # 单工具构建：命名、描述、脚本、参数、executor 等字段的校验都收敛在此
-        tools.append(_build_tool_entry(raw, d, provider, skill_prompt, seen))
-    return tools
+    entries = []
+    # 1) AI 工具：优先取 tools 数组；无 tools 键时用 _normalize_raw_list 兼容
+    #    历史写法（spec 直接是列表或单对象）。
+    if isinstance(spec, dict) and "tools" in spec:
+        raw_tools = spec.get("tools") or []
+    else:
+        raw_tools = _normalize_raw_list(spec)
+    for raw in (raw_tools if isinstance(raw_tools, list) else [raw_tools]):
+        entries.append(_build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"))
+    # 2) 指令执行端：来自 command_actions 数组（可选）
+    actions = spec.get("command_actions") if isinstance(spec, dict) else None
+    for raw in (actions or []):
+        entries.append(_build_tool_entry(raw, d, provider, skill_prompt, seen, kind="command_action"))
+    return entries
