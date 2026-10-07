@@ -24,20 +24,8 @@
   const log = D.log;
   const M = D.methods;
 
-  // 距上次检查超过多少轮 AI 输出未检查即提醒（默认值，可被配置覆盖）
+  // 距上次抽检超过多少轮 AI 输出未抽检即提醒（用户要求：二十轮）
   const MEMORY_IDLE_LIMIT = 20;
-
-  /**
-   * 取记忆检查的轮次间隔（可配置）。
-   *
-   * 优先用用户配置的 check_memory_interval；非法或未配置时用默认 20。
-   * 下限为 1，避免配成 0 或负数导致每轮都提醒。
-   * @returns {number} 间隔轮数
-   */
-  M._memoryIdleLimit = function () {
-    const v = parseInt((this.bridgePush || {}).check_memory_interval, 10);
-    return (v > 0) ? v : MEMORY_IDLE_LIMIT;
-  };
 
   // 记忆类工具名：AI 调用其中任一，即视为「主动抽检记忆」
   const MEMORY_TOOLS = { memory_search: 1, memory_inspect: 1, memory_refine: 1 };
@@ -49,9 +37,8 @@
         armed: false,          // 是否处于计数窗口（用户发言后开启）
         lastUserId: '',        // 上次开窗的用户发言指纹（幂等去重）
         immediatePending: false, // 用户发言后是否仍在「待首次抽检」
-        sinceCheck: 0,         // 距上次提醒经过的 AI 轮数
+        sinceCheck: 0,         // 距上次抽检经过的 AI 轮数
         notifiedImmediate: false, // 本窗口的「立即提醒」是否已发过
-        nextKind: 'inspect',   // 下次周期提醒的类型（search / inspect 交替）
       };
     }
     return this.memoryCheck;
@@ -142,26 +129,24 @@
   };
 
   /**
-   * 构造一条记忆提醒。
-   *
-   * 分两种：检索（search）与抽检（inspect）。
-   *   - 检索：用户发言后的首条提醒，让 AI 回忆最近记忆、强化「当前处境」意识；
-   *   - 抽检：之后的周期提醒，检查蒸馏质量是否失真。
-   * 二者交替出现，避免反复刷同一句。
-   * @param {string} kind 'search' 或 'inspect'
+   * 构造一条记忆质量提醒。
+   * @param {string} why 触发原因（immediate / periodic）
    * @returns {Object} { error, scope, severity, message }
    */
-  M._memoryIssue = function (kind) {
-    const message = (kind === 'search')
-      ? '用户已提出新需求，请先检索最近记忆，确认当前处境后再动手。'
-      : '已连续多轮未检查记忆，请抽检记忆的蒸馏质量。';
+  M._memoryIssue = function (why) {
+    const head = (why === 'immediate')
+      ? '用户已提出新需求，但你尚未抽检记忆的蒸馏质量。'
+      : '已连续多轮未抽检记忆的蒸馏质量。';
     return {
       error: 'memory_stale',
-      // 与代码块无关：记忆状态是整条回复的属性，走消息级回传。
+      // 与代码块无关：记忆质量是整条回复的属性，走消息级回传。
       scope: 'message',
       // 补充类告警：不阻止工具执行，仅作提醒，附在卡片结果后一起回传。
       severity: 'advisory',
-      message: message
+      message: head
+        //+ '请调用 memory_inspect 抽检「过往」记忆节点的蒸馏效果（对比原文与精华，'
+        //+ '重点看上次用户输入到本轮之间的记忆），若发现精华失真、遗漏要点或'
+        //+ '关键词无效，用 memory_refine 直接修正；确认无误后再继续。'
     };
   };
 
@@ -187,25 +172,21 @@
       log('记忆检查：AI 已主动抽检，免告警并重置计数');
       return null;
     }
-    // 未抽检：若仍在「待首次提醒」，则立即提醒一次（检索最近记忆，强化处境意识）
+    // 未抽检：若仍在「待首次抽检」，则立即提醒一次
     if (st.immediatePending && !st.notifiedImmediate) {
       if (!this.hasDeliverableToolCard(incoming)) return null;
       st.immediatePending = false;
       st.notifiedImmediate = true;
       st.sinceCheck = 0;
-      st.nextKind = 'inspect';   // 首条用了检索，下条交替为抽检
-      log('记忆检查：用户发言后首次提醒（检索最近记忆）');
-      return this._memoryIssue('search');
+      log('记忆检查：用户发言后尚未抽检，立即提醒');
+      return this._memoryIssue('immediate');
     }
-    // 否则累加计数，满阈值提醒一次；两种提醒交替出现
+    // 否则累加计数，满阈值提醒一次
     st.sinceCheck += 1;
-    const limit = this._memoryIdleLimit();
-    if (st.sinceCheck < limit) return null;
+    if (st.sinceCheck < MEMORY_IDLE_LIMIT) return null;
     if (!this.hasDeliverableToolCard(incoming)) return null;
     st.sinceCheck = 0;
-    const kind = st.nextKind === 'search' ? 'search' : 'inspect';
-    st.nextKind = (kind === 'search') ? 'inspect' : 'search';
-    log('记忆检查：周期提醒（' + kind + '）');
-    return this._memoryIssue(kind);
+    log('记忆检查：连续多轮未抽检，周期提醒');
+    return this._memoryIssue('periodic');
   };
 })();

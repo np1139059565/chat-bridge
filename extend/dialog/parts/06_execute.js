@@ -65,18 +65,14 @@
     // 看不到结果。以 'tool' 来源上报，后端据此放行（不按普通回看丢弃）。
     if (this.reportToBridge) this.reportToBridge('tool');
     // 自动回传仅在「自动流程」触发时进行；noReply 只豁免成功结果：
-    // 执行失败必须回传，让 AI 知道工具没跑成——但仅限「AI 能据此改进」的失败。
-    // 环境 / 网络类失败（如服务重启导致的 Failed to fetch）AI 改不了，回传只会
-    // 污染它的上下文、让它误判，故这类失败一律不回传（只留在卡片 + 推 QQ/网页）。
-    const envFail = this._isEnvFailure(card);
-    const mustReply = (!card.noReply || card.status === 'error') && !envFail;
+    // 执行失败必须回传，让 AI 知道工具没跑成，否则卡片标红、AI 收不到反馈。
+    const mustReply = !card.noReply || card.status === 'error';
     if (isAuto && this.autoSendEnabled && mustReply) {
       this.scheduleAutoSend(card);
     } else {
       // 不回传必须留痕：排查「自动流程停止」时，这是最关键的断点。
       log('卡片不回传：id=' + cid + ' 原因='
-        + (envFail ? '环境/网络类失败(不回传AI)'
-          : (isAuto ? (this.autoSendEnabled ? 'noReply' : '自动开关关') : '非自动流程')));
+        + (isAuto ? (this.autoSendEnabled ? 'noReply' : '自动开关关') : '非自动流程'));
     }
   };
 
@@ -146,27 +142,6 @@
       card.status = 'error';
       card.error = String(e);
     }
-  };
-
-  /**
-   * 判断一张失败卡片是否属「环境 / 网络类失败」。
-   *
-   * 这类失败 AI 改参数也解决不了（服务未启动、连接被拒、请求被中止等），
-   * 回传给 AI 只会污染上下文、让它误判成工具问题而反复重试。
-   * 依据两条：后端错误分类 origin=environment，或前端捕获的网络异常特征。
-   * @param {Object} card 工具卡片
-   * @returns {boolean} 是否环境 / 网络类失败
-   */
-  M._isEnvFailure = function (card) {
-    if (!card || card.status !== 'error') return false;
-    // 后端已归类为环境问题
-    if (card.origin === 'environment') return true;
-    // 前端 fetch 层异常：连接被拒 / 服务未起 / 请求中止等，特征文本
-    const err = String(card.error || '');
-    if (/Failed to fetch|NetworkError|ERR_CONNECTION|Load failed|Network request failed/i.test(err)) {
-      return true;
-    }
-    return false;
   };
 
   /**
