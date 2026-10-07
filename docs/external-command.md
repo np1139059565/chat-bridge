@@ -54,12 +54,16 @@
 
 ### 3.2 声明位置与格式
 
-在 `skills/<name>/tool.json` 中增加 `commands` 数组，与 `tools` 并列：
+在 `skills/<name>/tool.json` 中增加 `commands` 与 `command_actions` 两个数组，与 `tools` 并列：
 
 ```json
 {
   "provider": "debug_chrome",
-  "tools": [ /* 原样 */ ],
+  "tools": [ /* AI 工具，原样 */ ],
+  "command_actions": [
+    { "name": "open_drawer", "description": "打开调试抽屉", "executor": "external", "wakeup": true, "parameters": [] },
+    { "name": "close_drawer", "description": "关闭调试抽屉", "executor": "external", "parameters": [] }
+  ],
   "commands": [
     { "name": "/dbg-open", "alias": "/do", "desc": "打开调试抽屉", "tool": "open_drawer", "params": {} },
     { "name": "/dbg-close", "alias": "/dc", "desc": "关闭调试抽屉", "tool": "close_drawer", "params": {} }
@@ -67,14 +71,23 @@
 }
 ```
 
-字段说明：
+三个数组各司其职、互不混放：
+
+- `tools` —— AI 工具，进 AI 工具目录与 System Prompt。
+- `command_actions` —— 指令的执行端，字段与工具一致，但对 AI 透明。
+- `commands` —— 指令本身，用 `tool` 字段引用某个 `command_action`。
+
+`command_actions` 字段与 `tools` 完全一致（`name` / `description` / `executor` /
+`provider` / `parameters` / `wakeup` 等），解析与执行共用同一套逻辑，仅来源数组不同。
+
+`commands` 字段说明：
 
 | 字段 | 必填 | 说明 |
 |---|---|---|
 | `name` | 是 | 主命令名，须以 `/` 开头 |
 | `alias` | 否 | 快捷键，须唯一、不得与既有别名冲突 |
 | `desc` | 是 | 说明，进 `/help` 与指令面板 |
-| `tool` | 是 | 映射到本扩展的哪个工具（即 `TOOL_HANDLERS` 的键） |
+| `tool` | 是 | 映射到本 skill 的哪个 `command_action` |
 | `params` | 否 | 固定参数，敲指令时原样随命令下发 |
 
 ### 3.3 执行通道
@@ -90,7 +103,8 @@
   → 结果按原路回传
 ```
 
-宿主全程不碰扩展内部状态。这与 AI 调 `open_drawer` 走的是同一条路，扩展只维护一份执行逻辑。
+宿主全程不碰扩展内部状态。指令执行端与 AI 工具**共用同一条下发通道**，
+扩展只维护一份执行逻辑；区别仅在于指令执行端不进 AI 工具目录。
 
 ### 3.4 命名与快捷键
 
@@ -103,25 +117,31 @@
 
 - 不再硬限「20 个元素」。面板元素超出平台上限时**截断并记录**，保留优先级高者，不阻断注册。
 
-### 3.5.1 指令执行端工具必须标 command_only（硬约束）
+### 3.5.1 指令执行端与 AI 工具源头分离（硬约束）
 
-外部指令要执行，必须映射到一个工具（`tool` 字段）。但该工具是**指令的执行端**，
+外部指令要执行，必须映射到一个执行端。执行端是**指令的执行端**，
 **对 AI 透明**，绝不能出现在 AI 工具目录或 System Prompt 里。
 
 **边界（务必分清）**：
 
-| | 归谁用 | 是否进 AI 工具目录 / prompt |
-|---|---|---|
-| **指令** | QQ 用户在聊天对话里敲 | 否（指令列表另走 `/help` 与指令面板） |
-| **工具** | AI 调用 | 是 |
+| | 归谁用 | 声明位置 | 是否进 AI 工具目录 / prompt |
+|---|---|---|---|
+| **指令** | QQ 用户在聊天对话里敲 | `commands` 数组 | 否（指令列表另走 `/help` 与指令面板） |
+| **指令执行端** | 指令路由调用 | `command_actions` 数组 | 否 |
+| **工具** | AI 调用 | `tools` 数组 | 是 |
 
-**声明方式**：指令的执行端工具在 `tool.json` / `custom_tools.yaml` 里加 `command_only: true`。
+**声明方式（源头分开）**：指令执行端声明在独立的 `command_actions` 数组里，
+与 AI 工具的 `tools` 数组物理分开，不再用任何标记字段区分。
 
-**后果警示**：漏标 `command_only` 会让这类工具混进 `/tools` 并污染 System Prompt，
-即「指令入侵工具目录」——属严重错误。历史上 `open_drawer` 等 5 个抽屉控制工具
-就因此暴露给了 AI。加指令时若新增了执行端工具，**务必同步标 `command_only`**。
+**为什么不用标记字段**：历史上曾把两类混在 `tools` 数组里、用 `command_only: true`
+标记指令执行端，靠视图层过滤。这种「同源 + 过滤」的写法极易漏过滤：历史上
+`open_drawer` 等 5 个抽屉控制工具就曾因此暴露给 AI，造成「指令入侵工具目录」。
+现改为源头分开——解析层按条目所在数组自动标注来源身份，视图层天然分流，
+从根上消除漏标风险。
 
-字段细节见 `external-tool.md` 第 2.2.1 节。
+**执行通道仍共用**：指令执行端虽与 AI 工具分开声明，但两者仍注册进同一个
+provider hub、走同一条下发通道。指令执行时按自身携带的 provider 找到执行端。
+这样既不混淆，又避免重复实现执行逻辑。
 
 ### 3.6 生命周期
 
