@@ -113,23 +113,19 @@ def t_memory_inspect(p):
     }
 
 
-def t_memory_refine(p):
-    """修正某节点的蒸馏结果：改写精华与关键词。
+def _refine_params(p, memory_nodes):
+    """解析并校验 memory_refine 的参数，确认节点存在。
 
-    AI 抽检发现蒸馏失真时调用。只改蒸馏层字段（essence / keywords），
-    不动原始 blocks——原文永久保留，修正可随时重来。
-
-    @param p { node_id, essence?, keywords?, reason? }
-    @return { ok, node_id, updated, essence, keywords }
+    @param p            参数字典
+    @param memory_nodes 记忆节点模块
+    @returns (nid, essence, keywords)：essence/keywords 为 None 表示不改该项
     """
     _require(p, "node_id")
     try:
         nid = int(p.get("node_id"))
     except (TypeError, ValueError):
         raise ToolParamError("node_id 必须是整数，收到：%r" % (p.get("node_id"),))
-    import memory_nodes
-    node = memory_nodes.get_node(nid)
-    if not node:
+    if not memory_nodes.get_node(nid):
         raise ToolParamError("节点不存在：%d" % nid)
     essence = p.get("essence")
     keywords = p.get("keywords")
@@ -144,19 +140,38 @@ def t_memory_refine(p):
         if not isinstance(keywords, list):
             raise ToolParamError("keywords 必须是字符串数组")
         keywords = [str(k).strip() for k in keywords if str(k).strip()]
+    return nid, essence, keywords
+
+
+def _refresh_vector(memory_nodes, nid, essence):
+    """按最新精华刷新节点向量，保证检索第三路与精华一致（失败静默）。"""
+    try:
+        import memory_keywords as kw
+        vec = kw.text_to_vector(essence)
+        conn = memory_nodes.get_conn()
+        conn.execute("UPDATE nodes SET vector=? WHERE id=?",
+                     (memory_nodes.vec_to_blob(vec), nid))
+        memory_nodes.maybe_commit(conn)
+    except Exception:
+        pass  # 向量刷新失败不影响精华修正本身
+
+
+def t_memory_refine(p):
+    """修正某节点的蒸馏结果：改写精华与关键词。
+
+    AI 抽检发现蒸馏失真时调用。只改蒸馏层字段（essence / keywords），
+    不动原始 blocks——原文永久保留，修正可随时重来。
+
+    @param p { node_id, essence?, keywords?, reason? }
+    @return { ok, node_id, updated, essence, keywords }
+    """
+    import memory_nodes
+    nid, essence, keywords = _refine_params(p, memory_nodes)
     # 更新蒸馏层字段（set_content 只改显式传入的项）
     memory_nodes.set_content(nid, essence=essence, keywords=keywords)
     # 若改了精华，同步刷新向量，保证检索第三路与最新精华一致
     if essence is not None:
-        try:
-            import memory_keywords as kw
-            vec = kw.text_to_vector(essence)
-            conn = memory_nodes.get_conn()
-            conn.execute("UPDATE nodes SET vector=? WHERE id=?",
-                         (memory_nodes.vec_to_blob(vec), nid))
-            memory_nodes.maybe_commit(conn)
-        except Exception:
-            pass  # 向量刷新失败不影响精华修正本身
+        _refresh_vector(memory_nodes, nid, essence)
     updated = memory_nodes.get_node(nid)
     return {
         "ok": True,
