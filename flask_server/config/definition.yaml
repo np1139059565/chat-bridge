@@ -248,7 +248,7 @@ bridge:
     - /new
     - /csp
     - /sa on
-    interval: 2
+    interval: 3
   - name: /crp
     label: 清空消息记录并重新解析
     steps:
