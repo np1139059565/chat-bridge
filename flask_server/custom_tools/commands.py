@@ -53,28 +53,54 @@ def _collect_from_spec(spec, skill, tools):
     """
     out = []
     for c in (spec.get("commands") or []):
-        if not isinstance(c, dict):
-            continue
-        name = (c.get("name") or "").strip()
-        if not name.startswith("/"):
-            continue
-        tool = (c.get("tool") or "").strip()
-        entry = tools.get(tool)
-        # 映射目标必须存在且上线，且属于同一 skill，避免跨 skill 误挂
-        if not entry or not entry.get("enabled"):
-            continue
-        if (entry.get("skill_name") or "") != skill:
-            continue
-        out.append({
-            "name": name,                       # 主命令名（带 /）
-            "alias": (c.get("alias") or "").strip(),  # 快捷键（可空）
-            "desc": (c.get("desc") or "").strip(),    # 说明
-            "tool": tool,                       # 映射的外部工具名
-            "params": c.get("params") or {},    # 固定参数，随命令下发
-            "provider": entry.get("provider") or "",  # 执行方
-            "skill": skill,                     # 所属 skill
-        })
+        item = _parse_command(c, skill, tools)
+        if item:
+            out.append(item)
     return out
+
+
+def _is_valid_target(entry, skill):
+    """判断命令映射的工具是否合法：存在、已上线、且属于同一 skill。
+
+    @param entry 工具表条目（可能为 None）
+    @param skill 所属 skill 名
+    @returns 合法为 True
+    """
+    if not entry or not entry.get("enabled"):
+        return False
+    # 避免跨 skill 误挂：映射目标必须属于声明它的 skill
+    return (entry.get("skill_name") or "") == skill
+
+
+def _parse_command(c, skill, tools):
+    """解析并校验单条命令声明；不合法返回 None。
+
+    合法性判定（不合法则跳过该条，不报错，避免一条坏声明拖垮全部）：
+      1. 是对象；2. name 以 / 开头；3. tool 映射到本 skill 已上线的工具。
+    映射目标必须存在且上线，否则指令按了也没人执行，不如不列。
+    @param c     命令声明字典
+    @param skill 所属 skill 名
+    @param tools 已上线工具表 {tool_name: entry}
+    @returns 命令对象；不合法返回 None
+    """
+    if not isinstance(c, dict):
+        return None
+    name = (c.get("name") or "").strip()
+    if not name.startswith("/"):
+        return None
+    tool = (c.get("tool") or "").strip()
+    entry = tools.get(tool)
+    if not _is_valid_target(entry, skill):
+        return None
+    return {
+        "name": name,                       # 主命令名（带 /）
+        "alias": (c.get("alias") or "").strip(),  # 快捷键（可空）
+        "desc": (c.get("desc") or "").strip(),    # 说明
+        "tool": tool,                       # 映射的外部工具名
+        "params": c.get("params") or {},    # 固定参数，随命令下发
+        "provider": entry.get("provider") or "",  # 执行方
+        "skill": skill,                     # 所属 skill
+    }
 
 
 def list_external_commands():
