@@ -279,6 +279,54 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
     return n_written
 
 
+def _conv_key(id_to_msg, r):
+    """按节点行与其父节点拼出前端 msgTree 的 key：'父msg_id-子msg_id'。"""
+    pid_db = r["parent_id"] or 0
+    pid_msg = id_to_msg.get(pid_db, "0")
+    return pid_msg + "-" + r["msg_id"]
+
+
+def _build_tree(rows):
+    """由节点行重建 msgTree（key = '父msg_id-子msg_id'），卡片位先留空。"""
+    tree = {}
+    id_to_msg = {r["id"]: r["msg_id"] for r in rows}
+    for r in rows:
+        tree[_conv_key(id_to_msg, r)] = {
+            "role": r["role"], "name": r["name"],
+            "blocks": _loads(r["blocks"], []),
+            "source": r["source"], "deleted": bool(r["deleted"]), "cards": {},
+        }
+    return tree, id_to_msg
+
+
+def _attach_cards(conn, rows, tree, id_to_msg):
+    """把各节点的卡片挂到 msgTree 对应节点上。"""
+    for r in rows:
+        key = _conv_key(id_to_msg, r)
+        if key not in tree:
+            continue
+        for c in conn.execute("SELECT * FROM cards WHERE node_id=?", (r["id"],)).fetchall():
+            tree[key]["cards"][c["block_id"]] = {
+                "tool": c["tool"], "status": c["status"],
+                "result": _loads(c["result"], None), "finishedAt": c["finished_at"],
+            }
+
+
+def _conv_meta_fields(meta):
+    """从 conversations 行取出会话级字段（meta 为空时全用兜底值）。"""
+    if not meta:
+        return {"title": "", "page_url": "", "visibleKeys": [], "branchKeys": [],
+                "externalCards": [], "orphanSlice": []}
+    return {
+        "title": meta["title"] or "",
+        "page_url": meta["page_url"] or "",
+        "visibleKeys": _loads(meta["visible_keys"], []),
+        "branchKeys": _loads(meta["branch_keys"], []),
+        "externalCards": _loads(meta["external_cards"], []),
+        "orphanSlice": _loads(meta["orphan_slice"], []),
+    }
+
+
 def load_conversation(conv_id, site_key):
     """从库重建前端会话对象；不存在返回 None。"""
     conn = get_conn()
@@ -292,41 +340,11 @@ def load_conversation(conv_id, site_key):
     ).fetchall()
     if not rows and not meta:
         return None
-    # 重建 msgTree：key = '父msg_id-子msg_id'
-    tree = {}
-    id_to_msg = {}
-    for r in rows:
-        id_to_msg[r["id"]] = r["msg_id"]
-    for r in rows:
-        pid_db = r["parent_id"] or 0
-        pid_msg = id_to_msg.get(pid_db, "0")
-        key = pid_msg + "-" + r["msg_id"]
-        node = {
-            "role": r["role"], "name": r["name"],
-            "blocks": _loads(r["blocks"], []),
-            "source": r["source"], "deleted": bool(r["deleted"]), "cards": {},
-        }
-        tree[key] = node
-    # 挂卡片
-    for r in rows:
-        pid_db = r["parent_id"] or 0
-        pid_msg = id_to_msg.get(pid_db, "0")
-        key = pid_msg + "-" + r["msg_id"]
-        for c in conn.execute("SELECT * FROM cards WHERE node_id=?", (r["id"],)).fetchall():
-            if key in tree:
-                tree[key]["cards"][c["block_id"]] = {
-                    "tool": c["tool"], "status": c["status"],
-                    "result": _loads(c["result"], None), "finishedAt": c["finished_at"],
-                }
-    return {
-        "title": (meta["title"] if meta else "") or "",
-        "page_url": (meta["page_url"] if meta else "") or "",
-        "msgTree": tree,
-        "visibleKeys": _loads(meta["visible_keys"], []) if meta else [],
-        "branchKeys": _loads(meta["branch_keys"], []) if meta else [],
-        "externalCards": _loads(meta["external_cards"], []) if meta else [],
-        "orphanSlice": _loads(meta["orphan_slice"], []) if meta else [],
-    }
+    tree, id_to_msg = _build_tree(rows)
+    _attach_cards(conn, rows, tree, id_to_msg)
+    result = _conv_meta_fields(meta)
+    result["msgTree"] = tree
+    return result
 
 
 def list_conversations(site_key=None):
