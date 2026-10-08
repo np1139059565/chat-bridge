@@ -263,6 +263,37 @@ def web_voice():
     return jsonify(success=True, cardId=card_id, file=fname)
 
 
+@bp.route("/api/web/client_log", methods=["POST", "OPTIONS"])
+def web_client_log():
+    """接收前端（手机浏览器）上报的日志，落到后端文件。
+
+    背景：网页版跑在手机浏览器上，用户看不到控制台，无法把前端日志复制出来。
+    故前端在关键点把日志 POST 到这里，由后端落盘，供排查「页面卡住 / 断连」。
+
+    关键价值：若前端主线程被卡住，它连这条上报都发不出——后端日志会出现
+    整齐空档，那空档本身就是「主线程被卡住」的证据。
+
+    请求体：{ tag, msg }；为轻量，不校验字段，能记就记。
+    写盘用专用文件 client-YYYY-MM-DD.log，与主日志分开，便于单独查看。
+    """
+    if request.method == "OPTIONS":
+        return ("", 204)
+    data = request.get_json(force=True, silent=True) or {}
+    tag = str(data.get("tag") or "")
+    msg = str(data.get("msg") or "")
+    import time as _t
+    line = "%s [client][%s] %s" % (_t.strftime("%H:%M:%S"), tag, msg)
+    try:
+        paths.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        f = paths.LOGS_DIR / ("client-%s.log" % _t.strftime("%Y-%m-%d"))
+        with open(str(f), "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+    except Exception:
+        # 日志写盘失败不能影响前端：静默返回成功
+        pass
+    return jsonify(success=True)
+
+
 @bp.route("/api/web/messages", methods=["GET", "OPTIONS"])
 def web_messages():
     """主动拉取新消息。

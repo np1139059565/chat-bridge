@@ -17,6 +17,10 @@
   var dotEl = document.getElementById('dot');
   var statusTextEl = document.getElementById('statusText');
 
+  // ---------- 前端日志上报（实现在 web_clientlog.js，暴露为 window.WebLog） ----------
+  // 手机上看不到控制台，日志只能打到后端；实现细节见 web_clientlog.js 顶部说明。
+  var clientLog = window.WebLog.clientLog;
+
   // ---------- 时间格式化 ----------
   function fmtTime(ts) {
     var d = new Date(ts || Date.now());
@@ -223,8 +227,14 @@
   var FAIL_TOLERANCE = 4;
 
   function fetchMessages(history) {
-    if (pollBusy) return;   // 上一轮未完成：跳过本轮，避免并发堆积
+    if (pollBusy) {
+      // 上一轮未完成：跳过。记一条，便于看出「请求堆积」。
+      if (!history) clientLog('poll', 'skip(busy)');
+      return;   // 上一轮未完成：跳过本轮，避免并发堆积
+    }
     pollBusy = true;
+    var _t0 = Date.now();
+    if (!history) clientLog('poll', 'start cursor=' + cursor);
     var url = '/api/web/messages?cursor=' + cursor + '&limit=200';
     if (history) url += '&history=1';
     // 加超时：卡住的请求主动中断，否则 pollBusy 会永久为真、轮询停摆。
@@ -235,6 +245,7 @@
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.json(); })
       .then(function (data) {
+        if (!history) clientLog('poll', 'ok ' + (Date.now() - _t0) + 'ms');
         failCount = 0;
         setStatus(true);
         if (!data || !data.success) return;
@@ -243,13 +254,21 @@
         // 正序遍历、倒序插入：最终最新在顶部。
         // 历史加载（history）不自动播语音；增量拉取的新语音在解锁后自动播。
         var allowAuto = !history;
+        var _rt0 = Date.now();
         msgs.forEach(function (m) { renderMessage(m, allowAuto); });
+        var _rt = Date.now() - _rt0;
+        // 渲染是主线程同步操作，渲染条数多 / 单条重时会明显占主线程，
+        // 这里记渲染条数与耗时：若耗时大，就是「页面卡住」的嫌疑点。
+        if (!history && (msgs.length || _rt > 200)) {
+          clientLog('render', 'n=' + msgs.length + ' cost=' + _rt + 'ms');
+        }
         // 新消息渲染后触发一次待合成扫描：把「生成中」的语音自动轮询、就绪即自动连播
         if (window.WebVoice && window.WebVoice.kick) window.WebVoice.kick();
         // 保持可见区域是最新消息（列表倒序，最新在顶部）
         if (listEl.scrollTop < 40) listEl.scrollTop = 0;
       })
       .catch(function () {
+        if (!history) clientLog('poll', 'fail ' + (Date.now() - _t0) + 'ms failCount=' + (failCount + 1));
         failCount += 1;   // 连续失败超容差才显示断开，避免抖动就闪断
         if (failCount >= FAIL_TOLERANCE) setStatus(false);
       })
@@ -395,8 +414,15 @@
   document.getElementById('btnSend').addEventListener('click', sendMessage);
 
   // ---------- 首次加载：铺历史 + 启动轮询 ----------
+  clientLog('page', 'load 开始首次铺历史');
   fetchMessages(true);
   setInterval(function () { fetchMessages(false); }, 2500);
+  // 页面可见性变化打点：切后台时定时器会被系统暂停，这里记下进出时刻，
+  // 便于把「断连空档」与「切后台」对齐——若空档两端正好是 hidden/visible，
+  // 就是切后台所致，而非页面卡死。
+  document.addEventListener('visibilitychange', function () {
+    clientLog('page', document.hidden ? 'hidden（切后台）' : 'visible（回前台）');
+  });
   // 页面重新可见时立即补拉一次：手机切后台会暂停定时器，
   // 回到前台若不主动拉，会等到下一个周期甚至更久才看到新消息。
   document.addEventListener('visibilitychange', function () {
