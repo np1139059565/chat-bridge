@@ -50,6 +50,45 @@ def _ensure_import(name):
         return None
 
 
+def _synth_thread_body(edge_tts, text, voice, out_path, timeout, result):
+    """线程体：新建专属事件循环，跑完一次合成，把结果写回 result。
+
+    @param edge_tts 已导入的 edge_tts 模块
+    @param text     待合成文本
+    @param voice    音色名
+    @param out_path 输出音频路径
+    @param timeout  单次合成的协程级超时（秒）
+    @param result   结果字典（就地写入 ok / err）
+    """
+    loop = asyncio.new_event_loop()          # 本线程专属事件循环，独立于其它合成
+    asyncio.set_event_loop(loop)             # 绑定到本线程，避免跨线程串用
+    try:
+        async def _do():
+            """单次合成协程：Communicate.save 带协程级超时。"""
+            comm = edge_tts.Communicate(text, voice=voice)
+            await asyncio.wait_for(comm.save(out_path), timeout=timeout)
+        loop.run_until_complete(_do())       # 阻塞本线程直到合成完成或协程超时
+        result["ok"] = True                  # 正常产出音频
+    except asyncio.TimeoutError:
+        result["err"] = "timeout"            # 协程级超时（wait_for 触发）
+    except Exception as e:
+        result["err"] = str(e)               # 其它合成异常
+    finally:
+        # 收尾：不显式 loop.close()。
+        # edge_tts 遗留的 Proactor 管道对象在本线程循环回收后才被 GC，
+        # 其析构函数会调用已不可用的循环，向 stderr 打一条
+        # «Exception ignored ... Event loop is closed»。
+        # 这是 Python 3.10 + Windows Proactor 的已知无害告警：
+        #   - 不影响合成结果（音频已落盘）；
+        #   - 不进 app_log，不污染业务日志。
+        # 它无法在本层根除，除非放弃「独立循环」这一故障隔离手段；
+        # 权衡后保留独立循环，接受该噪音。
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except Exception:
+            pass                             # 收尾异常不影响合成结果
+
+
 def _synth_in_new_loop(edge_tts, text, voice, out_path, timeout):
     """在独立线程的独立事件循环中执行一次合成。
 
@@ -65,38 +104,9 @@ def _synth_in_new_loop(edge_tts, text, voice, out_path, timeout):
     @returns (ok, error)；成功时 error 为空串
     """
     result = {"ok": False, "err": ""}
-
-    def _worker():
-        """线程体：新建事件循环，跑完一次合成后关闭循环。"""
-        loop = asyncio.new_event_loop()          # 本线程专属事件循环，独立于其它合成
-        asyncio.set_event_loop(loop)             # 绑定到本线程，避免跨线程串用
-        try:
-            async def _do():
-                """单次合成协程：Communicate.save 带协程级超时。"""
-                comm = edge_tts.Communicate(text, voice=voice)
-                await asyncio.wait_for(comm.save(out_path), timeout=timeout)
-            loop.run_until_complete(_do())       # 阻塞本线程直到合成完成或协程超时
-            result["ok"] = True                  # 正常产出音频
-        except asyncio.TimeoutError:
-            result["err"] = "timeout"            # 协程级超时（wait_for 触发）
-        except Exception as e:
-            result["err"] = str(e)               # 其它合成异常
-        finally:
-            # 收尾：不显式 loop.close()。
-            # edge_tts 遗留的 Proactor 管道对象在本线程循环回收后才被 GC，
-            # 其析构函数会调用已不可用的循环，向 stderr 打一条
-            # «Exception ignored ... Event loop is closed»。
-            # 这是 Python 3.10 + Windows Proactor 的已知无害告警：
-            #   - 不影响合成结果（音频已落盘）；
-            #   - 不进 app_log，不污染业务日志。
-            # 它无法在本层根除，除非放弃「独立循环」这一故障隔离手段；
-            # 权衡后保留独立循环，接受该噪音。
-            try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-            except Exception:
-                pass                             # 收尾异常不影响合成结果
-
-    t = threading.Thread(target=_worker, daemon=True, name="tts-synth")
+    t = threading.Thread(target=_synth_thread_body,
+                         args=(edge_tts, text, voice, out_path, timeout, result),
+                         daemon=True, name="tts-synth")
     t.start()                                    # 启动独立合成线程
     t.join(timeout=timeout + 10)                 # 外层等待略长于协程超时，确保协程超时先触发
     if t.is_alive():
