@@ -21,6 +21,41 @@ def log(*args):
     bridge_log.write("[bridge][voice]", *args)
 
 
+VOICE_MARKER = '{"type":"bridge-voice"'
+
+
+def _scan_json_object(text, start):
+    """从 text[start] 起做大括号配平扫描，返回完整 JSON 对象的结束下标。
+
+    尊重字符串与转义：字符串内的 { } " 不参与配平。
+    @param text  待扫描文本
+    @param start 起始下标（应为 '{'）
+    @returns 结束下标（不含）；未配平返回 -1
+    """
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return -1
+
+
 def _find_voice_json_in_text(text):
     """在纯文本里查找「裸 JSON」形态的语音块，返回朗读文本；无则空串。
 
@@ -34,33 +69,10 @@ def _find_voice_json_in_text(text):
     import json
     if not text:
         return ""
-    marker = '{"type":"bridge-voice"'
-    start = text.find(marker)
+    start = text.find(VOICE_MARKER)
     while start >= 0:
-        # 从起头处做大括号配平扫描，切出完整 JSON 对象（尊重字符串与转义）
-        depth = 0
-        in_str = False
-        esc = False
-        end = -1
-        for i in range(start, len(text)):
-            ch = text[i]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = i + 1
-                    break
+        # 从起头处做大括号配平扫描，切出完整 JSON 对象
+        end = _scan_json_object(text, start)
         if end > 0:
             try:
                 obj = json.loads(text[start:end])
@@ -69,7 +81,7 @@ def _find_voice_json_in_text(text):
             if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
                 return str(obj.get("text") or "").strip()
         # 未命中则继续找下一个可能位置
-        start = text.find(marker, start + 1)
+        start = text.find(VOICE_MARKER, start + 1)
     return ""
 
 
@@ -97,6 +109,19 @@ def extract_voice_from_blocks(m):
         if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
             return str(obj.get("text") or "").strip()
     # 2) 兜底：语音块漂移成「裸 JSON」时，从正文文本里捞（md 优先，其次各文本块）
+    for t in _collect_texts(m):
+        got = _find_voice_json_in_text(t)
+        if got:
+            return got
+    return ""
+
+
+def _collect_texts(m):
+    """收集消息里的候选正文文本（md 优先，其次各文本块）。
+
+    @param m 消息对象
+    @returns 文本列表（可能含空串）
+    """
     texts = [str(m.get("md") or "")]
     for b in (m.get("blocks") or []):
         if not b:
@@ -104,11 +129,7 @@ def extract_voice_from_blocks(m):
         t = b.get("text") or b.get("content")
         if t:
             texts.append(str(t))
-    for t in texts:
-        got = _find_voice_json_in_text(t)
-        if got:
-            return got
-    return ""
+    return texts
 
 
 def strip_voice_blocks(text):
@@ -131,38 +152,14 @@ def strip_voice_blocks(text):
             return ""
         return mo.group(0)
     out = re.sub(r"```[^\n]*\n([\s\S]*?)```", _drop_fenced, out)
-    # 2) 裸 JSON：以 {"type":"bridge-voice" 起头、大括号配平，整段删除
-    marker = '{"type":"bridge-voice"'
-    i = out.find(marker)
+    # 2) 裸 JSON：以 {"type":"bridge-voice" 起头、大括号配平，整段删除（复用配平扫描）
+    i = out.find(VOICE_MARKER)
     while i >= 0:
-        depth = 0
-        in_str = False
-        esc = False
-        end = -1
-        for j in range(i, len(out)):
-            ch = out[j]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = j + 1
-                    break
-        if end > 0:
-            out = out[:i] + out[end:]
-        else:
+        end = _scan_json_object(out, i)
+        if end <= 0:
             break
-        i = out.find(marker)
+        out = out[:i] + out[end:]
+        i = out.find(VOICE_MARKER)
     return out.strip()
 
 
