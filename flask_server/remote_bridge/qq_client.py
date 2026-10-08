@@ -61,6 +61,33 @@ def log(*args):
     print("[bridge][qq]", *args)
 
 
+def _c2c_body(content, msg_id, msg_seq, markdown):
+    """构造单聊被动回复的请求体（文本 / Markdown 两种形态）。
+
+    Markdown 消息：msg_type=2，正文放进 markdown.content，content 必须为空串；
+    纯文本消息：msg_type=0，正文直接放在 content。
+    @param content  消息文本
+    @param msg_id   被动回复引用的用户消息 id
+    @param msg_seq  同一 msg_id 下的消息序号
+    @param markdown 是否按 Markdown 发送
+    @returns 请求体字典
+    """
+    if markdown:
+        return {
+            "msg_type": 2,                          # 2 = Markdown
+            "markdown": {"content": content},      # Markdown 正文
+            "content": "",                         # 此模式下必须留空
+            "msg_id": msg_id,                       # 被动回复引用的用户消息 id
+            "msg_seq": msg_seq,                     # 同 msg_id 下的去重序号
+        }
+    return {
+        "content": content,
+        "msg_type": 0,            # 0 = 文本
+        "msg_id": msg_id,         # 被动回复引用的用户消息 id
+        "msg_seq": msg_seq,       # 同 msg_id 下的去重序号
+    }
+
+
 class QQClient(QqMediaMixin):
     """QQ 机器人客户端：token 管理 + WebSocket 长连接。
 
@@ -193,24 +220,7 @@ class QQClient(QqMediaMixin):
             return False, "no_token"
         # 单聊发送接口路径（两种消息类型共用同一路径）
         url = API_BASE + "/v2/users/%s/messages" % openid
-        if markdown:
-            # Markdown 消息：msg_type=2，正文放进 markdown.content；
-            # 官方要求此模式下 content 必须为空字符串，否则请求体不合法。
-            body = {
-                "msg_type": 2,                          # 2 = Markdown
-                "markdown": {"content": content},      # Markdown 正文
-                "content": "",                         # 此模式下必须留空
-                "msg_id": msg_id,                       # 被动回复引用的用户消息 id
-                "msg_seq": msg_seq,                     # 同 msg_id 下的去重序号
-            }
-        else:
-            # 纯文本消息：msg_type=0，正文直接放在 content
-            body = {
-                "content": content,
-                "msg_type": 0,            # 0 = 文本
-                "msg_id": msg_id,         # 被动回复引用的用户消息 id
-                "msg_seq": msg_seq,       # 同 msg_id 下的去重序号
-            }
+        body = _c2c_body(content, msg_id, msg_seq, markdown)
         try:
             resp = self._http_post(url, body, self._auth_header())
             return True, resp
