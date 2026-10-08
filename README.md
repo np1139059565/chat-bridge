@@ -50,7 +50,9 @@ chat-bridge-main/
 │   │   ├── prompt_sections.py # 技能说明与技能清单收集
 │   │   ├── card_bus.py        # 外部卡片总线
 │   │   ├── external_tools.py  # 外部工具提供方注册表与转发
-│   │   └── screenshot_store.py# 截图存盘
+│   │   ├── screenshot_store.py# 截图存盘
+│   │   ├── memory_text.py     # 记忆消息块转纯文本（共享）
+│   │   └── serial_worker.py   # 串行队列 + 幂等后台线程骨架（共享）
 │   ├── tools/                 # 内置工具
 │   │   ├── tool_helpers.py    # 工具通用辅助（参数校验、路径解析、体积控制）
 │   │   ├── tool_meta.py       # 内置工具元数据声明（描述 + 参数表）
