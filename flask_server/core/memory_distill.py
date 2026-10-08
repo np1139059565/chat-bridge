@@ -25,14 +25,29 @@ import threading
 import memory_nodes
 import memory_keywords as kw
 import memory_events
+import serial_worker
 from memory_db import begin_batch, end_batch
 
 # ---------- 串行蒸馏队列 ----------
-# 待蒸馏节点（FIFO），元素为 (node_id, use_llm)；_pending_set 用于去重。
-_pending = collections.deque()
-_pending_set = set()
-_queue_lock = threading.Lock()
-_worker_running = False   # 工作线程是否在跑（避免重复启动多个工作线程）
+# 待蒸馏节点（FIFO），元素为 (node_id, use_llm)；同一 node 去重（保留首次）。
+# 并发骨架统一走共享模块 serial_worker。
+
+
+def _handle_distill(item):
+    """处理一个待蒸馏节点：调用 distill_node；单节点失败只记日志，不中断队列。
+
+    @param item 二元组 (node_id, use_llm)
+    """
+    nid, use_llm = item                          # 拆出节点 id 与是否用 LLM
+    try:
+        distill_node(nid, use_llm=use_llm)       # 执行蒸馏
+    except Exception as e:                       # 单节点失败不中断整批
+        print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))
+
+
+# 蒸馏队列：keep_first=True 对应「同一节点只保留首次入队」的去重语义
+_distill_worker = serial_worker.SerialWorker(
+    _handle_distill, keep_first=True, thread_name="mem-distill")
 
 
 # 各工具结果的专属摘要器注册表：工具名 -> 函数(result, limit) -> str。
@@ -314,41 +329,7 @@ def distill_async(node_ids, use_llm=False):
     @return 本次真正新增入队的节点数（已在队列中的不重复计）
     """
     added = 0
-    with _queue_lock:
-        for nid in node_ids:
-            if nid not in _pending_set:
-                _pending.append((nid, use_llm))
-                _pending_set.add(nid)
-                added += 1
-    _ensure_worker()
+    for nid in node_ids:
+        if _distill_worker.submit(nid, (nid, use_llm)):
+            added += 1                          # 仅统计真正新增入队的节点
     return added
-
-
-def _ensure_worker():
-    """确保串行工作线程在跑（幂等：重复调用只启动一个）。"""
-    global _worker_running
-    with _queue_lock:
-        if _worker_running:
-            return
-        _worker_running = True
-    threading.Thread(target=_worker, daemon=True).start()
-
-
-def _worker():
-    """串行工作线程：逐个节点蒸馏，处理完一个再取下一个。
-
-    队列空时退出并复位标志，下次入队会再次拉起，不空转占资源。
-    """
-    global _worker_running
-    while True:
-        with _queue_lock:
-            if not _pending:
-                _worker_running = False
-                return
-            nid, use_llm = _pending.popleft()
-            _pending_set.discard(nid)
-        try:
-            distill_node(nid, use_llm=use_llm)
-        except Exception as e:
-            # 单节点失败不中断整批
-            print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))

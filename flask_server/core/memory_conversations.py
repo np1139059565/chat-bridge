@@ -34,6 +34,7 @@ from memory_edges import add_edge
 from memory_cards import upsert_card
 import app_log
 import json_utils
+import serial_worker
 
 
 def _now():
@@ -42,13 +43,27 @@ def _now():
 
 
 # ---------------- 异步保存队列（改造 A：不占用请求线程） ----------------
-# 待保存：{(conv_id, site_key): conv}，配合 _pending_order 记录入队顺序。
 # 采用「最新覆盖」语义：同一会话若在尚未处理前又有新保存，后者覆盖前者，
-# 避免对同一会话做无谓的重复全量写。
-_pending = {}
-_pending_order = collections.deque()
-_queue_lock = threading.Lock()
-_worker_running = False
+# 避免对同一会话做无谓的重复全量写。并发骨架统一走共享模块 serial_worker。
+
+
+def _handle_save(item):
+    """处理一个待保存会话：先落库，再触发该会话的异步蒸馏。
+
+    先落库再蒸馏，保证蒸馏读得到刚写的节点。单会话失败只记日志，不中断队列。
+    @param item 三元组 (conv_id, site_key, conv)
+    """
+    conv_id, site_key, conv = item               # 拆出会话标识与内容
+    try:
+        _save_conversation_sync(conv_id, site_key, conv)  # 全量写库
+        _distill_new(conv_id)                    # 触发该会话新节点的异步蒸馏
+    except Exception as e:                       # 单会话失败不中断队列
+        app_log.warn("[mem][save] 后台保存失败 conv=%s: %s" % (conv_id, e))
+
+
+# 保存队列：keep_first=False 对应「最新覆盖」语义
+_save_worker = serial_worker.SerialWorker(
+    _handle_save, keep_first=False, thread_name="mem-save")
 
 # 增量签名缓存（改造 B）：{(conv_id, site_key, msg_id): (内容签名, 库节点id)}
 # 只存内存，进程重启后首次保存自然全量；会话删除时清除对应项。
@@ -65,46 +80,7 @@ def save_conversation(conv_id, site_key, conv):
     @return None（不等待写入完成）
     """
     key = (conv_id, site_key)
-    with _queue_lock:
-        if key not in _pending:
-            _pending_order.append(key)
-        _pending[key] = conv
-    _ensure_worker()
-
-
-def _ensure_worker():
-    """确保后台保存线程在跑（幂等：重复调用只启动一个）。"""
-    global _worker_running
-    with _queue_lock:
-        if _worker_running:
-            return
-        _worker_running = True
-    threading.Thread(target=_worker, daemon=True).start()
-
-
-def _worker():
-    """后台保存线程：串行处理队列，处理完一个会话再取下一个。
-
-    每个会话完成后：先落库，再触发该会话的异步蒸馏（保证蒸馏读得到刚写的节点）。
-    队列空时退出并复位标志，下次入队会再次拉起，不空转占资源。
-    """
-    global _worker_running
-    while True:
-        with _queue_lock:
-            if not _pending_order:
-                _worker_running = False
-                return
-            key = _pending_order.popleft()
-            conv = _pending.pop(key, None)
-        if conv is None:
-            continue
-        conv_id, site_key = key
-        try:
-            _save_conversation_sync(conv_id, site_key, conv)
-            _distill_new(conv_id)
-        except Exception as e:
-            # 单会话失败不中断队列
-            app_log.warn("[mem][save] 后台保存失败 conv=%s: %s" % (conv_id, e))
+    _save_worker.submit(key, (conv_id, site_key, conv))
 
 
 def _distill_new(conv_id):

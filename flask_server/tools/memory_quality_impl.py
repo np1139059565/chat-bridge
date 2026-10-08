@@ -27,15 +27,14 @@ _MAX_INSPECT = 20
 
 
 def _blocks_to_text(blocks):
-    """把节点 blocks 抽成纯文本，供 AI 与蒸馏精华对比。"""
-    parts = []
-    for b in (blocks or []):
-        if not isinstance(b, dict):
-            continue
-        t = b.get("text") or b.get("code") or ""
-        if t:
-            parts.append(str(t))
-    return "\n".join(parts).strip()
+    """把节点 blocks 抽成纯文本，供 AI 与蒸馏精华对比。
+
+    拼装逻辑统一走共享模块 memory_text（strip=True 保持原行为）。
+    @param blocks 节点块列表
+    @returns 去首尾空白后的纯文本
+    """
+    import memory_text
+    return memory_text.blocks_to_text(blocks, strip=True)
 
 
 def _preview(text, limit=_PREVIEW_LIMIT):

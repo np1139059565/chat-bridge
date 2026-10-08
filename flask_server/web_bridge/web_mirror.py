@@ -35,40 +35,16 @@ def log(*args):
 def _voice_text_of(m):
     """从消息 blocks 里取语音朗读文本（复用桥接侧同一约定）。
 
-    认内容为 {"type":"bridge-voice","text":...} 的块；
-    优先用远程桥接模块的提取器，取不到则就地解析，保证互不阻断。
+    识别规则以远程桥接模块的提取器为唯一来源，此处不再另存副本。
+    远程桥接模块不可用时返回空串：语音是附加能力，不应影响镜像主流程。
+    @param m 消息对象
     @returns 语音文本；无则空串
     """
     try:
         from remote_bridge.message_voice import extract_voice_from_blocks
         return extract_voice_from_blocks(m) or ""
     except Exception:
-        pass
-    # 兜底：就地解析代码块里的 JSON
-    return _scan_voice_from_blocks(m)
-
-
-def _scan_voice_from_blocks(m):
-    """兜底：从消息的代码块里就地解析语音 JSON，取朗读文本。
-
-    远程桥接模块不可用时使用；认 type 为 bridge-voice 的 JSON 块。
-    @param m 消息对象
-    @returns 语音文本；无则空串
-    """
-    import json
-    for b in (m.get("blocks") or []):
-        if not b or b.get("type") != "code":
-            continue
-        src = str(b.get("code") or "").strip()
-        if not src.startswith("{"):
-            continue
-        try:
-            obj = json.loads(src)
-        except Exception:
-            continue
-        if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
-            return str(obj.get("text") or "").strip()
-    return ""
+        return ""
 
 
 def synthesize_voice(text):

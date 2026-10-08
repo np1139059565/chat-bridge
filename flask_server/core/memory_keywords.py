@@ -16,6 +16,7 @@
 """
 import re
 from collections import Counter
+import memory_text
 
 # 英文/数字/下划线标识符：代码术语、工具名、变量名多为此类
 _RE_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{1,}")
@@ -136,15 +137,13 @@ def _all_stop(g):
 
 
 def extract_from_blocks(blocks):
-    """从消息 blocks 里抽出纯文本（供蒸馏用）。"""
-    parts = []
-    for b in (blocks or []):
-        if not isinstance(b, dict):
-            continue
-        t = b.get("text") or b.get("code") or ""
-        if t:
-            parts.append(str(t))
-    return "\n".join(parts)
+    """从消息 blocks 里抽出纯文本（供蒸馏用）。
+
+    具体拼装逻辑统一走共享模块 memory_text，避免与抽检工具重复实现。
+    @param blocks 消息块列表
+    @returns 拼接后的纯文本
+    """
+    return memory_text.blocks_to_text(blocks)
 
 
 def denoise_by_plans(keywords, threshold=0.8, recent=20):
