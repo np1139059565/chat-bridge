@@ -45,6 +45,16 @@ def _voice_text_of(m):
     except Exception:
         pass
     # 兜底：就地解析代码块里的 JSON
+    return _scan_voice_from_blocks(m)
+
+
+def _scan_voice_from_blocks(m):
+    """兜底：从消息的代码块里就地解析语音 JSON，取朗读文本。
+
+    远程桥接模块不可用时使用；认 type 为 bridge-voice 的 JSON 块。
+    @param m 消息对象
+    @returns 语音文本；无则空串
+    """
     import json
     for b in (m.get("blocks") or []):
         if not b or b.get("type") != "code":
@@ -258,6 +268,24 @@ def _prepare_fields(m, kind):
     return voice_text, image_value, role
 
 
+def _parse_env_kind(m, parsers):
+    """解析消息的信封与类别，两者都容错（失败时给安全默认）。
+
+    @param m       消息对象
+    @param parsers 解析函数字典
+    @returns (env, kind)：env 为信封字典或 None；kind 为 user / tool / ai
+    """
+    try:
+        env = parsers["parse_envelope"](m)
+    except Exception:
+        env = None
+    try:
+        kind = parsers["classify"](m)
+    except Exception:
+        kind = "ai"
+    return env, kind
+
+
 def _gate(m, push, parsers):
     """判断一条消息是否应入箱；应跳过时返回 None。
 
@@ -273,19 +301,13 @@ def _gate(m, push, parsers):
     # 已入库的不再重复处理（含语音合成这种重活）
     if web_inbox.is_seen(mid):
         return None
+    # 解析信封与类别（各自内部吞异常）
+    env, kind = _parse_env_kind(m, parsers)
     # 网页自发消息：网页发消息时已按纯文本记过一次（见 routes/web.py），
     # 抽屉上报回来的却是 external-call 信封原文（source=web）。若在此再镜像，
     # 就会同一句话记两条、且第二条显示为整段 JSON。故跳过网页自发的信封。
-    try:
-        env = parsers["parse_envelope"](m)
-    except Exception:
-        env = None
     if env and env.get("source") == "web":
         return None
-    try:
-        kind = parsers["classify"](m)          # user / tool / ai
-    except Exception:
-        kind = "ai"
     # 推送开关过滤：与 QQ 版同一套配置（push.user / tool / ai）。
     # 关掉某类推送时，网页版也一并跳过，保持两边设定一致。
     if not push.get(kind, True):
