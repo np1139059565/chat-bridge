@@ -105,41 +105,57 @@ def _write_split(cfg):
 _CONFIG = None
 
 
+def _merge_basic(cfg, raw):
+    """合并基础字段：文件里有的用文件值，没有的保留默认。"""
+    for k in ("enabled", "app_id", "app_secret", "intents"):
+        if k in raw:
+            cfg[k] = raw[k]
+
+
+def _merge_command_params(cfg, raw):
+    """合并内置指令参数，并兼容旧字段 md_selector。
+
+    以默认值为基底逐指令、逐键合并，文件值优先；
+    旧字段 md_selector 归并进 command_params.md.selector（新字段未设时才用）。
+    """
+    if isinstance(raw.get("command_params"), dict):
+        for cmd, params in raw["command_params"].items():
+            if isinstance(params, dict):
+                cfg["command_params"].setdefault(cmd, {}).update(params)
+    if raw.get("md_selector") and not (cfg["command_params"].get("md") or {}).get("selector"):
+        cfg["command_params"].setdefault("md", {})["selector"] = raw["md_selector"]
+
+
+def _merge_commands(cfg, raw):
+    """合并命令列表：以文件为准，只补从未在文件里出现过的默认项。
+
+    直接用文件列表覆盖会让默认的 /md 被空列表清掉；
+    用户删掉某条默认指令后又会「复活」——因此只补「文件里从未出现」的默认项。
+    """
+    user = raw["commands"]
+    seen = set()
+    for c in user:
+        if isinstance(c, dict) and c.get("name"):
+            seen.add(str(c["name"]).lower())
+    merged = list(user)
+    for d in cfg.get("commands") or []:
+        if str(d.get("name", "")).lower() not in seen:
+            merged.append(d)
+    cfg["commands"] = merged
+
+
 def load_config():
     """读取桥接配置并与默认值合并；结果缓存到内存。"""
     global _CONFIG
     with _lock:
         raw = _read_merged()
         cfg = _default_config()
-        # 逐字段合并：文件里有的用文件值，没有的保留默认
-        for k in ("enabled", "app_id", "app_secret", "intents"):
-            if k in raw:
-                cfg[k] = raw[k]
-        # 内置指令参数：以默认值为基底逐指令、逐键合并，文件值优先
-        if isinstance(raw.get("command_params"), dict):
-            for cmd, params in raw["command_params"].items():
-                if isinstance(params, dict):
-                    cfg["command_params"].setdefault(cmd, {}).update(params)
-        # 兼容旧字段 md_selector：归并进 command_params.md.selector（新字段未设时才用）
-        if raw.get("md_selector") and not (cfg["command_params"].get("md") or {}).get("selector"):
-            cfg["command_params"].setdefault("md", {})["selector"] = raw["md_selector"]
+        _merge_basic(cfg, raw)
+        _merge_command_params(cfg, raw)
         if isinstance(raw.get("push"), dict):
             cfg["push"].update(raw["push"])
         if isinstance(raw.get("commands"), list):
-            # 按命令名合并：文件里的指令优先，默认指令里未出现的补进来。
-            # 直接用文件列表覆盖会让默认的 /md 被空列表清掉；
-            # 用户删掉某条默认指令后又会「复活」——因此以文件为准，
-            # 只补从未在文件里出现过的默认项。
-            user = raw["commands"]
-            seen = set()
-            for c in user:
-                if isinstance(c, dict) and c.get("name"):
-                    seen.add(str(c["name"]).lower())
-            merged = list(user)
-            for d in cfg.get("commands") or []:
-                if str(d.get("name", "")).lower() not in seen:
-                    merged.append(d)
-            cfg["commands"] = merged
+            _merge_commands(cfg, raw)
         _CONFIG = cfg
         return cfg
 
