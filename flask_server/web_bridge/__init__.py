@@ -25,6 +25,33 @@ def log(*args):
 class WebBridge:
     """网页版桥接总控：入站投卡、出站存箱、语音落盘。"""
 
+    def _create_card(self, card_type, title, content, payload, log_hint="", extra=""):
+        """向卡片总线投一张卡，返回卡片 id；失败返回空串。
+
+        @param card_type 卡片类型
+        @param title     标题
+        @param content    卡片正文
+        @param payload    结构化载荷
+        @param log_hint   日志中的卡片名（如「图片卡片」）
+        @param extra      日志附加信息（如张数）
+        @returns 卡片 id；失败空串
+        """
+        import card_bus
+        try:
+            card = card_bus.bus.create(
+                source="web", card_type=card_type, title=title,
+                content=content, payload=payload,
+            )
+            seg = ["已投递" + log_hint, card.id[:8]]
+            if extra:
+                seg.append(extra)
+            seg.append("等待抽屉取走")
+            log(*seg)
+            return card.id
+        except Exception as e:
+            log("投递" + log_hint + "失败：", e)
+            return ""
+
     def ingest_text(self, text):
         """把网页发来的一段文字投进卡片总线，送进网页 AI。
 
@@ -35,7 +62,6 @@ class WebBridge:
         """
         import json
         import time
-        import card_bus
         payload = {
             "type": "external-call",
             "nonce": "web-" + str(int(time.time() * 1000)),
@@ -46,19 +72,13 @@ class WebBridge:
             "from_voice": False,
             "page_url": "",
         }
-        try:
-            card = card_bus.bus.create(
-                source="web",
-                card_type="external-call",
-                title="网页用户",
-                content=json.dumps(payload, ensure_ascii=False, indent=2),
-                payload={"source": "web", "openid": "web-user"},
-            )
-            log("已投递文本卡片", card.id[:8], "等待抽屉取走")
-            return card.id
-        except Exception as e:
-            log("投递文本卡片失败：", e)
-            return ""
+        return self._create_card(
+            card_type="external-call",
+            title="网页用户",
+            content=json.dumps(payload, ensure_ascii=False, indent=2),
+            payload={"source": "web", "openid": "web-user"},
+            log_hint="文本卡片",
+        )
 
     def ingest_images(self, data_urls, text="", image_names=None):
         """把网页发来的一组图片（可含文字）投成一张卡片，由抽屉一次贴进网页 AI。
@@ -71,36 +91,31 @@ class WebBridge:
         @param text      随图附带的文字；为空时补「用户截图」给 AI 上下文
         @returns 卡片 id；失败返回空串
         """
-        import card_bus
         urls = [str(u) for u in (data_urls or []) if u]
         if not urls:
             return ""
-        try:
-            card = card_bus.bus.create(
-                source="web",
-                card_type="qq-image",     # 沿用既有图片卡片类型，抽屉按此消费
-                title="网页图片",
-                content="（网页图片，自动贴入网页 AI 输入框）",
-                payload={
-                    "kind": "qq-image",
-                    # data_urls：图片数组（前端据此一次贴多张）
-                    "data_urls": urls,
-                    # data_url：单张兼容字段（旧消费端只认它时取第一张）
-                    "data_url": urls[0],
-                    "openid": "web-user",
-                    "path": "",
-                    "text": (text or "").strip() or "用户截图",
-                    # image_names：图片在服务端的文件名（与收件箱同源）。
-                    # 抽屉据此把图片挂到对应消息上，渲染时按名取图显示，
-                    # 不依赖网页 DOM（网页里用户图未必是 img 元素）。
-                    "image_names": [str(n) for n in (image_names or []) if n],
-                },
-            )
-            log("已投递图片卡片", card.id[:8], "张数=" + str(len(urls)), "等待抽屉取走")
-            return card.id
-        except Exception as e:
-            log("投递图片卡片失败：", e)
-            return ""
+        payload = {
+            "kind": "qq-image",
+            # data_urls：图片数组（前端据此一次贴多张）
+            "data_urls": urls,
+            # data_url：单张兼容字段（旧消费端只认它时取第一张）
+            "data_url": urls[0],
+            "openid": "web-user",
+            "path": "",
+            "text": (text or "").strip() or "用户截图",
+            # image_names：图片在服务端的文件名（与收件箱同源）。
+            # 抽屉据此把图片挂到对应消息上，渲染时按名取图显示，
+            # 不依赖网页 DOM（网页里用户图未必是 img 元素）。
+            "image_names": [str(n) for n in (image_names or []) if n],
+        }
+        return self._create_card(
+            card_type="qq-image",     # 沿用既有图片卡片类型，抽屉按此消费
+            title="网页图片",
+            content="（网页图片，自动贴入网页 AI 输入框）",
+            payload=payload,
+            log_hint="图片卡片",
+            extra="张数=" + str(len(urls)),
+        )
 
 
 # 全局单例
