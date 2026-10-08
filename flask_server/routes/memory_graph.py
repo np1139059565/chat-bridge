@@ -7,13 +7,10 @@
 
 依赖：flask、memory_* 各模块、paths
 """
-import json
-
 from flask import Blueprint, jsonify, request, send_file
 
 import paths
 import memory_nodes
-import memory_edges
 import memory_cards
 import memory_decay
 import memory_events
@@ -23,6 +20,7 @@ import memory_conversations
 import memory_solidify
 import memory_notes
 import rule_enforce
+import graph_data
 
 bp = Blueprint("memory_graph", __name__)
 
@@ -198,39 +196,12 @@ def graph_export():
     # since_id：增量拉取——只返回 id 大于它的新节点，及「至少一端是新节点」的边，
     # 供页面「随 AI 生成逐个增加节点」的轮询使用；0 或未传表示全量。
     since_id = request.args.get("since_id", type=int) or 0
-    if conv_id:
-        raw_nodes = memory_nodes.list_by_conv(conv_id, site_key)
-        node_ids = [n["id"] for n in raw_nodes]
-        edges = memory_edges.edges_within(node_ids)
-    else:
-        raw_nodes = memory_nodes.list_all()
-        edges = memory_edges.all_edges()
+    # 取数与整形统一委托 graph_data（纯函数，便于测试；本文件保持精简）
+    raw_nodes, edges = graph_data.collect_nodes_edges(conv_id, site_key)
     max_id = max([n["id"] for n in raw_nodes], default=0)
-    if since_id:
-        raw_nodes = [n for n in raw_nodes if n["id"] > since_id]
-        keep = set(n["id"] for n in raw_nodes)
-        # 只保留「至少一端是新节点」的边，避免重复下发旧边
-        edges = [e for e in edges
-                 if e.get("src_node") in keep or e.get("dst_node") in keep]
-    nodes = []
-    for n in raw_nodes:
-        nodes.append({
-            "id": n["id"], "source": n["source"], "tier": n.get("tier"),
-            "strength": n.get("strength"), "essence": n.get("essence"),
-            "keywords": n.get("keywords"),
-            # created_at：时间轴视图按时间排布节点需要
-            "created_at": n.get("created_at") or 0,
-        })
-    # 边的 keywords 存的是 JSON 字符串，转为数组供前端直接使用
-    for e in edges:
-        kw = e.get("keywords")
-        if isinstance(kw, str) and kw:
-            try:
-                e["keywords"] = json.loads(kw)
-            except Exception:
-                e["keywords"] = []
-        else:
-            e["keywords"] = []
+    raw_nodes, edges = graph_data.apply_since(raw_nodes, edges, since_id)
+    nodes = graph_data.shape_nodes(raw_nodes)
+    edges = graph_data.shape_edges(edges)
     # max_id 供前端记下，下次轮询带上，实现增量
     return _ok(nodes=nodes, edges=edges, max_id=max_id)
 
