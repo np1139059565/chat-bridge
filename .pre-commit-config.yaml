@@ -41,3 +41,11 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: doc-sync
+        name: 文档同步（路由 / 工具收录）
+        description: 校验路由与内置工具是否都已收录进 docs/api-reference.md，防止文档漂移
+        entry: python scripts/check_doc_sync.py
+        language: system
+        pass_filenames: false
+        always_run: true

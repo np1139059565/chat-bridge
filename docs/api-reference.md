@@ -228,9 +228,14 @@ POST 请求体示例：
 | `get_tool_params` | `tool_id` | — |
 | `list_rules` | — | — |
 | `read_rule` | `name` | — |
-| `run_command` | `language`, `command` | `cwd`, `timeout` |
+| `run_command` | `language`, `command` | `cwd`, `timeout`, `async`（true 时后台执行，返回 task_id） |
+| `command_task` | `task_id` | — |
+| `memory_search` | `query` | `limit` |
+| `memory_inspect` | — | `node_ids`, `conv_id`, `limit`（默认 5，上限 20） |
+| `memory_refine` | `node_id` | `essence`, `keywords`（两者至少提供一个） |
 
 > 参数命名口径：文件路径统一 `file_path`，目录路径统一 `dir_path`。调用前请先 `get_tool_params` 核对。
+> `command_task` 用于查询 `run_command` 异步调用的状态与结果；`memory_*` 三个工具服务于记忆系统的检索、抽检与修正。
 
 ---
 
@@ -295,3 +300,186 @@ POST 请求体示例：
 记忆图谱可视化页面（原生 Canvas 力导向图，零外部依赖）。
 节点按分级着色（临时=灰 / 中期=蓝 / 永久=金 / 用户=红），大小反映强度；
 边分树边（灰实线）、分支边（灰虚线）、突触边（金虚线）。支持悬停看精华、拖拽节点。
+
+### 记忆系统补充接口
+
+#### POST /memory/set
+
+写入单个节点（含其卡片）。请求：`{ node: {...} }`。返回 `{ success }`。
+
+#### POST /memory/node/delete
+
+删除单个节点。请求：`{ node_id }`。返回 `{ success, deleted }`。
+
+#### POST /memory/promote
+
+手动提升某节点分级（如临时 → 中期 → 永久）。请求：`{ node_id, tier }`。返回 `{ success, tier }`。
+
+#### GET /memory/strength
+
+查询某节点的记忆强度。查询参数 `node_id`。返回 `{ success, strength }`。
+
+#### POST /memory/rule-check
+
+对指定文本跑一遍规则检查（供质量评估）。请求：`{ text }`。返回检查结果。
+
+#### GET /memory/notes
+
+列出笔记条目。查询参数 `kind`（`journal` / `notebook`）、`day`（YYYY-MM-DD，可选）。返回 `{ success, notes: [...] }`。
+
+#### GET /memory/notes/days
+
+列出有每日记忆的日期。返回 `{ success, days: [...] }`。
+
+#### POST /memory/note
+
+写入一条笔记。请求：`{ kind, text, day?, node_id?, keywords? }`。返回 `{ success, note_id }`。
+
+#### POST /memory/note/delete
+
+删除一条笔记。请求：`{ note_id }`。返回 `{ success, deleted }`。
+
+#### POST /memory/solidify/rule
+
+把某节点固化为规则文件。请求：`{ node_id }`。返回 `{ success }`。
+
+#### POST /memory/solidify/notebook
+
+把某节点写入错题本。请求：`{ node_id }`。返回 `{ success }`。
+
+#### GET /memory/event/tree
+
+取事件树结构（事件根 + 其成员）。查询参数 `root_id`（可选）。返回 `{ success, tree }`。
+
+#### POST /memory/event/merge
+
+合并两个事件簇。请求：`{ from_root, to_root }`。返回 `{ success }`。
+
+---
+
+## 八、桥接层（/api/bridge）
+
+QQ ↔ 网页 AI 的双向桥接接口。抽屉插件与后端交互，把网页对话切片推给 QQ，
+并把 QQ 侧的指令回传到抽屉执行。
+
+### GET /api/bridge/status
+
+返回桥接运行状态（供设置页指示灯与窗口信息展示）。返回 `{ success, connected, ... }`。
+
+### GET /api/bridge/config
+
+读取桥接配置。
+
+### POST /api/bridge/config
+
+部分更新桥接配置并重启桥接（凭证 / 开关变化需重建长连接）。
+请求为待更新字段的字典；返回 `{ success }`。
+
+### POST /api/bridge/report
+
+抽屉上报消息切片，触发向 QQ 推送。
+请求：`{ conversationId, messages: [{id, role, blocks}], openid }`。
+`messages` 是全量可见切片，桥接层自行与已推送集合比对取差集。
+
+### POST /api/bridge/result
+
+抽屉回传指令执行结果，转发到 QQ。请求：`{ request_id, result }`。返回 `{ success }`。
+
+### GET /api/bridge/help
+
+返回桥接指令帮助文本。返回 `{ success, text }`。
+
+### GET /api/bridge/command_params
+
+查询某桥接指令的参数说明。查询参数 `name`。返回 `{ success, params }`。
+
+### GET /api/bridge/commands
+
+列出可用桥接指令。返回 `{ success, commands: [...] }`。
+
+### POST /api/bridge/commands
+
+登记或更新桥接指令面板。请求为指令清单；返回 `{ success }`。
+
+### DELETE /api/bridge/commands
+
+移除桥接指令面板。返回 `{ success }`。
+
+### POST /api/bridge/restart
+
+重启桥接。返回 `{ success }`。
+
+---
+
+## 九、网页版机器人（/api/web 与 /web-bot）
+
+网页版对话机器人：把 QQ 侧消息投递到网页收件箱，并支持从网页发图、发语音、回传消息。
+
+### GET /web-bot
+
+网页版机器人页面。
+
+### GET /web-bot/<name>
+
+按名字取网页版机器人会话页面。返回对应 HTML。
+
+### GET /api/web/commands
+
+列出网页版可用指令。返回 `{ success, commands: [...] }`。
+
+### GET /api/web/messages
+
+拉取网页收件箱消息。返回 `{ success, messages: [...] }`。
+
+### POST /api/web/send
+
+从网页发送一条消息（转投到 QQ）。请求：`{ text }`。返回 `{ success }`。
+
+### POST /api/web/image
+
+从网页发送一张图片。请求含图片数据（base64）；返回 `{ success, name }`。
+
+### GET /api/web/image-file/<name>
+
+读取已保存的网页图片。返回图片二进制（带长缓存）。
+
+### POST /api/web/voice
+
+从网页发送语音。请求含音频数据；返回 `{ success, name }`。
+
+### GET /api/web/audio/<name>
+
+读取已合成的语音文件。返回音频二进制（带长缓存）。
+
+### POST /api/web/voice-ensure
+
+按需合成语音（已存在则复用）。请求：`{ text }`。返回 `{ success, name }`。
+
+### GET /api/web/voice-status
+
+查询语音合成状态。查询参数 `name`。返回 `{ success, status }`。
+
+### POST /api/web/client_log
+
+接收网页端上报的客户端日志，落到服务端日志。请求：`{ level, text }`。返回 `{ success }`。
+
+---
+
+## 十、路由补充接口
+
+### GET/POST /config/restart-port
+
+改端口并重启服务（重启后新端口生效）。
+
+### PUT/DELETE /custom_tools/<name>
+
+按名字更新或删除自定义工具。
+
+### GET /tool/command_task
+
+查询 `run_command` 异步调用的状态与结果。查询参数 `task_id`。
+返回 `{ success, task_id, status, result?, error? }`。
+
+### GET/PUT/DELETE /rules/<name>
+
+按名字读取、更新或删除某条规则。
