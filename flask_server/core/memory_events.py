@@ -6,14 +6,14 @@
   3. 突触关联 → 关键词交集达阈值时，节点间建 associative 边；
   4. 三条护栏 → 边界锚定、语义化延迟、修订留痕。
 
-依赖：memory_db、memory_nodes、memory_edges、json、time
+依赖：memory_db、memory_nodes、memory_edges、json_utils、time
 """
-import json
 import time
 
 from memory_db import get_conn, maybe_commit
 import memory_nodes
 import memory_edges
+import json_utils
 
 # 突触建边门槛：交集 >= 3 且 Jaccard >= 0.3
 SYNAPSE_MIN_INTERSECT = 3
@@ -298,10 +298,5 @@ def get_shadow(root_id):
 
 
 def _loads(text, default):
-    """安全反序列化。"""
-    if not text:
-        return default
-    try:
-        return json.loads(text)
-    except Exception:
-        return default
+    """安全反序列化 JSON（委托公共函数，保留本名以兼容既有调用点）。"""
+    return json_utils.safe_json_loads(text, default)

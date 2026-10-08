@@ -13,6 +13,7 @@ import json
 import time
 
 from memory_db import get_conn, maybe_commit
+import json_utils
 
 
 def _now():
@@ -93,10 +94,5 @@ def delete_note(note_id):
 
 
 def _loads(text, default):
-    """安全反序列化 JSON。"""
-    if not text:
-        return default
-    try:
-        return json.loads(text)
-    except Exception:
-        return default
+    """安全反序列化 JSON（委托公共函数，保留本名以兼容既有调用点）。"""
+    return json_utils.safe_json_loads(text, default)

@@ -33,6 +33,7 @@ from memory_nodes import upsert_node, get_by_msg_id, set_parent
 from memory_edges import add_edge
 from memory_cards import upsert_card
 import app_log
+import json_utils
 
 
 def _now():
@@ -374,10 +375,5 @@ def _infer_source(node):
 
 
 def _loads(text, default):
-    """安全反序列化 JSON 文本。"""
-    if not text:
-        return default
-    try:
-        return json.loads(text)
-    except Exception:
-        return default
+    """安全反序列化 JSON 文本（委托公共函数，保留本名以兼容既有调用点）。"""
+    return json_utils.safe_json_loads(text, default)
