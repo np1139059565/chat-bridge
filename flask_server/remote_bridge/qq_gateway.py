@@ -23,6 +23,28 @@ def log(*args):
 # C2C 单聊消息事件类型
 EVENT_C2C_MESSAGE = "C2C_MESSAGE_CREATE"
 
+# 图片扩展名 → MIME 映射（用于拼 dataURL）；未命中默认 image/png
+_IMAGE_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+               ".gif": "image/gif", ".webp": "image/webp"}
+
+
+def _to_data_url(img_path, ext):
+    """把本地图片读成 dataURL 字符串；读取失败返回空串。
+
+    @param img_path 本地图片绝对路径
+    @param ext      文件扩展名（用于推断 MIME）
+    @returns dataURL；失败空串
+    """
+    import base64
+    try:
+        with open(img_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+    except Exception as e:
+        log("读取图片失败：", e)
+        return ""
+    mime = _IMAGE_MIME.get(ext, "image/png")
+    return "data:%s;base64,%s" % (mime, b64)
+
 
 def _extract(d):
     """从事件数据里取出关键字段。
@@ -203,40 +225,48 @@ class QqGateway:
             return
 
         # 后台线程处理：下载与识别都可能耗时，不能阻塞 WebSocket 回调线程
-        def _worker():
-            import os
-            import paths
-            from . import voice_asr, voice_pending
-            os.makedirs(paths.VOICE_DIR, exist_ok=True)
-            silk_path = str(paths.VOICE_DIR / ("in_" + str(int(time.time() * 1000)) + ".silk"))
-            # 1) 下载语音文件
-            if not _download_file(voice_url, silk_path):
-                self._reply_voice(openid, "语音文件下载失败")
-                return
-            # 2) 识别为文字
-            log("开始识别语音", "openid=" + openid[:8])
-            text, err = voice_asr.voice_file_to_text(silk_path)
-            # 源文件用完即删，不留垃圾
-            try:
-                os.remove(silk_path)
-            except OSError:
-                pass
-            if err:
-                log("语音识别失败：", err)
-                self._reply_voice(openid, "语音识别失败：" + err)
-                return
-            if not text:
-                log("语音里没识别出文字")
-                self._reply_voice(openid, "语音里没识别出文字")
-                return
-            # 3) 暂存待确认（不排队，新的覆盖旧的）
-            voice_pending.stash(openid, text, msg_id)
-            log("识别成功，已暂存待 /vo 确认：", text)
-            # 4) 回发识别结果，等用户 /vo 确认
-            self._reply_voice(openid, "识别到语音：\n" + text + "\n\n发送 /vo 确认转给 AI，不确认则忽略")
-
         import threading
-        threading.Thread(target=_worker, daemon=True).start()
+        threading.Thread(target=self._voice_worker,
+                         args=(openid, voice_url, msg_id), daemon=True).start()
+
+    def _voice_worker(self, openid, voice_url, msg_id):
+        """语音消息的后台处理：下载 → 识别 → 暂存 → 回发等 /vo 确认。
+
+        在独立线程内执行，避免耗时的下载与识别阻塞 WebSocket 回调线程。
+        @param openid    用户
+        @param voice_url 语音文件地址
+        @param msg_id    消息 id
+        """
+        import os
+        import paths
+        from . import voice_asr, voice_pending
+        os.makedirs(paths.VOICE_DIR, exist_ok=True)
+        silk_path = str(paths.VOICE_DIR / ("in_" + str(int(time.time() * 1000)) + ".silk"))
+        # 1) 下载语音文件
+        if not _download_file(voice_url, silk_path):
+            self._reply_voice(openid, "语音文件下载失败")
+            return
+        # 2) 识别为文字
+        log("开始识别语音", "openid=" + openid[:8])
+        text, err = voice_asr.voice_file_to_text(silk_path)
+        # 源文件用完即删，不留垃圾
+        try:
+            os.remove(silk_path)
+        except OSError:
+            pass
+        if err:
+            log("语音识别失败：", err)
+            self._reply_voice(openid, "语音识别失败：" + err)
+            return
+        if not text:
+            log("语音里没识别出文字")
+            self._reply_voice(openid, "语音里没识别出文字")
+            return
+        # 3) 暂存待确认（不排队，新的覆盖旧的）
+        voice_pending.stash(openid, text, msg_id)
+        log("识别成功，已暂存待 /vo 确认：", text)
+        # 4) 回发识别结果，等用户 /vo 确认
+        self._reply_voice(openid, "识别到语音：\n" + text + "\n\n发送 /vo 确认转给 AI，不确认则忽略")
 
     def _handle_image(self, openid, image_url, msg_id, text=""):
         """处理一条图片消息：下载存本地，并投一张卡片让镜像扩展贴进网页 AI。
@@ -249,51 +279,60 @@ class QqGateway:
         纯图片（无文字）时补一句「用户截图」，给 AI 一点上下文。
         @param text 同一条消息附带的文字（图文消息）；为空表示纯图片
         """
-        def _worker():
-            import os
-            import base64
-            import paths
-            os.makedirs(str(paths.QQ_IMAGES_DIR), exist_ok=True)
-            ts = str(int(time.time() * 1000))
-            low = image_url.lower()
-            ext = ".png"
-            for e in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
-                if low.endswith(e):
-                    ext = e
-                    break
-            img_path = str(paths.QQ_IMAGES_DIR / ("in_" + ts + ext))
-            # 1) 下载存本地
-            if not _download_file(image_url, img_path):
-                self._reply_voice(openid, "图片下载失败")
-                return
-            # 2) 读成 dataURL 放进卡片（与截图结果同构），扩展据此贴图
-            try:
-                with open(img_path, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("ascii")
-            except Exception as e:
-                log("读取图片失败：", e)
-                return
-            mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-                    ".gif": "image/gif", ".webp": "image/webp"}.get(ext, "image/png")
-            data_url = "data:%s;base64,%s" % (mime, b64)
-            # 3) 投一张卡片：type=qq-image，供前端识别并贴图（不下发网页 AI）
-            try:
-                card = card_bus.bus.create(
-                    source="qq",
-                    card_type="qq-image",
-                    title="QQ 图片",
-                    content="（QQ 图片，自动贴入网页 AI 输入框）",
-                    payload={"kind": "qq-image", "data_url": data_url,
-                             "openid": openid, "path": img_path,
-                             # 图文消息：带上同消息文字；纯图片则补「用户截图」
-                             "text": (text or "").strip() or "用户截图"},
-                )
-                log("已投递图片卡片", card.id[:8], "等待抽屉取走")
-            except Exception as e:
-                log("投递图片卡片失败：", e)
-
         import threading
-        threading.Thread(target=_worker, daemon=True).start()
+        threading.Thread(target=self._image_worker,
+                         args=(openid, image_url, text), daemon=True).start()
+
+    def _image_worker(self, openid, image_url, text):
+        """图片消息的后台处理：下载存本地 → 转 dataURL → 投卡片供扩展贴图。
+
+        在独立线程内执行，避免耗时的下载阻塞 WebSocket 回调线程。
+        @param openid    用户
+        @param image_url 图片地址
+        @param text      同消息附带的文字（图文消息）；空表示纯图片
+        """
+        img_path, ext = self._download_image(openid, image_url)
+        if not img_path:
+            return
+        data_url = _to_data_url(img_path, ext)
+        if not data_url:
+            return
+        self._deliver_image_card(openid, img_path, data_url, text)
+
+    def _download_image(self, openid, image_url):
+        """下载图片到本地，返回 (路径, 扩展名)；失败返回 (None, '')。"""
+        import os
+        import paths
+        os.makedirs(str(paths.QQ_IMAGES_DIR), exist_ok=True)
+        ts = str(int(time.time() * 1000))
+        low = image_url.lower()
+        ext = ".png"
+        for e in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+            if low.endswith(e):
+                ext = e
+                break
+        img_path = str(paths.QQ_IMAGES_DIR / ("in_" + ts + ext))
+        if not _download_file(image_url, img_path):
+            self._reply_voice(openid, "图片下载失败")
+            return None, ""
+        return img_path, ext
+
+    def _deliver_image_card(self, openid, img_path, data_url, text):
+        """投一张 qq-image 卡片，供前端识别并贴图（不下发网页 AI）。"""
+        try:
+            card = card_bus.bus.create(
+                source="qq",
+                card_type="qq-image",
+                title="QQ 图片",
+                content="（QQ 图片，自动贴入网页 AI 输入框）",
+                payload={"kind": "qq-image", "data_url": data_url,
+                         "openid": openid, "path": img_path,
+                         # 图文消息：带上同消息文字；纯图片则补「用户截图」
+                         "text": (text or "").strip() or "用户截图"},
+            )
+            log("已投递图片卡片", card.id[:8], "等待抽屉取走")
+        except Exception as e:
+            log("投递图片卡片失败：", e)
 
     def _reply_voice(self, openid, text):
         """向 QQ 回发一条提示文本（复用被动回复窗口）。"""
@@ -349,26 +388,8 @@ class QqGateway:
         @param from_voice 是否由语音确认投递：前端据此要求在随后 AI 回复里
                           必须含 voice 代码块（供 TTS 朗读）
         """
-        # 语音确认卡片：在正文前附一段针对性提示，直接提醒 AI 别忘了 voice 块。
-        # 只靠 System Prompt 的通用约定，AI 容易漏；把提醒贴进这次的具体请求里，命中率更高。
-        request_text = content
-        if from_voice:
-            request_text = (
-                "【本卡片来自 QQ 语音机器人】这是一段语音转成的文字。"
-                "请针对它作答，并在回复中务必另用一个代码块，块内为 JSON："
-                '{"type":"bridge-voice","text":"适合朗读的纯口语文本"}，'
-                "供系统合成语音发回用户。\n\n语音内容：\n" + content
-            )
-        payload = {
-            "type": "external-call",
-            "nonce": "qq-" + str(int(time.time() * 1000)),
-            "request": request_text,
-            "source": "qq",
-            "openid": openid,
-            "msg_id": msg_id,
-            "from_voice": bool(from_voice),   # 语音确认标记，前端据此要求 voice 块
-            "page_url": "",          # 不指定目标页面，谁打开着抽屉谁取走
-        }
+        request_text = _voice_request(content) if from_voice else content
+        payload = _external_payload(openid, request_text, msg_id, from_voice)
         try:
             import json
             card = card_bus.bus.create(
@@ -382,3 +403,40 @@ class QqGateway:
             log("已投递卡片", card.id[:8], "等待抽屉取走")
         except Exception as e:
             log("投递卡片失败：", e)
+
+
+def _voice_request(content):
+    """为语音确认卡片组装请求文本：在正文前附一段针对性提示。
+
+    只靠 System Prompt 的通用约定，AI 容易漏 voice 块；把提醒贴进这次的具体
+    请求里，命中率更高。
+    @param content 语音转出的文字
+    @returns 拼好提示的请求文本
+    """
+    return (
+        "【本卡片来自 QQ 语音机器人】这是一段语音转成的文字。"
+        "请针对它作答，并在回复中务必另用一个代码块，块内为 JSON："
+        '{"type":"bridge-voice","text":"适合朗读的纯口语文本"}，'
+        "供系统合成语音发回用户。\n\n语音内容：\n" + content
+    )
+
+
+def _external_payload(openid, request_text, msg_id, from_voice):
+    """组装外部调用卡片的信封载荷。
+
+    @param openid       用户标识
+    @param request_text 请求正文
+    @param msg_id       被动回复引用的用户消息 id
+    @param from_voice   是否由语音确认投递
+    @returns 信封字典
+    """
+    return {
+        "type": "external-call",
+        "nonce": "qq-" + str(int(time.time() * 1000)),
+        "request": request_text,
+        "source": "qq",
+        "openid": openid,
+        "msg_id": msg_id,
+        "from_voice": bool(from_voice),   # 语音确认标记，前端据此要求 voice 块
+        "page_url": "",          # 不指定目标页面，谁打开着抽屉谁取走
+    }
