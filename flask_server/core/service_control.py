@@ -8,7 +8,8 @@
   因此不存在「旧端口已让出、新端口还没起来」的真空期。
 
 新端口通过命令行参数 --port 传给新进程（server.py 的入口负责解析）。
-新进程的输出写入 data/logs/restart.log，便于排查启动失败。
+新进程的输出写入 data/logs/restart-YYYY-MM-DD.log（按天分文件），便于排查启动失败。
+按天分文件可避免单文件无限增长；旧文件在服务重启释放后可单独清理。
 """
 import os
 import subprocess
@@ -19,8 +20,17 @@ import urllib.request
 
 # flask_server 根目录（本文件在 core/ 下）
 _APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# 新进程输出日志（绝对路径，不依赖运行时工作目录）
-_LOG_PATH = os.path.join(_APP_DIR, "data", "logs", "restart.log")
+
+
+def _log_path():
+    """新进程输出日志路径：按天分文件，restart-YYYY-MM-DD.log。
+
+    按天分文件的原因：重启日志会持续追加，单文件会无限增长（曾达数十 MB）。
+    按天切分后，旧文件可在服务重启释放后单独清理，不影响当天记录。
+    @returns 绝对路径（不依赖运行时工作目录）
+    """
+    day = time.strftime("%Y-%m-%d")
+    return os.path.join(_APP_DIR, "data", "logs", "restart-%s.log" % day)
 
 
 def _spawn(extra_args=None, delay=0.0):
@@ -38,9 +48,10 @@ def _spawn(extra_args=None, delay=0.0):
         popen_cmd = argv
     # 把新进程输出重定向到日志文件，方便排查启动失败。
     # 之前丢弃输出，导致新服务起不来时无从查因。
+    log_path = _log_path()
     try:
-        os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
-        log_f = open(_LOG_PATH, "a", encoding="utf-8", buffering=1)
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        log_f = open(log_path, "a", encoding="utf-8", buffering=1)
     except Exception:
         log_f = subprocess.DEVNULL
     kw = {
