@@ -14,12 +14,12 @@
 
 依赖：paths、queue、threading、time、os
 """
-import os
 import queue
 import threading
 import time
 
 import paths
+import log_sink
 
 # 日志级别阈值：低于此级别的日志不输出。默认 INFO。
 _LEVELS = {"DEBUG": 10, "INFO": 20, "WARN": 30, "ERROR": 40}
@@ -27,9 +27,6 @@ _min_level = _LEVELS["INFO"]
 
 # 日志行队列：写入方只入队，后台线程消费。无界队列，避免写入方被阻塞。
 _queue = queue.Queue()
-
-# 缓存当前日志文件的日期，跨天时自动换新文件（仅后台线程读写）。
-_current_day = ""
 
 # 后台写线程的启动标志与保护锁（仅用于「只启动一次」）。
 _worker_started = False
@@ -47,14 +44,9 @@ def set_level(level):
         _min_level = lv
 
 
-def _day_str():
-    """取当天日期字符串 YYYY-MM-DD。"""
-    return time.strftime("%Y-%m-%d")
-
-
-def _log_path(day):
-    """拼出某天的日志文件路径。"""
-    return os.path.join(str(paths.LOGS_DIR), "app-%s.log" % day)
+# 日志落盘器：按天分文件、加锁追加、失败静默。目录每次写入时动态取，
+# 便于测试重定向 paths.LOGS_DIR 后立即生效。
+_sink = log_sink.DayFileSink("app", lambda: paths.LOGS_DIR)
 
 
 def _worker():
@@ -63,7 +55,6 @@ def _worker():
     循环永不退出（守护线程，进程结束即止）。每条处理完调用 task_done，
     供 drain 判断「是否已全部落盘」。
     """
-    global _current_day
     while True:
         # 阻塞取一条；队列空时在此挂起，不占用 CPU
         line = _queue.get()
@@ -73,18 +64,8 @@ def _worker():
                 print(line, flush=True)
             except Exception:
                 pass
-            # 文件输出：按天分文件
-            try:
-                os.makedirs(str(paths.LOGS_DIR), exist_ok=True)
-                day = _day_str()
-                # 跨天时切换文件；文件不存在则追加模式自动创建
-                if day != _current_day:
-                    _current_day = day
-                with open(_log_path(day), "a", encoding="utf-8") as f:
-                    f.write(line + "\n")
-            except Exception:
-                # 日志写盘失败不能影响主流程，静默吞掉
-                pass
+            # 文件输出：交给公共落盘器（按天分文件、加锁、失败静默）
+            _sink.append(line)
         finally:
             # 无论成败都标记该条已处理，保证 drain 能正常判定
             _queue.task_done()
