@@ -18,12 +18,18 @@ from flask import Blueprint, jsonify, request, Response, send_file
 import paths
 import web_bridge
 import screenshot_store
+import log_sink
 from web_bridge import web_inbox
 
 bp = Blueprint("web", __name__)
 
 # 网页版在指令体系里的固定用户标识（与 command_dispatch.WEB_OPENID 一致）
 WEB_OPENID = "web-user"
+
+# 前端上报日志的落盘器：client-YYYY-MM-DD.log。
+# 用同步 sink（非异步）：前端日志是「主线程是否被卡住」的诊断证据，
+# 靠日志的整齐空档判断卡顿，故宁可写入方短暂等盘，也不丢条目。
+_client_sink = log_sink.DayFileSink("client", lambda: paths.LOGS_DIR)
 
 
 def _web_reply(text):
@@ -290,14 +296,9 @@ def web_client_log():
     msg = str(data.get("msg") or "")
     import time as _t
     line = "%s [client][%s] %s" % (_t.strftime("%H:%M:%S"), tag, msg)
-    try:
-        paths.LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        f = paths.LOGS_DIR / ("client-%s.log" % _t.strftime("%Y-%m-%d"))
-        with open(str(f), "a", encoding="utf-8") as fh:
-            fh.write(line + "\n")
-    except Exception:
-        # 日志写盘失败不能影响前端：静默返回成功
-        pass
+    # 交给公共落盘器：与其它日志共用「按天分文件 + 加锁 + 失败静默」实现，
+    # 不再就地 open/write（后者未加锁，并发上报时行可能交错）。
+    _client_sink.append(line)
     return jsonify(success=True)
 
 
