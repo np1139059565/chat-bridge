@@ -295,28 +295,43 @@ def shortcut_groups():
     - 自定义区：用户在前端配置的自定义指令（含别名）
     @returns {"builtin": [...], "custom": [...]}
     """
-    builtin = []
-    # 1) 内置指令
+    builtin = _builtin_shortcuts() + _external_shortcuts()
+    custom = _custom_shortcuts()
+    return {"builtin": _dedup_sort(builtin), "custom": _dedup_sort(custom)}
+
+
+def _builtin_shortcuts():
+    """内置指令的快捷键列表（有别名取首个别名，否则取命令名）。"""
+    out = []
     for name, info in BUILTIN.items():
         aliases = info.get("aliases") or []
-        builtin.append(aliases[0] if aliases else name)
-    # 2) 外部指令（来自各 skill 的声明）：非用户自定义，归入内置区
+        out.append(aliases[0] if aliases else name)
+    return out
+
+
+def _external_shortcuts():
+    """外部指令（来自各 skill 的声明）的快捷键列表；非用户自定义，归入内置区。"""
+    out = []
     try:
         import custom_tools.commands as ext_cmds
         for c in (ext_cmds.list_external_commands() or []):
             pick = c.get("alias") or c.get("name") or ""
             if pick:
-                builtin.append(pick)
+                out.append(pick)
     except Exception as e:
         log("读取外部指令失败：", e)
-    # 3) 自定义指令（用户配置的，含别名）
-    custom = []
+    return out
+
+
+def _custom_shortcuts():
+    """用户配置的自定义指令的快捷键列表（含别名）。"""
+    out = []
     for c in (bridge_store.get_config().get("commands") or []):
         aliases = c.get("aliases") or []
         pick = aliases[0] if aliases else (c.get("name") or "")
         if pick:
-            custom.append(pick)
-    return {"builtin": _dedup_sort(builtin), "custom": _dedup_sort(custom)}
+            out.append(pick)
+    return out
 
 
 def register_panel(qq_client):
