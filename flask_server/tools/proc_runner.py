@@ -90,12 +90,40 @@ def run_with_tree_timeout(cmd, cwd=None, timeout=60, env=None):
     @returns ProcResult(returncode, stdout, stderr, timed_out)
     @raises FileNotFoundError 解释器 / 程序缺失
     """
+    proc = _spawn_process(cmd, cwd, env)
+    # 读取线程：把输出读进缓冲区。它是 daemon，读不到 EOF 就一直挂着，
+    # 但不妨碍主线程按超时返回。
+    out_chunks, err_chunks = [], []
+    reader = _start_reader(proc, out_chunks, err_chunks)
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # 超时：杀树 + 关管道，立即返回，不等读取线程
+        _abort_on_timeout(proc)
+        return ProcResult(None, "", "", True)
+    # 正常退出：给读取线程一个很短的时间收尾。
+    # 进程已退出时 EOF 通常立即到达，读取线程瞬间结束；
+    # 但若存在「孤儿孙进程持管道」，EOF 不到、读取线程会一直挂着——
+    # 故此处只等很短时间，拿不到就带着已读到的内容返回，绝不陪它干等。
+    reader.join(timeout=1)
+    return ProcResult(proc.returncode, "".join(out_chunks), "".join(err_chunks), False)
+
+
+def _spawn_process(cmd, cwd, env):
+    """启动子进程并接好管道，返回 Popen 对象。
+
+    @param cmd 命令列表
+    @param cwd 工作目录
+    @param env 环境变量字典
+    @returns Popen 对象
+    @raises FileNotFoundError 解释器 / 程序缺失
+    """
     kwargs = {}
     if os.name != "nt":
         # POSIX：自建会话，os.killpg 才能按组杀
         kwargs["start_new_session"] = True
     try:
-        proc = subprocess.Popen(
+        return subprocess.Popen(
             cmd, cwd=cwd,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True, encoding="utf-8", errors="replace",
@@ -105,10 +133,15 @@ def run_with_tree_timeout(cmd, cwd=None, timeout=60, env=None):
         # 解释器或程序缺失：交由调用方归类为环境类错误
         raise FileNotFoundError("无法启动命令（解释器或程序缺失）：%s" % e)
 
-    # 读取线程：把输出读进缓冲区。它是 daemon，读不到 EOF 就一直挂着，
-    # 但不妨碍主线程按超时返回。
-    out_chunks, err_chunks = [], []
 
+def _start_reader(proc, out_chunks, err_chunks):
+    """启动守护读取线程，把子进程输出读进给定缓冲区，返回线程对象。
+
+    @param proc       子进程
+    @param out_chunks 标准输出缓冲（就地追加）
+    @param err_chunks 标准错误缓冲（就地追加）
+    @returns 读取线程对象
+    """
     def _reader():
         try:
             o, e = proc.communicate()
@@ -120,28 +153,16 @@ def run_with_tree_timeout(cmd, cwd=None, timeout=60, env=None):
 
     reader = threading.Thread(target=_reader, daemon=True)
     reader.start()
+    return reader
 
-    timed_out = False
-    try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        # 1) 尽力杀树（可能杀不掉挣脱的孙进程，见模块说明）
-        _kill_tree(proc)
-        # 2) 关闭管道读端：让仍持写端的进程下次写入时收到 EPIPE
-        _close_quietly(proc.stdout)
-        _close_quietly(proc.stderr)
-        # 3) 不等读取线程——立即返回，调用方不再被拖住
-        return ProcResult(None, "", "", True)
 
-    # 正常退出：给读取线程一个很短的时间收尾。
-    # 进程已退出时 EOF 通常立即到达，读取线程瞬间结束；
-    # 但若存在「孤儿孙进程持管道」，EOF 不到、读取线程会一直挂着——
-    # 故此处只等很短时间，拿不到就带着已读到的内容返回，绝不陪它干等。
-    reader.join(timeout=1)
-    return ProcResult(
-        proc.returncode,
-        "".join(out_chunks),
-        "".join(err_chunks),
-        False,
-    )
+def _abort_on_timeout(proc):
+    """超时处置：尽力杀进程树，并关闭管道读端让持写端的进程收到 EPIPE。
+
+    @param proc 子进程
+    """
+    # 1) 尽力杀树（可能杀不掉挣脱的孙进程，见模块说明）
+    _kill_tree(proc)
+    # 2) 关闭管道读端：让仍持写端的进程下次写入时收到 EPIPE
+    _close_quietly(proc.stdout)
+    _close_quietly(proc.stderr)
