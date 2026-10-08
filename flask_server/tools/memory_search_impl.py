@@ -74,13 +74,7 @@ def t_memory_search(p):
     @param p 工具参数 { query, keywords?, focus?, top_k? }
     @return { ok, query, keywords, focus, hits:[...], rejected, plan_found }
     """
-    _require(p, "query")
-    query = str(p.get("query") or "").strip()
-    if not query:
-        raise ToolParamError("query 不能为空")
-    focus = _resolve_focus(p.get("focus"))
-    top_k = _resolve_top_k(p.get("top_k"))
-    keywords = _resolve_keywords(p, query)
+    query, focus, top_k, keywords = _search_params(p)
     if not keywords:
         # 提取不到关键词：无锚点可验证，按空结果返回并说明，不报错
         return {
@@ -88,6 +82,34 @@ def t_memory_search(p):
             "hits": [], "rejected": [], "plan_found": False,
             "note": "未能从 query 提取到关键词，请改用更具体的查询文本或显式给 keywords。",
         }
+    return _run_search(query, keywords, focus, top_k)
+
+
+def _search_params(p):
+    """解析并校验记忆检索工具的参数。
+
+    @param p 工具参数字典
+    @returns (query, focus, top_k, keywords)
+    """
+    _require(p, "query")
+    query = str(p.get("query") or "").strip()
+    if not query:
+        raise ToolParamError("query 不能为空")
+    focus = _resolve_focus(p.get("focus"))
+    top_k = _resolve_top_k(p.get("top_k"))
+    keywords = _resolve_keywords(p, query)
+    return query, focus, top_k, keywords
+
+
+def _run_search(query, keywords, focus, top_k):
+    """执行双接口检索：先提交计划真值，再做验证式关联搜索，组装返回。
+
+    @param query    查询原文
+    @param keywords 有效关键词
+    @param focus    排序焦点
+    @param top_k    返回条数上限
+    @returns 工具返回字典
+    """
     # 延迟导入：核心模块已在 sys.path，避免工具加载期就拉起记忆整包
     import memory_search as _ms
     # 接口 A：以 query 作为计划真值基准
