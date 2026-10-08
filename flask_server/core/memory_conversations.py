@@ -254,6 +254,51 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
     return n_written
 
 
+def _key_child(key):
+    """从会话引用键里取出「子消息指纹」。
+
+    会话的 visible_keys / branch_keys 存的是树键「父指纹-子指纹」
+    （根节点为「0-子指纹」），引用的是子节点。判定悬空须取子段比对，
+    不可拿整条树键去比对 msg_id（否则会全部误判为悬空）。
+    @param key 树键字符串
+    @return 子消息指纹
+    """
+    return key.split("-", 1)[1] if "-" in key else key
+
+
+def prune_dangling_refs():
+    """清理会话表里指向已删节点的悬空引用。
+
+    会话的 visible_keys / branch_keys 存的是树键「父指纹-子指纹」。节点被删除后，
+    这些列表里会残留子节点已不存在的树键，导致「列表里有、树上找不到」的口径错位。
+    本函数逐会话剔除子节点已不存在的树键并写回。
+    @return 被剔除的引用总数
+    """
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT conv_id, site_key, visible_keys, branch_keys FROM conversations"
+    ).fetchall()
+    removed = 0
+    # 一次性取出全部现存 msg_id 指纹，避免每会话重复查库。
+    exist = set(
+        x["msg_id"] for x in conn.execute("SELECT msg_id FROM nodes WHERE deleted=0").fetchall()
+    )
+    for r in rows:
+        vk = _loads(r["visible_keys"], [])
+        bk = _loads(r["branch_keys"], [])
+        vk2 = [k for k in vk if _key_child(k) in exist]
+        bk2 = [k for k in bk if _key_child(k) in exist]
+        if len(vk2) != len(vk) or len(bk2) != len(bk):
+            removed += (len(vk) - len(vk2)) + (len(bk) - len(bk2))
+            conn.execute(
+                "UPDATE conversations SET visible_keys=?, branch_keys=? WHERE conv_id=? AND site_key=?",
+                (json.dumps(vk2, ensure_ascii=False), json.dumps(bk2, ensure_ascii=False),
+                 r["conv_id"], r["site_key"]),
+            )
+    maybe_commit(conn)
+    return removed
+
+
 def _conv_key(id_to_msg, r):
     """按节点行与其父节点拼出前端 msgTree 的 key：'父msg_id-子msg_id'。"""
     pid_db = r["parent_id"] or 0

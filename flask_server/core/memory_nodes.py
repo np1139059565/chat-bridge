@@ -165,19 +165,33 @@ def soft_delete(node_id):
     maybe_commit(conn)
 
 
-def hard_delete(node_id):
-    """硬删除：真删节点行，并清掉它的边与卡片，不可恢复。
+def _delete_node_related(conn, node_id):
+    """删除单个节点及其全部关联数据（须在批量模式或调用方控制提交）。
 
-    调用方须先做二次确认（前端弹框）。删节点时一并删除 src/dst 指向它的边、
-    挂在它名下的卡片，避免留下悬空边与孤儿卡片。
+    关联数据覆盖所有引用该节点的表，避免留下孤儿死数据：
+      - edges：src/dst 指向它的边；
+      - cards：挂在它名下的卡片；
+      - revision_log：它的修订留痕（节点已删，留痕无意义）；
+      - notes：引用它的每日记忆/错题本条目。
+    @return 删除的节点行数（0 表示节点不存在）
+    """
+    conn.execute("DELETE FROM edges WHERE src_node=? OR dst_node=?", (node_id, node_id))
+    conn.execute("DELETE FROM cards WHERE node_id=?", (node_id,))
+    conn.execute("DELETE FROM revision_log WHERE node_id=?", (node_id,))
+    conn.execute("DELETE FROM notes WHERE node_id=?", (node_id,))
+    return conn.execute("DELETE FROM nodes WHERE id=?", (node_id,)).rowcount
+
+
+def hard_delete(node_id):
+    """硬删除：真删节点行及其全部关联数据，不可恢复。
+
+    调用方须先做二次确认（前端弹框）。
     @return 被删除的节点数（0 表示节点不存在）
     """
     conn = get_conn()
-    conn.execute("DELETE FROM edges WHERE src_node=? OR dst_node=?", (node_id, node_id))
-    conn.execute("DELETE FROM cards WHERE node_id=?", (node_id,))
-    cur = conn.execute("DELETE FROM nodes WHERE id=?", (node_id,))
+    n = _delete_node_related(conn, node_id)
     maybe_commit(conn)
-    return cur.rowcount
+    return n
 
 
 def hard_delete_many(node_ids):
@@ -192,19 +206,20 @@ def hard_delete_many(node_ids):
     conn = get_conn()
     total = 0
     for nid in node_ids:
-        conn.execute("DELETE FROM edges WHERE src_node=? OR dst_node=?", (nid, nid))
-        conn.execute("DELETE FROM cards WHERE node_id=?", (nid,))
-        cur = conn.execute("DELETE FROM nodes WHERE id=?", (nid,))
-        total += cur.rowcount
+        total += _delete_node_related(conn, nid)
     maybe_commit(conn)
     return total
 
 
-def descendant_ids(root_id, sources=None):
+def descendant_ids(root_id, sources=None, stop_at_user=False):
     """取某节点的全部后代 id（沿 parent_id 向下），不含自身。
 
-    @param root_id 根节点 id
-    @param sources 仅取这些来源的后代；None 表示不限
+    @param root_id      根节点 id
+    @param sources      仅取这些来源的后代；None 表示不限
+    @param stop_at_user 遇到嵌套的用户发言时是否停止下钻。
+        用户的每一轮发言都是一条独立对话；清理某用户节点的下挂内容时，
+        若其子树里还嵌套着另一条用户发言，那条发言的 AI/工具节点属于它自己，
+        不该被这一轮的清理牵连。置 True 即遇到用户节点不下钻（防止过度清理）。
     @return 后代 id 列表
     """
     conn = get_conn()
@@ -223,6 +238,9 @@ def descendant_ids(root_id, sources=None):
             seen.add(nid)
             if sources is None or r["source"] in sources:
                 out.append(nid)
+            # 遇嵌套用户发言：不下钻，避免牵连它自己那一轮的对话内容
+            if stop_at_user and r["source"] == "user":
+                continue
             frontier.append(nid)
     return out
 

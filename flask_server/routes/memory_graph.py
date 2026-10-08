@@ -93,8 +93,11 @@ def node_clean_children():
     nid = data.get("node_id")
     if not nid:
         return _err("缺少 node_id")
-    ids = memory_nodes.descendant_ids(nid, sources=("assistant", "tool"))
+    # stop_at_user=True：遇嵌套的用户发言即停止下钻，避免牵连它自己那一轮的内容。
+    ids = memory_nodes.descendant_ids(nid, sources=("assistant", "tool"), stop_at_user=True)
     deleted = memory_nodes.hard_delete_many(ids)
+    # 节点删除后，会话表里指向它们的树键会悬空，一并清理，保持口径一致。
+    memory_conversations.prune_dangling_refs()
     memory_loader.invalidate()
     return _ok(deleted=deleted, candidates=len(ids))
 
@@ -112,6 +115,8 @@ def node_clean_older():
         return _err("缺少 node_id")
     ids = memory_nodes.ids_older_than(nid)
     deleted = memory_nodes.hard_delete_many(ids)
+    # 同样清理会话表里因节点删除而悬空的树键引用。
+    memory_conversations.prune_dangling_refs()
     memory_loader.invalidate()
     return _ok(deleted=deleted, candidates=len(ids))
 
