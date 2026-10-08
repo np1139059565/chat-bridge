@@ -82,55 +82,64 @@ _inflight = {}
 _inflight_lock = None
 
 
+# 慢请求阈值（毫秒）：超过即告警，便于排查阻塞
+_SLOW_MS = 1000
+
+
+def _req_start_hook():
+    """before_request 钩子：登记请求开始时间与短 id，并打一条进入日志。
+
+    给每个请求一个短 id，串起同一请求的开始与结束。
+    """
+    import time
+    import uuid
+    import threading
+    import app_log
+    from flask import g, request
+    g._req_t0 = time.time()
+    g._req_id = uuid.uuid4().hex[:8]
+    with _inflight_lock:
+        _inflight[g._req_id] = {
+            "start": g._req_t0, "method": request.method, "path": request.path,
+            "thread": threading.current_thread().name,
+        }
+    app_log.debug("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
+
+
+def _req_end_hook(resp):
+    """after_request 钩子：登记请求结束、算耗时；慢请求升级为 WARN。"""
+    import time
+    import app_log
+    from flask import g, request
+    t0 = getattr(g, "_req_t0", None)
+    rid = getattr(g, "_req_id", "?")
+    if t0 is None:
+        return resp
+    with _inflight_lock:
+        _inflight.pop(rid, None)
+    ms = (time.time() - t0) * 1000.0
+    # 慢请求升级为 WARN，正常请求走 DEBUG（避免刷屏）
+    line = "[req][%s] <- %s %s %d %.1fms" % (
+        rid, request.method, request.path, resp.status_code, ms)
+    if ms >= _SLOW_MS:
+        app_log.warn(line)
+    else:
+        app_log.debug(line)
+    return resp
+
+
 def _register_request_logging(app):
-    """请求耗时日志：记录每个请求的开始、结束与耗时。
+    """请求耗时日志：注册开始/结束钩子，并初始化进行中请求登记表。
 
     目的：接口卡死时，日志能回答「哪个请求进来了、有没有出去、卡了多久」。
-    慢请求（超过 SLOW_MS）额外以 WARN 打一条，便于一眼捞出卡点。
+    慢请求（超过 _SLOW_MS）额外以 WARN 打一条，便于一眼捞出卡点。
     同时把进行中的请求登记到 _inflight，供看门狗在卡死时 dump 线程堆栈。
     """
-    import time as _time
-    import app_log
-    import uuid as _uuid
-    import threading as _th
-
     global _inflight_lock
-    _inflight_lock = _th.Lock()
-
-    # 慢请求阈值（毫秒）：超过即告警，便于排查阻塞
-    SLOW_MS = 1000
-
-    @app.before_request
-    def _log_req_start():
-        # 给每个请求一个短 id，串起同一请求的开始与结束
-        from flask import g, request
-        g._req_t0 = _time.time()
-        g._req_id = _uuid.uuid4().hex[:8]
-        with _inflight_lock:
-            _inflight[g._req_id] = {
-                "start": g._req_t0, "method": request.method, "path": request.path,
-                "thread": _th.current_thread().name,
-            }
-        app_log.debug("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
-
-    @app.after_request
-    def _log_req_end(resp):
-        from flask import g, request
-        t0 = getattr(g, "_req_t0", None)
-        rid = getattr(g, "_req_id", "?")
-        if t0 is None:
-            return resp
-        with _inflight_lock:
-            _inflight.pop(rid, None)
-        ms = (_time.time() - t0) * 1000.0
-        # 慢请求升级为 WARN，正常请求走 DEBUG（避免刷屏）
-        line = "[req][%s] <- %s %s %d %.1fms" % (
-            rid, request.method, request.path, resp.status_code, ms)
-        if ms >= SLOW_MS:
-            app_log.warn(line)
-        else:
-            app_log.debug(line)
-        return resp
+    import threading
+    _inflight_lock = threading.Lock()
+    app.before_request(_req_start_hook)
+    app.after_request(_req_end_hook)
 
 
 def _register_watchdog(app, hang_seconds=150):
@@ -143,40 +152,50 @@ def _register_watchdog(app, hang_seconds=150):
     内置工具兜底超时 120 秒（routes/tools.py），故取 150 秒留出余量。
     @param hang_seconds 判定卡死的阈值（秒）
     """
-    import time as _time
-    import threading as _th
-    import sys as _sys
-    import traceback as _tb
-    import app_log
-
+    import threading
     # 已 dump 过的请求 id：避免同一卡死请求每轮都刷日志
     dumped = set()
+    threading.Thread(target=_watchdog_loop, args=(hang_seconds, dumped),
+                     daemon=True, name="watchdog").start()
 
-    def _dump_stacks(reason):
-        """打印所有线程的调用栈到日志。"""
-        frames = _sys._current_frames()
-        for tid, frame in frames.items():
-            stack = "".join(_tb.format_stack(frame))
-            app_log.error("[watchdog] %s 线程tid=%s 堆栈:\n%s" % (reason, tid, stack))
 
-    def _loop():
-        while True:
-            _time.sleep(3)
-            now = _time.time()
-            with _inflight_lock:
-                snapshot = list(_inflight.items())
-            for rid, info in snapshot:
-                if now - info["start"] < hang_seconds:
-                    continue
-                if rid in dumped:
-                    continue
-                dumped.add(rid)
-                app_log.error(
-                    "[watchdog] 请求疑似卡死 %s %s（线程=%s，已 %.0fs），dump 全部线程堆栈"
-                    % (info["method"], info["path"], info["thread"], now - info["start"]))
-                _dump_stacks("卡死现场")
+def _watchdog_dump_stacks(reason):
+    """打印所有线程的调用栈到日志。
 
-    _th.Thread(target=_loop, daemon=True, name="watchdog").start()
+    @param reason 触发原因（写入日志前缀）
+    """
+    import sys
+    import traceback
+    import app_log
+    frames = sys._current_frames()
+    for tid, frame in frames.items():
+        stack = "".join(traceback.format_stack(frame))
+        app_log.error("[watchdog] %s 线程tid=%s 堆栈:\n%s" % (reason, tid, stack))
+
+
+def _watchdog_loop(hang_seconds, dumped):
+    """看门狗循环：每 3 秒巡检一次进行中请求，超时则 dump 全部线程堆栈。
+
+    @param hang_seconds 判定卡死的阈值（秒）
+    @param dumped       已 dump 过的请求 id 集合（就地累加，避免重复刷日志）
+    """
+    import time
+    import app_log
+    while True:
+        time.sleep(3)
+        now = time.time()
+        with _inflight_lock:
+            snapshot = list(_inflight.items())
+        for rid, info in snapshot:
+            if now - info["start"] < hang_seconds:
+                continue
+            if rid in dumped:
+                continue
+            dumped.add(rid)
+            app_log.error(
+                "[watchdog] 请求疑似卡死 %s %s（线程=%s，已 %.0fs），dump 全部线程堆栈"
+                % (info["method"], info["path"], info["thread"], now - info["start"]))
+            _watchdog_dump_stacks("卡死现场")
 
 
 def _register_error_logging(app):
