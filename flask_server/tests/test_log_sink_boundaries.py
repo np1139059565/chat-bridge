@@ -92,6 +92,39 @@ class TestQueueDrop(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class TestDrainTimeout(unittest.TestCase):
+    """验证 drain 在超时后返回 False（队列未排空）。"""
+
+    def test_drain_returns_false_on_timeout(self):
+        """有未完成项且无人消费时，drain 应超时返回 False。
+
+        确定性做法：直接往内部队列塞一条（绕过 write，不启动消费线程），
+        使 unfinished_tasks 恒大于 0，drain 必然等到超时并返回 False。
+        """
+        tmp = tempfile.mkdtemp(prefix="drainto_test_")
+        try:
+            sink = log_sink.AsyncDayFileSink("dto", lambda: tmp)
+            sink._queue.put("never-consumed-line")   # 只入队，不启动消费者
+            ok = sink.drain(timeout=0.2)             # 无人消费，必定超时
+            self.assertFalse(ok, "队列未排空时 drain 应返回 False")
+            # 收尾：手动标记该条已处理，避免残留 unfinished 计数影响其它用例
+            sink._queue.get_nowait()
+            sink._queue.task_done()
+            sink.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_drain_true_when_empty(self):
+        """队列为空时，drain 应立即返回 True。"""
+        tmp = tempfile.mkdtemp(prefix="drainempty_test_")
+        try:
+            sink = log_sink.AsyncDayFileSink("de", lambda: tmp)
+            self.assertTrue(sink.drain(timeout=1.0), "空队列应返回 True")
+            sink.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class TestDaySwitch(unittest.TestCase):
     """验证 DayFileSink 跨天切换文件。"""
 

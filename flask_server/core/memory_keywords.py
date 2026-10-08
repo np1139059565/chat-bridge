@@ -71,36 +71,61 @@ def extract(text, top_k=8, use_llm=False):
 def _rule_candidates(text):
     """规则初筛：英文标识符 + 中文短语块，停用词过滤，按相关度降序。
 
+    编排三步：英文计分 → 中文计分 → 去子串并排序。
     中文不切 n-gram（会产出「网页版机」这类无意义碎片），
     改为按标点与连接词把句子切成短语块，短语块才是语义单元。
+    @param text 待提取的原始文本
+    @returns 候选关键词列表（按相关度降序）
     """
     scores = Counter()
-    # 1) 英文标识符：直接计入，权重 2（技术术语更可能是任务关键词）
+    _score_identifiers(text, scores)     # 1) 英文标识符计分
+    _score_cjk_phrases(text, scores)     # 2) 中文短语块计分
+    return _rank_candidates(scores)      # 3) 去子串 + 降序
+
+
+def _score_identifiers(text, scores):
+    """英文标识符计分：直接计入，权重 2（技术术语更可能是任务关键词）。
+
+    @param text   待扫描文本
+    @param scores 计分表（就地累加）
+    """
     for m in _RE_IDENT.finditer(text):
         w = m.group(0)
         low = w.lower()
-        if low in _STOPWORDS or len(low) < 2:
+        if low in _STOPWORDS or len(low) < 2:   # 停用词或过短则跳过
             continue
         scores[w] += 2
-    # 2) 中文：按标点/连接词切成短语块，整块作为一个候选
+
+
+def _score_cjk_phrases(text, scores):
+    """中文短语块计分：按标点/连接词切块，整块作为候选，权重按长度给。
+
+    @param text   待扫描文本
+    @param scores 计分表（就地累加）
+    """
     for m in _RE_CJK.finditer(text):
         seg = m.group(0)
         for phrase in _split_phrases(seg):
-            if len(phrase) < 2:
+            if len(phrase) < 2:                 # 过短不成词
                 continue
-            if phrase in _STOPWORDS or _all_stop(phrase):
+            if phrase in _STOPWORDS or _all_stop(phrase):  # 停用词过滤
                 continue
-            # 短语越长越具体，权重按长度给
-            scores[phrase] += len(phrase)
-    # 3) 去掉被更长短语完整包含的短词（保留更具体的）
-    keys = sorted(scores.keys(), key=len, reverse=True)
+            scores[phrase] += len(phrase)       # 越长越具体，权重越高
+
+
+def _rank_candidates(scores):
+    """去子串并排序：先剔除被更长短语包含的短词，再按分数降序。
+
+    @param scores 计分表 Counter
+    @returns 排序后的候选列表
+    """
+    keys = sorted(scores.keys(), key=len, reverse=True)  # 长词优先，便于判包含
     kept = []
     for k in keys:
-        if any(k != other and k in other for other in kept):
+        if any(k != other and k in other for other in kept):  # 被更长词包含则弃
             continue
         kept.append(k)
-    # 4) 按分数降序
-    kept.sort(key=lambda w: scores[w], reverse=True)
+    kept.sort(key=lambda w: scores[w], reverse=True)     # 按相关度降序
     return kept
 
 
