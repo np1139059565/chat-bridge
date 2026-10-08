@@ -145,8 +145,13 @@ def _rrf_fuse(lists, k=60):
     return scores
 
 
-def _rank(scores, valid_keywords, focus, top_k):
-    """按交集置信度加权，按 focus 排序，返回命中列表。"""
+def _enrich_scores(scores, valid_keywords):
+    """按交集置信度加权，返回 [(node, final_score, jaccard), ...]。
+
+    @param scores          {node_id: 基础分}
+    @param valid_keywords 有效关键词列表
+    @returns 加权后的三元组列表
+    """
     vset = set(valid_keywords)
     enriched = []
     for nid, base in scores.items():
@@ -159,12 +164,23 @@ def _rank(scores, valid_keywords, focus, top_k):
         jac = inter / union
         final = base * (0.5 + 0.5 * jac)
         enriched.append((node, final, jac))
+    return enriched
+
+
+def _sort_by_focus(enriched, focus):
+    """按 focus 排序：time 按创建时间、strength 按强度、否则按得分。"""
     if focus == "time":
         enriched.sort(key=lambda x: x[0].get("created_at") or 0, reverse=True)
     elif focus == "strength":
         enriched.sort(key=lambda x: x[0].get("strength") or 0, reverse=True)
     else:
         enriched.sort(key=lambda x: x[1], reverse=True)
+
+
+def _rank(scores, valid_keywords, focus, top_k):
+    """按交集置信度加权，按 focus 排序，返回命中列表。"""
+    enriched = _enrich_scores(scores, valid_keywords)
+    _sort_by_focus(enriched, focus)
     out = []
     for node, final, jac in enriched[:top_k]:
         # 命中计数 + 突触强化
