@@ -12,6 +12,7 @@ AI 工具调用镜像插件 —— 主配置读写
 """
 import runtime
 import config_file
+import yaml_utils
 
 
 def load_yaml_config():
@@ -23,19 +24,8 @@ def load_yaml_config():
     """
     base = config_file.get_definition_section("app")
     rt = config_file.get_runtime_section("app")
-    if not rt:
-        return base
-    # flask 区块逐字段合并：运行时只覆盖 port，host 仍以定义为准
-    if isinstance(rt.get("flask"), dict):
-        base.setdefault("flask", {})
-        base["flask"].update(rt["flask"])
-    # tools 区块逐工具合并：运行时只覆盖 enabled 与 languages
-    if isinstance(rt.get("tools"), dict):
-        base.setdefault("tools", {})
-        for name, ent in rt["tools"].items():
-            if isinstance(ent, dict):
-                base["tools"].setdefault(name, {}).update(ent)
-    return base
+    # 合并核心委托给公共函数，与 yaml_utils.load_config_dict 共用同一实现
+    return yaml_utils.merge_app_sections(base, rt)
 
 
 def _tool_entry_for(name, entry):

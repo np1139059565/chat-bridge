@@ -13,6 +13,31 @@ AI 工具调用镜像插件 —— YAML 处理公共原语
 import config_file
 
 
+def merge_app_sections(base, rt):
+    """把 runtime 的 app 分区合并进 definition 的 app 分区（就地修改 base 并返回）。
+
+    合并规则：flask 区块逐字段覆盖；tools 区块逐工具、逐字段覆盖。
+    这是 config_store 与 load_config_dict 两处共用的合并核心，避免同一逻辑多处维护。
+    @param base definition 的 app 分区字典
+    @param rt   runtime 的 app 分区字典；为空时直接返回 base
+    @returns 合并后的 base（同一对象）
+    """
+    # runtime 为空：无需合并，直接返回定义
+    if not rt:
+        return base
+    # flask 区块逐字段合并：运行时覆盖定义中的同名字段
+    if isinstance(rt.get("flask"), dict):
+        base.setdefault("flask", {})
+        base["flask"].update(rt["flask"])
+    # tools 区块逐工具合并：运行时覆盖定义中同名工具的字段
+    if isinstance(rt.get("tools"), dict):
+        base.setdefault("tools", {})
+        for name, ent in rt["tools"].items():
+            if isinstance(ent, dict):
+                base["tools"].setdefault(name, {}).update(ent)
+    return base
+
+
 def load_config_dict():
     """读取主配置（definition.yaml 与 runtime.yaml 的 app 分区）并合并为字典。
 
@@ -22,15 +47,8 @@ def load_config_dict():
     try:
         base = config_file.get_definition_section("app")
         rt = config_file.get_runtime_section("app")
-        if isinstance(rt.get("flask"), dict):
-            base.setdefault("flask", {})
-            base["flask"].update(rt["flask"])
-        if isinstance(rt.get("tools"), dict):
-            base.setdefault("tools", {})
-            for name, ent in rt["tools"].items():
-                if isinstance(ent, dict):
-                    base["tools"].setdefault(name, {}).update(ent)
-        return base
+        # 合并核心委托给公共函数，与 config_store 共用同一实现
+        return merge_app_sections(base, rt)
     except Exception:
         return {}
 
