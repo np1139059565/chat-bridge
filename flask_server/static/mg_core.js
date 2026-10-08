@@ -11,7 +11,7 @@
   MG.nodes = [];             // 节点数组
   MG.edges = [];             // 边数组（s/t 指向节点对象）
   MG.W = 0; MG.H = 0;        // 画布逻辑尺寸
-  MG.MODE = 'force';         // 视图：force / radial / timeline
+  MG.MODE = 'timeline';      // 默认视图：timeline（时间轴）；可选 force / radial / timeline
   MG.selected = null;        // 单击选中的节点
   MG.selectedSet = {};       // 选中节点 + 一跳邻居 id 集合
   MG.drag = null;            // 正在拖动的节点
@@ -230,11 +230,41 @@
     var t0 = sorted[0].created_at || 0;
     var t1 = sorted[sorted.length - 1].created_at || 1;
     var span = Math.max(1, t1 - t0);
-    var laneY = { user: MG.H * 0.2, assistant: MG.H * 0.5, tool: MG.H * 0.8 };
+    var left = 60, right = MG.W - 60;
+    var usable = Math.max(1, right - left);
+    // 三条车道：用户 / AI / 工具
+    var lanes = ['user', 'assistant', 'tool'];
+    var laneBase = { user: MG.H * 0.2, assistant: MG.H * 0.5, tool: MG.H * 0.8 };
+    // 先按时间算出统一 X 坐标，并按来源归入车道
+    var byLane = { user: [], assistant: [], tool: [] };
+    var other = [];
     sorted.forEach(function (n) {
-      n.x = 60 + (MG.W - 120) * (((n.created_at || 0) - t0) / span);
-      n.y = laneY[n.source] || MG.H * 0.5;
+      n.x = left + usable * (((n.created_at || 0) - t0) / span);
       n.vx = n.vy = 0;
+      if (byLane[n.source]) byLane[n.source].push(n); else other.push(n);
     });
+    // 车道内「贪心分层」：X 太近的节点分到不同层，避免同一条线上重叠。
+    // 仅靠硬分离不足以救——同源、同时刻的节点会完全重合，必须在此错开。
+    var GAP = 16;            // 同层相邻节点的最小水平间距
+    var LAYER_STEP = 30;     // 层间距（大于节点直径，保证上下不叠）
+    lanes.forEach(function (k) {
+      var arr = byLane[k];
+      if (!arr.length) return;
+      var layerLastX = [];   // 每层最后一个节点的 X
+      arr.forEach(function (n) {
+        var layer = 0;
+        while (layer < layerLastX.length && n.x - layerLastX[layer] < GAP) layer++;
+        if (layer >= layerLastX.length) layerLastX.push(n.x);
+        else layerLastX[layer] = n.x;
+        n._layer = layer;
+      });
+      var maxLayer = 0;
+      arr.forEach(function (n) { if (n._layer > maxLayer) maxLayer = n._layer; });
+      // 以车道基准线为中心上下展开，避免整体偏移出画布
+      arr.forEach(function (n) {
+        n.y = laneBase[k] + (n._layer - maxLayer / 2) * LAYER_STEP;
+      });
+    });
+    other.forEach(function (n) { n.y = MG.H * 0.5; });
   };
 })();

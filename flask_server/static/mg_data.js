@@ -74,9 +74,18 @@
       if (added) {
         document.getElementById('stat').textContent =
           MG.nodes.length + ' 节点 / ' + MG.edges.length + ' 边（持续增加中）';
-        // 很小的 alpha：新节点轻微落位，不打乱已稳定的布局
-        MG.alpha = Math.max(MG.alpha, 0.25);
-        MG.settled = false;
+        if (MG.MODE === 'timeline') {
+          // 时间轴是「按时间定位」的确定性布局：新节点必须重新按时间轴排布
+          // 并做硬分离，否则它们会堆在中心、与既有节点重叠（曾出现的覆盖问题）。
+          MG.layoutTimeline();
+          MG.separateOverlaps();
+        } else if (MG.MODE === 'radial') {
+          MG.layoutRadial(MG.pickRoot());
+        } else {
+          // 力导向：给很小的 alpha，让新节点轻微落位、不打乱已稳定的布局
+          MG.alpha = Math.max(MG.alpha, 0.25);
+          MG.settled = false;
+        }
       }
     }).catch(function () { /* 后端未就绪时静默重试 */ });
   };
