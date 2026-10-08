@@ -194,17 +194,36 @@ def web_image():
     请求体：{ dataUrls: [...], text: "" }；兼容旧的单个 dataUrl。
     """
     data = request.get_json(force=True, silent=True) or {}
-    # 图片列表：优先取 dataUrls 数组，兼容单个 dataUrl
-    urls = data.get("dataUrls")
-    if not isinstance(urls, list):
-        one = str(data.get("dataUrl") or "")
-        urls = [one] if one else []
-    urls = [str(u) for u in urls if u]
+    urls = _image_urls(data)
     text = str(data.get("text") or "").strip()
     if not urls:
         return jsonify(success=False, error="empty_image")
     # 图片落盘：网页消息列表、抽屉镜像、抽屉消息列表三处都要能拿到这张图，
     # 故服务端把 dataURL 存成本地文件，三处统一按文件名经 /api/web/image-file 取用。
+    names = _save_web_images(urls)
+    # 先落盘再投卡片：卡片带上图片文件名，抽屉据此把图片挂到对应消息上
+    card_id = web_bridge.web.ingest_images(urls, text, names)
+    # 收件箱展示：有文字带文字，并标注图片张数；图片字段带文件名供前端渲染真图
+    web_inbox.append("user", _image_label(text, len(urls)), kind="web-image",
+                     image=(names if len(names) > 1 else (names[0] if names else "")))
+    return jsonify(success=True, cardId=card_id, count=len(urls), images=names)
+
+
+def _image_urls(data):
+    """从请求体取图片 dataURL 列表：优先 dataUrls 数组，兼容单个 dataUrl。
+
+    @param data 请求体字典
+    @returns 非空字符串列表（去空、转字符串）
+    """
+    urls = data.get("dataUrls")
+    if not isinstance(urls, list):
+        one = str(data.get("dataUrl") or "")
+        urls = [one] if one else []
+    return [str(u) for u in urls if u]
+
+
+def _save_web_images(urls):
+    """把每个 dataURL 落盘为本地图片，返回成功保存的文件名列表。"""
     names = []
     for u in urls:
         try:
@@ -213,14 +232,14 @@ def web_image():
                 names.append(saved["name"])
         except Exception as e:
             print("[web] 保存网页图片失败：", e)
-    # 先落盘再投卡片：卡片带上图片文件名，抽屉据此把图片挂到对应消息上
-    card_id = web_bridge.web.ingest_images(urls, text, names)
-    # 收件箱展示：有文字带文字，并标注图片张数；图片字段带文件名供前端渲染真图
-    label = text or "[图片]"
-    if len(urls) > 1:
-        label = (text + " " if text else "") + "[%d 张图片]" % len(urls)
-    web_inbox.append("user", label, kind="web-image", image=(names if len(names) > 1 else (names[0] if names else "")))
-    return jsonify(success=True, cardId=card_id, count=len(urls), images=names)
+    return names
+
+
+def _image_label(text, count):
+    """生成收件箱展示文本：有文字带文字，多图时标注张数。"""
+    if count > 1:
+        return (text + " " if text else "") + "[%d 张图片]" % count
+    return text or "[图片]"
 
 
 @bp.route("/api/web/voice", methods=["POST", "OPTIONS"])
