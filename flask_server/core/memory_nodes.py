@@ -180,6 +180,72 @@ def hard_delete(node_id):
     return cur.rowcount
 
 
+def hard_delete_many(node_ids):
+    """批量硬删一批节点（连同它们的边与卡片）。
+
+    供图谱的「清理下级节点 / 清理旧节点」使用。
+    @param node_ids 节点 id 列表
+    @return 实际删除的节点数
+    """
+    if not node_ids:
+        return 0
+    conn = get_conn()
+    total = 0
+    for nid in node_ids:
+        conn.execute("DELETE FROM edges WHERE src_node=? OR dst_node=?", (nid, nid))
+        conn.execute("DELETE FROM cards WHERE node_id=?", (nid,))
+        cur = conn.execute("DELETE FROM nodes WHERE id=?", (nid,))
+        total += cur.rowcount
+    maybe_commit(conn)
+    return total
+
+
+def descendant_ids(root_id, sources=None):
+    """取某节点的全部后代 id（沿 parent_id 向下），不含自身。
+
+    @param root_id 根节点 id
+    @param sources 仅取这些来源的后代；None 表示不限
+    @return 后代 id 列表
+    """
+    conn = get_conn()
+    seen = set()
+    frontier = [root_id]
+    out = []
+    while frontier:
+        placeholders = ",".join("?" for _ in frontier)
+        sql = "SELECT id, source FROM nodes WHERE parent_id IN (%s) AND deleted=0" % placeholders
+        rows = conn.execute(sql, list(frontier)).fetchall()
+        frontier = []
+        for r in rows:
+            nid = r["id"]
+            if nid in seen:
+                continue
+            seen.add(nid)
+            if sources is None or r["source"] in sources:
+                out.append(nid)
+            frontier.append(nid)
+    return out
+
+
+def ids_older_than(node_id):
+    """取创建时间早于某节点的全部节点 id（不含自身）。
+
+    以目标节点的 created_at 为界；同一时刻用 id 兜底，保证「之前」稳定。
+    @param node_id 参照节点 id
+    @return 更早的节点 id 列表
+    """
+    conn = get_conn()
+    row = conn.execute("SELECT created_at FROM nodes WHERE id=?", (node_id,)).fetchone()
+    if not row:
+        return []
+    ts = row["created_at"] or 0
+    rows = conn.execute(
+        "SELECT id FROM nodes WHERE deleted=0 AND (created_at < ? OR (created_at = ? AND id < ?))",
+        (ts, ts, node_id),
+    ).fetchall()
+    return [r["id"] for r in rows]
+
+
 def set_content(node_id, blocks=None, essence=None, keywords=None):
     """更新节点的内容字段（接口 memory_set 的落点）。
 

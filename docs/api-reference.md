@@ -311,6 +311,16 @@ POST 请求体示例：
 
 删除单个节点。请求：`{ node_id }`。返回 `{ success, deleted }`。
 
+#### POST /memory/node/clean_children
+
+清理某节点下挂的全部 AI 与工具节点（图谱右键菜单用，不可恢复）。
+请求：`{ node_id }`。返回 `{ success, deleted, candidates }`。
+
+#### POST /memory/node/clean_older
+
+清理创建时间早于某节点的全部旧节点（图谱右键菜单用，破坏性最强）。
+请求：`{ node_id }`。返回 `{ success, deleted, candidates }`。
+
 #### POST /memory/promote
 
 手动提升某节点分级（如临时 → 中期 → 永久）。请求：`{ node_id, tier }`。返回 `{ success, tier }`。

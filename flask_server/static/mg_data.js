@@ -106,7 +106,12 @@
     document.getElementById('modeRadial').className = MG.MODE === 'radial' ? '' : 'ghost';
     document.getElementById('modeTimeline').className = MG.MODE === 'timeline' ? '' : 'ghost';
     if (MG.MODE === 'radial') MG.layoutRadial(MG.pickRoot());
-    else if (MG.MODE === 'timeline') MG.layoutTimeline();
+    else if (MG.MODE === 'timeline') {
+      MG.layoutTimeline();
+      // 时间轴按时间与来源定位，同一时刻/同一来源的节点会重叠；
+      // 布局后跑一次硬分离，保证节点间至少留 MIN_GAP 的间距。
+      MG.separateOverlaps();
+    }
     else { MG.settled = false; MG.alpha = 1; }   // 回力导向需重新布局
   };
 

@@ -82,6 +82,40 @@ def node_hard_delete():
     return _ok(deleted=n)
 
 
+@bp.route("/memory/node/clean_children", methods=["POST"])
+def node_clean_children():
+    """清理某节点下挂的 AI 与工具节点（不可恢复）。
+
+    图谱右键菜单用：选中一条用户发言，删掉它分支下的 assistant / tool 节点，
+    只保留用户自己的发言，用于手动控制节点规模。前端须先做二次确认。
+    """
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    if not nid:
+        return _err("缺少 node_id")
+    ids = memory_nodes.descendant_ids(nid, sources=("assistant", "tool"))
+    deleted = memory_nodes.hard_delete_many(ids)
+    memory_loader.invalidate()
+    return _ok(deleted=deleted, candidates=len(ids))
+
+
+@bp.route("/memory/node/clean_older", methods=["POST"])
+def node_clean_older():
+    """清理某节点之前的全部旧节点（不可恢复）。
+
+    图谱右键菜单用：以选中节点的时间为界，删掉更早的所有节点，
+    用于快速砍掉历史存量。破坏性最强，前端须做二次确认。
+    """
+    data = request.get_json(force=True) or {}
+    nid = data.get("node_id")
+    if not nid:
+        return _err("缺少 node_id")
+    ids = memory_nodes.ids_older_than(nid)
+    deleted = memory_nodes.hard_delete_many(ids)
+    memory_loader.invalidate()
+    return _ok(deleted=deleted, candidates=len(ids))
+
+
 # ---------------- 会话层（前端走后端查询） ----------------
 
 @bp.route("/memory/conversation", methods=["GET"])
@@ -377,41 +411,4 @@ def note_delete():
     return _ok(deleted=memory_notes.delete_note(nid))
 
 
-@bp.route("/memory-graph", methods=["GET"])
-@bp.route("/memory_graph.html", methods=["GET"])
-def graph_page():
-    """记忆图谱可视化页面（原生 Canvas 力导向图）。
-
-    页面放在 static/（入库），不放 data/（被忽略），否则他人拉取后页面缺失。
-    两个路径都指向同一页面：/memory-graph（规范）与 /memory_graph.html（别名，
-    与页面文件名一致，便于直接记忆与访问）。
-    """
-    page = paths.APP_DIR / "static" / "memory_graph.html"
-    if not page.is_file():
-        return _err("图谱页面不存在")
-    # 禁用缓存：页面与脚本改动频繁，缓存旧页会导致「引用已删脚本→白屏」。
-    resp = send_file(str(page), mimetype="text/html")
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
-
-
-@bp.route("/memory-graph-assets/<path:name>", methods=["GET"])
-def graph_asset(name):
-    """记忆图谱页面的脚本资源（static 目录下 mg_*.js）。
-
-    只允许 mg_ 前缀的 .js 文件名，拦截目录穿越，避免暴露 static 下其它文件。
-    """
-    import os
-    if not name.startswith("mg_") or not name.endswith(".js") or "/" in name or "\\" in name or ".." in name:
-        return _err("非法资源名")
-    js = paths.APP_DIR / "static" / name
-    if not js.is_file():
-        return _err("图谱脚本不存在")
-    # 脚本同样禁用缓存：否则浏览器混用新旧脚本会直接报错、页面空白。
-    resp = send_file(str(js), mimetype="application/javascript")
-    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    resp.headers["Pragma"] = "no-cache"
-    resp.headers["Expires"] = "0"
-    return resp
+# 可视化页面与静态资源路由已迁至 routes/memory_graph_page.py（本文件仅保留数据接口）。

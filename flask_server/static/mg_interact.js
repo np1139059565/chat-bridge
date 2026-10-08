@@ -159,6 +159,92 @@
     if (el) el.addEventListener(evt, fn);
   }
 
+  // ---------- 右键菜单：用户发言节点的手动清理 ----------
+  // 右键「用户发言」节点弹出：清理其下挂的 AI/工具节点、清理它之前的旧节点。
+  // 两个动作都是破坏性的，执行前一律二次确认。
+  MG.hideCtxMenu = function () {
+    var m = document.getElementById('ctxMenu');
+    if (m) m.style.display = 'none';
+  };
+
+  // 菜单项定义：仅对「用户发言」节点开放清理动作（AI/工具节点不提供）。
+  MG.showCtxMenu = function (ev, node) {
+    var menu = document.getElementById('ctxMenu');
+    if (!menu) return;
+    var items = [];
+    items.push({ label: '查看详情', fn: function () { MG.showDetail(node); } });
+    if (node.source === 'user') {
+      items.push({ sep: true });
+      items.push({
+        label: '清理该节点下挂的 AI / 工具节点', danger: true,
+        fn: function () { MG.cleanChildren(node); }
+      });
+      items.push({
+        label: '清理该节点之前的全部旧节点', danger: true,
+        fn: function () { MG.cleanOlder(node); }
+      });
+    }
+    var html = '';
+    items.forEach(function (it) {
+      if (it.sep) { html += '<div class="sep"></div>'; return; }
+      html += '<div class="mi' + (it.danger ? ' danger' : '') + '">' + it.label + '</div>';
+    });
+    menu.innerHTML = html;
+    // 逐个绑定点击（重新生成后绑定，避免闭包串号）
+    var idx = 0;
+    Array.prototype.forEach.call(menu.children, function (el) {
+      if (el.className.indexOf('sep') >= 0) return;
+      var it = items.filter(function (x) { return !x.sep; })[idx++];
+      el.onclick = function () { MG.hideCtxMenu(); it.fn(); };
+    });
+    menu.style.left = ev.clientX + 'px';
+    menu.style.top = ev.clientY + 'px';
+    menu.style.display = 'block';
+  };
+
+  // 清理某用户节点下挂的 AI/工具节点（二次确认）
+  MG.cleanChildren = function (node) {
+    if (!confirm('确定清理节点 #' + node.id + ' 下挂的全部 AI 与工具节点？\n此操作不可恢复。')) return;
+    fetch('/memory/node/clean_children', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node_id: node.id })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      alert('已清理 ' + ((d && d.deleted) || 0) + ' 个节点');
+      MG.load();
+    }).catch(function () { alert('清理失败'); });
+  };
+
+  // 清理某节点之前的全部旧节点（二次确认，破坏性最强）
+  MG.cleanOlder = function (node) {
+    if (!confirm('确定清理节点 #' + node.id + ' 之前的全部旧节点？\n此操作不可恢复，且数量可能很大。')) return;
+    if (!confirm('再次确认：真的要删除所有这些旧节点吗？')) return;
+    fetch('/memory/node/clean_older', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ node_id: node.id })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      alert('已清理 ' + ((d && d.deleted) || 0) + ' 个节点');
+      MG.load();
+    }).catch(function () { alert('清理失败'); });
+  };
+
+  // 绑定右键：命中用户节点则弹出清理菜单，否则隐藏
+  MG.bindContextMenu = function () {
+    MG.cv.addEventListener('contextmenu', function (ev) {
+      var rect = MG.cv.getBoundingClientRect();
+      var g = MG.toGraph(ev.clientX - rect.left, ev.clientY - rect.top);
+      var hit = MG.hitNodeAt(g.x, g.y);
+      if (!hit) { MG.hideCtxMenu(); return; }
+      ev.preventDefault();
+      MG.showCtxMenu(ev, hit);
+    });
+    // 点击别处 / 滚轮缩放时关闭菜单
+    window.addEventListener('mousedown', function (ev) {
+      var m = document.getElementById('ctxMenu');
+      if (m && m.style.display === 'block' && !m.contains(ev.target)) MG.hideCtxMenu();
+    });
+    MG.cv.addEventListener('wheel', MG.hideCtxMenu, { passive: true });
+  };
+
   // ---------- 顶栏控件 ----------
   MG.bindBar = function () {
     on('reload', 'click', MG.load);
@@ -180,6 +266,6 @@
   // 绑定全部交互
   MG.bindAll = function () {
     MG.bindWheel(); MG.bindMouseMove(); MG.bindMouseDown();
-    MG.bindClick(); MG.bindDblClick(); MG.bindBar();
+    MG.bindClick(); MG.bindDblClick(); MG.bindBar(); MG.bindContextMenu();
   };
 })();

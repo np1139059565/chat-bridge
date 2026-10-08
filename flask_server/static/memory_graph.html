@@ -43,6 +43,17 @@
     .dt-actions button { background: #2d6cdf; border: 0; color: #fff; padding: 6px 14px; border-radius: 4px; cursor: pointer; }
     .dt-actions button.ghost { background: #333a44; }
     .dt-actions button.danger { background: #b33; }
+    /* 右键菜单：定位于鼠标处，随点击关闭 */
+    #ctxMenu {
+      position: fixed; z-index: 20; display: none; min-width: 200px;
+      background: #1c1f25; border: 1px solid #3a3f47; border-radius: 6px;
+      box-shadow: 0 6px 20px #000a; padding: 4px; font-size: 13px;
+    }
+    #ctxMenu .mi { padding: 7px 12px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+    #ctxMenu .mi:hover { background: #2d6cdf; }
+    #ctxMenu .mi.danger { color: #f88; }
+    #ctxMenu .mi.danger:hover { background: #b33; color: #fff; }
+    #ctxMenu .sep { height: 1px; background: #3a3f47; margin: 4px 6px; }
   </style>
 </head>
 <body>
@@ -67,6 +78,7 @@
   </div>
   <canvas id="cv"></canvas>
   <div id="tip"></div>
+  <div id="ctxMenu"></div>
   <div id="detail"><div id="detailBody"></div></div>
   <div id="bootErr" style="display:none;padding:20px;color:#f88;"></div>
   <script>

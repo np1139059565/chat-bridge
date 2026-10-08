@@ -102,11 +102,46 @@
       a.vx *= 0.6; a.vy *= 0.6;      // 阻尼：抑制速度，配合 alpha 衰减更快静止
       a.x += a.vx; a.y += a.vy;
     }
+    // 位置更新后做硬分离：纯斥力在节点密集时不足以保证最小间距，
+    // 这里显式把重叠节点推开，保证任意两节点间距 >= 半径之和 + MIN_GAP。
+    MG.separateOverlaps();
     // alpha 衰减到阈值以下：视为收敛，停帧省性能
     MG.alpha *= MG.ALPHA_DECAY;
     if (MG.alpha < MG.ALPHA_MIN) {
       MG.alpha = 0;
       MG.settled = true;
+    }
+  };
+
+  // 节点间最小间隙（像素）：两节点边缘至少隔开这么多，避免视觉重叠。
+  MG.MIN_GAP = 5;
+
+  // 硬分离：把间距小于「半径和 + MIN_GAP」的节点对推开。
+  // 迭代若干轮直至无重叠或达到轮数上限；被拖动的节点固定不动，只推对方。
+  // 这是确定性约束（不依赖 alpha），保证收敛后仍维持最小间距。
+  MG.separateOverlaps = function () {
+    var nodes = MG.nodes;
+    var passes = 3;                   // 迭代轮数：太多会拖慢每帧
+    for (var pass = 0; pass < passes; pass++) {
+      var moved = false;
+      for (var i = 0; i < nodes.length; i++) {
+        var a = nodes[i];
+        for (var j = i + 1; j < nodes.length; j++) {
+          var b = nodes[j];
+          var dx = b.x - a.x, dy = b.y - a.y;
+          var d = Math.sqrt(dx * dx + dy * dy);
+          var need = MG.radiusOf(a) + MG.radiusOf(b) + MG.MIN_GAP;
+          if (d >= need) continue;    // 间距足够，跳过
+          // 完全重合时给一个随机方向，避免除零、让它们分开
+          if (d < 0.01) { dx = Math.random() - 0.5; dy = Math.random() - 0.5; d = Math.sqrt(dx * dx + dy * dy) + 0.001; }
+          var push = (need - d) / 2;  // 各推一半
+          var ux = dx / d, uy = dy / d;
+          if (a !== MG.drag) { a.x -= ux * push; a.y -= uy * push; }
+          if (b !== MG.drag) { b.x += ux * push; b.y += uy * push; }
+          moved = true;
+        }
+      }
+      if (!moved) break;              // 已无重叠，提前结束
     }
   };
 
