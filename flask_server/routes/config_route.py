@@ -96,8 +96,6 @@ def config():
     POST 支持三个区块：flask（host/port）、tools（开关与语言）、limits（体积上限）。
     仅 flask 改动需要重启服务才能生效，因此单独标记 requireRestart。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     if request.method == "POST":
         data = request.get_json(force=True, silent=True) or {}
         changed = []
@@ -125,8 +123,6 @@ def restart_port():
     请求体：{ "port": 5001 }
     响应：立即返回，随后进程重启（连接会短暂中断属正常）。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     try:
         port = int(data.get("port"))

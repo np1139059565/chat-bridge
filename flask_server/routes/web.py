@@ -106,8 +106,6 @@ def web_asset(name):
     只允许 web_bridge 目录下的 css / js / html，且拦截目录穿越；
     这样页面文件能拆小、保持在仓库行数上限内。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     import os
     # 只允许纯文件名，拦截路径分隔符与上跳
     if not name or "/" in name or "\\" in name or ".." in name:
@@ -140,8 +138,6 @@ def web_commands():
     数据源是指令注册表，新增内置指令时面板自动出现，无需前端改代码。
     @returns {success, commands: ["/xx", ...]}
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     try:
         from remote_bridge import command_registry
         groups = command_registry.shortcut_groups()
@@ -174,8 +170,6 @@ def _handle_command(text):
 @bp.route("/api/web/send", methods=["POST", "OPTIONS"])
 def web_send():
     """网页发消息：指令走指令通道，普通文本投卡片送进网页 AI。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     text = str(data.get("text") or "").strip()
     if not text:
@@ -199,8 +193,6 @@ def web_image():
     一次性贴入输入框再回车，避免拆成多条消息。
     请求体：{ dataUrls: [...], text: "" }；兼容旧的单个 dataUrl。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     # 图片列表：优先取 dataUrls 数组，兼容单个 dataUrl
     urls = data.get("dataUrls")
@@ -239,8 +231,6 @@ def web_voice():
     音频落盘路径告知 AI；落盘文件供留档与后续排查。
     请求体：{ audio: base64, format: 'webm' }
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     import base64
     import time
     data = request.get_json(force=True, silent=True) or {}
@@ -276,8 +266,6 @@ def web_client_log():
     请求体：{ tag, msg }；为轻量，不校验字段，能记就记。
     写盘用专用文件 client-YYYY-MM-DD.log，与主日志分开，便于单独查看。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     tag = str(data.get("tag") or "")
     msg = str(data.get("msg") or "")
@@ -304,8 +292,6 @@ def web_messages():
     - history：为 1 时返回最近一批历史（首次打开页面用），否则按游标增量
     @returns {success, seq, messages}
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     cursor = request.args.get("cursor", "0")
     try:
         limit = int(request.args.get("limit", "200"))
@@ -324,8 +310,6 @@ def web_image_file(name):
 
     与音频接口同一套目录穿越防护：只允许纯文件名，且必须落在网页图片目录内。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     path = _safe_under(name, paths.WEB_IMAGES_DIR)
     if not path:
         return jsonify(success=False, error="not_found"), 404
@@ -339,8 +323,6 @@ def web_image_file(name):
 @bp.route("/api/web/audio/<name>", methods=["GET", "OPTIONS"])
 def web_audio(name):
     """取语音音频文件：浏览器据此自动播放。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     path = _safe_audio_path(name)
     if not path:
         return jsonify(success=False, error="not_found"), 404
@@ -378,8 +360,6 @@ def web_voice_ensure():
     前端据 status=processing 轮询 voice-status，就绪后再播放。
     查询参数：seq（消息序号）
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     try:
         seq = int(request.args.get("seq", "0"))
     except (TypeError, ValueError):
@@ -410,8 +390,6 @@ def web_voice_status():
     查询参数：seq
     返回 status：ready（含 name）/ processing / not_found
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     try:
         seq = int(request.args.get("seq", "0"))
     except (TypeError, ValueError):

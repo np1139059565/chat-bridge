@@ -13,8 +13,6 @@ bp = Blueprint("ext", __name__)
 
 @bp.route("/api/ext/<provider>", methods=["POST", "OPTIONS"])
 def provider_channel(provider):
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     action = data.get("action")
 

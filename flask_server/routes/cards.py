@@ -32,8 +32,6 @@ def create_card():
     请求体：{ type, title, content, payload }
     成功返回：{ success: true, id, status }
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     fields = _parse_card_fields(data)
     # 字段解析失败：直接返回 400 响应
@@ -47,8 +45,6 @@ def create_card():
 @bp.route("/api/cards/pending", methods=["GET", "OPTIONS"])
 def pending_cards():
     """镜像插件轮询：取走尚未投递的卡片。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     return jsonify({"success": True, "cards": bus.claim_pending()})
 
 
@@ -59,8 +55,6 @@ def confirm_delivered(card_id):
     客户端把卡片渲染进列表后调用。在收到确认前，卡片可被任何客户端反复取走；
     这是卡片停止投递的唯一条件。重复调用幂等。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     ok = bus.confirm_delivered(card_id)
     if not ok:
         return jsonify({"success": False, "error": "UNKNOWN_CARD"}), 404
@@ -70,8 +64,6 @@ def confirm_delivered(card_id):
 @bp.route("/api/cards/<card_id>", methods=["GET", "OPTIONS"])
 def get_card(card_id):
     """查询单张卡片状态。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     card = bus.get(card_id)
     if not card:
         return jsonify({"success": False, "error": "UNKNOWN_CARD"}), 404

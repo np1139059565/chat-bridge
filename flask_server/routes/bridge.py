@@ -42,8 +42,6 @@ def _run_report_async(data):
 @bp.route("/api/bridge/status", methods=["GET", "OPTIONS"])
 def bridge_status():
     """返回桥接运行状态，供设置页指示灯与窗口信息展示。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     return jsonify(success=True, **bridge.status())
 
 
@@ -53,8 +51,6 @@ def bridge_config():
 
     POST 后自动重启桥接：凭证 / 开关变化需要重建长连接。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     if request.method == "POST":
         data = request.get_json(force=True, silent=True) or {}
         cfg = bridge_store.save_config(data)
@@ -76,8 +72,6 @@ def bridge_report():
     请求体：{ conversationId, messages:[{id, role, blocks}], openid }
     注意：messages 是全量可见切片，桥接层自行与已推送集合比对取差集。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     # 网页版镜像：无论 QQ 是否在线，都把这次切片存一份进网页收件箱，
     # 让手机网页能拉到 AI 回复。失败不影响 QQ 推送。
@@ -201,8 +195,6 @@ def bridge_result():
     用于 /sessions、/screenshot 这类「浏览器执行后要回传结果」的指令。
     请求体：{ request_id, text }（text 为已格式化好的文本，或图片附件另行处理）
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     client, openid, err = _take_result_context(data)
     if err is not None:
@@ -247,8 +239,6 @@ def _cmd_remove(data):
 @bp.route("/api/bridge/help", methods=["GET", "OPTIONS"])
 def bridge_help():
     """返回指令说明文本（与 /h 同源），供设置页展示，避免两处手写漂移。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     return jsonify(success=True, help=command_panel.help_text())
 
 
@@ -260,8 +250,6 @@ def bridge_command_params():
     前端不写死任何指令名，新增带参数的内置指令时后端登记一行即可。
     @returns { success, defs: [ {cmd, key, label, placeholder, hint} ] }
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     from remote_bridge import command_registry
     return jsonify(success=True, defs=command_registry.builtin_param_defs())
 
@@ -274,8 +262,6 @@ def bridge_commands():
     - POST {index?, entry}：index 为 null 时新增，否则修改该下标
     - DELETE {index} ：删除该下标
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     if request.method == "GET":
         return jsonify(success=True, commands=bridge_store.list_commands())
     data = request.get_json(force=True, silent=True) or {}
@@ -291,7 +277,5 @@ def bridge_commands():
 @bp.route("/api/bridge/restart", methods=["POST", "OPTIONS"])
 def bridge_restart():
     """手动重启桥接。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     ok = bridge.restart()
     return jsonify(success=bool(ok), status=bridge.status())

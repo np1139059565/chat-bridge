@@ -40,6 +40,21 @@ def _register_blueprints(app):
     app.register_blueprint(web_bp)
 
 
+def _register_options(app):
+    """统一处理 CORS 预检（OPTIONS）：任何路径的预检一律返回 204。
+
+    目的：各路由原先各自写「if request.method == \"OPTIONS\": return (\"\", 204)」，
+    约 30 处重复。集中到应用层一处拦截，路由函数只管业务方法，重复消除。
+    before_request 返回响应即短路，不再进入视图函数；after_request 仍会补 CORS 头。
+    """
+    @app.before_request
+    def _options_preflight():
+        from flask import request
+        # 预检请求：直接回空 204，无需进入任何视图函数
+        if request.method == "OPTIONS":
+            return ("", 204)
+
+
 def _register_cors(app):
     """统一响应头：允许跨域、禁用缓存。
 
@@ -224,6 +239,8 @@ def create_app():
     _init_runtime()
     # 注册蓝图与响应头
     _register_blueprints(app)
+    # 统一处理 CORS 预检（OPTIONS）：集中在应用层，省去各路由重复判断
+    _register_options(app)
     _register_cors(app)
     # 请求耗时日志：排查接口卡死时，靠它还原「哪个请求卡了多久」
     _register_request_logging(app)

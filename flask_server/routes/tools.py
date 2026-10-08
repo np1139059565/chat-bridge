@@ -311,8 +311,6 @@ def _unknown_tool(name):
 @bp.route("/tool", methods=["POST", "OPTIONS"])
 def tool():
     """调用工具。按优先级依次尝试：内置 → 自定义 → 未知工具。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     name = data.get("tool") or data.get("name")
     params = data.get("parameters") or data.get("arguments") or {}

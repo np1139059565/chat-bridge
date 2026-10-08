@@ -17,8 +17,6 @@ bp = Blueprint("rules_route", __name__)
 @bp.route("/rules", methods=["GET", "POST", "OPTIONS"])
 def rules_list():
     """列出规则（GET）或新建规则（POST）。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     if request.method == "POST":
         data = request.get_json(force=True, silent=True) or {}
         name = data.get("name")
@@ -66,8 +64,6 @@ def _get_rule(name):
 @bp.route("/rules/<name>", methods=["GET", "PUT", "DELETE", "OPTIONS"])
 def rules_manage(name):
     """读取（GET）、更新（PUT）或删除（DELETE）单条规则。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     if request.method == "DELETE":
         ok = rules_mod.delete_rule(name)
         return jsonify({"ok": bool(ok), "removed": name})

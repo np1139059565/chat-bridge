@@ -20,8 +20,6 @@ def prompt_section_list():
     skills        —— 注入 System Prompt 的精简清单（含说明文档的技能）。
     skillsManage  —— 设置页「技能」区块的管理视图（全部技能 + 其工具 + 开关状态）。
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     return jsonify({
         "success": True,
         "sections": prompt_sections.sections(),
@@ -33,8 +31,6 @@ def prompt_section_list():
 @bp.route("/skills/<skill>/enabled", methods=["PUT", "OPTIONS"])
 def skill_set_enabled(skill):
     """技能一键上 / 下线：批量设置该技能下全部工具的 enabled，并刷新提供方注册表。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     enabled = bool(data.get("enabled"))
     changed = ct.set_skill_enabled(skill, enabled)
@@ -50,8 +46,6 @@ def skill_doc(skill):
     GET  ?file=SKILL.md          读取文档文本
     PUT  { file, text }          写回文档文本
     """
-    if request.method == "OPTIONS":
-        return ("", 204)
     try:
         if request.method == "GET":
             rel = (request.args.get("file") or "SKILL.md").strip()

@@ -20,8 +20,6 @@ bp = Blueprint("custom_tools_route", __name__)
 @bp.route("/custom_tools", methods=["GET", "OPTIONS"])
 def custom_tools_list():
     """返回已安装的自定义工具与可扫描的默认根目录。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     roots = [str(p) for p in ct.DEFAULT_SKILL_ROOTS]
     return jsonify({"tools": ct.all_meta_full(), "scanRoots": roots})
 
@@ -29,8 +27,6 @@ def custom_tools_list():
 @bp.route("/custom_tools/scan", methods=["POST", "OPTIONS"])
 def custom_tools_scan():
     """扫描指定目录，返回其中可安装的 skill 与工具。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     d = (data.get("dir") or "").strip()
     try:
@@ -42,8 +38,6 @@ def custom_tools_scan():
 @bp.route("/custom_tools/install", methods=["POST", "OPTIONS"])
 def custom_tools_install():
     """安装指定 skill 中的工具（names 为空时安装全部）。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     data = request.get_json(force=True, silent=True) or {}
     d = (data.get("dir") or "").strip()
     names = data.get("names")
@@ -58,8 +52,6 @@ def custom_tools_install():
 @bp.route("/custom_tools/<name>", methods=["PUT", "DELETE", "OPTIONS"])
 def custom_tools_manage(name):
     """更新（PUT）或删除（DELETE）某个自定义工具。"""
-    if request.method == "OPTIONS":
-        return ("", 204)
     if request.method == "DELETE":
         ok = ct.remove(name)
         runtime.refresh_external_providers()
