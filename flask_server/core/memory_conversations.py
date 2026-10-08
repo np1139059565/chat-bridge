@@ -22,7 +22,6 @@
 
 依赖：memory_db、memory_nodes、memory_edges、memory_cards、json、time
 """
-import collections
 import hashlib
 import json
 import threading

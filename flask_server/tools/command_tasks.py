@@ -22,6 +22,7 @@ import time
 
 import app_log
 import run_command_impl
+import serial_worker
 
 # 任务表上限：超过后淘汰最旧的「已完成」任务，防止内存无限增长
 _MAX_TASKS = 200
@@ -32,14 +33,15 @@ _MAX_TASKS = 200
 _tasks = {}
 # 入队顺序：用于淘汰最旧任务
 _tasks_order = collections.deque()
-# 待执行任务队列：元素为 task_id
-_pending = collections.deque()
-# 统一锁：保护上面三个结构，线程安全
+# 统一锁：保护任务表与入队顺序，线程安全
 _lock = threading.Lock()
-# 工作线程是否在跑（幂等启动用）
-_worker_running = False
 # task_id 序号：与时间戳组合，保证同一秒内多次提交也不重号
 _seq = 0
+
+# 待执行任务队列：并发骨架统一走共享模块 serial_worker。
+# task_id 本身唯一，故以它作 key，天然不发生去重（每个任务都会被处理）。
+_task_worker = serial_worker.SerialWorker(
+    lambda tid: _run_task(tid), thread_name="cmd-task-worker")
 
 
 def _now():
@@ -93,9 +95,8 @@ def submit(params):
             "finished_at": None,
         }
         _tasks_order.append(task_id)
-        _pending.append(task_id)
         _prune_locked()
-    _ensure_worker()
+    _task_worker.submit(task_id, task_id)
     app_log.info("[cmd][async] 入队 task=%s lang=%s" % (
         task_id, safe_params.get("language")))
     return task_id
@@ -112,31 +113,6 @@ def get(task_id):
         if t is None:
             return None
         return dict(t)
-
-
-def _ensure_worker():
-    """确保后台工作线程在跑（幂等：重复调用只启动一个）。"""
-    global _worker_running
-    with _lock:
-        if _worker_running:
-            return
-        _worker_running = True
-    threading.Thread(target=_worker, daemon=True, name="cmd-task-worker").start()
-
-
-def _worker():
-    """后台工作线程：串行取任务执行，处理完一个再取下一个。
-
-    队列空时退出并复位标志，下次提交会再次拉起，不空转占资源。
-    """
-    global _worker_running
-    while True:
-        with _lock:
-            if not _pending:
-                _worker_running = False
-                return
-            task_id = _pending.popleft()
-        _run_task(task_id)
 
 
 def _run_task(task_id):

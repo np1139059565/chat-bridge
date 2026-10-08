@@ -18,9 +18,7 @@
 
 依赖：memory_nodes、memory_keywords、memory_events、memory_db、threading、collections
 """
-import collections
 import json
-import threading
 
 import memory_nodes
 import memory_keywords as kw
