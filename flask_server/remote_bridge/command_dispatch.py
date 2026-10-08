@@ -84,6 +84,23 @@ def _reply(qq_client, openid, text, markdown=False):
     return ok
 
 
+def _maybe_attach_screenshot(payload, openid, screenshot):
+    """按需给命令载荷挂上「自动截图回传」字段，返回是否挂了。
+
+    页面操作类指令：动作执行完自动截图回传，便于在 QQ 端核对界面变化。
+    组合指令执行期间（_reply_ctx.suppress）强制关闭，避免大量截图刷屏。
+    @param payload    命令载荷（就地修改）
+    @param openid     发起指令的用户
+    @param screenshot 调用方是否要求截图
+    @returns 是否挂上了截图回传
+    """
+    want_shot = bool(screenshot and openid and not getattr(_reply_ctx, "suppress", False))
+    if want_shot:
+        payload["request_id"] = _register_pending(openid)
+        payload["auto_screenshot"] = True
+    return want_shot
+
+
 def _dispatch(action, params=None, openid="", screenshot=False):
     """把一条抽屉命令通过卡片总线下发。
 
@@ -105,11 +122,7 @@ def _dispatch(action, params=None, openid="", screenshot=False):
     """
     import card_bus
     payload = {"action": action, "params": params or {}}
-    # 页面操作类指令：动作执行完自动截图回传，便于在 QQ 端核对界面变化。
-    want_shot = bool(screenshot and openid and not getattr(_reply_ctx, "suppress", False))
-    if want_shot:
-        payload["request_id"] = _register_pending(openid)
-        payload["auto_screenshot"] = True
+    want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
     card = card_bus.bus.create(
         source="bridge",
         card_type="drawer-command",
