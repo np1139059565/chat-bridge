@@ -74,41 +74,28 @@ def load_all():
             "keywords": len(_CACHE["kw_index"])}
 
 
+def _ensure_loaded():
+    """缓存未加载时惰性重载一次。
+
+    使 invalidate() 真正生效：调用 invalidate() 后 loaded 置假，
+    下次读取经此触发一次全量重载，从而看到最新的规则与节点，
+    不再出现「写后内存仍旧值、直到重启才刷新」的问题。
+    """
+    if _CACHE.get("loaded"):
+        return
+    load_all()
+
+
 def get_rules():
-    """取内存中的规则字典。"""
+    """取内存中的规则字典；缓存失效时先重载。"""
+    _ensure_loaded()
     return _CACHE.get("rules") or {}
 
 
 def get_node_summary(node_id):
-    """从内存取节点摘要；未命中返回 None。"""
+    """从内存取节点摘要；未命中返回 None；缓存失效时先重载。"""
+    _ensure_loaded()
     return (_CACHE.get("nodes") or {}).get(node_id)
-
-
-def keyword_prefilter(keywords, limit=None):
-    """基于内存倒排索引做关键词预筛：返回按命中关键词数降序的 node_id 列表。
-
-    这是「接口读取优先走内存」的落点：检索先在此拿到候选，避免每次都全库 LIKE。
-    未加载或索引为空时返回 None，调用方据此回退到数据库查询。
-    @param keywords 关键词列表
-    @param limit 返回上限；None 表示不限
-    @return [(node_id, hit_count)] 或 None（缓存不可用时）
-    """
-    if not _CACHE.get("loaded"):
-        return None
-    index = _CACHE.get("kw_index") or {}
-    if not index:
-        return None
-    scores = {}
-    for kw in (keywords or []):
-        if not kw:
-            continue
-        # 子串命中：内存索引按精确关键词建，此处做包含式匹配以兼容中文短语。
-        for key, ids in index.items():
-            if kw in key or key in kw:
-                for nid in ids:
-                    scores[nid] = scores.get(nid, 0) + 1
-    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return ordered[:limit] if limit else ordered
 
 
 def keyword_prefilter(keywords, limit=None):
