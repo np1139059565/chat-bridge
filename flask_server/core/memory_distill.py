@@ -66,29 +66,38 @@ def _generic_brief(result, limit):
     if isinstance(result, (int, float, bool)):
         return str(result)
     if isinstance(result, list):
-        # 列表：报条数，并附首项摘要（首项更有代表性）
-        if not result:
-            return "空列表"
-        head = _generic_brief(result[0], limit // 2)
-        return ("共 %d 项，首项：%s" % (len(result), head)) if head else "共 %d 项" % len(result)
+        return _brief_list(result, limit)
     if isinstance(result, dict):
-        parts = []
-        # 1) 关键标量字段优先（ok / count / total_lines / exitCode 等），一眼可判成败与规模
-        for k in ("ok", "success", "count", "total", "total_lines", "exitCode"):
-            if k in result and isinstance(result[k], (int, float, bool)):
-                parts.append("%s=%s" % (k, result[k]))
-        # 2) 取第一个非空字符串字段作为语义正文
-        for v in result.values():
-            if isinstance(v, str) and v.strip():
-                parts.append(v.replace("\n", " ").strip()[: limit // 2])
-                break
-        # 3) 数组字段只报长度，不展开（展开会撑爆精华）
-        for k, v in result.items():
-            if isinstance(v, list):
-                parts.append("%s %d 项" % (k, len(v)))
-                break
-        return "，".join(parts)[:limit] if parts else ""
+        return _brief_dict(result, limit)
     return str(result).replace("\n", " ")[:limit]
+
+
+def _brief_list(result, limit):
+    """列表摘要：报条数，并附首项摘要（首项更有代表性）。"""
+    if not result:
+        return "空列表"
+    head = _generic_brief(result[0], limit // 2)
+    return ("共 %d 项，首项：%s" % (len(result), head)) if head else "共 %d 项" % len(result)
+
+
+def _brief_dict(result, limit):
+    """字典摘要：关键标量字段 + 首个字符串正文 + 首个数组长度，均按需截断。"""
+    parts = []
+    # 1) 关键标量字段优先（ok / count / total_lines / exitCode 等），一眼可判成败与规模
+    for k in ("ok", "success", "count", "total", "total_lines", "exitCode"):
+        if k in result and isinstance(result[k], (int, float, bool)):
+            parts.append("%s=%s" % (k, result[k]))
+    # 2) 取第一个非空字符串字段作为语义正文
+    for v in result.values():
+        if isinstance(v, str) and v.strip():
+            parts.append(v.replace("\n", " ").strip()[: limit // 2])
+            break
+    # 3) 数组字段只报长度，不展开（展开会撑爆精华）
+    for k, v in result.items():
+        if isinstance(v, list):
+            parts.append("%s %d 项" % (k, len(v)))
+            break
+    return "，".join(parts)[:limit] if parts else ""
 
 
 @_register_brief("read_file")
@@ -198,11 +207,33 @@ def _tool_essence(text):
     result = obj.get("result")
     # 告警类结果（形如 {"issue":"...","message":"..."}）：直接用 message 当摘要。
     if isinstance(result, dict) and result.get("issue"):
-        msg = str(result.get("message") or result.get("issue") or "").strip()
-        head = ("%s：%s" % (tool, msg)).strip("：") if tool else msg
-        return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
+        return _tool_issue_essence(tool, result, raw)
     # 普通工具结果：按工具名分派摘要器，绝不整体 json.dumps（那会产出腰斩 JSON）。
     brief = _brief_for(tool, result, 200) if result is not None else ""
+    return _join_tool_brief(tool, brief, raw)
+
+
+def _tool_issue_essence(tool, result, raw):
+    """告警类工具结果的精华：直接取 message 或 issue。
+
+    @param tool   工具名
+    @param result 结果字典（含 issue 字段）
+    @param raw    原始文本（兜底用）
+    @returns 精华字符串
+    """
+    msg = str(result.get("message") or result.get("issue") or "").strip()
+    head = ("%s：%s" % (tool, msg)).strip("：") if tool else msg
+    return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
+
+
+def _join_tool_brief(tool, brief, raw):
+    """把「工具名 + 结果摘要」拼成精华；为空则退回原文截断。
+
+    @param tool  工具名
+    @param brief 结果摘要
+    @param raw   原始文本（兜底用）
+    @returns 精华字符串
+    """
     head = ("%s：%s" % (tool, brief)).strip("：") if tool else brief
     return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
 
