@@ -24,6 +24,7 @@
       "matches": ["<all_urls>"],
       "js": [
         "lib/dom-utils.js",
+        "lib/host_theme.js",
         "content/00_state.js",
         "content/01_panel.js",
         "content/02_blocks.js",
