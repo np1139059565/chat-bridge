@@ -52,31 +52,39 @@ def main():
         source_text = f.read()
     expected = render_copy(source_text)
     # 逐个副本：写入或比对
-    dirty = 0
-    for t in TARGETS:
-        if check_only:
-            # 校验模式：读现有副本，与期望内容比对
-            if not os.path.exists(t):
-                print("副本缺失：%s" % os.path.relpath(t, ROOT))
-                dirty += 1
-                continue
-            with open(t, "r", encoding="utf-8") as f:
-                actual = f.read()
-            if actual != expected:
-                print("副本与真源不一致：%s" % os.path.relpath(t, ROOT))
-                dirty += 1
-        else:
-            # 写入模式：确保目录存在后覆盖写入
-            os.makedirs(os.path.dirname(t), exist_ok=True)
-            with open(t, "w", encoding="utf-8", newline="") as f:
-                f.write(expected)
-            print("已生成：%s" % os.path.relpath(t, ROOT))
+    dirty = sum(_process_target(t, expected, check_only) for t in TARGETS)
     if check_only:
         if dirty:
             print("\n共 %d 个副本需同步。" % dirty)
             return 1
         print("全部副本与真源一致。")
+    return 0
+
+
+def _process_target(target, expected, check_only):
+    """处理单个副本：校验模式下比对，写入模式下覆盖写。
+
+    @param target     副本路径
+    @param expected   期望内容
+    @param check_only 是否只校验
+    @returns 1 表示该副本有问题（缺失 / 不一致），0 表示正常
+    """
+    if check_only:
+        # 校验模式：读现有副本，与期望内容比对
+        if not os.path.exists(target):
+            print("副本缺失：%s" % os.path.relpath(target, ROOT))
+            return 1
+        with open(target, "r", encoding="utf-8") as f:
+            actual = f.read()
+        if actual != expected:
+            print("副本与真源不一致：%s" % os.path.relpath(target, ROOT))
+            return 1
         return 0
+    # 写入模式：确保目录存在后覆盖写入
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    with open(target, "w", encoding="utf-8", newline="") as f:
+        f.write(expected)
+    print("已生成：%s" % os.path.relpath(target, ROOT))
     return 0
 
 

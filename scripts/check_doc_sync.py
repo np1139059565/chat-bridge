@@ -92,39 +92,54 @@ def normalize_route(path):
     return re.sub(r'<[^>]*>', '<param>', path)
 
 
+def _report_missing(label, missing):
+    """打印一类缺漏清单；无缺漏返回 0，否则返回条数。
+
+    @param label   缺漏类别描述（如「路由」）
+    @param missing 缺失项列表
+    @returns 缺漏条数
+    """
+    if not missing:
+        return 0
+    print("以下%s未收录进接口文档（%d 项）：" % (label, len(missing)))
+    for m in missing:
+        print("  ", m)
+    return len(missing)
+
+
+def _check_routes(doc_norm):
+    """校验路由是否都已收录；返回缺漏路由数。
+
+    @param doc_norm 归一化后的文档全文
+    @returns 缺漏条数
+    """
+    missing = []
+    for r in sorted(collect_routes()):
+        if r in DOC_EXEMPT_PATHS:
+            continue
+        if normalize_route(r) not in doc_norm:
+            missing.append(r)
+    return _report_missing("路由", missing)
+
+
+def _check_tools(doc):
+    """校验工具名是否都已收录；返回缺漏工具数。
+
+    @param doc 文档全文（原文，工具名不需归一化）
+    @returns 缺漏个数
+    """
+    missing = [t for t in sorted(collect_tools()) if t not in doc]
+    return _report_missing("工具", missing)
+
+
 def main():
     """执行路由与工具的文档收录校验。"""
     doc = read_doc()
     if not doc:
         print("接口文档不存在或为空：%s" % API_DOC)
         return 1
-    problems = 0
-    # 文档也做同样的参数占位归一化，消除 <id> / <card_id> 之类的写法差异
-    doc_norm = normalize_route(doc)
-
-    # 1) 路由校验：归一化后应能在（同样归一化的）文档中找到
-    routes = collect_routes()
-    missing_routes = []
-    for r in sorted(routes):
-        if r in DOC_EXEMPT_PATHS:
-            continue
-        if normalize_route(r) not in doc_norm:
-            missing_routes.append(r)
-    if missing_routes:
-        problems += len(missing_routes)
-        print("以下路由未收录进接口文档（%d 条）：" % len(missing_routes))
-        for r in missing_routes:
-            print("  ", r)
-
-    # 2) 工具校验：每个工具名应出现在文档中
-    tools = collect_tools()
-    missing_tools = [t for t in sorted(tools) if t not in doc]
-    if missing_tools:
-        problems += len(missing_tools)
-        print("以下工具未收录进接口文档（%d 个）：" % len(missing_tools))
-        for t in missing_tools:
-            print("  ", t)
-
+    # 文档做参数占位归一化，消除 <id> / <card_id> 之类的写法差异
+    problems = _check_routes(normalize_route(doc)) + _check_tools(doc)
     if problems:
         print("\n文档同步校验未通过：共 %d 项缺漏。" % problems)
         return 1
