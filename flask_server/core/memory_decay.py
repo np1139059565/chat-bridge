@@ -19,6 +19,7 @@ import time
 
 import memory_nodes
 import memory_edges
+import ui_priority
 from memory_db import begin_batch, end_batch
 
 # 各分级的底子系数
@@ -96,6 +97,9 @@ def recompute_all():
                 memory_nodes.bulk_set_strength_tier(pending)
                 pending = []
                 end_batch(conn)
+                # 界面优先：此刻锁已释放，若发现有界面请求在跑，先让路，
+                # 等它毫秒级做完再继续下一批。避免维护与界面写操作抢锁。
+                ui_priority.maintenance_yield()
                 begin_batch()
         # 收尾：写入剩余不足一批的改动
         if pending:

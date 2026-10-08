@@ -97,9 +97,12 @@ def _req_start_hook():
     import uuid
     import threading
     import app_log
+    import ui_priority
     from flask import g, request
     g._req_t0 = time.time()
     g._req_id = uuid.uuid4().hex[:8]
+    # 登记界面请求开始：后台维护据此让路（界面响应优先级最高）。
+    ui_priority.ui_request_enter()
     with _inflight_lock:
         _inflight[g._req_id] = {
             "start": g._req_t0, "method": request.method, "path": request.path,
@@ -232,6 +235,13 @@ def _register_db_teardown(app):
     """
     @app.teardown_request
     def _close_db_conn(exc=None):
+        # 登记界面请求结束：teardown 无论成功失败都会执行，
+        # 放这里可避免请求异常时漏减计数、导致维护永久让路。
+        try:
+            import ui_priority
+            ui_priority.ui_request_exit()
+        except Exception:
+            pass
         try:
             import memory_db
             memory_db.close_conn()
