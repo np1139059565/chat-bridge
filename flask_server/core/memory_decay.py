@@ -49,34 +49,59 @@ def compute_strength(node, edge_weight_sum):
     return max(0.0, min(1.0, s))
 
 
+# 分批提交的批大小：每处理这么多节点提交一次。
+# 取值权衡：太小则提交次数多、慢（逐节点提交曾使全量重算耗时 8.5 秒）；
+# 太大则单次持写锁时间长、阻塞前台。200 是二者的折中。
+_COMMIT_BATCH = 200
+
+
 def recompute_all():
-    """遍历全部节点，重算强度并写回；返回 (处理数, 升级数, 降级数)。"""
+    """遍历全部节点，重算强度并写回；返回 (处理数, 升级数, 降级数)。
+
+    分批提交：每 _COMMIT_BATCH 个节点提交一次，而非逐个提交。
+    逐节点提交会让 4000+ 节点产生 4000+ 次磁盘同步，是全量重算耗时的主要来源；
+    分批后提交次数降到约 1/200，同时每批结束即释放写锁，不长时间独占。
+    """
     conn = memory_nodes.get_conn()
-    rows = conn.execute("SELECT id FROM nodes WHERE deleted=0").fetchall()
+    # 一次性取出重算所需的全部字段（不含庞大的 blocks，避免无谓读放大）：
+    # 逐节点 get_node 会产生 N 次查询并读入 blocks，是全量重算的另一耗时来源。
+    rows = conn.execute(
+        "SELECT id, tier, hit_count, last_hit_at, created_at FROM nodes WHERE deleted=0"
+    ).fetchall()
     upgraded = downgraded = 0
-    # 短事务：每个节点处理完立即提交、释放写锁。
-    # 后台任务不跨节点长时间持锁，让前台请求能在节点间隙插入，
-    # 避免后台抱着写锁不放、前台请求全部死等。
-    for r in rows:
-        nid = r["id"]
-        node = memory_nodes.get_node(nid)
-        if not node:
-            continue
-        begin_batch()
-        try:
-            wsum = memory_edges.associative_weight_sum(nid)
+    # 一次性预取全部节点的关联边权重和：把「每节点查一次边表」的 N 次查询
+    # 降为 2 次聚合查询，这是全量重算的主要提速点。
+    weight_sums = memory_edges.associative_weight_sums()
+    begin_batch()                       # 进入批量模式：写操作暂不逐条提交
+    pending = []                        # 待批量写入的 (id, strength, tier)
+    try:
+        for r in rows:
+            nid = r["id"]
+            node = {
+                "tier": r["tier"], "hit_count": r["hit_count"],
+                "last_hit_at": r["last_hit_at"], "created_at": r["created_at"],
+            }
+            wsum = weight_sums.get(nid, 0.0)
             strength = compute_strength(node, wsum)
-            memory_nodes.set_strength(nid, strength)
             # 自动升降级
             new_tier = _next_tier(node, strength)
             if new_tier != node.get("tier"):
-                memory_nodes.set_tier(nid, new_tier)
                 if TIER_BASE.get(new_tier, 0) > TIER_BASE.get(node.get("tier"), 0):
                     upgraded += 1
                 else:
                     downgraded += 1
-        finally:
-            end_batch(conn)
+            pending.append((nid, strength, new_tier))
+            # 每满一批：批量写入并提交、释放写锁，随后重开批量模式继续
+            if len(pending) >= _COMMIT_BATCH:
+                memory_nodes.bulk_set_strength_tier(pending)
+                pending = []
+                end_batch(conn)
+                begin_batch()
+        # 收尾：写入剩余不足一批的改动
+        if pending:
+            memory_nodes.bulk_set_strength_tier(pending)
+    finally:
+        end_batch(conn)                 # 提交最后不足一批的改动
     # 边衰减单独做（其内部逐边短事务更新）
     memory_edges.decay_edges()
     return len(rows), upgraded, downgraded

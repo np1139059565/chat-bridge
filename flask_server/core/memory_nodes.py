@@ -140,6 +140,24 @@ def set_strength(node_id, strength):
     maybe_commit(conn)
 
 
+def bulk_set_strength_tier(pairs):
+    """批量写入「强度 + 分级」（全量衰减重算用）。
+
+    逐条 UPDATE 会让 4000+ 节点产生 4000+ 条语句、每条都要过一遍 SQL 追踪回调，
+    实测是全量重算的主要耗时来源（约 1ms/条）。改用 executemany 一次提交一批，
+    把语句级开销摊薄，是重算提速的关键。
+    @param pairs [(node_id, strength, tier), ...] 三元组列表
+    """
+    if not pairs:
+        return
+    conn = get_conn()
+    conn.executemany(
+        "UPDATE nodes SET strength=?, tier=? WHERE id=?",
+        [(float(s), t, nid) for (nid, s, t) in pairs],
+    )
+    maybe_commit(conn)
+
+
 def soft_delete(node_id):
     """软删除：置 deleted=1，节点保留、树不断裂。"""
     conn = get_conn()

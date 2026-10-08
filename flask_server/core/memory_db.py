@@ -124,6 +124,12 @@ _INDEXES = [
     "CREATE INDEX IF NOT EXISTS idx_edges_src ON edges(src_node)",
     "CREATE INDEX IF NOT EXISTS idx_edges_dst ON edges(dst_node)",
     "CREATE INDEX IF NOT EXISTS idx_cards_node ON cards(node_id)",
+    # 突触边按「类型 + 权重」的复合索引：维护里的边衰减、权重求和都在
+    # WHERE kind='associative' AND weight > 0 上过滤，13 万行全表扫描会拖慢维护；
+    # 这两个索引让过滤走索引而非全扫。
+    "CREATE INDEX IF NOT EXISTS idx_edges_kind_weight ON edges(kind, weight)",
+    "CREATE INDEX IF NOT EXISTS idx_edges_kind_src ON edges(kind, src_node)",
+    "CREATE INDEX IF NOT EXISTS idx_edges_kind_dst ON edges(kind, dst_node)",
 ]
 
 

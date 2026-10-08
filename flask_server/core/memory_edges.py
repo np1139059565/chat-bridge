@@ -117,6 +117,32 @@ def associative_weight_sum(node_id):
     return float(row["s"]) if row else 0.0
 
 
+def associative_weight_sums():
+    """一次性取全部节点的关联边权重之和，返回 {node_id: 权重和}。
+
+    供全量衰减重算使用：逐节点调用 associative_weight_sum 会产生 N 次查询
+    （4000+ 节点即 4000+ 次），是重算耗时的大头；此处用两次 GROUP BY
+    聚合（分别按 src、dst）在内存里合并，把查询次数降到 2 次。
+    仅返回有权重边的节点；无关联边的节点不在结果中（调用方按 0 处理）。
+    @returns {node_id: float}
+    """
+    conn = get_conn()
+    sums = {}
+    # 按源端聚合
+    for r in conn.execute(
+        "SELECT src_node AS nid, SUM(weight) AS s FROM edges"
+        " WHERE kind='associative' AND weight > 0 GROUP BY src_node"
+    ).fetchall():
+        sums[r["nid"]] = sums.get(r["nid"], 0.0) + float(r["s"] or 0.0)
+    # 按目标端聚合，与源端结果累加（同一条边可能两端都被统计到不同节点）
+    for r in conn.execute(
+        "SELECT dst_node AS nid, SUM(weight) AS s FROM edges"
+        " WHERE kind='associative' AND weight > 0 GROUP BY dst_node"
+    ).fetchall():
+        sums[r["nid"]] = sums.get(r["nid"], 0.0) + float(r["s"] or 0.0)
+    return sums
+
+
 def decay_edges(half_life_days=30, floor=0.1):
     """对突触边做时间衰减：超期未激活的权重减半，过低标 dormant。
 
