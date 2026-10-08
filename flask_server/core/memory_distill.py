@@ -244,7 +244,11 @@ def distill_node(node_id, use_llm=False):
     source = node.get("source") or "assistant"
     text = kw.extract_from_blocks(node.get("blocks"))
     essence = _essence_for(source, text, node.get("blocks"))
-    keywords = kw.extract(text, top_k=8, use_llm=use_llm)
+    # 工具节点从「精华」提关键词，而非原始 JSON 全文。
+    # 原始 blocks 是 bridge-chat-res 的 JSON，全文提词会把 bridge/chat/type/true、
+    # 路径片段、nonce 等噪声当作关键词；精华已是「工具名 + 结果摘要」，提词更干净。
+    kw_source = essence if (source == "tool" and essence) else text
+    keywords = kw.extract(kw_source, top_k=8, use_llm=use_llm)
     # 跨计划去噪：剔除近期计划里高频出现的低区分度词
     keywords = kw.denoise_by_plans(keywords)
     # 生成文本向量，供检索第三路（向量语义近邻）使用
