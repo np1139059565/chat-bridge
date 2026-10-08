@@ -274,17 +274,30 @@ def _push_one(qq_client, openid, m, push, voice_paths=None):
     # 经 voice_paths 传入）。放在正文之后同一轮里推，恢复「文本→语音」顺序，
     # 避免一批消息的语音全部被挤到末尾。
     if kind == "ai" and not built.get("is_tool_result"):
-        path = (voice_paths or {}).get(m.get("id") or "")
-        if path:
-            # 正文推成功才推语音（保持「文本→语音」顺序）；推完即删临时音频。
-            # 正文失败时不推，文件也删掉——下轮重试会重新合成，不留垃圾。
-            if ok:
-                try:
-                    push_voice(qq_client, openid, path)
-                except Exception as e:
-                    log("语音推送失败（不影响主流程）：", e)
-            _remove_voice_file(path)
+        _push_voice_after(qq_client, openid, m, voice_paths, ok)
     return 'sent' if ok else 'fail'
+
+
+def _push_voice_after(qq_client, openid, m, voice_paths, text_ok):
+    """正文推送后，紧跟着推这条消息的语音（保持「文本→语音」顺序）。
+
+    正文推成功才推语音；推完即删临时音频。正文失败时不推，文件也删掉——
+    下轮重试会重新合成，不留垃圾。
+    @param qq_client   QQClient 实例
+    @param openid      收件人
+    @param m           消息对象
+    @param voice_paths 预合成的 {消息id: 音频路径}
+    @param text_ok     正文是否推送成功
+    """
+    path = (voice_paths or {}).get(m.get("id") or "")
+    if not path:
+        return
+    if text_ok:
+        try:
+            push_voice(qq_client, openid, path)
+        except Exception as e:
+            log("语音推送失败（不影响主流程）：", e)
+    _remove_voice_file(path)
 
 
 def _remove_voice_file(path):
@@ -373,73 +386,19 @@ def handle_report(qq_client, payload):
     # 就会长时间占用其推送锁、上报线程堆满、服务器拒绝连接（必须重启才恢复）。
     # 在锁外先把本轮要推的 AI 语音统统合成好，得到 {消息id: 音频路径}，
     # 锁内只按序推送，既保住「文本→语音」顺序，又不占锁。
-    voice_paths = {}
-    if push.get("voice"):
-        for m in messages:
-            mid = m.get("id") or ""
-            if not mid or not _should_push(m, push):
-                continue
-            try:
-                from .outbound import build_body
-                built = build_body(m, push)
-                if built.get("kind") != "ai" or built.get("is_tool_result"):
-                    continue
-            except Exception:
-                continue
-            try:
-                path = _synthesize_voice(m)
-                if path:
-                    voice_paths[mid] = path
-            except Exception as e:
-                log("语音预合成失败（不影响主流程）：", e)
+    # 推送编排已抽到 message_flow 模块，此处延迟导入避免循环依赖。
+    from . import message_flow
+    voice_paths = message_flow.presynth_voice(messages, push)
 
     # 第二步（会话锁内）：整段「读已推集合 → 逐条推送 → 写回」对同一会话串行执行：
     # 否则同会话多个上报并发会读到同一份集合，导致同一条被推两次（重复）、顺序穿插（乱序）。
     # 按会话分锁：不同会话各用各的锁，一个慢会话不会拖住其它会话的推送。
     with _lock_for(conv_id):
-        pushed = bridge_store.get_pushed_set(conv_id)
-        sent = 0
-        seen_keys = []
-        # 本轮推送失败的消息：结束后写入待推缓存，供下次上报优先重试。
-        failed = []
+        sent = message_flow.push_batch_locked(qq_client, openid, conv_id, messages, push, voice_paths)
 
-        for m in messages:
-            mid = m.get("id") or ""
-            # 1) 正文推送：按消息 id 去重。
-            #    工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
-            #    否则「消息已推过」会把后来的结果一并挡掉。
-            if mid and mid not in pushed:
-                status = _push_one(qq_client, openid, m, push, voice_paths)
-                if status == 'sent':
-                    sent += 1
-                # 失败不记账：留待下轮重试，避免消息被永久漏掉
-                if status in ('sent', 'skip'):
-                    seen_keys.append(mid)
-                elif status == 'fail':
-                    # 正文推送失败：记入待推，下次上报优先重试（此时窗口多半已续期）
-                    failed.append(m)
-                # 图片推送：按「消息id#img」去重，与正文各自独立
-                sent += _push_images_block(qq_client, openid, m, push, pushed, seen_keys)
-            # 2) 卡片结果推送：按「消息id#卡片id」去重，与正文互不影响。
-            for card in (m.get("cardResults") or []):
-                cid = card.get("id") or ""
-                if not cid:
-                    continue
-                ckey = (mid + "#" + cid) if mid else cid
-                if ckey in pushed or ckey in seen_keys:
-                    continue
-                if _push_card_result(qq_client, openid, card, push):
-                    sent += 1
-                    seen_keys.append(ckey)
-                # 图片推送失败不记账，同样留待重试
-
-        # 只登记本轮「成功或本就不该推」的 key；失败的不写，下轮会再评估
-        bridge_store.mark_pushed(conv_id, seen_keys)
-        # 回写待推缓存：本轮失败的消息挂起，下次上报优先重试；
-        # 成功 / 跳过的消息不在其中，故会自动移出缓存。
-        bridge_store.set_pending(conv_id, failed)
     # 兜底清理：预合成了语音、但正文已推过（未进 _push_one）的，其音频没人删，
     # 在此统一清掉，避免临时文件堆积。
     for _mid, _p in voice_paths.items():
         _remove_voice_file(_p)
     return sent
+
