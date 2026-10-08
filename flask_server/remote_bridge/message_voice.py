@@ -74,8 +74,27 @@ def extract_voice_from_blocks(m):
     @param m 消息对象
     @returns 语音文本；无则空串
     """
-    import json
     # 1) 优先按「代码块」取：这是标准形态
+    got = _voice_from_code_blocks(m)
+    if got:
+        return got
+    # 2) 兜底：语音块漂移成「裸 JSON」时，从正文文本里捞（md 优先，其次各文本块）
+    for t in _collect_texts(m):
+        got = _find_voice_json_in_text(t)
+        if got:
+            return got
+    return ""
+
+
+def _voice_from_code_blocks(m):
+    """从消息的代码块里取语音文本（标准形态）。
+
+    认 JSON 的 type 字段，不看代码块语言名：
+    代码块内容为 {"type":"bridge-voice","text":...} 时取其 text。
+    @param m 消息对象
+    @returns 语音文本；无则空串
+    """
+    import json
     for b in (m.get("blocks") or []):
         if not b or b.get("type") != "code":
             continue
@@ -88,11 +107,6 @@ def extract_voice_from_blocks(m):
             continue
         if isinstance(obj, dict) and obj.get("type") == "bridge-voice":
             return str(obj.get("text") or "").strip()
-    # 2) 兜底：语音块漂移成「裸 JSON」时，从正文文本里捞（md 优先，其次各文本块）
-    for t in _collect_texts(m):
-        got = _find_voice_json_in_text(t)
-        if got:
-            return got
     return ""
 
 

@@ -42,14 +42,7 @@ def presynth_voice(messages, push):
         return voice_paths
     for m in messages:
         mid = m.get("id") or ""
-        if not mid or not mr._should_push(m, push):
-            continue
-        try:
-            from .outbound import build_body
-            built = build_body(m, push)
-            if built.get("kind") != "ai" or built.get("is_tool_result"):
-                continue
-        except Exception:
+        if not mid or not _should_synth(m, push):
             continue
         try:
             path = mr._synthesize_voice(m)
@@ -58,6 +51,24 @@ def presynth_voice(messages, push):
         except Exception as e:
             log("语音预合成失败（不影响主流程）：", e)
     return voice_paths
+
+
+def _should_synth(m, push):
+    """判断一条消息是否该预合成语音：可推送、且是 AI 正文（非工具结果）。
+
+    @param m    消息对象
+    @param push 推送开关字典
+    @returns 需要合成为 True
+    """
+    from . import message_router as mr
+    if not mr._should_push(m, push):
+        return False
+    try:
+        from .outbound import build_body
+        built = build_body(m, push)
+        return built.get("kind") == "ai" and not built.get("is_tool_result")
+    except Exception:
+        return False
 
 
 def push_batch_locked(qq_client, openid, conv_id, messages, push, voice_paths):
