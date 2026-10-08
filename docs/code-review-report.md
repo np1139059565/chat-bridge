@@ -130,14 +130,29 @@
 | D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 |
 | D5 | `extend/content/00_state.js` | DeepSeek 输入框选择器含哈希类 |
 
-### 4.3 跨文件重复代码：不处理
+### 4.3 跨文件重复代码：分类与处理
 
-扫描报出 `extend/content/00_state.js` 与 `skills/debug_chrome/extension/content/02_drawer.js`
-之间的连续重复块。**这是架构约束，不是缺陷。**
+重复代码按性质分四类，处理方式各不相同：
 
-两者是各自独立的 Chrome 扩展，运行时无法加载同一份代码，只能人工保持同步。
-抽取公共文件会制造「看似统一、实则各自为政」的假象。
-相关代码中已注明同步要求（亮度阈值、回退策略、监听属性列表需两侧同步修改）。
+| 类别 | 判据 | 处理 |
+|---|---|---|
+| 结构约定 | 各分片文件统一的 IIFE 包裹、命名空间声明、`'use strict'` | 保留不动。属模块约定，抽走反而破坏可读性；扫描已按样板行排除 |
+| 同步副本 | 由单一真源经脚本同步生成的副本，内容刻意一致 | 保留副本，扫描跳过副本、只留真源；改动只写真源 |
+| 可抽逻辑 | 跨文件、语义一致的实现片段 | 抽公共函数或公共模块，各调用点改为引用 |
+| 数据类表格 | 纯静态数据（如样式片段） | 视成本决定，通常保留 |
+
+**同步副本机制（两个独立扩展间）**：
+
+`extend/` 与 `skills/debug_chrome/extension/` 是两个独立的 Chrome 扩展，
+运行时无法加载同一份代码。为消除「改一处忘一处」的分叉风险，采用「单一真源 + 同步副本」：
+
+- 真源：`shared/host_theme.js`（宿主明暗主题探测实现）。
+- 副本：`extend/lib/host_theme.js`、`skills/debug_chrome/extension/shared/host_theme.js`，
+  文件头带「自动生成，请勿直接编辑」标记。
+- 同步：`python scripts/sync_host_theme.py` 生成副本；`--check` 校验副本与真源是否一致。
+- 消费：两处 `detectHostTheme` 改为薄包装，调用 `window.HostThemeDetector.detect()`。
+
+如此，改动只发生在真源一处，副本由脚本保证一致，「看似统一、实则各自为政」的隐患由校验兜住。
 
 ---
 
@@ -147,3 +162,9 @@
   登记处理函数。两表键必须一致（导入期自检会拦住不一致）。
 - 消息块类型：在 `message_router._BLOCK_HANDLERS` 登记处理函数。
 - 提交前：`python scripts/check_quality.py`；安装钩子后由 pre-commit 自动校验。
+- 共享真源：改动 `shared/host_theme.js` 后运行 `python scripts/sync_host_theme.py` 同步副本；
+  `--check` 模式校验副本是否与真源一致。副本文件请勿直接编辑（文件头已标注）。
+- 日志落盘：统一走 `core/log_sink.py` 的 `DayFileSink`；`app_log` 与 `bridge_log` 各持一个实例，
+  不再各自实现按天分文件逻辑。
+- 安全 JSON 解析：统一用 `core/json_utils.safe_json_loads`；记忆子系统各模块的 `_loads` 为薄包装。
+- CORS 预检：由 `app.py` 的 `_register_options` 集中处理，路由函数不再各自判断 `OPTIONS`。

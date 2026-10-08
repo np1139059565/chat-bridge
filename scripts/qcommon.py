@@ -77,3 +77,18 @@ def is_exempt(rel):
     """判断相对路径是否属于豁免范围（第三方库 / 压缩产物）。"""
     norm = rel.replace("\\", "/")
     return any(norm.startswith(p) for p in EXEMPT_PREFIXES) or norm.endswith(".min.js")
+
+
+# 重复检测豁免：由单一真源同步生成的副本，内容刻意与真源一致，
+# 不参与「重复代码」统计（否则同步副本会被误报为重复实现）。
+# 规则：只排除副本，保留真源（shared/host_theme.js）参与扫描。
+DUP_EXEMPT_PREFIXES = (
+    "extend/lib/host_theme.js",
+    "skills/debug_chrome/extension/shared/host_theme.js",
+)
+
+
+def is_dup_exempt(rel):
+    """判断相对路径是否为「同步生成的副本」，重复检测应跳过。"""
+    norm = rel.replace("\\", "/")
+    return any(norm == p or norm.startswith(p) for p in DUP_EXEMPT_PREFIXES)

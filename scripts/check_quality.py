@@ -132,7 +132,11 @@ def check_duplicates(root):
     """检查三：规范化后的连续 DUP_WINDOW 行在多处出现（仅针对代码文件）。"""
     index = collections.defaultdict(list)
     for p in iter_files(root, DUP_EXTS):
-        _index_windows(index, _normalize_lines(p), os.path.relpath(p, root))
+        rel = os.path.relpath(p, root)
+        # 同步生成的副本跳过：内容刻意与真源一致，不参与重复统计
+        if qcommon.is_dup_exempt(rel):
+            continue
+        _index_windows(index, _normalize_lines(p), rel)
     # 只保留跨文件出现（同一文件内的重复另行评估）
     return [(places, key) for key, places in index.items()
             if len(places) >= 2 and len({pl[0] for pl in places}) >= 2]
