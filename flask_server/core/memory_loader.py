@@ -9,6 +9,7 @@
 
 依赖：paths、memory_nodes、threading
 """
+import json
 import threading
 
 import paths
@@ -18,6 +19,7 @@ import memory_nodes
 _CACHE = {
     "rules": {},       # { 规则名: 内容 }
     "nodes": {},       # { node_id: 摘要 }
+    "kw_index": {},    # { 关键词: set(node_id) } 倒排索引，供检索快速预筛
     "loaded": False,
 }
 _LOCK = threading.Lock()
@@ -49,15 +51,27 @@ def load_all():
             "SELECT id, source, essence, keywords, tier, strength FROM nodes WHERE deleted=0"
         ).fetchall()
         nodes = {}
+        kw_index = {}
         for r in rows:
             nodes[r["id"]] = {
                 "id": r["id"], "source": r["source"],
                 "essence": r["essence"], "keywords": r["keywords"],
                 "tier": r["tier"], "strength": r["strength"],
             }
+            # 构建关键词倒排索引：{ 关键词: {node_id, ...} }，供内存预筛。
+            # 关键词字段存的是 JSON 数组字符串，逐条解析；解析失败跳过该节点。
+            try:
+                kws = json.loads(r["keywords"] or "[]")
+            except Exception:
+                kws = []
+            for k in kws:
+                if k:
+                    kw_index.setdefault(str(k), set()).add(r["id"])
         _CACHE["nodes"] = nodes
+        _CACHE["kw_index"] = kw_index
         _CACHE["loaded"] = True
-    return {"rules": len(_CACHE["rules"]), "nodes": len(_CACHE["nodes"])}
+    return {"rules": len(_CACHE["rules"]), "nodes": len(_CACHE["nodes"]),
+            "keywords": len(_CACHE["kw_index"])}
 
 
 def get_rules():
@@ -68,6 +82,60 @@ def get_rules():
 def get_node_summary(node_id):
     """从内存取节点摘要；未命中返回 None。"""
     return (_CACHE.get("nodes") or {}).get(node_id)
+
+
+def keyword_prefilter(keywords, limit=None):
+    """基于内存倒排索引做关键词预筛：返回按命中关键词数降序的 node_id 列表。
+
+    这是「接口读取优先走内存」的落点：检索先在此拿到候选，避免每次都全库 LIKE。
+    未加载或索引为空时返回 None，调用方据此回退到数据库查询。
+    @param keywords 关键词列表
+    @param limit 返回上限；None 表示不限
+    @return [(node_id, hit_count)] 或 None（缓存不可用时）
+    """
+    if not _CACHE.get("loaded"):
+        return None
+    index = _CACHE.get("kw_index") or {}
+    if not index:
+        return None
+    scores = {}
+    for kw in (keywords or []):
+        if not kw:
+            continue
+        # 子串命中：内存索引按精确关键词建，此处做包含式匹配以兼容中文短语。
+        for key, ids in index.items():
+            if kw in key or key in kw:
+                for nid in ids:
+                    scores[nid] = scores.get(nid, 0) + 1
+    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return ordered[:limit] if limit else ordered
+
+
+def keyword_prefilter(keywords, limit=None):
+    """基于内存倒排索引做关键词预筛：返回按命中关键词数降序的 node_id 列表。
+
+    这是「接口读取优先走内存」的落点：检索先在此拿到候选，避免每次都全库 LIKE。
+    未加载或索引为空时返回 None，调用方据此回退到数据库查询。
+    @param keywords 关键词列表
+    @param limit 返回上限；None 表示不限
+    @return [(node_id, hit_count)] 或 None（缓存不可用时）
+    """
+    if not _CACHE.get("loaded"):
+        return None
+    index = _CACHE.get("kw_index") or {}
+    if not index:
+        return None
+    scores = {}
+    for kw in (keywords or []):
+        if not kw:
+            continue
+        # 子串命中：内存索引按精确关键词建，此处做包含式匹配以兼容中文短语。
+        for key, ids in index.items():
+            if kw in key or key in kw:
+                for nid in ids:
+                    scores[nid] = scores.get(nid, 0) + 1
+    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return ordered[:limit] if limit else ordered
 
 
 def is_loaded():

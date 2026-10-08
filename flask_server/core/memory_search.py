@@ -82,14 +82,27 @@ def _vector_search(keywords, limit):
 
 
 def _fts_search(keywords, limit):
-    """关键词检索：子串匹配（LIKE），返回 [(node_id, rank)]。
+    """关键词检索：优先走内存倒排索引预筛，未命中再回退 LIKE 子串匹配。
 
     为何不用 FTS5 MATCH：FTS5 的默认分词器把整段连续汉字当成一个词元，
     「网页版机器人语音」匹配不上「网页版机器人语音要自动播放」，中文检索失效。
     改用 LIKE 子串匹配，命中率更符合中文短语场景；语料量小，性能足够。
+
+    内存优先：启动时 memory_loader 已把关键词倒排索引读进内存，命中即可
+    免去全库 LIKE；若缓存未就绪或无命中，回退数据库，保证结果不缺失。
     """
     conn = get_conn()
     scores = {}
+    # 第一优先：内存倒排索引预筛（兑现「接口读取优先走内存」）
+    try:
+        import memory_loader
+        pre = memory_loader.keyword_prefilter(keywords, limit * 3)
+    except Exception:
+        pre = None
+    if pre:
+        for nid, hits in pre:
+            scores[nid] = hits
+    # 回退（或补充）：数据库 LIKE。内存已给出候选时也补齐，避免缓存滞后漏掉新节点
     for kw in keywords:
         like = "%" + kw + "%"
         rows = conn.execute(
@@ -97,7 +110,6 @@ def _fts_search(keywords, limit):
             (like, like, limit),
         ).fetchall()
         for r in rows:
-            # 命中关键词越多，排序越靠前（用负命中数当 rank）
             scores[r["id"]] = scores.get(r["id"], 0) + 1
     # 按命中数降序，转成 (node_id, rank)
     ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -105,11 +117,17 @@ def _fts_search(keywords, limit):
 
 
 def _graph_search(seed_ids, limit):
-    """图遍历：从种子节点沿边扩一跳，返回 [(node_id, rank)]。"""
+    """图遍历：从种子节点沿边扩一跳，按边权重排序返回 [(node_id, rank)]。
+
+    边权重参与排序：权重高的邻居（关联更紧）排位更靠前，进而经 RRF
+    融合获得更高分。此前只判连通、不看权重，导致「强关联」与「弱关联」
+    在检索里被同等对待（走查确认的功能缺口）。
+    """
     out = []
     seen = set()
     for sid in seed_ids:
-        for nid in memory_edges.get_neighbors(sid):
+        # neighbors_with_weight 已按权重降序，故 rank 天然反映关联强度
+        for nid, _w in memory_edges.neighbors_with_weight(sid):
             if nid not in seen:
                 seen.add(nid)
                 out.append((nid, len(out)))

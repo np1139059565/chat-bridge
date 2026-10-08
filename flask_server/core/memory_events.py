@@ -68,9 +68,13 @@ def build_synapses(new_node_id):
             continue
         # 无向去重：同一对节点只建一条边，以较小 id 为 src 规范化。
         lo, hi = (new_node_id, r["id"]) if new_node_id < r["id"] else (r["id"], new_node_id)
+        # 强化增量随交集词数缩放：交集越多，重复激活时权重增长越快。
+        # 这样「两个节点间多个关键词相同」才真正影响突触强度，
+        # 而非此前固定 +0.2（与交集数无关，走查确认的断层）。
+        delta = 0.2 * min(len(inter), 5) / 5.0
         # 把导致关联的关键词一并存入：前端悬停连线时据此说明「因哪些词相连」。
         memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)),
-                              keywords=sorted(inter))
+                              keywords=sorted(inter), reinforce_delta=delta)
         count += 1
     return count
 

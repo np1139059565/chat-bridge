@@ -23,21 +23,24 @@ def _now():
     return int(time.time())
 
 
-def add_edge(src, dst, kind, weight=1.0, keywords=None):
+def add_edge(src, dst, kind, weight=1.0, keywords=None, reinforce_delta=0.2):
     """建边；已存在则强化权重并合并关键词，不新增行。
 
     @param keywords 导致关联的关键词列表（仅突触边用），存为 JSON，供前端解释连线原因。
+    @param reinforce_delta 已存在时的强化增量系数；交集词越多传得越大，
+           使「多个关键词相同」真正体现在权重增长上（此前固定 0.2，与交集数无关）。
     """
     conn = get_conn()
     kw_json = json.dumps(keywords or [], ensure_ascii=False) if keywords else None
+    delta = max(0.0, min(1.0, float(reinforce_delta)))
     conn.execute(
         "INSERT INTO edges (src_node, dst_node, kind, weight, keywords, created_at, last_active_at)"
         " VALUES (?,?,?,?,?,?,?)"
         " ON CONFLICT(src_node, dst_node, kind) DO UPDATE SET"
-        " weight=MIN(1.0, edges.weight + 0.2 * (1.0 - edges.weight)),"
+        " weight=MIN(1.0, edges.weight + ? * (1.0 - edges.weight)),"
         " keywords=COALESCE(excluded.keywords, edges.keywords),"
         " last_active_at=excluded.last_active_at",
-        (src, dst, kind, float(weight), kw_json, _now(), _now()),
+        (src, dst, kind, float(weight), kw_json, _now(), _now(), delta),
     )
     maybe_commit(conn)
 
@@ -72,6 +75,36 @@ def get_neighbors(node_id, kind=None):
             (node_id, node_id),
         ).fetchall()
     return [r["nid"] for r in rows]
+
+
+def neighbors_with_weight(node_id, kind=None):
+    """取某节点的邻居并附带边权重：[(node_id, weight)]，按权重降序。
+
+    与 get_neighbors 的区别：返回权重值，供检索的图遍历按「关联强度」
+    排序——强边邻居更相关，应排在弱边邻居之前（此前图遍历只判连通、不看权重）。
+    @param kind 只取指定类型；None 表示全部
+    @return [(node_id, weight)]，权重降序
+    """
+    conn = get_conn()
+    if kind:
+        rows = conn.execute(
+            "SELECT dst_node AS nid, weight AS w FROM edges WHERE src_node=? AND kind=? AND weight > 0"
+            " UNION SELECT src_node AS nid, weight AS w FROM edges WHERE dst_node=? AND kind=? AND weight > 0",
+            (node_id, kind, node_id, kind),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT dst_node AS nid, weight AS w FROM edges WHERE src_node=? AND weight > 0"
+            " UNION SELECT src_node AS nid, weight AS w FROM edges WHERE dst_node=? AND weight > 0",
+            (node_id, node_id),
+        ).fetchall()
+    # 同一邻居可能经多条边到达：取最大权重，再整体降序
+    best = {}
+    for r in rows:
+        nid, w = r["nid"], float(r["w"] or 0.0)
+        if w > best.get(nid, 0.0):
+            best[nid] = w
+    return sorted(best.items(), key=lambda x: x[1], reverse=True)
 
 
 def associative_weight_sum(node_id):

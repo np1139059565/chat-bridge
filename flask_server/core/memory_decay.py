@@ -83,13 +83,19 @@ def recompute_all():
 
 
 def _next_tier(node, strength):
-    """根据命中次数与强度决定下一分级；返回 tier 字符串。"""
+    """根据命中次数与强度决定下一分级；返回 tier 字符串。
+
+    升级：temp→mid（hit≥3 且 strength≥0.6）、mid→perm（hit≥10 且 strength≥0.8）。
+    降级：mid 长期不命中、强度跌破 0.3 且命中不足 3 次时降回 temp，
+          避免「一次偶然升到 mid 就永远占位」。perm 不降级（文档规定，除非用户显式删除）。
+    """
     tier = node.get("tier") or "temp"
     hit = int(node.get("hit_count") or 0)
     if tier == "temp" and hit >= 3 and strength >= 0.6:
         return "mid"
     if tier == "mid" and hit >= 10 and strength >= 0.8:
         return "perm"
-    # 当前仅实现升级路径：perm 不降级，temp/mid 也不主动降。
-    # 故 recompute_all 的 downgraded 计数恒为 0。
+    # 降级路径：仅对 mid 生效，perm 永不自动降级。
+    if tier == "mid" and strength < 0.3 and hit < 3:
+        return "temp"
     return tier

@@ -1,23 +1,21 @@
 // 模块：extend/dialog/parts/05d_memory.js
-// 用途：记忆蒸馏质量提醒：把控「过往记忆的蒸馏效果」是否被 AI 主动抽检。
-//       检测到用户发言后，期望 AI 立即抽检一次；此后每二十轮再抽检一次。
-//       AI 若主动调用了记忆工具，则视为「自觉遵守」，本窗口免告警；
-//       长时间未抽检（脱离掌控）才产出提醒，随卡片结果回传给 AI。
+// 用途：记忆「先检索、后抽检」提醒：先引导 AI 检索记忆用于规划，再把控蒸馏质量。
+//       检测到用户发言后，期望 AI 先调 memory_search 检索；随后抽检一次蒸馏质量；
+//       此后每二十轮再抽检一次。AI 若主动做了，本窗口免告警；
+//       长时间未做（脱离掌控）才产出提醒，随卡片结果回传给 AI。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 //
 // 设计（自遵守优先，告警兜底）：
-//   规则已写入 rules/work-memory.md：AI 应在用户发言后立即 memory_inspect 抽检，
-//   此后每二十轮再抽检一次，发现问题用 memory_refine 修正。
+//   规则已写入 rules/work-memory.md。检索与抽检是两件事：
+//   - 检索（memory_search）：用记忆——取回最近相关记忆精华，校准处境、消除臆测、再规划；
+//   - 抽检（memory_inspect/refine）：保质量——检查蒸馏是否失真，失真则修正。
 //   本检测只是「兜底」——AI 自觉就不打扰，脱离掌控才提醒。
-//   这与旧版「数三轮看有没有写文件」的思路一致（主动做了就不警告），
-//   但检视对象从「有没有写」升级为「蒸馏质量好不好」。
 //
 // 计数语义：
-//   - 用户发言 = 打开窗口，置「待抽检」标记（immediatePending）；
-//   - 每轮 AI 输出：若本轮调用了记忆工具 → 判为自觉，清标记、计数归零；
-//   - 未调用：若仍在「待抽检」（用户发言后首次）→ 立即提醒；
-//             否则计数 +1，满二十轮提醒一次。
-//   - 一个「待抽检」只提醒一次；二十轮周期提醒后重新计数，避免反复打扰。
+//   - 用户发言 = 打开窗口，置「待检索」（retrievePending）与「待抽检」（inspectPending）两个标记；
+//   - 每轮 AI 输出：调了检索工具 → 清检索标记；调了抽检工具 → 清抽检标记、计数归零；
+//   - 优先级：先提醒检索（retrieve）→ 检索做了再提醒首次抽检（immediate）→ 之后计数满二十轮周期提醒（periodic）。
+//   - 每类提醒一个窗口只发一次，避免反复打扰。
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
@@ -27,8 +25,10 @@
   // 距上次抽检超过多少轮 AI 输出未抽检即提醒（用户要求：二十轮）
   const MEMORY_IDLE_LIMIT = 20;
 
-  // 记忆类工具名：AI 调用其中任一，即视为「主动抽检记忆」
-  const MEMORY_TOOLS = { memory_search: 1, memory_inspect: 1, memory_refine: 1 };
+  // 检索类工具：AI 调用即视为「已完成本轮记忆检索」
+  const RETRIEVE_TOOLS = { memory_search: 1 };
+  // 抽检类工具：AI 调用即视为「已主动抽检蒸馏质量」
+  const INSPECT_TOOLS = { memory_inspect: 1, memory_refine: 1 };
 
   /** 初始化记忆检查状态（不存在时）。 */
   M._ensureMemoryState = function () {
@@ -36,9 +36,11 @@
       this.memoryCheck = {
         armed: false,          // 是否处于计数窗口（用户发言后开启）
         lastUserId: '',        // 上次开窗的用户发言指纹（幂等去重）
-        immediatePending: false, // 用户发言后是否仍在「待首次抽检」
+        retrievePending: false, // 用户发言后是否仍「待首次检索」
+        inspectPending: false,  // 用户发言后是否仍「待首次抽检」
         sinceCheck: 0,         // 距上次抽检经过的 AI 轮数
-        notifiedImmediate: false, // 本窗口的「立即提醒」是否已发过
+        notifiedRetrieve: false, // 本窗口的「检索提醒」是否已发过
+        notifiedImmediate: false, // 本窗口的「抽检立即提醒」是否已发过
       };
     }
     return this.memoryCheck;
@@ -86,13 +88,15 @@
     const uid = this._lastRealUserId(incoming);
     if (!uid) return false;                       // 本轮无真实用户发言
     if (uid === st.lastUserId) return false;      // 与上一条相同，非新发言
-    // 新的用户发言：打开新窗口，等待 AI 首次抽检
+    // 新的用户发言：打开新窗口，等待 AI 先检索、后抽检
     st.armed = true;
     st.lastUserId = uid;
-    st.immediatePending = true;
+    st.retrievePending = true;      // 先引导检索（拿最近记忆、强化处境、再规划）
+    st.inspectPending = true;       // 之后仍需一次抽检
     st.sinceCheck = 0;
+    st.notifiedRetrieve = false;
     st.notifiedImmediate = false;
-    log('记忆检查：检测到新用户发言，等待 AI 首次抽检');
+    log('记忆检查：检测到新用户发言，等待 AI 首次检索');
     return true;
   };
 
@@ -102,7 +106,7 @@
    * @param {Array} incoming 本轮消息切片
    * @returns {boolean} 本轮 AI 是否主动抽检了记忆
    */
-  M._touchedMemoryThisRound = function (incoming) {
+  M._touchedMemoryThisRound = function (incoming, toolSet) {
     const list = incoming || [];
     for (let i = 0; i < list.length; i++) {
       const m = list[i];
@@ -112,10 +116,28 @@
         const b = blocks[j];
         if (!b || b.type !== 'code' || !b.id) continue;
         const call = this.parseToolCall(b);
-        if (call && MEMORY_TOOLS[call.tool]) return true;
+        if (call && toolSet[call.tool]) return true;
       }
     }
     return false;
+  };
+
+  /**
+   * 本轮 AI 是否调用了检索类工具（memory_search）。
+   * @param {Array} incoming 本轮消息切片
+   * @returns {boolean}
+   */
+  M._retrievedMemoryThisRound = function (incoming) {
+    return this._touchedMemoryThisRound(incoming, RETRIEVE_TOOLS);
+  };
+
+  /**
+   * 本轮 AI 是否调用了抽检类工具（memory_inspect / memory_refine）。
+   * @param {Array} incoming 本轮消息切片
+   * @returns {boolean}
+   */
+  M._inspectedMemoryThisRound = function (incoming) {
+    return this._touchedMemoryThisRound(incoming, INSPECT_TOOLS);
   };
 
   /**
@@ -134,19 +156,26 @@
    * @returns {Object} { error, scope, severity, message }
    */
   M._memoryIssue = function (why) {
-    const head = (why === 'immediate')
-      ? '用户已提出新需求，但你尚未抽检记忆的蒸馏质量。'
-      : '已连续多轮未抽检记忆的蒸馏质量。';
+    // 三类提醒：retrieve（先检索）/ immediate（首次抽检）/ periodic（周期抽检）
+    let head;
+    if (why === 'retrieve') {
+      head = '用户已提出新需求，但你尚未检索记忆。请先调用 memory_search：'
+        + '以当前任务原文为查询，取回最近相关记忆（含蒸馏精华），'
+        + '据此校准当前处境、消除臆测，再规划新任务。';
+    } else if (why === 'immediate') {
+      head = '用户已提出新需求，但你尚未抽检记忆的蒸馏质量。'
+        + '请调用 memory_inspect 抽检「过往」记忆（对比原文与精华），'
+        + '若发现精华失真或关键词无效，用 memory_refine 修正。';
+    } else {
+      head = '已连续多轮未抽检记忆的蒸馏质量，请调用 memory_inspect 抽检一次。';
+    }
     return {
-      error: 'memory_stale',
+      error: (why === 'retrieve') ? 'memory_unread' : 'memory_stale',
       // 与代码块无关：记忆质量是整条回复的属性，走消息级回传。
       scope: 'message',
       // 补充类告警：不阻止工具执行，仅作提醒，附在卡片结果后一起回传。
       severity: 'advisory',
       message: head
-        //+ '请调用 memory_inspect 抽检「过往」记忆节点的蒸馏效果（对比原文与精华，'
-        //+ '重点看上次用户输入到本轮之间的记忆），若发现精华失真、遗漏要点或'
-        //+ '关键词无效，用 memory_refine 直接修正；确认无误后再继续。'
     };
   };
 
@@ -164,24 +193,39 @@
     if ((this.bridgePush || {}).check_memory !== true) return null;
     const st = this.memoryCheck;
     if (!st || !st.armed) return null;
-    // 先判 AI 是否自觉抽检：抽检了则清标记、计数归零，本轮不告警
-    if (this._touchedMemoryThisRound(incoming)) {
-      st.immediatePending = false;
-      st.sinceCheck = 0;
-      st.notifiedImmediate = true;   // 视为已完成首次抽检
-      log('记忆检查：AI 已主动抽检，免告警并重置计数');
-      return null;
+
+    // 先消化「本轮已做的动作」：检索与抽检各自清各自的待办标记。
+    if (this._retrievedMemoryThisRound(incoming)) {
+      st.retrievePending = false;
+      st.notifiedRetrieve = true;   // 本窗口的检索引导已完成
+      log('记忆检查：AI 已检索记忆，检索待办清除');
     }
-    // 未抽检：若仍在「待首次抽检」，则立即提醒一次
-    if (st.immediatePending && !st.notifiedImmediate) {
+    if (this._inspectedMemoryThisRound(incoming)) {
+      st.inspectPending = false;
+      st.sinceCheck = 0;
+      st.notifiedImmediate = true;  // 视为已完成首次抽检
+      log('记忆检查：AI 已抽检记忆，计数归零');
+    }
+
+    // 优先级一：用户发言后，先引导「检索」——拿最近记忆、校准处境、再规划。
+    // 检索与抽检是两件事，检索未做前不急着催抽检。
+    if (st.retrievePending && !st.notifiedRetrieve) {
       if (!this.hasDeliverableToolCard(incoming)) return null;
-      st.immediatePending = false;
+      st.notifiedRetrieve = true;   // 一个窗口只引导一次，不反复打扰
+      log('记忆检查：用户发言后尚未检索，引导检索');
+      return this._memoryIssue('retrieve');
+    }
+
+    // 优先级二：检索已做，但仍需一次抽检（首次）
+    if (st.inspectPending && !st.notifiedImmediate) {
+      if (!this.hasDeliverableToolCard(incoming)) return null;
       st.notifiedImmediate = true;
       st.sinceCheck = 0;
-      log('记忆检查：用户发言后尚未抽检，立即提醒');
+      log('记忆检查：尚未抽检，立即提醒');
       return this._memoryIssue('immediate');
     }
-    // 否则累加计数，满阈值提醒一次
+
+    // 优先级三：此后每 MEMORY_IDLE_LIMIT 轮抽检一次
     st.sinceCheck += 1;
     if (st.sinceCheck < MEMORY_IDLE_LIMIT) return null;
     if (!this.hasDeliverableToolCard(incoming)) return null;

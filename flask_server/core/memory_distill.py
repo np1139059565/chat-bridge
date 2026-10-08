@@ -35,12 +35,155 @@ _queue_lock = threading.Lock()
 _worker_running = False   # 工作线程是否在跑（避免重复启动多个工作线程）
 
 
+# 各工具结果的专属摘要器注册表：工具名 -> 函数(result, limit) -> str。
+# 未登记的工具回退到通用摘要 _generic_brief，绝不整体 json.dumps。
+_BRIEFERS = {}
+
+
+def _register_brief(name):
+    """装饰器：把函数登记为某工具的 result 摘要器。
+
+    @param name 工具名（对应 bridge-chat-res 里的 tool 字段）
+    """
+    def deco(fn):
+        _BRIEFERS[name] = fn
+        return fn
+    return deco
+
+
+def _generic_brief(result, limit):
+    """通用结果摘要：优先取标量字段与数组计数，再取首个字符串叶子。
+
+    绝不把整个 result 序列化成 JSON——那会产出腰斩的机器串，无检索价值。
+    @param result 工具结果的 result 字段（任意 JSON 类型）
+    @param limit 返回字符串长度上限
+    @return 一句人话摘要
+    """
+    if result is None:
+        return ""
+    if isinstance(result, str):
+        return result.replace("\n", " ").strip()[:limit]
+    if isinstance(result, (int, float, bool)):
+        return str(result)
+    if isinstance(result, list):
+        # 列表：报条数，并附首项摘要（首项更有代表性）
+        if not result:
+            return "空列表"
+        head = _generic_brief(result[0], limit // 2)
+        return ("共 %d 项，首项：%s" % (len(result), head)) if head else "共 %d 项" % len(result)
+    if isinstance(result, dict):
+        parts = []
+        # 1) 关键标量字段优先（ok / count / total_lines / exitCode 等），一眼可判成败与规模
+        for k in ("ok", "success", "count", "total", "total_lines", "exitCode"):
+            if k in result and isinstance(result[k], (int, float, bool)):
+                parts.append("%s=%s" % (k, result[k]))
+        # 2) 取第一个非空字符串字段作为语义正文
+        for v in result.values():
+            if isinstance(v, str) and v.strip():
+                parts.append(v.replace("\n", " ").strip()[: limit // 2])
+                break
+        # 3) 数组字段只报长度，不展开（展开会撑爆精华）
+        for k, v in result.items():
+            if isinstance(v, list):
+                parts.append("%s %d 项" % (k, len(v)))
+                break
+        return "，".join(parts)[:limit] if parts else ""
+    return str(result).replace("\n", " ")[:limit]
+
+
+@_register_brief("read_file")
+def _brief_read_file(r, limit):
+    """read_file 摘要：报路径、总行数与正文开头。"""
+    seg = "读文件"
+    if r.get("path"):
+        seg += " " + str(r["path"])
+    if r.get("total_lines") is not None:
+        seg += "（共 %s 行）" % r["total_lines"]
+    head = (r.get("content") or "").replace("\n", " ").strip()[: limit // 2]
+    return (seg + "：" + head) if head else seg
+
+
+@_register_brief("search_content")
+def _brief_search_content(r, limit):
+    """search_content 摘要：报命中数与首条文件位置。"""
+    seg = "内容搜索"
+    if r.get("count") is not None:
+        seg += "命中 %s 处" % r["count"]
+    matches = r.get("matches") or []
+    if matches:
+        first = matches[0]
+        seg += "，首条 %s" % (first.get("file") or "?")
+        if first.get("line") is not None:
+            seg += ":%s" % first["line"]
+    return seg
+
+
+@_register_brief("search_file")
+def _brief_search_file(r, limit):
+    """search_file 摘要：报命中文件数与首个文件名。"""
+    files = r.get("files") or r.get("matches") or []
+    seg = "文件搜索命中 %s 个" % (r.get("count", len(files)))
+    if files:
+        first = files[0]
+        name = first.get("file") if isinstance(first, dict) else first
+        if name:
+            seg += "，首条 %s" % name
+    return seg
+
+
+@_register_brief("list_dir")
+def _brief_list_dir(r, limit):
+    """list_dir 摘要：报目录与条目数。"""
+    return "列目录 %s：%d 项" % (r.get("directory") or "?", len(r.get("items") or []))
+
+
+@_register_brief("run_command")
+def _brief_run_command(r, limit):
+    """run_command 摘要：报退出码与标准输出/错误的开头。"""
+    seg = "执行命令"
+    if r.get("exitCode") is not None:
+        seg += "（退出码 %s）" % r["exitCode"]
+    out = (r.get("stdout") or "").replace("\n", " ").strip()[: limit // 2]
+    err = (r.get("stderr") or "").replace("\n", " ").strip()[: limit // 3]
+    if out:
+        seg += "：" + out
+    elif err:
+        seg += "：错误 " + err
+    return seg
+
+
+@_register_brief("memory_search")
+def _brief_memory_search(r, limit):
+    """memory_search 摘要：报命中记忆条数。"""
+    return "检索记忆：命中 %s 条" % r.get("count", len(r.get("hits") or []))
+
+
+def _brief_for(tool, result, limit):
+    """按工具名分派 result 摘要器；未登记的工具走通用摘要。
+
+    @param tool 工具名
+    @param result 工具结果的 result 字段
+    @param limit 摘要长度上限
+    @return 摘要字符串
+    """
+    fn = _BRIEFERS.get(tool)
+    if fn is not None:
+        try:
+            text = fn(result, limit)
+            if text:
+                return text
+        except Exception:
+            # 专属摘要器异常时降级到通用摘要，不让蒸馏中断
+            pass
+    return _generic_brief(result, limit)
+
+
 def _tool_essence(text):
-    """工具结果精华：优先解析 JSON 取「工具名 + 结果摘要」，失败退回文本截断。
+    """工具结果精华：解析 JSON 取「工具名 + 结果摘要」，失败退回文本截断。
 
     工具节点的 blocks 多为 bridge-chat-res 的 JSON 原文，直接截断会得到
-    腰斩的 JSON 片段（无检索价值）。解析出 tool 与 result 才能得到
-    「工具名 + 结果摘要」这一设计文档要求的形态。
+    腰斩的 JSON 片段（无检索价值）。解析出 tool 与 result，再按工具名
+    分派专属摘要器，才能得到设计文档要求的「工具名 + 结果摘要」形态。
     @param text blocks 抽出的纯文本
     @return 精华字符串（最长 200 字符）
     """
@@ -54,12 +197,12 @@ def _tool_essence(text):
     tool = obj.get("tool") or ""
     result = obj.get("result")
     # 告警类结果（形如 {"issue":"...","message":"..."}）：直接用 message 当摘要。
-    # 否则整段 JSON 会作为精华，机器味重且难检索。
     if isinstance(result, dict) and result.get("issue"):
         msg = str(result.get("message") or result.get("issue") or "").strip()
         head = ("%s：%s" % (tool, msg)).strip("：") if tool else msg
         return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
-    brief = json.dumps(result, ensure_ascii=False) if result is not None else ""
+    # 普通工具结果：按工具名分派摘要器，绝不整体 json.dumps（那会产出腰斩 JSON）。
+    brief = _brief_for(tool, result, 200) if result is not None else ""
     head = ("%s：%s" % (tool, brief)).strip("：") if tool else brief
     return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
 
