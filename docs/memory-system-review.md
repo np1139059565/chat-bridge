@@ -29,15 +29,19 @@
 
 ## 二、严重：功能事实错误或测试失真
 
-### S1 工具节点精华提取与规格不符（已修复）
+### S1 工具节点精华提取与规格不符（已彻底修复）
 
-位置：`memory_distill._essence_for`。
+位置：`memory_distill._essence_for` / `_tool_essence`。
 
 设计文档 4.2 规定 tool 来源产出「工具名 + 结果摘要」。实现只把 blocks 纯文本截前 200 字，工具节点的 blocks 是 `bridge-chat-res` 的 JSON 原文，于是精华成为被腰斩的 JSON。
 
 这是记忆抽检反复出现失真的根因，稳定复现。
 
-修复：新增 `_tool_essence`，解析 JSON 取 `tool` 与 `result` 摘要，解析失败回退文本截断。
+**修复历程（诚实记录）**：初版只新增 `_tool_essence` 解析 JSON 取 `tool` 与 `result` 摘要，但对「非告警结构的普通 result」仍整体 `json.dumps` 再截断——抽检时仍产出腰斩 JSON，属**未治本的假性修复**。
+
+**彻底修复**：改为按工具名分派专属摘要器（read_file / search_content / run_command / list_dir / memory_search 等），未登记工具走通用兜底（取标量字段、首个文本字段、数组计数），**绝不整体序列化**。并新增 `tests/test_memory_distill.py` 固化。另：工具节点关键词改从「精华」提取，不再从原始 JSON 全文提，消除 bridge/chat/type 等噪声词。
+
+**存量数据**：已用 `scripts/redistill_tools.py` 重蒸历史工具节点，蒸馏层刷新，原始 blocks 不动。
 
 ### S2 测试复位未重置建表标志（已修复）
 
@@ -67,11 +71,11 @@
 
 ## 三、中：注释与实现不一致
 
-### M1 关于 FTS5 的描述自相矛盾（已修复）
+### M1 关于 FTS5 的描述自相矛盾（已彻底清理）
 
 `memory_db` docstring 与 `_ensure_schema` 称「建 FTS5 全文索引（关键词检索）」，`memory_search._fts_search` docstring 明确说中文分词失效、已改用 LIKE。FTS5 虚表建了却无人查询。
 
-修复：`memory_db` 与检索层注释统一为「FTS5 虚表仅保留兼容，关键词检索实际走 LIKE 子串匹配」。
+初版修复只是统一注释；后续走查确认该虚表**建后无人查询、纯占资源**（建表在数据量后耗时数秒并拿写锁），故**彻底移除**：`_ensure_schema` 改为 `DROP TABLE IF EXISTS nodes_fts`，新库不建、旧库清理遗留，docstring 同步改为「清理历史遗留 FTS5 虚表」。
 
 ### M2 表数量注释错误（已修复）
 

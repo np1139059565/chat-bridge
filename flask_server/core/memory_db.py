@@ -3,7 +3,7 @@
 职责：
   1. 管理记忆库 SQLite 连接（单文件、进程内、线程安全）；
   2. 建表：nodes / edges / cards / plans / revision_log / notes / conversations 七张表；
-  3. 建 FTS5 虚表（仅保留兼容，关键词检索实际走 LIKE，见 memory_search）；
+  3. 清理历史遗留的 FTS5 虚表（关键词检索实际走 LIKE，见 memory_search）；
   4. 提供向量序列化与暴力余弦检索（numpy 实现，零外部依赖）。
 
 设计要点：
@@ -308,16 +308,15 @@ def _ensure_schema(conn):
     # 兼容迁移：为已存在的旧库补「后加的列」。
     # CREATE TABLE IF NOT EXISTS 不会改动已存在的表，故新列必须显式 ALTER。
     _migrate_columns(conn)
-    # FTS5 虚表：仅保留兼容（外部内容表关联 nodes）。
-    # 关键词检索实际走 LIKE 子串匹配——FTS5 默认分词器把连续汉字当单词元，
-    # 中文短语匹配失效，详见 memory_search._fts_search 的说明。
+    # 清理历史遗留的 FTS5 虚表 nodes_fts：
+    # 早期曾建该虚表想走全文检索，但 FTS5 默认分词器把连续汉字当单词元，
+    # 中文短语匹配失效，检索已改走 LIKE 子串匹配（见 memory_search._fts_search）。
+    # 该虚表建后无人查询，且建表本身在数据量后耗时数秒并拿写锁，故移除。
+    # DROP IF EXISTS 幂等：新库无此表时几无开销，旧库则清理掉遗留。
     try:
-        conn.execute(
-            "CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5("
-            "essence, keywords, content='nodes', content_rowid='id')"
-        )
+        conn.execute("DROP TABLE IF EXISTS nodes_fts")
     except sqlite3.OperationalError:
-        # FTS5 不可用时降级：检索层会自动回退到 LIKE 匹配
+        # FTS5 模块不可用时忽略：本就没有该虚表
         pass
     conn.commit()
 

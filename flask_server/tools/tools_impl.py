@@ -63,9 +63,12 @@ def t_command_task(p):
 # 搜索类工具默认跳过的目录：这些目录体积大或属运行时产物，
 # 递归扫描它们既慢又无意义（如 models/ 是 1.36G 模型、.git/ 是版本库内部）。
 # 跳过可避免 search_file / search_content 在大工程里卡死。
+# data/ 与 screenshots/ 是运行时产物（含数十 MB 的 .db 与日志），
+# 曾因未忽略，导致搜索整个服务目录时把大二进制/日志当文本读、触发 60s 超时。
 DEFAULT_IGNORE_DIRS = {
     ".git", "models", "node_modules", "__pycache__",
     ".venv", "venv", "env", ".idea", ".vscode",
+    "data", "screenshots", "logs",
 }
 
 
