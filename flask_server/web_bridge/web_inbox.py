@@ -75,10 +75,19 @@ def _read_state():
         _cache_sig = sig
         return _cache
     # 字段兜底：外部改坏文件时不至于让后续逻辑崩在 None 上
+    _cache = _sanitize_state(data)
+    _cache_sig = sig
+    return _cache
+
+
+def _sanitize_state(data):
+    """把读到的原始数据规整为合法状态（字段类型不对时用兜底值）。
+
+    @param data 从磁盘 JSON 解析出的对象
+    @returns {seq, messages, seen} 状态字典
+    """
     if not isinstance(data, dict):
-        _cache = _empty_state()
-        _cache_sig = sig
-        return _cache
+        return _empty_state()
     msgs = data.get("messages")
     if not isinstance(msgs, list):
         msgs = []
@@ -88,9 +97,7 @@ def _read_state():
     seen = data.get("seen")
     if not isinstance(seen, list):
         seen = []
-    _cache = {"seq": seq, "messages": msgs, "seen": seen}
-    _cache_sig = sig
-    return _cache
+    return {"seq": seq, "messages": msgs, "seen": seen}
 
 
 def _write_state(state):
@@ -136,23 +143,16 @@ def append(role, text, voice="", kind="", image="", voice_text=""):
     @param voice_text 可选，待朗读的文本；点播时据此按需合成，不占用上报链路
     @returns 追加后的消息对象（含分配好的 seq 与 id）
     """
+    # 复用 _make_msg 构造消息对象，避免与 append_many 各写一份字段表
+    it = {
+        "role": role, "text": text, "voice": voice, "voice_text": voice_text,
+        "image": image, "kind": kind, "key": "", "ts": None,
+    }
     with _lock:
         state = _read_state()
         # 游标自增：seq 从 1 开始，作为拉取增量与消息 id 的双重依据
         state["seq"] = int(state.get("seq") or 0) + 1
-        seq = state["seq"]
-        msg = {
-            "seq": seq,
-            "id": "w-" + str(seq),
-            "role": role or "user",
-            "text": str(text or ""),
-            "voice": str(voice or ""),
-            "voice_text": str(voice_text or ""),
-            "image": _norm_image(image),
-            "kind": str(kind or ""),
-            "key": "",
-            "ts": int(time.time() * 1000),
-        }
+        msg = _make_msg(it, state["seq"])
         messages = state.get("messages") or []
         messages.append(msg)
         # 超上限则截断最旧的：保留末尾 MAX_MESSAGES 条
@@ -163,83 +163,148 @@ def append(role, text, voice="", kind="", image="", voice_text=""):
         return msg
 
 
+def _content_seen_from(messages):
+    """从已有消息构建内容级判重集合（仅 ai / tool 两类）。
+
+    内容级判重针对「指纹漂移」：抽屉按基于 blocks 的指纹去重，而镜像正文优先用 md；
+    AI 流式生成时 blocks 会增长、指纹随之变化，但 md 最终稳定，
+    导致同一条消息因指纹漂移被当成新消息、重复入库。
+    user 与 system 不纳入（用户可能连发相同的话；指令回执是两次真实执行）。
+    @param messages 已有消息列表
+    @returns {(role, text)} 集合
+    """
+    content_seen = set()
+    for m in messages:
+        r = m.get("role")
+        if r in ("ai", "tool"):
+            content_seen.add((r, m.get("text") or ""))
+    return content_seen
+
+
+def _skip_item(it, seen, content_seen):
+    """判断一条 item 是否应跳过（已入库 或 内容重复）。
+
+    @param it          待入库条目
+    @param seen        已入库源 id 集合
+    @param content_seen 内容级判重集合
+    @returns 应跳过为 True
+    """
+    sid = str(it.get("source_id") or "")
+    # 无源 id 的条目（如网页自己发的）允许直接入库，不去重
+    if sid and sid in seen:
+        return True
+    role = it.get("role") or "user"
+    text = str(it.get("text") or "")
+    if role in ("ai", "tool", "system") and (role, text) in content_seen:
+        return True
+    return False
+
+
+def _make_msg(it, seq):
+    """按 item 与分配到的 seq 构造消息对象。
+
+    @param it  待入库条目
+    @param seq 分配到的单调递增序号
+    @returns 消息对象
+    """
+    return {
+        "seq": seq,
+        "id": "w-" + str(seq),
+        "role": it.get("role") or "user",
+        "text": str(it.get("text") or ""),
+        "voice": str(it.get("voice") or ""),
+        "voice_text": str(it.get("voice_text") or ""),
+        "image": _norm_image(it.get("image")),
+        "kind": str(it.get("kind") or ""),
+        # key：消息在抽屉消息树里的 key（pid-id 格式），供前端核对块完整性
+        "key": str(it.get("key") or ""),
+        "ts": int(it.get("ts") or (time.time() * 1000)),
+    }
+
+
+def _init_batch(state):
+    """准备一批入库所需的可变上下文。
+
+    seen 用「有序列表 + 集合」双结构：列表保序用于截断，集合用于 O(1) 判定。
+    不能用 list(set) 再切片——集合无序，切片会随机丢条目，导致已入库的
+    source_id 被误删、该消息再次上报时重新入库（user 消息无内容判重兜底，会重复）。
+    @param state 收件箱状态
+    @returns 批次上下文（含 seq / messages / added / seen / seen_list / content_seen）
+    """
+    seen_list = list(state.get("seen") or [])
+    messages = state.get("messages") or []
+    return {
+        "seq": int(state.get("seq") or 0),
+        "messages": messages,
+        "added": [],
+        "seen": set(seen_list),
+        "seen_list": seen_list,
+        "content_seen": _content_seen_from(messages),
+    }
+
+
+def _apply_item(it, batch):
+    """把一条 item 应用进批次上下文；被跳过时返回 False。
+
+    就地更新 batch 的 seq / messages / added / seen 等字段。
+    @param it    待入库条目
+    @param batch 批次上下文
+    @returns 是否真正新增了一条
+    """
+    if _skip_item(it, batch["seen"], batch["content_seen"]):
+        return False
+    sid = str(it.get("source_id") or "")
+    role = it.get("role") or "user"
+    text = str(it.get("text") or "")
+    batch["seq"] += 1
+    msg = _make_msg(it, batch["seq"])
+    batch["messages"].append(msg)
+    batch["added"].append(msg)
+    if sid and sid not in batch["seen"]:
+        batch["seen"].add(sid)
+        batch["seen_list"].append(sid)   # 有序列表同步追加，供末尾保序截断
+    # 同步累加内容级判重集合：同一批内后续的重复条目据此跳过
+    if role in ("ai", "tool", "system"):
+        batch["content_seen"].add((role, text))
+    return True
+
+
+def _flush_batch(state, batch):
+    """把批次上下文写回收件箱状态并落盘（无新增则不动）。
+
+    @param state 收件箱状态（就地更新）
+    @param batch 批次上下文
+    """
+    if not batch["added"]:
+        return
+    messages = batch["messages"]
+    if len(messages) > MAX_MESSAGES:
+        messages = messages[-MAX_MESSAGES:]
+    state["seq"] = batch["seq"]
+    state["messages"] = messages
+    # 已入库源 id 同样限长：只保留最近写入的一批（有序列表保序截断，
+    # 不会像 list(set) 那样随机丢条目），避免它本身无界增长。
+    state["seen"] = batch["seen_list"][-MAX_MESSAGES * 2:]
+    _write_state(state)
+
+
 def append_many(items):
     """批量入库并去重，返回真正新增的消息列表。
 
     抽屉上报的是全量切片，同一条消息会被反复上报；本函数按每条 item 的
     source_id（抽屉里的消息 id）去重，只有首次出现才写进收件箱。
     整个批次共用一次读改写，避免逐条写盘。
+    逐条判定与构造委托 _init_batch / _apply_item / _flush_batch，本函数只做编排。
     @param items 列表，每项 {source_id, role, text, voice, kind}
     @returns 新增的消息对象列表（按入库顺序）
     """
-    added = []
     with _lock:
         state = _read_state()
-        # seen 用「有序列表 + 集合」双结构：列表保序用于截断，集合用于 O(1) 判定。
-        # 不能用 list(set) 再切片——集合无序，切片会随机丢条目，导致已入库的
-        # source_id 被误删、该消息再次上报时重新入库（user 消息无内容判重兜底，会重复）。
-        seen_list = list(state.get("seen") or [])
-        seen = set(seen_list)
-        messages = state.get("messages") or []
-        seq = int(state.get("seq") or 0)
-        changed = False
-        # 内容级判重集合：仅对 ai / tool 两类生效。
-        # 原因：抽屉按「基于 blocks 的指纹」去重，而镜像正文优先用 md；
-        # AI 流式生成时 blocks 会增长、指纹随之变化，但 md 最终稳定，
-        # 导致同一条消息因指纹漂移被当成新消息、重复入库。
-        # user 不纳入：用户可能连发两条相同的话，需保留。
-        # system 不纳入：指令回执（如两次 /help）内容可能完全相同，
-        #   但那是两次真实执行，都该显示，不能被判重吞掉。
-        content_seen = set()
-        for m in messages:
-            r = m.get("role")
-            if r in ("ai", "tool"):
-                content_seen.add((r, m.get("text") or ""))
+        batch = _init_batch(state)
         for it in (items or []):
-            sid = str(it.get("source_id") or "")
-            # 无源 id 的条目（如网页自己发的）允许直接入库，不去重
-            if sid and sid in seen:
-                continue
-            # 内容级判重：同类消息正文完全相同时跳过，兜住指纹漂移导致的重复。
-            # 注意 content_seen 必须随新增同步累加，否则同一批内的重复条目会漏判。
-            _role = it.get("role") or "user"
-            _text = str(it.get("text") or "")
-            if _role in ("ai", "tool", "system") and (_role, _text) in content_seen:
-                continue
-            seq += 1
-            msg = {
-                "seq": seq,
-                "id": "w-" + str(seq),
-                "role": it.get("role") or "user",
-                "text": str(it.get("text") or ""),
-                "voice": str(it.get("voice") or ""),
-                "voice_text": str(it.get("voice_text") or ""),
-                "image": _norm_image(it.get("image")),
-                "kind": str(it.get("kind") or ""),
-                # key：消息在抽屉消息树里的 key（pid-id 格式），供前端核对块完整性
-                "key": str(it.get("key") or ""),
-                "ts": int(it.get("ts") or (time.time() * 1000)),
-            }
-            messages.append(msg)
-            added.append(msg)
-            if sid and sid not in seen:
-                seen.add(sid)
-                seen_list.append(sid)   # 有序列表同步追加，供末尾保序截断
-            # 同步累加内容级判重集合：同一批内后续的重复条目据此跳过
-            if _role in ("ai", "tool", "system"):
-                content_seen.add((_role, _text))
-            changed = True
-        if not changed:
-            return []
-        if len(messages) > MAX_MESSAGES:
-            messages = messages[-MAX_MESSAGES:]
-        state["seq"] = seq
-        state["messages"] = messages
-        # 已入库源 id 同样限长：只保留最近写入的一批（有序列表保序截断，
-        # 不会像 list(set) 那样随机丢条目），避免它本身无界增长。
-        state["seen"] = seen_list[-MAX_MESSAGES * 2:]
-        _write_state(state)
-    return added
+            _apply_item(it, batch)
+        _flush_batch(state, batch)
+        return batch["added"]
 
 
 def is_seen(source_id):
