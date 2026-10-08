@@ -330,6 +330,32 @@ class ProviderHub:
             self._queues[provider] = [c for c in queue
                                       if c.get("request_id") != request_id]
 
+    def _build_command(self, request_id, tool, params, silent, page_url, host_page_url):
+        """构造一条待入队的命令字典。
+
+        @param request_id    请求唯一 id
+        @param tool          工具名
+        @param params        参数
+        @param silent        是否静默（仅随命令下发）
+        @param page_url      目标页面地址
+        @param host_page_url 本页面地址
+        @returns 命令字典
+        """
+        # 唤醒类工具（如 open_drawer）允许在抽屉关闭时被待命轮询取走，
+        # 因此把该标记随命令下发；其余工具仅在抽屉打开时可取。
+        _, tdef = self.find_tool(tool)
+        wakeup = bool(tdef.get("wakeup")) if isinstance(tdef, dict) else False
+        return {
+            "request_id": request_id,
+            "tool": tool,
+            "params": params or {},
+            "silent": bool(silent),
+            "wakeup": wakeup,
+            "page_url": page_url or "",              # 目标页面：独占窗口内优先由它执行
+            "host_page_url": host_page_url or "",    # 本页面：逸散阶段优先回投给它
+            "created_at": time.time(),               # 入队时刻：用于计算目标页独占窗口
+        }
+
     def dispatch(self, provider, tool, params, silent=False, page_url="", host_page_url=""):
         """把一次工具调用入队，并阻塞等待提供方回传结果。
 
@@ -341,20 +367,7 @@ class ProviderHub:
         返回 (ok, data_or_error)。
         """
         request_id = str(uuid.uuid4())
-        # 唤醒类工具（如 open_drawer）允许在抽屉关闭时被待命轮询取走，
-        # 因此把该标记随命令下发；其余工具仅在抽屉打开时可取。
-        _, tdef = self.find_tool(tool)
-        wakeup = bool(tdef.get("wakeup")) if isinstance(tdef, dict) else False
-        command = {
-            "request_id": request_id,
-            "tool": tool,
-            "params": params or {},
-            "silent": bool(silent),
-            "wakeup": wakeup,
-            "page_url": page_url or "",              # 目标页面：独占窗口内优先由它执行
-            "host_page_url": host_page_url or "",    # 本页面：逸散阶段优先回投给它
-            "created_at": time.time(),               # 入队时刻：用于计算目标页独占窗口
-        }
+        command = self._build_command(request_id, tool, params, silent, page_url, host_page_url)
         event = threading.Event()
         with self._lock:
             self._events[request_id] = event
