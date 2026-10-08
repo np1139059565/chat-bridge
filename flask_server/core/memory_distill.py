@@ -24,6 +24,7 @@ import memory_nodes
 import memory_keywords as kw
 import memory_events
 import serial_worker
+import envelope
 from memory_db import begin_batch, end_batch
 
 # ---------- 串行蒸馏队列 ----------
@@ -260,8 +261,10 @@ def _essence_for(source, text, blocks):
     @return 精华字符串
     """
     if source == "user":
-        # 用户发言：原句即精华，不摘要（保留原句是防语义漂移的底线）
-        return text.strip()
+        # 用户发言：原句即精华，不摘要（保留原句是防语义漂移的底线）。
+        # 但桥接投递的用户消息被包在 external-call 信封里，原句会是一段 JSON，
+        # 直接照抄会让精华不可检索，故先剥掉信封取出真正的用户话。
+        return envelope.unwrap_user_text(text).strip()
     if source == "tool":
         # 工具结果：优先解析出「工具名 + 结果摘要」，解析失败再退回文本截断
         return _tool_essence(text)
@@ -288,10 +291,11 @@ def distill_node(node_id, use_llm=False):
     source = node.get("source") or "assistant"
     text = kw.extract_from_blocks(node.get("blocks"))
     essence = _essence_for(source, text, node.get("blocks"))
-    # 工具节点从「精华」提关键词，而非原始 JSON 全文。
-    # 原始 blocks 是 bridge-chat-res 的 JSON，全文提词会把 bridge/chat/type/true、
-    # 路径片段、nonce 等噪声当作关键词；精华已是「工具名 + 结果摘要」，提词更干净。
-    kw_source = essence if (source == "tool" and essence) else text
+    # 工具与用户节点都从「精华」提关键词，而非原始 JSON 全文。
+    # 工具 blocks 是 bridge-chat-res 的 JSON，用户消息经桥接被包成 external-call 信封，
+    # 两者原文全文提词都会把 type / nonce / page_url 等结构字段当关键词；
+    # 精华已是解包后的可读文本，提词更干净。
+    kw_source = essence if (source in ("tool", "user") and essence) else text
     keywords = kw.extract(kw_source, top_k=8, use_llm=use_llm)
     # 跨计划去噪：剔除近期计划里高频出现的低区分度词
     keywords = kw.denoise_by_plans(keywords)

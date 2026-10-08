@@ -9,30 +9,20 @@
   4. 把内容块拼成纯文本（思考 / 代码 / 段落 / 列表 / 表格等）。
 
 调用方是 message_router.py；本模块不反向引用它，依赖单向。
+
+信封穿透逻辑统一走 core/envelope，与蒸馏模块共用一份实现。
 """
+import envelope
 
 
 def _merge_nested_envelope(obj):
-    """把嵌套信封的内层字段并入外层。
+    """把嵌套信封的内层字段并入外层（委托共享模块）。
 
-    obj 的 request 字段若是字符串且本身又是一段 JSON，说明这是两层结构；
-    内层补 source / openid 等字段，外层字段优先（update 顺序即优先级）。
-    穿透失败时原样返回 obj。
+    实现已上移到 core/envelope.py，与蒸馏模块共用同一份，避免两处维护。
+    @param obj 外层信封字典
+    @returns 合并后的字典（或原样返回）
     """
-    import json
-    req = obj.get("request")
-    if not (isinstance(req, str) and req.strip().startswith("{")):
-        return obj
-    try:
-        inner = json.loads(req)
-    except Exception:
-        return obj
-    if not isinstance(inner, dict):
-        return obj
-    merged = dict(inner)
-    merged.update(obj)
-    merged["request"] = inner.get("request", req)
-    return merged
+    return envelope.merge_nested_envelope(obj)
 
 
 def _block_text_of(b):
