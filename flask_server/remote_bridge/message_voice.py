@@ -27,33 +27,13 @@ VOICE_MARKER = '{"type":"bridge-voice"'
 def _scan_json_object(text, start):
     """从 text[start] 起做大括号配平扫描，返回完整 JSON 对象的结束下标。
 
-    尊重字符串与转义：字符串内的 { } " 不参与配平。
+    委托共享模块 json_scan，与 message_parse 共用同一实现。
     @param text  待扫描文本
     @param start 起始下标（应为 '{'）
     @returns 结束下标（不含）；未配平返回 -1
     """
-    depth = 0
-    in_str = False
-    esc = False
-    for i in range(start, len(text)):
-        ch = text[i]
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-        if ch == '"':
-            in_str = True
-        elif ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                return i + 1
-    return -1
+    from . import json_scan
+    return json_scan.scan_json_object(text, start)
 
 
 def _find_voice_json_in_text(text):

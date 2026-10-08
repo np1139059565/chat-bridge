@@ -78,45 +78,9 @@ def _scan_json_by_type(text, want_type):
     @param want_type 目标 type 值
     @returns 匹配的 dict；无则 None
     """
-    import json
-    if not text:
-        return None
-    i = text.find("{")
-    while i >= 0:
-        # 从该 { 起做大括号配平扫描，切出完整 JSON 对象（尊重字符串与转义）
-        depth = 0
-        in_str = False
-        esc = False
-        end = -1
-        for j in range(i, len(text)):
-            ch = text[j]
-            if in_str:
-                if esc:
-                    esc = False
-                elif ch == "\\":
-                    esc = True
-                elif ch == '"':
-                    in_str = False
-                continue
-            if ch == '"':
-                in_str = True
-            elif ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    end = j + 1
-                    break
-        if end > 0:
-            try:
-                obj = json.loads(text[i:end])
-            except Exception:
-                obj = None
-            if isinstance(obj, dict) and obj.get("type") == want_type:
-                return obj
-        # 未命中则从下一个 { 继续尝试
-        i = text.find("{", i + 1)
-    return None
+    # 大括号配平扫描与「按 type 查找」统一走共享模块 json_scan，避免重复实现
+    from . import json_scan
+    return json_scan.find_json_by_type(text, want_type)
 
 
 def _json_payload_of(m, want_type):
