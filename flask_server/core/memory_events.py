@@ -53,30 +53,51 @@ def build_synapses(new_node_id):
         ok = set(_loads(r["keywords"], []))
         if not ok:
             continue
-        # 包含式匹配：一个关键词是另一个的子串即算相关（中文短语常有包含关系）
-        inter = _related(nk, ok)
-        # 自适应交集门槛：关键词数量少时，硬套 3 会永远建不成边。
-        # 取「关键词较少一方的一半（向上取整）」与 3 的较小值，下限 1：
-        #   各 1~2 个词 → 门槛 1；各 3~4 个词 → 门槛 2；各 ≥5 个词 → 门槛 3。
-        # 仍由下方 Jaccard 门槛兜底，避免少量巧合词就建边。
-        need = min(SYNAPSE_MIN_INTERSECT, max(1, (min(len(nk), len(ok)) + 1) // 2))
-        if len(inter) < need:
-            continue
-        union = len(nk) + len(ok) - len(inter)
-        jac = len(inter) / union if union else 0
-        if jac < SYNAPSE_MIN_JACCARD:
-            continue
-        # 无向去重：同一对节点只建一条边，以较小 id 为 src 规范化。
-        lo, hi = (new_node_id, r["id"]) if new_node_id < r["id"] else (r["id"], new_node_id)
-        # 强化增量随交集词数缩放：交集越多，重复激活时权重增长越快。
-        # 这样「两个节点间多个关键词相同」才真正影响突触强度，
-        # 而非此前固定 +0.2（与交集数无关，走查确认的断层）。
-        delta = 0.2 * min(len(inter), 5) / 5.0
-        # 把导致关联的关键词一并存入：前端悬停连线时据此说明「因哪些词相连」。
-        memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)),
-                              keywords=sorted(inter), reinforce_delta=delta)
-        count += 1
+        if _try_link(new_node_id, nk, r["id"], ok):
+            count += 1
     return count
+
+
+def _adaptive_threshold(nk, ok):
+    """自适应交集门槛：关键词数量少时，硬套 3 会永远建不成边。
+
+    取「关键词较少一方的一半（向上取整）」与 3 的较小值，下限 1：
+      各 1~2 个词 → 门槛 1；各 3~4 个词 → 门槛 2；各 ≥5 个词 → 门槛 3。
+    仍由 Jaccard 门槛兜底，避免少量巧合词就建边。
+    @param nk 新节点关键词集合
+    @param ok 候选节点关键词集合
+    @returns 交集门槛值
+    """
+    return min(SYNAPSE_MIN_INTERSECT, max(1, (min(len(nk), len(ok)) + 1) // 2))
+
+
+def _try_link(new_node_id, nk, cand_id, ok):
+    """判定新节点与某候选是否应建突触边；应建则建边并返回 True。
+
+    @param new_node_id 新节点 id
+    @param nk          新节点关键词集合
+    @param cand_id     候选节点 id
+    @param ok          候选节点关键词集合
+    @returns 是否建边
+    """
+    # 包含式匹配：一个关键词是另一个的子串即算相关（中文短语常有包含关系）
+    inter = _related(nk, ok)
+    if len(inter) < _adaptive_threshold(nk, ok):
+        return False
+    union = len(nk) + len(ok) - len(inter)
+    jac = len(inter) / union if union else 0
+    if jac < SYNAPSE_MIN_JACCARD:
+        return False
+    # 无向去重：同一对节点只建一条边，以较小 id 为 src 规范化。
+    lo, hi = (new_node_id, cand_id) if new_node_id < cand_id else (cand_id, new_node_id)
+    # 强化增量随交集词数缩放：交集越多，重复激活时权重增长越快。
+    # 这样「两个节点间多个关键词相同」才真正影响突触强度，
+    # 而非此前固定 +0.2（与交集数无关，走查确认的断层）。
+    delta = 0.2 * min(len(inter), 5) / 5.0
+    # 把导致关联的关键词一并存入：前端悬停连线时据此说明「因哪些词相连」。
+    memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)),
+                          keywords=sorted(inter), reinforce_delta=delta)
+    return True
 
 
 def _related(nk, ok):
@@ -125,6 +146,70 @@ def reinforce_by_hits(hit_ids):
             memory_edges.reinforce_edge(hit_ids[i], hit_ids[j], "associative")
 
 
+class UnionFind:
+    """并查集（带路径压缩），用于把相似节点聚成簇。"""
+
+    def __init__(self, ids):
+        """用一组 id 初始化：各自为独立集合。"""
+        # 父指针：初始每个节点指向自己
+        self._parent = {i: i for i in ids}
+
+    def find(self, x):
+        """查根，并做路径压缩。"""
+        parent = self._parent
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(self, a, b):
+        """合并两个节点所在集合。"""
+        ra, rb = self.find(a), self.find(b)
+        if ra != rb:
+            self._parent[ra] = rb
+
+
+def _build_bucket(roots):
+    """按关键词的 1~2 字子组建「gram → 节点下标」倒排索引，用于剪枝。
+
+    保真性：包含式匹配命中时，两词必有公共长度≥2 的子串，故必共享 bigram；
+    此剪枝只排除「必然不可能匹配」的对，不漏掉任何真匹配。
+    @param roots [(node_id, 关键词集合), ...]
+    @returns {gram: [节点下标, ...]}
+    """
+    bucket = {}
+    for idx, (_nid, kwset) in enumerate(roots):
+        grams = set()
+        for kw in kwset:
+            grams |= _grams(kw)
+        for g in grams:
+            bucket.setdefault(g, []).append(idx)
+    return bucket
+
+
+def _union_similar(uf, roots, bucket, min_shared):
+    """在倒排桶内对候选节点对做精判，命中则并入同一集合。
+
+    包含式匹配：与突触建边同一套判定，避免「精确相等」漏掉真实关联。
+    每处理完一个桶 sleep(0) 让出解释器锁，避免后台重活长时间霸占 GIL。
+    @param uf         并查集
+    @param roots      [(node_id, 关键词集合), ...]
+    @param bucket     {gram: [节点下标, ...]}
+    @param min_shared 判为同簇所需的最小共享关键词数
+    """
+    seen_pairs = set()
+    for _g, idxs in bucket.items():
+        for a in range(len(idxs)):
+            for b in range(a + 1, len(idxs)):
+                i, j = idxs[a], idxs[b]
+                if (i, j) in seen_pairs:
+                    continue
+                seen_pairs.add((i, j))
+                if len(_related(roots[i][1], roots[j][1])) >= min_shared:
+                    uf.union(roots[i][0], roots[j][0])
+        time.sleep(0)
+
+
 def cluster_events(min_shared=2):
     """把跨会话讲同一件事的用户发言聚成事件。
 
@@ -142,48 +227,13 @@ def cluster_events(min_shared=2):
         kwset = _loads(r["keywords"], [])
         if kwset:
             roots.append((r["id"], set(kwset)))
-    # 并查集
-    parent = {nid: nid for nid, _ in roots}
-
-    def find(x):
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a, b):
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[ra] = rb
-
-    # 倒排索引剪枝：按关键词的二元字符组建「bigram → 节点下标」映射，
-    # 只在共享 bigram 的节点对之间做精判，避免 O(N²) 全量两两比较。
-    # 保真性：包含式匹配命中时，两词必有公共长度≥2 的子串，故必共享 bigram；
-    # 此剪枝只排除「必然不可能匹配」的对，不漏掉任何真匹配。
-    bucket = {}
-    for idx, (_nid, kwset) in enumerate(roots):
-        grams = set()
-        for kw in kwset:
-            grams |= _grams(kw)
-        for g in grams:
-            bucket.setdefault(g, []).append(idx)
-    seen_pairs = set()
-    for _g, idxs in bucket.items():
-        for a in range(len(idxs)):
-            for b in range(a + 1, len(idxs)):
-                i, j = idxs[a], idxs[b]
-                if (i, j) in seen_pairs:
-                    continue
-                seen_pairs.add((i, j))
-                # 包含式匹配：与突触建边同一套判定，避免「精确相等」漏掉真实关联
-                if len(_related(roots[i][1], roots[j][1])) >= min_shared:
-                    union(roots[i][0], roots[j][0])
-        # 分批让出解释器锁：聚类是后台重活，定期让出避免长时间霸占 GIL
-        time.sleep(0)
+    uf = UnionFind([nid for nid, _ in roots])
+    # 倒排索引剪枝后，仅对可能匹配的节点对做精判
+    _union_similar(uf, roots, _build_bucket(roots), min_shared)
     # 兜底：仅单节点自身的词不足 min_shared 时不会被任何桶连上，保持独立（正确）
     clusters = {}
     for nid, _ in roots:
-        clusters.setdefault(find(nid), []).append(nid)
+        clusters.setdefault(uf.find(nid), []).append(nid)
     # 只保留多节点的事件
     events = {}
     for root_id, members in clusters.items():
