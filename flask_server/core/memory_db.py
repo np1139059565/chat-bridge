@@ -251,36 +251,49 @@ def _install_slow_query_trace(conn):
     记录里带线程名，便于区分是「请求线程」还是「后台调度线程」在拖。
     """
     state = {"sql": "", "first_tick": None, "last_tick": None}
-
-    def _settle():
-        """结算当前语句：只有发生过进度回调（即真的执行过）才计时与告警。"""
-        if state["first_tick"] is not None:
-            ms = (state["last_tick"] - state["first_tick"]) * 1000.0
-            if ms >= _SLOW_SQL_MS:
-                app_log.warn("[db][%s] 慢SQL %.1fms: %s" % (
-                    threading.current_thread().name, ms,
-                    " ".join(state["sql"].split())[:120]))
-
-    def _trace(sql):
-        # 语句执行前：先结算上一条，再开始记录新一条
-        _settle()
-        state["sql"] = sql or ""
-        state["first_tick"] = None
-        state["last_tick"] = None
-
-    def _progress():
-        # 语句执行中：记录首次与末次进度时刻；返回 0 表示不中止查询
-        now = time.time()
-        if state["first_tick"] is None:
-            state["first_tick"] = now
-        state["last_tick"] = now
-        return 0
-
     try:
-        conn.set_trace_callback(_trace)
-        conn.set_progress_handler(_progress, _SQL_PROGRESS_INTERVAL)
+        conn.set_trace_callback(lambda sql: _slow_sql_trace(state, sql))
+        conn.set_progress_handler(lambda: _slow_sql_progress(state), _SQL_PROGRESS_INTERVAL)
     except Exception:
         pass
+
+
+def _slow_sql_settle(state):
+    """结算当前语句：只有发生过进度回调（即真的执行过）才计时与告警。
+
+    @param state 追踪状态字典（sql / first_tick / last_tick）
+    """
+    if state["first_tick"] is not None:
+        ms = (state["last_tick"] - state["first_tick"]) * 1000.0
+        if ms >= _SLOW_SQL_MS:
+            app_log.warn("[db][%s] 慢SQL %.1fms: %s" % (
+                threading.current_thread().name, ms,
+                " ".join(state["sql"].split())[:120]))
+
+
+def _slow_sql_trace(state, sql):
+    """语句执行前的 trace 回调：先结算上一条，再开始记录新一条。
+
+    @param state 追踪状态字典
+    @param sql   即将执行的语句
+    """
+    _slow_sql_settle(state)
+    state["sql"] = sql or ""
+    state["first_tick"] = None
+    state["last_tick"] = None
+
+
+def _slow_sql_progress(state):
+    """语句执行中的进度回调：记录首次与末次时刻；返回 0 表示不中止查询。
+
+    @param state 追踪状态字典
+    @returns 恒为 0（不中止查询）
+    """
+    now = time.time()
+    if state["first_tick"] is None:
+        state["first_tick"] = now
+    state["last_tick"] = now
+    return 0
 
 
 def _migrate_columns(conn):
