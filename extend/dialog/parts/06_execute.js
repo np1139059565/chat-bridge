@@ -177,9 +177,11 @@
       // 误操作与结果刷屏。旧卡片保留待执行态，由用户手动点击执行。
       // 按入列顺序取最新：工具卡片取卡片表里的末位，外部卡片取列表末位。
       //
-      // 【隔离铁律】执行本身是正常流程，不禁止；但若本次开启由指令触发
-      // （/sa on），被它带起来的卡片要打上「指令触发」标记，
-      // 其执行结果【不回传 AI】——触发源是用户指令，指令的产物不得流向 AI。
+      // 开启自动时顺手执行的那张卡片，是【AI 主动调用的工具卡片】，
+      // 其结果是 AI 工作的正常产物，必须正常回传——不能因「/sa on 这条
+      // 指令恰好触发了开关」就把整张工具卡片标记为「指令触发」。
+      // 指令本身（/sa on）不经此处、也不会因此泄露：指令的执行端是
+      // command_actions，回执走 /api/bridge/result，与本路径无关。
       let newest = null;
       Object.keys(cardMap).forEach((id) => {
         const c = cardMap[id];
@@ -192,9 +194,11 @@
         newest = { card: c, ext: true };
       });
       if (newest) {
-        // 工具卡片：把「指令触发」一路传到执行环节（否则 executeCard 会清掉标记）
+        // 工具卡片：按正常自动流程执行——不传 fromCommand。
+        // 这张卡片是 AI 主动调用的工具卡片，其结果须正常回传 AI；
+        // 「指令触发」标记只属于指令自身的产物（/cp、/rr 等），不得传染给它。
         if (newest.ext) this.scheduleExternalSend(newest.card);
-        else this.scheduleExecute(newest.card, fromCommand);
+        else this.scheduleExecute(newest.card);
       }
     } else {
       Object.keys(cardMap).forEach((id) => {
