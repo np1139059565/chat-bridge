@@ -154,17 +154,11 @@ def _extract_images(m):
     return names
 
 
-def mirror_report(messages):
-    """把一批上报消息镜像进网页收件箱，返回新增条数。
+def _import_parsers():
+    """延迟导入解析器：避免模块导入期就拉起 remote_bridge 整包。
 
-    入参就是 message_router 处理的那份切片；本函数自行分类与拼文本，
-    不依赖 message_router 的中间结果，保持两侧解耦。
-    @param messages 消息对象列表
-    @returns 新增入库的消息条数
+    @returns 解析函数字典；任一模块不可用时返回 None（调用方跳过镜像）
     """
-    if not messages:
-        return 0
-    # 延迟导入解析器：避免模块导入期就拉起 remote_bridge 整包
     try:
         from remote_bridge.message_parse import (
             _classify, _blocks_to_text, _thinking_text_of, _parse_envelope,
@@ -172,93 +166,185 @@ def mirror_report(messages):
         from remote_bridge.message_voice import strip_voice_blocks
     except Exception as e:
         log("解析模块不可用，跳过镜像：", e)
-        return 0
-    # 读取推送开关：与 QQ 版同一份配置，保证两边「哪类消息推不推」一致。
-    # 读不到时用空字典，各类默认放行（与 QQ 版 push.get(kind, True) 同义）。
+        return None
+    # 汇总为字典，供组装函数按名取用；_thinking_text_of 保持导入以维持
+    # 与旧实现一致的「模块可用性判定」口径。
+    return {
+        "classify": _classify,
+        "blocks_to_text": _blocks_to_text,
+        "parse_envelope": _parse_envelope,
+        "strip_voice_blocks": strip_voice_blocks,
+    }
+
+
+def _load_push():
+    """读取推送开关：与 QQ 版同一份配置，保证两边「哪类消息推不推」一致。
+
+    读不到时用空字典，各类默认放行（与 QQ 版 push.get(kind, True) 同义）。
+    @returns 推送开关字典
+    """
     try:
         from remote_bridge import bridge_store
-        push = bridge_store.get_config().get("push") or {}
+        return bridge_store.get_config().get("push") or {}
     except Exception as e:
         log("读取推送开关失败，按全推处理：", e)
-        push = {}
-    items = []
-    for m in messages:
-        mid = (m or {}).get("id") or ""
-        if not mid:
-            continue
-        # 已入库的不再重复处理（含语音合成这种重活）
-        if web_inbox.is_seen(mid):
-            continue
-        # 网页自发消息：网页发消息时已按纯文本记过一次（见 routes/web.py），
-        # 抽屉上报回来的却是 external-call 信封原文（source=web）。若在此再镜像，
-        # 就会同一句话记两条、且第二条显示为整段 JSON。故跳过网页自发的信封。
+        return {}
+
+
+def _compose_body(m, push, parsers):
+    """组装一条消息的正文文本。
+
+    统一交给 outbound.build_body：与 QQ 版共用同一套规则，网页版因此自动继承
+    「思考内容」与「工具结果围栏」等能力；失败时退回块拼。
+    @param m       消息对象
+    @param push    推送开关字典
+    @param parsers 解析函数字典
+    @returns 正文文本
+    """
+    try:
+        from remote_bridge.outbound import build_body
+        built = build_body(m, push)
+        return built.get("text") or ""
+    except Exception as e:
+        log("正文组装失败，退回块拼：", e)
         try:
-            env = _parse_envelope(m)
+            return str(m.get("md") or "").strip() or parsers["blocks_to_text"](m, False)
         except Exception:
-            env = None
-        if env and env.get("source") == "web":
-            continue
-        try:
-            kind = _classify(m)          # user / tool / ai
-        except Exception:
-            kind = "ai"
-        # 推送开关过滤：与 QQ 版同一套配置（push.user / tool / ai）。
-        # 关掉某类推送时，网页版也一并跳过，保持两边设定一致。
-        if not push.get(kind, True):
-            continue
-        # 正文组装统一交给 outbound.build_body：与 QQ 版共用同一套规则，
-        # 网页版因此自动继承「思考内容」与「工具结果围栏」等能力。
-        body = ""
-        is_tool_result = False
-        try:
-            from remote_bridge.outbound import build_body
-            built = build_body(m, push)
-            body = built.get("text") or ""
-            is_tool_result = bool(built.get("is_tool_result"))
-        except Exception as e:
-            log("正文组装失败，退回块拼：", e)
-            try:
-                body = str(m.get("md") or "").strip() or _blocks_to_text(m, False)
-            except Exception:
-                body = str(m.get("md") or "").strip()
-        # 外部卡片（external-call 信封）：正文应是信封里 request 承载的「真实发言」，
-        # 而非整段 JSON。QQ 用户发来的消息即以信封形态上报，不取 request 会把
-        # 用户的普通一句话显示成一段 JSON。
-        if env:
-            req = env.get("request")
-            if isinstance(req, str) and req.strip():
-                body = req.strip()
-        # 剔除语音块：语音已由 voice 字段单独承载，正文不该再残留其 JSON 文本
-        try:
-            body = strip_voice_blocks(body)
-        except Exception:
-            pass
-        # 语音：仅 AI 消息提取「待朗读文本」，此处不合成。
-        # 合成为在线网络调用（无超时），若放在上报链路里同步执行，
-        # 会让每轮上报都阻塞在合成上、把服务拖垮。故只存文本，
-        # 真正合成由网页点播时按需触发（见 routes/web.py 的 /api/web/voice-ensure）。
-        voice_text = ""
-        if kind == "ai":
-            voice_text = _voice_text_of(m)
-        # 图片块：消息里的 image 块（网页发图、AI 配图等）存到服务端，
-        # 收件箱记文件名，前端与抽屉镜像据此用同一地址取图。
-        images = _extract_images(m)
-        # 角色映射：tool 归到工具类，user/ai 原样
-        role = kind if kind in ("user", "ai") else "tool"
-        items.append({
-            "source_id": mid,
-            "role": role,
-            "text": body,
-            "voice": "",
-            "voice_text": voice_text,
-            "image": (images if len(images) > 1 else (images[0] if images else "")),
-            "kind": "",
-            # key：消息在抽屉消息树里的 key（pid-id 格式），供网页版逐条
-            # 核对消息块是否完整、有无缺块。缺失时为空串。
-            "key": str((m or {}).get("key") or ""),
-        })
+            return str(m.get("md") or "").strip()
+
+
+def _finalize_body(body, env, parsers):
+    """对组装好的正文做后处理：信封取真实发言、剔除语音块。
+
+    @param body    已组装的正文
+    @param env     信封字典（无则 None）
+    @param parsers 解析函数字典
+    @returns 处理后的正文
+    """
+    # 外部卡片（external-call 信封）：正文应是信封里 request 承载的「真实发言」，
+    # 而非整段 JSON。QQ 用户发来的消息即以信封形态上报，不取 request 会把
+    # 用户的普通一句话显示成一段 JSON。
+    if env:
+        req = env.get("request")
+        if isinstance(req, str) and req.strip():
+            body = req.strip()
+    # 剔除语音块：语音已由 voice 字段单独承载，正文不该再残留其 JSON 文本
+    try:
+        body = parsers["strip_voice_blocks"](body)
+    except Exception:
+        pass
+    return body
+
+
+def _prepare_fields(m, kind):
+    """准备条目的附加字段：语音文本、图片、角色。
+
+    @param m    消息对象
+    @param kind 消息类别 user / tool / ai
+    @returns (voice_text, image_value, role) 三元组
+    """
+    # 语音：仅 AI 消息提取「待朗读文本」，此处不合成。
+    # 合成为在线网络调用（无超时），若放在上报链路里同步执行，
+    # 会让每轮上报都阻塞在合成上、把服务拖垮。故只存文本，
+    # 真正合成由网页点播时按需触发（见 routes/web.py 的 /api/web/voice-ensure）。
+    voice_text = _voice_text_of(m) if kind == "ai" else ""
+    # 图片块：消息里的 image 块（网页发图、AI 配图等）存到服务端，
+    # 收件箱记文件名，前端与抽屉镜像据此用同一地址取图。
+    images = _extract_images(m)
+    # 单图存字符串、多图存列表；无图存空串
+    image_value = images if len(images) > 1 else (images[0] if images else "")
+    # 角色映射：tool 归到工具类，user/ai 原样
+    role = kind if kind in ("user", "ai") else "tool"
+    return voice_text, image_value, role
+
+
+def _gate(m, push, parsers):
+    """判断一条消息是否应入箱；应跳过时返回 None。
+
+    跳过条件：无 id / 已入库 / 网页自发信封 / 推送开关关闭。
+    @param m       消息对象
+    @param push    推送开关字典
+    @param parsers 解析函数字典
+    @returns (mid, env, kind) 三元组；应跳过时返回 None
+    """
+    mid = (m or {}).get("id") or ""
+    if not mid:
+        return None
+    # 已入库的不再重复处理（含语音合成这种重活）
+    if web_inbox.is_seen(mid):
+        return None
+    # 网页自发消息：网页发消息时已按纯文本记过一次（见 routes/web.py），
+    # 抽屉上报回来的却是 external-call 信封原文（source=web）。若在此再镜像，
+    # 就会同一句话记两条、且第二条显示为整段 JSON。故跳过网页自发的信封。
+    try:
+        env = parsers["parse_envelope"](m)
+    except Exception:
+        env = None
+    if env and env.get("source") == "web":
+        return None
+    try:
+        kind = parsers["classify"](m)          # user / tool / ai
+    except Exception:
+        kind = "ai"
+    # 推送开关过滤：与 QQ 版同一套配置（push.user / tool / ai）。
+    # 关掉某类推送时，网页版也一并跳过，保持两边设定一致。
+    if not push.get(kind, True):
+        return None
+    return mid, env, kind
+
+
+def _build_item(m, push, parsers):
+    """把一条上报消息组装成收件箱条目；无需入箱时返回 None。
+
+    @param m       消息对象
+    @param push    推送开关字典
+    @param parsers 解析函数字典
+    @returns 条目字典；跳过（无 id / 已入库 / 网页自发 / 开关关闭）返回 None
+    """
+    # 前置判断：无 id / 已入库 / 网页自发 / 开关关闭 都跳过
+    gated = _gate(m, push, parsers)
+    if gated is None:
+        return None
+    mid, env, kind = gated
+    # 正文组装 + 后处理（信封取真实发言、剔除语音块）
+    body = _finalize_body(_compose_body(m, push, parsers), env, parsers)
+    # 语音文本、图片、角色：一并准备好，供下方组装条目
+    voice_text, image_value, role = _prepare_fields(m, kind)
+    return {
+        "source_id": mid,
+        "role": role,
+        "text": body,
+        "voice": "",
+        "voice_text": voice_text,
+        "image": image_value,
+        "kind": "",
+        # key：消息在抽屉消息树里的 key（pid-id 格式），供网页版逐条
+        # 核对消息块是否完整、有无缺块。缺失时为空串。
+        "key": str((m or {}).get("key") or ""),
+    }
+
+
+def mirror_report(messages):
+    """把一批上报消息镜像进网页收件箱，返回新增条数。
+
+    入参就是 message_router 处理的那份切片；本函数自行分类与拼文本，
+    不依赖 message_router 的中间结果，保持两侧解耦。
+    逐条组装委托 _build_item，本函数只负责编排「准备 → 遍历 → 入库」。
+    @param messages 消息对象列表
+    @returns 新增入库的消息条数
+    """
+    if not messages:
+        return 0
+    # 准备阶段：解析器与推送开关，任一不可用即安全退出
+    parsers = _import_parsers()
+    if parsers is None:
+        return 0
+    push = _load_push()
+    # 遍历阶段：逐条组装，跳过无需入箱的消息
+    items = [it for it in (_build_item(m, push, parsers) for m in messages) if it]
     if not items:
         return 0
+    # 入库阶段：批量写入，成功则触发后台语音合成
     added = web_inbox.append_many(items)
     if added:
         log("镜像入库", len(added), "条")
