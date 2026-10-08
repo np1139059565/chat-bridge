@@ -15,9 +15,10 @@
 // 计数语义：
 //   - 用户发言 = 打开窗口，置「待检索」（retrievePending）标记；
 //   - 每轮 AI 输出：调了检索工具 → 清检索标记；调了抽检工具 → 计数归零；
-//   - 优先级：用户发言后先提醒检索（retrieve）——只要未检索，任何工具调用都会被拦下，
-//     强制 AI 先检索再干活；此后计数满二十轮，随机在「抽检 / 检索」中提醒一类（periodic）。
-//   - 每类提醒一个窗口只发一次，避免反复打扰。
+//   - 优先级：用户发言后先提醒检索（retrieve）——首次检测到工具调用而尚未检索时，
+//     拦截该次调用并引导先检索（仅一次，防死循环）；
+//     此后计数满二十轮，随机在「抽检 / 检索」中提醒一类（periodic）。
+//   - 每类提醒一个窗口只发一次，避免反复打扰与死循环。
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
@@ -38,8 +39,9 @@
       this.memoryCheck = {
         armed: false,          // 是否处于计数窗口（用户发言后开启）
         lastUserId: '',        // 上次开窗的用户发言指纹（幂等去重）
-        retrievePending: false, // 用户发言后是否仍「待检索」（每轮拦截直到检索）
+        retrievePending: false, // 用户发言后是否仍「待首次检索」
         sinceCheck: 0,         // 距上次周期提醒经过的 AI 轮数
+        notifiedRetrieve: false, // 本窗口的「检索提醒」是否已发过（一次，避免死循环）
       };
     }
     return this.memoryCheck;
@@ -92,6 +94,7 @@
     st.lastUserId = uid;
     st.retrievePending = true;      // 先引导检索（拿最近记忆、强化处境、再规划）
     st.sinceCheck = 0;
+    st.notifiedRetrieve = false;
     log('记忆检查：检测到新用户发言，等待 AI 首次检索');
     return true;
   };
@@ -202,11 +205,12 @@
       log('记忆检查：AI 已抽检记忆，计数归零');
     }
 
-    // 优先级一：用户发言后，只要尚未检索，任何工具调用都被拦下、引导先检索。
-    // 反复引导（每轮都拦）直到 AI 真正调用 memory_search，确保先了解处境再干活。
-    if (st.retrievePending) {
+    // 优先级一：用户发言后，首次检测到工具调用而尚未检索 → 拦截该次调用并引导检索。
+    // 仅一次：拦截后即置标记，之后不再反复告警，避免 AI 不检索时被反复拦下造成死循环。
+    if (st.retrievePending && !st.notifiedRetrieve) {
       if (!this.hasDeliverableToolCard(incoming)) return null;
-      log('记忆检查：用户发言后尚未检索，引导检索并拦截工具');
+      st.notifiedRetrieve = true;   // 一个窗口只引导一次，防死循环
+      log('记忆检查：用户发言后尚未检索，引导检索并拦截该次工具');
       return this._memoryIssue('retrieve');
     }
 
