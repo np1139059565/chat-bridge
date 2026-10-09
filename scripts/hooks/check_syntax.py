@@ -90,16 +90,39 @@ def _find_node():
     return sorted(candidates)[-1] if candidates else None
 
 
+def _check_js_esprima(path):
+    """用 esprima（纯 Python 解析器）校验 JS 语法；不可用时返回 None。
+
+    作为 node 缺失时的兜底：把「环境无 node 就完全跳过 JS 校验」的盲区补上。
+    只做语法解析（parseScript），不做风格检查。
+    """
+    try:
+        import esprima
+    except ImportError:
+        return None
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            esprima.parseScript(fh.read())
+        return None
+    except Exception as e:
+        return "esprima 解析失败：%s" % e
+
+
 def check_js(path):
-    """校验 JS 文件语法（node --check）；node 不可用时跳过（返回 None）。"""
+    """校验 JS 文件语法：优先 node --check，缺失时回退 esprima；都无则跳过。
+
+    node 与 esprima 都不具备时才返回 None（跳过）——把「无 node 即无校验」
+    的盲区收敛到「两者皆无」这一极端情况。
+    """
     node = _find_node()
-    if not node:
-        return None
-    proc = subprocess.run([node, "--check", path], capture_output=True)
-    if proc.returncode == 0:
-        return None
-    out = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip()
-    return out or "node --check 校验失败"
+    if node:
+        proc = subprocess.run([node, "--check", path], capture_output=True)
+        if proc.returncode == 0:
+            return None
+        out = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip()
+        return out or "node --check 校验失败"
+    # node 不可用：回退到 esprima（纯 Python）
+    return _check_js_esprima(path)
 
 
 # 扩展名 → 校验函数

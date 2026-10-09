@@ -44,6 +44,9 @@ class TestLevelFilter(unittest.TestCase):
         paths.LOGS_DIR = self.tmp
 
     def tearDown(self):
+        # 先等队列排空，再恢复日志目录：app_log 落盘目录是「每次写入动态取」，
+        # 若恢复目录时队列还有未消费日志，后台线程稍后消费会写进真实日志文件。
+        app_log.drain(timeout=3.0)
         app_log._min_level = self._orig_level       # 复原级别阈值
         paths.LOGS_DIR = self._orig_logs_dir
         shutil.rmtree(self.tmp, ignore_errors=True)

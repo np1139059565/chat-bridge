@@ -36,6 +36,12 @@ class TestAppLogAsync(unittest.TestCase):
         paths.LOGS_DIR = self.tmp
 
     def tearDown(self):
+        # 先等日志队列排空，再恢复日志目录。
+        # 关键：app_log 的落盘目录是「每次写入时动态取 paths.LOGS_DIR」。
+        # 若恢复目录时队列里还有未消费的日志，后台线程稍后消费会读回真实目录，
+        # 把这些测试日志写进生产日志文件（曾观察到 8000+ 条 [test] 污染）。
+        # drain 时 LOGS_DIR 仍是临时目录，故残留日志会落到临时目录、随之删除。
+        app_log.drain(timeout=3.0)
         paths.LOGS_DIR = self._orig_logs_dir
         shutil.rmtree(self.tmp, ignore_errors=True)
 
