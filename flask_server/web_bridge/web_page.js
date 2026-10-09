@@ -81,123 +81,8 @@
     return true;
   }
 
-  // ---------- 图片看大图：页面内浮层 + 手势缩放平移 ----------
-  // 不新开标签页（新文档必然重新请求），把被点图片地址交给浮层 img，
-  // 同址 + 后端强缓存 → 命中浏览器缓存，零请求。
-  var viewer = null;
-  var vimg = null;
-  var vstate = { scale: 1, tx: 0, ty: 0 };   // 缩放倍数与平移量
-  var MIN_SCALE = 1, MAX_SCALE = 8;          // 缩放范围：不小于适配尺寸，最大 8 倍
-  var pointers = {};                          // 活动指针 id → 坐标
-  var pinchDist = 0;                          // 双指初始间距（捏合基准）
-  var moved = 0;                              // 本次按下累计移动，用于区分点击与拖动
-
-  /** 应用当前缩放平移（只改 transform，不动布局，手势跟手）。 */
-  function applyTransform() {
-    if (vimg) vimg.style.transform =
-      'translate(' + vstate.tx + 'px,' + vstate.ty + 'px) scale(' + vstate.scale + ')';
-  }
-
-  /** 重置缩放平移：每次打开大图都回到初始适配状态。 */
-  function resetView() {
-    vstate.scale = 1; vstate.tx = 0; vstate.ty = 0;
-    applyTransform();
-  }
-
-  /** 双指间距。 */
-  function pinchDistance() {
-    var ids = Object.keys(pointers);
-    var a = pointers[ids[0]], b = pointers[ids[1]];
-    return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
-  }
-
-  /** 以某点为中心缩放：保持该点下图像位置不跑（跟手缩放）。 */
-  function zoomAt(cx, cy, factor) {
-    var ns = Math.max(MIN_SCALE, Math.min(MAX_SCALE, vstate.scale * factor));
-    var real = ns / vstate.scale;
-    var rect = viewer.getBoundingClientRect();
-    var ox = cx - (rect.left + rect.width / 2);
-    var oy = cy - (rect.top + rect.height / 2);
-    vstate.tx = ox - (ox - vstate.tx) * real;
-    vstate.ty = oy - (oy - vstate.ty) * real;
-    vstate.scale = ns;
-    applyTransform();
-  }
-
-  /** 构造浮层并绑手势（只建一次，复用后续）。 */
-  function buildViewer() {
-    viewer = document.createElement('div');
-    viewer.className = 'img-viewer';
-    vimg = document.createElement('img');
-    vimg.className = 'img-viewer-img';
-    viewer.appendChild(vimg);
-    var tip = document.createElement('div');
-    tip.className = 'img-viewer-tip';
-    tip.textContent = '滚轮或双指缩放 · 拖动平移 · 轻点关闭';
-    viewer.appendChild(tip);
-
-    // 按下：记录指针；单指拖动、双指捏合
-    viewer.addEventListener('pointerdown', function (e) {
-      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-      try { viewer.setPointerCapture(e.pointerId); } catch (err) { /* 忽略 */ }
-      if (Object.keys(pointers).length === 1) { moved = 0; viewer.classList.add('grabbing'); }
-      else if (Object.keys(pointers).length === 2) {
-        pinchDist = pinchDistance();
-        // 双指一出现即视为「已交互」：抬手时不得误判为轻点而关闭浮层。
-        // 此前双指缩放不累加 moved，抬手被当轻点，导致放大后一松手浮层即关。
-        moved = 999;
-      }
-    });
-
-    // 移动：单指平移，双指缩放
-    viewer.addEventListener('pointermove', function (e) {
-      if (!pointers[e.pointerId]) return;
-      var ids = Object.keys(pointers);
-      var prev = pointers[e.pointerId];
-      var dx = e.clientX - prev.x, dy = e.clientY - prev.y;
-      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (ids.length === 1) {
-        moved += Math.abs(dx) + Math.abs(dy);   // 累计位移，供点击判定
-        vstate.tx += dx; vstate.ty += dy;
-        applyTransform();
-      } else if (ids.length === 2) {
-        var d = pinchDistance();
-        var cx = (pointers[ids[0]].x + pointers[ids[1]].x) / 2;
-        var cy = (pointers[ids[0]].y + pointers[ids[1]].y) / 2;
-        if (pinchDist > 0) zoomAt(cx, cy, d / pinchDist);
-        pinchDist = d;
-      }
-    });
-
-    // 抬起：清理；从未移动视为轻点 → 关闭
-    function onUp(e) {
-      if (!pointers[e.pointerId]) return;
-      delete pointers[e.pointerId];
-      if (Object.keys(pointers).length === 0) {
-        viewer.classList.remove('grabbing');
-        if (moved < 6) viewer.classList.remove('on');
-      } else if (Object.keys(pointers).length === 1) {
-        pinchDist = 0;   // 回到单指，重置捏合基准
-      }
-    }
-    viewer.addEventListener('pointerup', onUp);
-    viewer.addEventListener('pointercancel', onUp);
-
-    // 滚轮缩放（桌面端）
-    viewer.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      zoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
-    }, { passive: false });
-
-    document.body.appendChild(viewer);
-  }
-
-  function showViewer(src) {
-    if (!viewer) buildViewer();
-    vimg.src = src;
-    resetView();
-    viewer.classList.add('on');
-  }
+  // ---------- 图片看大图 ----------
+  // 浮层与手势缩放已抽到 web_viewer.js，暴露为 window.WebViewer。
 
   // ---------- 指令链接 / 图片点击（事件委托） ----------
   listEl.addEventListener('click', function (e) {
@@ -205,7 +90,7 @@
     // 图片：页面内浮层看大图，复用缓存
     if (t && t.classList && t.classList.contains('msg-img')) {
       e.preventDefault();
-      showViewer(t.getAttribute('src') || '');
+      window.WebViewer.show(t.getAttribute('src') || '');
       return;
     }
     if (t && t.classList && t.classList.contains('cmd-link')) {
@@ -267,8 +152,18 @@
         // 保持可见区域是最新消息（列表倒序，最新在顶部）
         if (listEl.scrollTop < 40) listEl.scrollTop = 0;
       })
-      .catch(function () {
-        if (!history) clientLog('poll', 'fail ' + (Date.now() - _t0) + 'ms failCount=' + (failCount + 1));
+      .catch(function (err) {
+        // 区分失败类型：这是「请求发不出去」与「发出去了没回应」的关键分界。
+        //   AbortError      —— 被 6 秒超时主动中断，说明请求已进入网络、但迟迟无响应；
+        //   TypeError       —— 网络层直接失败（DNS/连接失败/断网），根本没送出去；
+        //   HTTP 状态错误   —— 请求到了服务端、但返回了非 2xx（下方 r.ok 判断）。
+        // 再带上 navigator.onLine：断网时浏览器会置 false，可佐证网络层原因。
+        var kind = 'unknown';
+        if (err && err.name === 'AbortError') kind = 'timeout(已发出,无响应)';
+        else if (err && err.name === 'TypeError') kind = 'neterr(未发出/断连)';
+        else if (err && err.message) kind = String(err.message).slice(0, 40);
+        var offline = (typeof navigator !== 'undefined' && navigator.onLine === false) ? ' OFFLINE' : '';
+        if (!history) clientLog('poll', 'fail ' + (Date.now() - _t0) + 'ms kind=' + kind + offline + ' failCount=' + (failCount + 1));
         failCount += 1;   // 连续失败超容差才显示断开，避免抖动就闪断
         if (failCount >= FAIL_TOLERANCE) setStatus(false);
       })
@@ -289,29 +184,42 @@
     var snapshotText = text;
     var snapshotImgs = pendingImages.slice();
     // 只有发送成功才清空输入与图片；失败则恢复现场并提示。
-    var finish = function (res) {
-      if (res && res.ok) { clearImages(); fetchMessages(false); return; }
+    // 失败时记录原因类型：超时（已发出无响应）/ 网络错（未发出）/ 服务端错误。
+    var finish = function (res, err) {
+      if (res && res.ok) { clientLog('send', 'ok'); clearImages(); fetchMessages(false); return; }
+      var kind = 'unknown';
+      if (err && err.name === 'AbortError') kind = 'timeout(已发出,无响应)';
+      else if (err && err.name === 'TypeError') kind = 'neterr(未发出/断连)';
+      else if (res) kind = 'http' + res.status;
+      var offline = (typeof navigator !== 'undefined' && navigator.onLine === false) ? ' OFFLINE' : '';
+      clientLog('send', 'fail kind=' + kind + offline);
       inputEl.value = snapshotText;
       pendingImages = snapshotImgs;
       renderPreview();
       setStatus(false);
       alert('发送失败，内容已保留在输入框，请检查网络后重试');
     };
+    // 发送超时：8 秒未返回即中断，避免按钮永久无反馈。
+    var sctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var stimer = setTimeout(function () { if (sctrl) sctrl.abort(); }, 8000);
+    var _sopts = { headers: { 'Content-Type': 'application/json' } };
+    if (sctrl) _sopts.signal = sctrl.signal;
     inputEl.value = '';
     autoGrow();
+    var _done = function () { clearTimeout(stimer); };
     if (pendingImages.length > 0) {
       // 有图片：图文一次性提交（多张一并），避免图片被丢弃
-      fetch('/api/web/image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dataUrls: pendingImages.slice(), text: text })
-      }).then(finish).catch(function () { finish(null); });
+      _sopts.method = 'POST';
+      _sopts.body = JSON.stringify({ dataUrls: pendingImages.slice(), text: text });
+      fetch('/api/web/image', _sopts)
+        .then(function (r) { _done(); finish(r, null); })
+        .catch(function (e) { _done(); finish(null, e); });
     } else {
-      fetch('/api/web/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text })
-      }).then(finish).catch(function () { finish(null); });
+      _sopts.method = 'POST';
+      _sopts.body = JSON.stringify({ text: text });
+      fetch('/api/web/send', _sopts)
+        .then(function (r) { _done(); finish(r, null); })
+        .catch(function (e) { _done(); finish(null, e); });
     }
   }
 
