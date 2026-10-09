@@ -144,6 +144,10 @@ def get_conn():
     conn = getattr(_local, "conn", None)
     if conn is not None:
         return conn
+    # 建连耗时埋点：首次建连含 WAL 设置、建表检查等，可能明显耗时；
+    # 记录实际耗时，便于判断「界面请求慢」是否耗在建立数据库连接上。
+    import time as _t
+    _t0 = _t.perf_counter()
     # 确保目录存在：记忆库目录可能首次创建
     paths.MEMORY_DB_DIR.mkdir(parents=True, exist_ok=True)
     # timeout=15：连接级等待锁的秒数（默认仅 5 秒）。
@@ -163,7 +167,12 @@ def get_conn():
     # 建表只在进程内做一次（详见 _ensure_schema_once）
     _ensure_schema_once(conn)
     _local.conn = conn
-    app_log.info("[db][%s] 建立记忆库连接" % threading.current_thread().name)
+    _ms = (_t.perf_counter() - _t0) * 1000.0
+    # 建连超过 200ms 记 WARN（正常应远低于此），否则记 INFO。
+    if _ms >= 200:
+        app_log.warn("[db][%s] 建立记忆库连接 耗时=%.0fms" % (threading.current_thread().name, _ms))
+    else:
+        app_log.info("[db][%s] 建立记忆库连接 耗时=%.0fms" % (threading.current_thread().name, _ms))
     return conn
 
 

@@ -19,6 +19,7 @@ from contextlib import contextmanager
 
 import paths
 import app_log
+from . import web_inbox_store
 
 # 消息数量上限：超出后丢弃最旧的，防止收件箱文件无限膨胀。
 # 手机端只需看最近内容，历史靠 QQ 侧与抽屉存档，无需在此长期留存。
@@ -64,97 +65,27 @@ def _timed_lock(op):
         _lock.release()
         _note_slow_lock(op, wait_ms, hold_ms)
 
-# 内存缓存：收件箱每次读取都要解析整个 JSON，而网页每 2.5 秒轮询一次，
-# 镜像又要对切片逐条调用 is_seen。若每次都全量读盘解析，开销随消息量持续放大。
-# 这里缓存「状态对象 + 文件签名（mtime 纳秒 + 大小）」：签名未变直接复用，
-# 外部改动（如手工编辑）也能被签名变化感知、自动重读。
-_cache = None
-_cache_sig = None
-
+# 持久化层：读盘 / 写盘 / 缓存 / 慢 IO 埋点，已抽到独立模块 web_inbox_store。
+# 这里保留同名薄封装，主模块其它调用点无需改动。
 
 def _file_sig():
-    """取收件箱文件的签名（mtime 纳秒 + 大小）；文件不存在返回 None。"""
-    try:
-        st = paths.WEB_INBOX_PATH.stat()
-        return (st.st_mtime_ns, st.st_size)
-    except OSError:
-        return None
+    """取收件箱文件签名（委托 web_inbox_store）。"""
+    return web_inbox_store.file_sig()
 
 
 def _empty_state():
-    """收件箱的初始状态：空消息列表 + 游标归零 + 已入库源 id 集合。
-
-    seen 用于按「源消息 id」去重：抽屉每次上报的是全量可见切片，
-    若不去重，同一轮对话会被反复写进收件箱。
-    """
-    return {"seq": 0, "messages": [], "seen": []}
+    """收件箱初始空状态（委托 web_inbox_store）。"""
+    return web_inbox_store.empty_state()
 
 
 def _read_state():
-    """读取收件箱状态（带缓存）。不存在或损坏时返回空结构。
-
-    损坏时不抛异常：收件箱是「尽力而为」的展示缓存，
-    宁可当作空箱重新开始，也不能让网页版整个不可用。
-    缓存策略：比对文件签名，未变则直接返回内存对象，避免重复解析大 JSON。
-    """
-    global _cache, _cache_sig
-    path = paths.WEB_INBOX_PATH
-    sig = _file_sig()
-    if _cache is not None and sig is not None and sig == _cache_sig:
-        return _cache
-    if not path.exists():
-        _cache = _empty_state()
-        _cache_sig = None
-        return _cache
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        app_log.warn("[web]", "读取收件箱失败，按空箱处理：", e)
-        _cache = _empty_state()
-        _cache_sig = sig
-        return _cache
-    # 字段兜底：外部改坏文件时不至于让后续逻辑崩在 None 上
-    _cache = _sanitize_state(data)
-    _cache_sig = sig
-    return _cache
-
-
-def _sanitize_state(data):
-    """把读到的原始数据规整为合法状态（字段类型不对时用兜底值）。
-
-    @param data 从磁盘 JSON 解析出的对象
-    @returns {seq, messages, seen} 状态字典
-    """
-    if not isinstance(data, dict):
-        return _empty_state()
-    msgs = data.get("messages")
-    if not isinstance(msgs, list):
-        msgs = []
-    seq = data.get("seq")
-    if not isinstance(seq, int):
-        seq = 0
-    seen = data.get("seen")
-    if not isinstance(seen, list):
-        seen = []
-    return {"seq": seq, "messages": msgs, "seen": seen}
+    """读取收件箱状态，带缓存（委托 web_inbox_store）。"""
+    return web_inbox_store.read_state()
 
 
 def _write_state(state):
-    """把收件箱状态写回磁盘，并同步刷新内存缓存。
-
-    先确保目录存在；写失败只记录——收件箱是缓存，写不进去不应阻断消息流。
-    写成功后立即更新 _cache 与签名，使后续读取不必再解析一遍。
-    """
-    global _cache, _cache_sig
-    path = paths.WEB_INBOX_PATH
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
-    except Exception as e:
-        app_log.warn("[web]", "写回收件箱失败：", e)
-        return
-    _cache = state
-    _cache_sig = _file_sig()
+    """写回收件箱状态并刷新缓存（委托 web_inbox_store）。"""
+    web_inbox_store.write_state(state)
 
 
 def _norm_image(image):
