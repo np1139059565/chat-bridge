@@ -235,12 +235,24 @@ def graph_export():
     # since_id：增量拉取——只返回 id 大于它的新节点，及「至少一端是新节点」的边，
     # 供页面「随 AI 生成逐个增加节点」的轮询使用；0 或未传表示全量。
     since_id = request.args.get("since_id", type=int) or 0
+    # 耗时与数据量埋点：图谱导出是全库取数 + 整形，数据量大时会明显变慢。
+    # 记录节点数、边数与耗时，便于判断「界面慢」是否由图谱数据量引起。
+    import time as _t
+    import app_log
+    _t0 = _t.perf_counter()
     # 取数与整形统一委托 graph_data（纯函数，便于测试；本文件保持精简）
     raw_nodes, edges = graph_data.collect_nodes_edges(conv_id, site_key)
     max_id = max([n["id"] for n in raw_nodes], default=0)
     raw_nodes, edges = graph_data.apply_since(raw_nodes, edges, since_id)
     nodes = graph_data.shape_nodes(raw_nodes)
     edges = graph_data.shape_edges(edges)
+    _ms = (_t.perf_counter() - _t0) * 1000.0
+    if _ms >= 500:
+        app_log.warn("[memory][graph]",
+                     "导出 节点=%d 边=%d 耗时=%.0fms" % (len(nodes), len(edges), _ms))
+    else:
+        app_log.debug("[memory][graph]",
+                      "导出 节点=%d 边=%d 耗时=%.0fms" % (len(nodes), len(edges), _ms))
     # max_id 供前端记下，下次轮询带上，实现增量
     return _ok(nodes=nodes, edges=edges, max_id=max_id)
 
