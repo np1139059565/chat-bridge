@@ -72,6 +72,7 @@ def save_web_image(data_url):
     @param data_url 图片 dataURL
     @returns {name, path} 或 None
     """
+    _t0 = time.perf_counter()
     try:
         if not data_url or "," not in data_url:
             return None
@@ -85,6 +86,11 @@ def save_web_image(data_url):
         path = os.path.join(out_dir, name)
         with open(path, "wb") as f:
             f.write(raw)
+        # 落盘耗时埋点：本函数在网页发图的请求线程里同步执行（base64 解码 + 写盘），
+        # 大图可能耗时明显，记录下来便于排查「界面请求被落盘拖慢」。
+        _ms = (time.perf_counter() - _t0) * 1000.0
+        if _ms >= 200:
+            app_log.warn("[screenshot]", "网页图片保存耗时=%.0fms 大小=%.0fKB" % (_ms, len(raw) / 1024.0))
         return {"name": name, "path": path}
     except Exception as e:
         app_log.warn("[screenshot]", "网页图片保存失败：", e)
