@@ -48,18 +48,38 @@ def _voice_text_of(m):
         return ""
 
 
-# 音频文件保留上限：合成音频按时间戳命名，用久了两目录会持续堆积。
-# 音频是「可重新合成的产物」：删除旧文件只影响回放历史语音，
-# 不影响收件箱里的文字消息本身，故保留最近若干条即可。
-MAX_AUDIO_FILES = 100
+# 音频文件保留上限取自全项目统一来源（core/app_limits），与消息上限同源。
+# 音频是「可重新合成的产物」，但消息会引用它：清理时必须保护仍被引用的文件，
+# 否则会出现「消息还在、语音打不开」。
+from app_limits import MAX_AUDIO_FILES
+
+
+def _referenced_audio():
+    """取收件箱中仍被消息引用的音频文件名集合（引用保护）。
+
+    被引用的音频即使很旧也不能删，否则用户翻到那条消息时语音会 404。
+    @returns 文件名集合；取不到时返回空集（退化为仅按上限清理）
+    """
+    try:
+        state = web_inbox._read_state()
+        out = set()
+        for m in (state.get("messages") or []):
+            v = m.get("voice")
+            if v:
+                out.add(str(v))
+        return out
+    except Exception:
+        return set()
 
 
 def prune_audio_files(max_keep=MAX_AUDIO_FILES):
-    """回收网页音频目录：只保留最近 max_keep 个文件，其余删除。
+    """回收网页音频目录：保留最近 max_keep 个文件，且**绝不删被消息引用的**。
 
-    按文件修改时间排序保留最新的：同一毫秒生成的多个文件若按文件名排序
-    可能错乱，用 mtime 才稳。删除失败（如文件被占用）静默跳过，
-    下次调用再补删——清理是「尽力而为」，不应影响主流程。
+    双重保护：
+      1. 引用保护——仍被收件箱消息引用的音频一律保留；
+      2. 数量上限——其余文件只保留最近 max_keep 个。
+    按修改时间排序保留最新的（同毫秒生成的文件按文件名排序可能错乱，mtime 才稳）。
+    删除失败静默跳过，下次再补删——清理是「尽力而为」，不影响主流程。
     @param max_keep 保留的文件数上限
     @returns 实际删除的文件数
     """
@@ -74,11 +94,15 @@ def prune_audio_files(max_keep=MAX_AUDIO_FILES):
         # 未超上限：直接返回，避免无谓的 stat 开销
         if len(files) <= max_keep:
             return 0
-        # 按修改时间升序（最旧在前）
-        files.sort(key=lambda f: f.stat().st_mtime)
+        keep_ref = _referenced_audio()
+        # 超出上限、需要删掉的个数
+        need = len(files) - max_keep
+        # 可删候选：未被消息引用的文件，按修改时间升序（最旧在前）
+        removable = [f for f in files if f.name not in keep_ref]
+        removable.sort(key=lambda f: f.stat().st_mtime)
         removed = 0
-        # 删除「超出上限」的最旧那批（保留末尾 max_keep 个）
-        for f in files[:len(files) - max_keep]:
+        # 从最旧的可删文件开始删，最多删 need 个；被引用的一个都不动。
+        for f in removable[:need]:
             try:
                 f.unlink()
                 removed += 1
@@ -90,13 +114,23 @@ def prune_audio_files(max_keep=MAX_AUDIO_FILES):
         return 0
 
 
+# 合成失败重试次数与间隔（秒）。
+# edge-tts 是在线服务，偶发不返回音频（No audio received）或瞬时超时；
+# 这类失败多为暂时性，重试即可成功，故自动重试若干次。
+SYNTH_RETRY = 3
+SYNTH_RETRY_INTERVAL = 1.0
+
+
 def synthesize_voice(text):
     """按需把朗读文本合成为 MP3，落到网页音频目录，返回文件名。
 
     由网页点播时调用（在后台线程内执行），不在上报链路里跑，
     故不会阻塞服务。失败返回空串：语音是附加能力，合成不了不应影响主流程。
+
+    失败自动重试：edge-tts 偶发不返回音频，重试多为暂时性失败。
+    每次失败都记录「文本长度 / 音色 / 耗时 / 第几次」，便于判断成因。
     @param text 待朗读文本
-    @returns 音频文件名（相对音频目录）；失败空串
+    @returns 音频文件名（相对音频目录）；全部重试仍失败返回空串
     """
     if not text:
         return ""
@@ -108,16 +142,34 @@ def synthesize_voice(text):
         return ""
     try:
         paths.WEB_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-        fname = "out_" + str(int(time.time() * 1000)) + ".mp3"
-        out_path = str(paths.WEB_AUDIO_DIR / fname)
-        ok, err = voice_tts.text_to_voice(text, out_path)
-        if not ok:
-            log("语音合成失败：", err)
-            return ""
-        # 合成成功即顺手回收旧音频：每次新增一个文件，就把超出上限的最旧文件删掉，
-        # 无需额外定时器，目录大小自然收敛在上限附近。
-        prune_audio_files()
-        return fname
+        tlen = len(text)
+        voice = getattr(voice_tts, "DEFAULT_VOICE", "")
+        last_err = ""
+        for attempt in range(1, SYNTH_RETRY + 1):
+            fname = "out_" + str(int(time.time() * 1000)) + ".mp3"
+            out_path = str(paths.WEB_AUDIO_DIR / fname)
+            _t0 = time.perf_counter()
+            ok, err = voice_tts.text_to_voice(text, out_path)
+            _ms = (time.perf_counter() - _t0) * 1000.0
+            if ok:
+                # 成功：记录首次即成功还是重试后成功，供观察失败率。
+                if attempt > 1:
+                    log("语音合成成功（第 %d 次尝试）文本=%d 音色=%s 耗时=%.0fms"
+                        % (attempt, tlen, voice, _ms))
+                # 合成成功即顺手回收旧音频：每次新增一个文件，就把超出上限的最旧文件删掉，
+                # 无需额外定时器，目录大小自然收敛在上限附近。
+                prune_audio_files()
+                return fname
+            last_err = err
+            # 失败：记录足够定位的信息（文本长度、音色、耗时、第几次）。
+            log("语音合成失败（第 %d/%d 次）文本=%d 音色=%s 耗时=%.0fms 原因=%s"
+                % (attempt, SYNTH_RETRY, tlen, voice, _ms, err))
+            # 最后一次失败后不再等待；否则等一会儿再重试。
+            if attempt < SYNTH_RETRY:
+                time.sleep(SYNTH_RETRY_INTERVAL)
+        # 全部重试仍失败。
+        log("语音合成最终失败（已重试 %d 次）文本=%d 原因=%s" % (SYNTH_RETRY, tlen, last_err))
+        return ""
     except Exception as e:
         log("语音合成异常：", e)
         return ""

@@ -22,9 +22,9 @@ import threading
 import time
 
 
-# 异步队列默认容量：满时丢弃最旧的一条。
+# 异步队列默认容量取自全项目统一来源（app_limits）：满时丢弃最旧的一条。
 # 取值足够大，正常流量下不会触及；异常堆积时兜住内存。
-DEFAULT_QUEUE_MAX = 10000
+from app_limits import LOG_QUEUE_MAX as DEFAULT_QUEUE_MAX
 
 
 def day_str():

@@ -101,9 +101,12 @@ class TestPruneAudio(_Base):
         self.assertEqual(web_mirror.prune_audio_files(max_keep=10), 0)
         self.assertTrue(os.path.isdir(os.path.join(d, "subdir")))
 
-    def test_default_limit_is_100(self):
-        """默认上限应为 100。"""
-        self.assertEqual(web_mirror.MAX_AUDIO_FILES, 100)
+    def test_default_limit_matches_retention(self):
+        """默认上限应与统一保留口径一致（消息与音频同源）。"""
+        from app_limits import MAX_AUDIO_FILES, MAX_MESSAGES
+        self.assertEqual(web_mirror.MAX_AUDIO_FILES, MAX_AUDIO_FILES)
+        # 音频与消息同口径：消息还在时，其引用的音频一定还在
+        self.assertEqual(MAX_AUDIO_FILES, MAX_MESSAGES)
 
 
 if __name__ == "__main__":

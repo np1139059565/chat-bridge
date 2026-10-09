@@ -20,10 +20,9 @@ from contextlib import contextmanager
 import paths
 import app_log
 from . import web_inbox_store
-
-# 消息数量上限：超出后丢弃最旧的，防止收件箱文件无限膨胀。
-# 手机端只需看最近内容，历史靠 QQ 侧与抽屉存档，无需在此长期留存。
-MAX_MESSAGES = 500
+# 消息数量上限取自全项目统一来源（core/limits），与音频上限同源，
+# 保证「消息还在时其引用的音频一定还在」，避免音频被清理后消息仍引用。
+from app_limits import MAX_MESSAGES
 
 # 用可重入锁：读改写同一份文件，需整体串行。
 _lock = threading.RLock()

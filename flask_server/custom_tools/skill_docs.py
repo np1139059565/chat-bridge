@@ -12,9 +12,9 @@ rel 必须是该技能目录内的相对路径，解析后仍须落在该技能�
 from tool_helpers import SKILLS_ROOT, ToolParamError, _require_single_dir_name
 
 
-# 允许读写文档的最大字符数：技能说明属手写文档，正常不会超过此量级。
-# 上限仅用于挡住异常超大内容，避免界面卡死。
-MAX_DOC_CHARS = 200000
+# 允许读写文档的最大字符数取自全项目统一来源（app_limits）：技能说明属手写文档，
+# 正常不会超过此量级。上限仅用于挡住异常超大内容，避免界面卡死。
+from app_limits import MAX_DOC_CHARS
 
 
 def _resolve(skill, rel):

@@ -36,9 +36,9 @@ DEFAULT_VOICE = os.environ.get("EDGE_TTS_VOICE", "zh-CN-XiaoxiaoNeural")
 # 单次合成的超时（秒）：edge-tts 是在线服务，网络差时会长时间挂住。
 SYNTH_TIMEOUT = 20
 
-# 并发合成上限：同一时刻最多 N 条在线合成，其余排队。
-# 既防一次性打爆在线服务，也防线程数无上限增长。
-MAX_CONCURRENT_SYNTH = 3
+# 并发合成上限取自全项目统一来源（app_limits）：同一时刻最多 N 条在线合成，
+# 其余排队。既防一次性打爆在线服务，也防线程数无上限增长。
+from app_limits import MAX_CONCURRENT_SYNTH
 _synth_sem = threading.Semaphore(MAX_CONCURRENT_SYNTH)
 
 
