@@ -48,6 +48,48 @@ def _voice_text_of(m):
         return ""
 
 
+# 音频文件保留上限：合成音频按时间戳命名，用久了两目录会持续堆积。
+# 音频是「可重新合成的产物」：删除旧文件只影响回放历史语音，
+# 不影响收件箱里的文字消息本身，故保留最近若干条即可。
+MAX_AUDIO_FILES = 100
+
+
+def prune_audio_files(max_keep=MAX_AUDIO_FILES):
+    """回收网页音频目录：只保留最近 max_keep 个文件，其余删除。
+
+    按文件修改时间排序保留最新的：同一毫秒生成的多个文件若按文件名排序
+    可能错乱，用 mtime 才稳。删除失败（如文件被占用）静默跳过，
+    下次调用再补删——清理是「尽力而为」，不应影响主流程。
+    @param max_keep 保留的文件数上限
+    @returns 实际删除的文件数
+    """
+    try:
+        import paths
+        d = paths.WEB_AUDIO_DIR
+        # 目录不存在：无需清理
+        if not d.is_dir():
+            return 0
+        # 只处理普通文件，忽略可能的子目录
+        files = [f for f in d.iterdir() if f.is_file()]
+        # 未超上限：直接返回，避免无谓的 stat 开销
+        if len(files) <= max_keep:
+            return 0
+        # 按修改时间升序（最旧在前）
+        files.sort(key=lambda f: f.stat().st_mtime)
+        removed = 0
+        # 删除「超出上限」的最旧那批（保留末尾 max_keep 个）
+        for f in files[:len(files) - max_keep]:
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+        return removed
+    except Exception as e:
+        log("清理音频目录失败：", e)
+        return 0
+
+
 def synthesize_voice(text):
     """按需把朗读文本合成为 MP3，落到网页音频目录，返回文件名。
 
@@ -72,6 +114,9 @@ def synthesize_voice(text):
         if not ok:
             log("语音合成失败：", err)
             return ""
+        # 合成成功即顺手回收旧音频：每次新增一个文件，就把超出上限的最旧文件删掉，
+        # 无需额外定时器，目录大小自然收敛在上限附近。
+        prune_audio_files()
         return fname
     except Exception as e:
         log("语音合成异常：", e)
