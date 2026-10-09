@@ -269,10 +269,15 @@
     this.clearAllConversations(true);
   };
 
-  /** 清空当前会话的消息列表（保留外部卡片，供远程指令使用）。 */
+  /** 清空当前会话的消息列表（保留外部卡片，供远程指令使用）。
+   *
+   * 同步清理后端记忆：界面清空后，该会话在后端的节点/边/卡片等一并删除，
+   * 避免「界面空了、后端还留着」的死数据。删除在持久化之后发起，失败不影响本地清空。
+   */
   M._bridgeClearMessages = function () {
     const conv = this.curConv;
     if (!conv) return;
+    const convId = this.activeConv;
     this.eachCard(conv, (c) => { if (c && c._cdTimer) { clearTimeout(c._cdTimer); c._cdTimer = null; } });
     conv.msgTree = {};
     conv.visibleKeys = [];
@@ -281,7 +286,9 @@
     Object.keys(this.entryChecked).forEach((k) => { delete this.entryChecked[k]; });
     Object.keys(this.entryOpen).forEach((k) => { delete this.entryOpen[k]; });
     if (this._persist) this._persist();
-    this.toast('已清空消息列表');
+    // 同步清掉后端该会话的记忆数据（失败静默，不阻断本地清空）
+    if (this.memDeleteConv) this.memDeleteConv(convId);
+    this.toast('已清空消息列表（含后端记忆）');
   };
 
   /** 复制 System Prompt 并自动粘贴发送给网页 AI。 */

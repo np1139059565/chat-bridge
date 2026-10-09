@@ -103,6 +103,26 @@
    * @param {string} convId 会话 id
    * @returns {Promise<Object|null>} 会话对象或 null
    */
+  /**
+   * 删除后端某个会话的全部记忆数据（节点、边、卡片、修订日志、笔记、元数据）。
+   * 供「清空消息列表 / 清空会话」使用：界面清空后，后端对应的记忆一并清掉，
+   * 不留死数据。失败静默返回 false（清空本身是本地操作，不因后端失败而中断）。
+   * @param {string} convId 会话 id
+   * @returns {Promise<boolean>} 是否删除成功
+   */
+  M.memDeleteConv = async function (convId) {
+    try {
+      await D.apiFetch(this, '/memory/conversation/delete', {
+        method: 'POST',
+        body: { conv_id: convId || '', site_key: this.siteKey || '' },
+      });
+      return true;
+    } catch (e) {
+      log('memDeleteConv 失败：' + e);
+      return false;
+    }
+  };
+
   M.memFetchConv = async function (convId) {
     const fromBackend = await this.memLoadConv(convId);
     if (fromBackend) return fromBackend;

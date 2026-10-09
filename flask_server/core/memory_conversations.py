@@ -28,6 +28,7 @@ import threading
 import time
 
 from memory_db import get_conn, maybe_commit, begin_batch, end_batch
+import memory_nodes
 from memory_nodes import upsert_node, get_by_msg_id, set_parent
 from memory_edges import add_edge
 from memory_cards import upsert_card
@@ -389,9 +390,9 @@ def delete_conversation(conv_id, site_key):
     ids = [r["id"] for r in conn.execute(
         "SELECT id FROM nodes WHERE conv_id=? AND site_key=?", (conv_id, site_key)
     ).fetchall()]
-    for nid in ids:
-        conn.execute("DELETE FROM edges WHERE src_node=? OR dst_node=?", (nid, nid))
-        conn.execute("DELETE FROM cards WHERE node_id=?", (nid,))
+    # 复用统一的节点删除入口：一并清理 edges / cards / revision_log / notes，
+    # 避免只删边与卡片、留下孤儿修订日志与笔记（此类死数据此前已实测存在）。
+    memory_nodes.hard_delete_many(ids)
     conn.execute("DELETE FROM nodes WHERE conv_id=? AND site_key=?", (conv_id, site_key))
     conn.execute("DELETE FROM conversations WHERE conv_id=? AND site_key=?", (conv_id, site_key))
     maybe_commit(conn)

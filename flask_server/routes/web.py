@@ -26,10 +26,7 @@ bp = Blueprint("web", __name__)
 # 网页版在指令体系里的固定用户标识（与 command_dispatch.WEB_OPENID 一致）
 WEB_OPENID = "web-user"
 
-# 前端上报日志的落盘器：client-YYYY-MM-DD.log。
-# 用同步 sink（非异步）：前端日志是「主线程是否被卡住」的诊断证据，
-# 靠日志的整齐空档判断卡顿，故宁可写入方短暂等盘，也不丢条目。
-_client_sink = log_sink.DayFileSink("client", lambda: paths.LOGS_DIR)
+# 前端日志上报接口已迁至 routes/web_clientlog.py（见该文件）。
 
 
 def _web_reply(text):
@@ -276,30 +273,6 @@ def web_voice():
     card_id = web_bridge.web.ingest_text(text)
     web_inbox.append("user", "[语音]", kind="web-voice")
     return jsonify(success=True, cardId=card_id, file=fname)
-
-
-@bp.route("/api/web/client_log", methods=["POST", "OPTIONS"])
-def web_client_log():
-    """接收前端（手机浏览器）上报的日志，落到后端文件。
-
-    背景：网页版跑在手机浏览器上，用户看不到控制台，无法把前端日志复制出来。
-    故前端在关键点把日志 POST 到这里，由后端落盘，供排查「页面卡住 / 断连」。
-
-    关键价值：若前端主线程被卡住，它连这条上报都发不出——后端日志会出现
-    整齐空档，那空档本身就是「主线程被卡住」的证据。
-
-    请求体：{ tag, msg }；为轻量，不校验字段，能记就记。
-    写盘用专用文件 client-YYYY-MM-DD.log，与主日志分开，便于单独查看。
-    """
-    data = request.get_json(force=True, silent=True) or {}
-    tag = str(data.get("tag") or "")
-    msg = str(data.get("msg") or "")
-    import time as _t
-    line = "%s [client][%s] %s" % (_t.strftime("%H:%M:%S"), tag, msg)
-    # 交给公共落盘器：与其它日志共用「按天分文件 + 加锁 + 失败静默」实现，
-    # 不再就地 open/write（后者未加锁，并发上报时行可能交错）。
-    _client_sink.append(line)
-    return jsonify(success=True)
 
 
 @bp.route("/api/web/messages", methods=["GET", "OPTIONS"])
