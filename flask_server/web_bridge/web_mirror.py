@@ -114,11 +114,10 @@ def prune_audio_files(max_keep=MAX_AUDIO_FILES):
         return 0
 
 
-# 合成失败重试次数与间隔（秒）。
+# 合成失败重试次数与间隔取自全项目统一来源（app_limits）。
 # edge-tts 是在线服务，偶发不返回音频（No audio received）或瞬时超时；
 # 这类失败多为暂时性，重试即可成功，故自动重试若干次。
-SYNTH_RETRY = 3
-SYNTH_RETRY_INTERVAL = 1.0
+from app_limits import SYNTH_RETRY, SYNTH_RETRY_INTERVAL
 
 
 def synthesize_voice(text):
