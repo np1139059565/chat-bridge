@@ -21,6 +21,7 @@ import threading
 import time
 
 from . import web_inbox
+import app_log
 
 # 后台合成占用集合：避免同一条被重复丢进线程。
 _synth_inflight = set()
@@ -29,7 +30,7 @@ _synth_lock = threading.Lock()
 
 def log(*args):
     """统一前缀打印。"""
-    print("[web][mirror]", *args)
+    app_log.info("[web][mirror]", *args)
 
 
 def _voice_text_of(m):

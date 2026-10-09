@@ -19,6 +19,7 @@ from pathlib import Path
 import paths
 import runtime
 import config_file
+import app_log
 
 # 路径说明：
 #   definition.yaml / runtime.yaml —— 桥接配置集中在两份合并文件的 bridge 分区，见下
@@ -201,7 +202,7 @@ def _read_state():
     try:
         return json.loads(BRIDGE_STATE_PATH.read_text(encoding="utf-8")) or {}
     except Exception as e:
-        print("[bridge] 读取去重状态失败：", e)
+        app_log.warn("[bridge]", "读取去重状态失败：", e)
         return {}
 
 
@@ -211,7 +212,7 @@ def _write_state(state):
         BRIDGE_STATE_PATH.write_text(
             json.dumps(state, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
-        print("[bridge] 写回去重状态失败：", e)
+        app_log.warn("[bridge]", "写回去重状态失败：", e)
 
 
 # 去重集合的内存缓存：{ 会话 id: set(消息 id) }

@@ -11,6 +11,7 @@
 import threading
 import time
 import uuid
+import app_log
 
 
 def log(*args):
@@ -19,7 +20,7 @@ def log(*args):
     这些日志用于判断「命令是否被正确的页面取走」：入队记一次、
     取走时记一次归属决策，双开时命令串页能据此直接定位。
     """
-    print("[ext]", *args)
+    app_log.info("[ext]", *args)
 
 # 提供方在线判定窗口（秒）：仅用于「已连接」指示灯展示，不参与执行判断
 ONLINE_WINDOW = 10.0

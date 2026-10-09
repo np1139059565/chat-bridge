@@ -12,11 +12,12 @@
 """
 import base64
 import urllib.error
+import app_log
 
 
 def log(*args):
     """统一前缀打印。"""
-    print("[bridge][qq]", *args)
+    app_log.info("[bridge][qq]", *args)
 
 
 def _api_base():

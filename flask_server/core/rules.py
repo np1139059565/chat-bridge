@@ -16,6 +16,7 @@ import re
 from pathlib import Path
 
 import paths
+import app_log
 
 # 规则目录统一由 paths 提供（位于工程根，与 skills/ 同级）
 RULES_DIR = paths.RULES_DIR
@@ -69,7 +70,7 @@ def _save_meta(meta):
         META_PATH.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         return True
     except Exception as e:
-        print("[rules] 写回优先级元数据失败：", e)
+        app_log.warn("[rules]", "写回优先级元数据失败：", e)
         return False
 
 

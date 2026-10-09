@@ -25,6 +25,7 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 import paths
+import app_log
 
 APP_DIR_STR = paths.APP_DIR_STR
 
@@ -87,6 +88,6 @@ def refresh_external_providers():
     try:
         groups = ct.external_providers()
     except Exception as e:
-        print("[ext] 读取外部工具失败：", e)
+        app_log.warn("[ext]", "读取外部工具失败：", e)
         return
     external_tools.hub.replace_providers(groups)

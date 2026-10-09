@@ -26,6 +26,7 @@ import memory_events
 import serial_worker
 import envelope
 from memory_db import begin_batch, end_batch
+import app_log
 
 # ---------- 串行蒸馏队列 ----------
 # 待蒸馏节点（FIFO），元素为 (node_id, use_llm)；同一 node 去重（保留首次）。
@@ -41,7 +42,7 @@ def _handle_distill(item):
     try:
         distill_node(nid, use_llm=use_llm)       # 执行蒸馏
     except Exception as e:                       # 单节点失败不中断整批
-        print("[memory] 蒸馏失败 node=%s: %s" % (nid, e))
+        app_log.warn("[memory]", "蒸馏失败 node=%s: %s" % (nid, e))
 
 
 # 蒸馏队列：keep_first=True 对应「同一节点只保留首次入队」的去重语义
@@ -318,7 +319,7 @@ def distill_node(node_id, use_llm=False):
             memory_events.set_shadow(node_id, essence)
     except Exception as e:
         # 事件层失败不影响蒸馏本身（蒸馏结果已落库）
-        print("[memory] 事件层触发失败 node=%s: %s" % (node_id, e))
+        app_log.warn("[memory]", "事件层触发失败 node=%s: %s" % (node_id, e))
     return {"essence": essence, "keywords": keywords}
 
 

@@ -10,6 +10,7 @@ import json
 
 from .registry import load_tools
 from .paths import resolve_to_abs
+import app_log
 
 
 def _online_skill_dirs():
@@ -40,7 +41,7 @@ def _load_spec(skill_dir):
     try:
         return json.loads(tf.read_text(encoding="utf-8"))
     except Exception as e:
-        print("[custom_tools] 读取外部指令失败：", tf, e)
+        app_log.warn("[custom_tools]", "读取外部指令失败：", tf, e)
         return None
 
 

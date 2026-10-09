@@ -289,19 +289,19 @@ def create_app():
         import memory_loader
         memory_loader.load_all()
     except Exception as e:
-        print("[memory] 启动加载失败（不阻断服务）：", e)
+        app_log.warn("[memory]", "启动加载失败（不阻断服务）：", e)
     # 启动后台调度：周期性执行衰减与事件聚类（方案「事件层全自动」）。
     # 守护线程，不阻塞接口；失败不阻断服务。
     try:
         import memory_scheduler
         memory_scheduler.start_background_tasks()
     except Exception as e:
-        print("[memory] 后台调度启动失败（不阻断服务）：", e)
+        app_log.warn("[memory]", "后台调度启动失败（不阻断服务）：", e)
     # 启动远程桥接（QQ ↔ 网页 AI）。失败不阻断服务启动：
     # 桥接是可选功能，凭证未填或依赖未装时其余功能照常可用。
     try:
         import remote_bridge
         remote_bridge.init_bridge()
     except Exception as e:
-        print("[bridge] 启动失败（不阻断服务）：", e)
+        app_log.warn("[bridge]", "启动失败（不阻断服务）：", e)
     return app

@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 
 import paths
+import app_log
 
 # 两份合并后的配置文件路径。
 # 支持用环境变量 CHAT_BRIDGE_CONFIG_DIR 覆盖配置目录：
@@ -42,7 +43,7 @@ def _load(path):
             return {}
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception as e:
-        print("[config_file] 读取 %s 失败：%s" % (path.name, e))
+        app_log.warn("[config_file]", "读取 %s 失败：%s" % (path.name, e))
         return {}
 
 
@@ -58,7 +59,7 @@ def _save(path, data):
             encoding="utf-8", newline="\n")
         return True
     except Exception as e:
-        print("[config_file] 写入 %s 失败：%s" % (path.name, e))
+        app_log.warn("[config_file]", "写入 %s 失败：%s" % (path.name, e))
         return False
 
 

@@ -11,11 +11,12 @@
 不写入 System Prompt。网页 AI 感知不到它的存在。
 """
 from . import bridge_store, message_router, qq_gateway, command_panel
+import app_log
 
 
 def log(*args):
     """统一前缀打印。"""
-    print("[bridge]", *args)
+    app_log.info("[bridge]", *args)
 
 
 class RemoteBridge:

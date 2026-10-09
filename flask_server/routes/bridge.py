@@ -13,6 +13,7 @@ from flask import Blueprint, jsonify, request
 import remote_bridge
 import screenshot_store
 from remote_bridge import bridge, bridge_store, command_panel, message_router
+import app_log
 
 bp = Blueprint("bridge", __name__)
 
@@ -32,7 +33,7 @@ def _run_report_async(data):
         try:
             bridge.report(data)
         except Exception as e:
-            print("[bridge] 后台推送失败：", e)
+            app_log.warn("[bridge]", "后台推送失败：", e)
         finally:
             with _report_lock:
                 _report_busy.pop(conv, None)
@@ -59,7 +60,7 @@ def bridge_config():
         try:
             remote_bridge.bridge.restart()
         except Exception as e:
-            print("[bridge] 重启失败：", e)
+            app_log.warn("[bridge]", "重启失败：", e)
         return jsonify(success=True, config=cfg, status=bridge.status())
     # GET：返回配置（含凭证，供设置页回填）
     cfg = bridge_store.get_config()
@@ -80,7 +81,7 @@ def bridge_report():
         from web_bridge import web_mirror
         web_mirror.mirror_report(data.get("messages") or [])
     except Exception as e:
-        print("[web] 镜像上报失败：", e)
+        app_log.warn("[web]", "镜像上报失败：", e)
     # QQ 推送放后台线程执行，请求立即返回：合成 + 逐条发送是重活，
     # 若在请求线程里同步跑，堆积切片会把接口拖死。
     # 同一会话上一轮仍在处理则跳过——抽屉会重报全量切片，跳过不丢消息，

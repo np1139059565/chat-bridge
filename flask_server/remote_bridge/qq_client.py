@@ -24,6 +24,7 @@ import urllib.error
 import urllib.request
 
 from .qq_media import QqMediaMixin
+import app_log
 
 try:
     import websocket  # websocket-client
@@ -58,7 +59,7 @@ OP_HEARTBEAT_ACK = 11
 
 def log(*args):
     """统一前缀打印，便于在服务端控制台过滤桥接日志。"""
-    print("[bridge][qq]", *args)
+    app_log.info("[bridge][qq]", *args)
 
 
 def _c2c_body(content, msg_id, msg_seq, markdown):

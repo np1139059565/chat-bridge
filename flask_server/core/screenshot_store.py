@@ -15,6 +15,7 @@ import threading
 import time
 
 import paths
+import app_log
 
 # 进程内自增序号：仅靠「毫秒」做文件名后缀，同一毫秒内连续保存两次会撞名，
 # 后一张覆盖前一张（实测两张图同名、磁盘只剩一个文件即此因）。
@@ -59,7 +60,7 @@ def save_data_url(data_url):
             f.write(raw)
         return {"name": name, "path": path}
     except Exception as e:
-        print("[screenshot] 保存失败：", e)
+        app_log.warn("[screenshot]", "保存失败：", e)
         return None
 
 
@@ -86,5 +87,5 @@ def save_web_image(data_url):
             f.write(raw)
         return {"name": name, "path": path}
     except Exception as e:
-        print("[screenshot] 网页图片保存失败：", e)
+        app_log.warn("[screenshot]", "网页图片保存失败：", e)
         return None

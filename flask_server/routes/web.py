@@ -20,6 +20,7 @@ import web_bridge
 import screenshot_store
 import log_sink
 from web_bridge import web_inbox
+import app_log
 
 bp = Blueprint("web", __name__)
 
@@ -48,7 +49,7 @@ def _ensure_web_reply_sink():
         from remote_bridge import command_dispatch
         command_dispatch.set_web_reply_sink(_web_reply)
     except Exception as e:
-        print("[web] 注册指令回执出口失败：", e)
+        app_log.warn("[web]", "注册指令回执出口失败：", e)
 
 
 # 模块加载即注册：指令逻辑一旦被调用，回执就能找到网页出口
@@ -145,7 +146,7 @@ def web_commands():
         from remote_bridge import command_registry
         groups = command_registry.shortcut_groups()
     except Exception as e:
-        print("[web] 读取指令快捷键失败：", e)
+        app_log.warn("[web]", "读取指令快捷键失败：", e)
         groups = {"builtin": [], "custom": []}
     # 同时回扁平列表（兼容）与分组（新前端按内置/自定义两区渲染）
     flat = list(groups.get("builtin", [])) + list(groups.get("custom", []))
@@ -234,7 +235,7 @@ def _save_web_images(urls):
             if saved and saved.get("name"):
                 names.append(saved["name"])
         except Exception as e:
-            print("[web] 保存网页图片失败：", e)
+            app_log.warn("[web]", "保存网页图片失败：", e)
     return names
 
 
@@ -338,7 +339,7 @@ def _synth_worker(seq, text):
         if name:
             web_inbox.set_voice(seq, name)
     except Exception as e:
-        print("[web] 按需合成失败：", e)
+        app_log.warn("[web]", "按需合成失败：", e)
     finally:
         with _synth_lock:
             _synth_inflight.discard(seq)
@@ -410,5 +411,5 @@ def _render_page():
     try:
         return page.read_text(encoding="utf-8")
     except Exception as e:
-        print("[web] 读取页面文件失败：", e)
+        app_log.warn("[web]", "读取页面文件失败：", e)
         return "<h3>网页版页面文件缺失</h3><p>请检查 flask_server/web_bridge/web_page.html</p>"

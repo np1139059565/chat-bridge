@@ -17,6 +17,7 @@ import threading
 import time
 
 import paths
+import app_log
 
 # 消息数量上限：超出后丢弃最旧的，防止收件箱文件无限膨胀。
 # 手机端只需看最近内容，历史靠 QQ 侧与抽屉存档，无需在此长期留存。
@@ -70,7 +71,7 @@ def _read_state():
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as e:
-        print("[web] 读取收件箱失败，按空箱处理：", e)
+        app_log.warn("[web]", "读取收件箱失败，按空箱处理：", e)
         _cache = _empty_state()
         _cache_sig = sig
         return _cache
@@ -112,7 +113,7 @@ def _write_state(state):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
-        print("[web] 写回收件箱失败：", e)
+        app_log.warn("[web]", "写回收件箱失败：", e)
         return
     _cache = state
     _cache_sig = _file_sig()

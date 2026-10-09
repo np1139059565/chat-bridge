@@ -67,7 +67,7 @@ def _loop(interval):
             run_once()
         except Exception as e:
             # 看门狗兜底：任何意外都不让循环退出
-            print("[memory] 调度轮次异常：%s" % e)
+            app_log.warn("[memory]", "调度轮次异常：%s" % e)
         time.sleep(interval)
 
 

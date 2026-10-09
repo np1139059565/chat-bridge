@@ -14,6 +14,7 @@ import threading
 
 import paths
 import memory_nodes
+import app_log
 
 # 内存缓存：启动时填充，接口读取优先走这里
 _CACHE = {
@@ -34,7 +35,7 @@ def load_rules():
             try:
                 out[f.stem] = f.read_text(encoding="utf-8")
             except Exception as e:
-                print("[memory] 规则读取失败 %s: %s" % (f, e))
+                app_log.warn("[memory]", "规则读取失败 %s: %s" % (f, e))
     return out
 
 

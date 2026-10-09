@@ -15,11 +15,12 @@
 3. 语音：AI 回复里的语音块合成 MP3 落到网页音频目录，网页拉到后自动播放。
 """
 from . import web_inbox
+import app_log
 
 
 def log(*args):
     """统一前缀打印。"""
-    print("[web]", *args)
+    app_log.info("[web]", *args)
 
 
 class WebBridge:
