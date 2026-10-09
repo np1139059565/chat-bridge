@@ -110,7 +110,13 @@ def _req_start_hook():
             "start": g._req_t0, "method": request.method, "path": request.path,
             "thread": threading.current_thread().name,
         }
-    app_log.debug("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
+    # 网页版（/api/web/*）的请求用 INFO 记录：手机端看不到控制台，
+    # 其轮询是否按时到达、被卡多久，只能靠服务端日志判断，故不随 DEBUG 过滤。
+    # 其它路径仍走 DEBUG，避免高频轮询（扩展每 2.5 秒一次）刷屏。
+    if request.path.startswith("/api/web/"):
+        app_log.info("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
+    else:
+        app_log.debug("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
 
 
 def _req_end_hook(resp):

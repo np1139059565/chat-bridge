@@ -15,6 +15,7 @@
 import json
 import threading
 import time
+from contextlib import contextmanager
 
 import paths
 import app_log
@@ -25,6 +26,43 @@ MAX_MESSAGES = 500
 
 # 用可重入锁：读改写同一份文件，需整体串行。
 _lock = threading.RLock()
+
+# 慢锁阈值（毫秒）：等锁或持锁超过此值即告警。
+# 用途：定位「界面轮询被堵」——手机端 /api/web/messages 与写收件箱共用这把锁，
+# 若某次写操作长时间持锁，轮询就会排队等待、表现为「界面卡住」。
+# 只在超过阈值时记录，正常毫秒级操作不产生日志，不会刷屏。
+_SLOW_LOCK_MS = 100.0
+
+
+def _note_slow_lock(op, wait_ms, hold_ms):
+    """等锁或持锁超阈值时告警，用于定位界面轮询被堵的根因。
+
+    @param op      操作名（list_since / append_many / set_voice）
+    @param wait_ms 等待获取锁的毫秒数
+    @param hold_ms 持锁执行的毫秒数
+    """
+    if wait_ms >= _SLOW_LOCK_MS or hold_ms >= _SLOW_LOCK_MS:
+        app_log.warn("[web][inbox]",
+                     "%s 等锁=%.0fms 持锁=%.0fms" % (op, wait_ms, hold_ms))
+
+
+@contextmanager
+def _timed_lock(op):
+    """带耗时监控的锁：记录等锁与持锁耗时，超阈值即告警。
+
+    语义与 `with _lock:` 完全一致，只是多了计时。正常毫秒级操作不产生日志。
+    @param op 操作名，用于日志区分
+    """
+    t0 = time.perf_counter()
+    _lock.acquire()
+    wait_ms = (time.perf_counter() - t0) * 1000.0
+    t1 = time.perf_counter()
+    try:
+        yield
+    finally:
+        hold_ms = (time.perf_counter() - t1) * 1000.0
+        _lock.release()
+        _note_slow_lock(op, wait_ms, hold_ms)
 
 # 内存缓存：收件箱每次读取都要解析整个 JSON，而网页每 2.5 秒轮询一次，
 # 镜像又要对切片逐条调用 is_seen。若每次都全量读盘解析，开销随消息量持续放大。
@@ -149,7 +187,7 @@ def append(role, text, voice="", kind="", image="", voice_text=""):
         "role": role, "text": text, "voice": voice, "voice_text": voice_text,
         "image": image, "kind": kind, "key": "", "ts": None,
     }
-    with _lock:
+    with _timed_lock('append'):
         state = _read_state()
         # 游标自增：seq 从 1 开始，作为拉取增量与消息 id 的双重依据
         state["seq"] = int(state.get("seq") or 0) + 1
@@ -299,7 +337,7 @@ def append_many(items):
     @param items 列表，每项 {source_id, role, text, voice, kind}
     @returns 新增的消息对象列表（按入库顺序）
     """
-    with _lock:
+    with _timed_lock('append_many'):
         state = _read_state()
         batch = _init_batch(state)
         for it in (items or []):
@@ -317,7 +355,7 @@ def is_seen(source_id):
     sid = str(source_id or "")
     if not sid:
         return False
-    with _lock:
+    with _timed_lock('is_seen'):
         state = _read_state()
     return sid in set(state.get("seen") or [])
 
@@ -335,7 +373,7 @@ def set_voice(seq, name):
         want = int(seq)
     except (TypeError, ValueError):
         return False
-    with _lock:
+    with _timed_lock('set_voice'):
         state = _read_state()
         for m in (state.get("messages") or []):
             if int(m.get("seq") or 0) == want:
@@ -351,7 +389,7 @@ def get_by_seq(seq):
         want = int(seq)
     except (TypeError, ValueError):
         return None
-    with _lock:
+    with _timed_lock('get_by_seq'):
         state = _read_state()
     for m in (state.get("messages") or []):
         if int(m.get("seq") or 0) == want:
@@ -366,7 +404,7 @@ def list_since(cursor=0, limit=200):
     @param limit  单次最多返回条数，避免一次拉太多卡住手机
     @returns {seq, messages}：seq 为当前最新游标，messages 为新消息（按时间正序）
     """
-    with _lock:
+    with _timed_lock('list_since'):
         state = _read_state()
     try:
         cur = int(cursor)
@@ -398,7 +436,7 @@ def recent(limit=50):
     @param limit 条数上限
     @returns {seq, messages}：messages 按时间正序
     """
-    with _lock:
+    with _timed_lock('recent'):
         state = _read_state()
     messages = state.get("messages") or []
     if limit and len(messages) > limit:
@@ -408,5 +446,5 @@ def recent(limit=50):
 
 def clear():
     """清空收件箱（供调试或用户主动重置）。"""
-    with _lock:
+    with _timed_lock('clear'):
         _write_state(_empty_state())
