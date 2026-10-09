@@ -417,6 +417,10 @@
   clientLog('page', 'load 开始首次铺历史');
   fetchMessages(true);
   setInterval(function () { fetchMessages(false); }, 2500);
+  // 心跳：每 3 秒记一条。正常时后端持续收到心跳；
+  // 若某段时间前端有时刻连续的日志、却迟迟未到后端，即为「请求出不去」。
+  // 心跳本身也是「页面仍在运行」的持续证据。
+  setInterval(function () { if (window.WebLog && window.WebLog.heartbeat) window.WebLog.heartbeat('tick'); }, 3000);
   // 页面可见性变化打点：切后台时定时器会被系统暂停，这里记下进出时刻，
   // 便于把「断连空档」与「切后台」对齐——若空档两端正好是 hidden/visible，
   // 就是切后台所致，而非页面卡死。
