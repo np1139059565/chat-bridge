@@ -68,7 +68,16 @@
    */
   function clientLog(tag, msg) {
     try {
-      _buf.push({ tag: tag, msg: msg });
+      // 带上「前端记录时刻」：后端落盘的时间是「服务端收到」的时刻，
+      // 二者不是一回事——日志经缓冲批量发送，若前端主线程冻结或网络受阻，
+      // 一批日志会在恢复瞬间集中到达，服务端时间戳会挤在同一秒，
+      // 无法区分「没发生」与「发了但迟到」。带上前端时刻即可还原真实时间线。
+      var t = new Date();
+      var hh = ('0' + t.getHours()).slice(-2);
+      var mm = ('0' + t.getMinutes()).slice(-2);
+      var ss = ('0' + t.getSeconds()).slice(-2);
+      var ms = ('00' + t.getMilliseconds()).slice(-3);
+      _buf.push({ tag: tag, msg: msg, t: hh + ':' + mm + ':' + ss + '.' + ms });
       // 缓冲超上限：立即冲刷，避免无限增长
       if (_buf.length >= MAX_BATCH) { flush(); return; }
       // 已有定时器则等它；否则安排一次冲刷

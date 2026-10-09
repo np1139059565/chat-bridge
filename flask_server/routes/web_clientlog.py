@@ -47,7 +47,14 @@ def web_client_log():
             continue
         tag = str(it.get("tag") or "")
         msg = str(it.get("msg") or "")
+        # 前端记录时刻（若前端已上报）：格式 HH:MM:SS.mmm。
+        # 与「服务端收到时刻」一并落盘，二者不等时即可判断日志迟到：
+        # 迟到说明前端主线程冻结或网络受阻，一批日志在恢复瞬间集中到达。
+        ct = str(it.get("t") or "")
         # 交给公共落盘器：与其它日志共用「按天分文件 + 加锁 + 失败静默」实现，
         # 不再就地 open/write（后者未加锁，并发上报时行可能交错）。
-        _client_sink.append("%s [client][%s] %s" % (now, tag, msg))
+        if ct:
+            _client_sink.append("%s [client@%s][%s] %s" % (now, ct, tag, msg))
+        else:
+            _client_sink.append("%s [client][%s] %s" % (now, tag, msg))
     return jsonify(success=True)
