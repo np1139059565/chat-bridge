@@ -66,6 +66,44 @@ class Card:
         }
 
 
+# 慢锁阈值（毫秒）：等锁或持锁超过此值即告警。
+# 卡片总线被网页发消息、指令下发、镜像等多条路径共用，若某次持锁过久，
+# 这些路径都会排队等待。超阈值才记录，正常毫秒级操作不产生日志。
+_SLOW_LOCK_MS = 100.0
+
+
+class TimedLock:
+    """带耗时监控的锁：记录等锁与持锁耗时，超阈值即告警。
+
+    语义与 `with lock:` 一致，只是多了计时。正常毫秒级操作不产生日志。
+    """
+
+    def __init__(self, lock, op):
+        """@param lock 被包裹的锁；@param op 操作名（日志区分用）"""
+        self._lock = lock
+        self._op = op
+
+    def __enter__(self):
+        """获取锁并记录等待时长。"""
+        import time
+        self._t0 = time.perf_counter()
+        self._lock.acquire()
+        self._wait_ms = (time.perf_counter() - self._t0) * 1000.0
+        self._t1 = time.perf_counter()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        """释放锁并记录持有时长；超阈值则告警。"""
+        import time
+        import app_log
+        hold_ms = (time.perf_counter() - self._t1) * 1000.0
+        self._lock.release()
+        if self._wait_ms >= _SLOW_LOCK_MS or hold_ms >= _SLOW_LOCK_MS:
+            app_log.warn("[card_bus]",
+                         "%s 等锁=%.0fms 持锁=%.0fms" % (self._op, self._wait_ms, hold_ms))
+        return False
+
+
 class CardBus:
     """卡片总线：线程安全地登记与投递。
 
@@ -77,6 +115,13 @@ class CardBus:
         self._lock = threading.Lock()
         self._cards = {}
 
+    def _timed(self, op):
+        """返回一个带耗时监控的锁上下文管理器，超阈值即告警。
+
+        @param op 操作名，用于日志区分
+        """
+        return TimedLock(self._lock, op)
+
     def create(self, source, card_type, title, content, payload):
         """登记一张卡片，返回卡片对象。
 
@@ -84,7 +129,7 @@ class CardBus:
         未确认的始终保留，避免 _cards 无界增长导致内存泄漏。
         """
         card = Card(source, card_type, title, content, payload)
-        with self._lock:
+        with self._timed("create"):
             self._cards[card.id] = card
             self._trim_locked()
         return card
@@ -111,7 +156,7 @@ class CardBus:
         重复投递由接收方按卡片 id 去重。
         """
         out = []
-        with self._lock:
+        with self._timed('claim_pending'):
             for card in self._cards.values():
                 if card.delivered:
                     continue
@@ -126,7 +171,7 @@ class CardBus:
         在收到确认之前，任何客户端都可以反复取走该卡片。
         重复确认是幂等的。
         """
-        with self._lock:
+        with self._timed('confirm_delivered'):
             card = self._cards.get(card_id)
             if not card:
                 return False
@@ -135,7 +180,7 @@ class CardBus:
 
     def get(self, card_id):
         """查询单张卡片的状态快照；不存在返回 None。"""
-        with self._lock:
+        with self._timed('get'):
             card = self._cards.get(card_id)
             return card.to_dict() if card else None
 
