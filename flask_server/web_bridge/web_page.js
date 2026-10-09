@@ -133,7 +133,7 @@
         // 正常轮询不记日志（每 2.5 秒一次、量大）；只在响应偏慢时记，
         // 便于发现「变慢的苗头」而不淹没日志。失败仍照常记录。
         var _okms = Date.now() - _t0;
-        if (!history && _okms >= 1000) clientLog('poll', 'slow ' + _okms + 'ms');
+        if (!history && WebLogic.isSlowPoll(_okms, 1000)) clientLog('poll', 'slow ' + _okms + 'ms');
         failCount = 0;
         setStatus(true);
         if (!data || !data.success) return;
@@ -156,19 +156,13 @@
         if (listEl.scrollTop < 40) listEl.scrollTop = 0;
       })
       .catch(function (err) {
-        // 区分失败类型：这是「请求发不出去」与「发出去了没回应」的关键分界。
-        //   AbortError      —— 被 6 秒超时主动中断，说明请求已进入网络、但迟迟无响应；
-        //   TypeError       —— 网络层直接失败（DNS/连接失败/断网），根本没送出去；
-        //   HTTP 状态错误   —— 请求到了服务端、但返回了非 2xx（下方 r.ok 判断）。
-        // 再带上 navigator.onLine：断网时浏览器会置 false，可佐证网络层原因。
-        var kind = 'unknown';
-        if (err && err.name === 'AbortError') kind = 'timeout(已发出,无响应)';
-        else if (err && err.name === 'TypeError') kind = 'neterr(未发出/断连)';
-        else if (err && err.message) kind = String(err.message).slice(0, 40);
-        var offline = (typeof navigator !== 'undefined' && navigator.onLine === false) ? ' OFFLINE' : '';
+        // 失败分类（区分「发不出去」与「发出去了没回应」）由 WebLogic 统一实现，
+        // 页面不再内联——同一逻辑在发送路径也复用，避免两处各写一份。
+        var kind = WebLogic.classifyFailKind(err && err.name, err && err.message);
+        var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
         if (!history) clientLog('poll', 'fail ' + (Date.now() - _t0) + 'ms kind=' + kind + offline + ' failCount=' + (failCount + 1));
         failCount += 1;   // 连续失败超容差才显示断开，避免抖动就闪断
-        if (failCount >= FAIL_TOLERANCE) setStatus(false);
+        if (WebLogic.shouldShowDisconnected(failCount, FAIL_TOLERANCE)) setStatus(false);
       })
       .then(function () { clearTimeout(timer); pollBusy = false; });
   }
@@ -190,11 +184,9 @@
     // 失败时记录原因类型：超时（已发出无响应）/ 网络错（未发出）/ 服务端错误。
     var finish = function (res, err) {
       if (res && res.ok) { clientLog('send', 'ok'); clearImages(); fetchMessages(false); return; }
-      var kind = 'unknown';
-      if (err && err.name === 'AbortError') kind = 'timeout(已发出,无响应)';
-      else if (err && err.name === 'TypeError') kind = 'neterr(未发出/断连)';
-      else if (res) kind = 'http' + res.status;
-      var offline = (typeof navigator !== 'undefined' && navigator.onLine === false) ? ' OFFLINE' : '';
+      // 失败分类与轮询共用 WebLogic，避免两处各写一份分类逻辑。
+      var kind = res ? ('http' + res.status) : WebLogic.classifyFailKind(err && err.name, err && err.message);
+      var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
       clientLog('send', 'fail kind=' + kind + offline);
       inputEl.value = snapshotText;
       pendingImages = snapshotImgs;
