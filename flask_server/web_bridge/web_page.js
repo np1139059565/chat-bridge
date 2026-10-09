@@ -329,6 +329,10 @@
   // 若某段时间前端有时刻连续的日志、却迟迟未到后端，即为「请求出不去」。
   // 心跳本身也是「页面仍在运行」的持续证据。
   setInterval(function () { if (window.WebLog && window.WebLog.heartbeat) window.WebLog.heartbeat('tick'); }, 3000);
+  // 性能监控：长任务（主线程被占）与定时器实时间隔。
+  // 卡顿时若出现 longtask，是代码卡的；若只有 tickgap、无 longtask，
+  // 则更像浏览器/系统冻结了页面 JS。二者日志分不开，靠它区分。
+  if (window.WebPerf) window.WebPerf.start();
   // 页面可见性变化打点：切后台时定时器会被系统暂停，这里记下进出时刻，
   // 便于把「断连空档」与「切后台」对齐——若空档两端正好是 hidden/visible，
   // 就是切后台所致，而非页面卡死。
