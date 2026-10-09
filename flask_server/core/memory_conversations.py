@@ -139,7 +139,10 @@ def _save_conversation_sync(conv_id, site_key, conv):
         end_batch(conn)
     # 计时放在提交之后：日志耗时含「写入 + 最终提交」，才是真实端到端耗时。
     ms = (time.perf_counter() - _t0) * 1000.0
-    app_log.info("[mem][save] conv=%s 写入=%d 总耗时=%.1fms" % (conv_id, result, ms))
+    # 只在「慢」或「写入量大」时记日志：正常保存（几十毫秒、少量节点）
+    # 每 2-3 秒一次，全记会把日志淹没。异常时记录才有诊断价值。
+    if ms >= 200 or (result or 0) >= 50:
+        app_log.warn("[mem][save] conv=%s 写入=%d 总耗时=%.1fms" % (conv_id, result, ms))
     return result
 
 

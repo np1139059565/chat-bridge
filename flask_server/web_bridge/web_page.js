@@ -119,7 +119,7 @@
     }
     pollBusy = true;
     var _t0 = Date.now();
-    if (!history) clientLog('poll', 'start cursor=' + cursor);
+    // 不再记「start」：每次轮询都记一条纯属噪音，结果已由 slow / fail 表达。
     var url = '/api/web/messages?cursor=' + cursor + '&limit=200';
     if (history) url += '&history=1';
     // 加超时：卡住的请求主动中断，否则 pollBusy 会永久为真、轮询停摆。
@@ -130,7 +130,10 @@
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (!history) clientLog('poll', 'ok ' + (Date.now() - _t0) + 'ms');
+        // 正常轮询不记日志（每 2.5 秒一次、量大）；只在响应偏慢时记，
+        // 便于发现「变慢的苗头」而不淹没日志。失败仍照常记录。
+        var _okms = Date.now() - _t0;
+        if (!history && _okms >= 1000) clientLog('poll', 'slow ' + _okms + 'ms');
         failCount = 0;
         setStatus(true);
         if (!data || !data.success) return;
@@ -325,10 +328,8 @@
   clientLog('page', 'load 开始首次铺历史');
   fetchMessages(true);
   setInterval(function () { fetchMessages(false); }, 2500);
-  // 心跳：每 3 秒记一条。正常时后端持续收到心跳；
-  // 若某段时间前端有时刻连续的日志、却迟迟未到后端，即为「请求出不去」。
-  // 心跳本身也是「页面仍在运行」的持续证据。
-  setInterval(function () { if (window.WebLog && window.WebLog.heartbeat) window.WebLog.heartbeat('tick'); }, 3000);
+  // 不再单独发心跳：每 3 秒一条纯属噪音。页面是否仍在运行，
+  // 由轮询（slow / fail）与性能监控（tickgap）共同反映——它们异常时才有记录。
   // 性能监控：长任务（主线程被占）与定时器实时间隔。
   // 卡顿时若出现 longtask，是代码卡的；若只有 tickgap、无 longtask，
   // 则更像浏览器/系统冻结了页面 JS。二者日志分不开，靠它区分。

@@ -54,6 +54,8 @@
    * 启动定时器间隔监控：每 TICK_MS 打一次点，
    * 若与上次的实时间隔超过 GAP_WARN_MS，记录一条「事件循环被卡」。
    * 这条记录能直接印证「日志空白」是不是因为事件循环停摆。
+   * 正常间隔不写日志（避免每秒一条淹没日志），且每条 tickgap 自带心跳语义——
+   * 定时器仍在跑即证明页面 JS 未停，故无需再单独发心跳日志。
    */
   function startTickWatch() {
     var last = Date.now();
@@ -61,8 +63,6 @@
       var now = Date.now();
       var gap = now - last;
       last = now;
-      // 只在异常时记录：正常间隔不写日志，避免每秒一条淹没真正有用的信息。
-      // 「事件循环仍在跑」的持续证据由 hb 心跳提供，此处只报异常。
       if (gap >= GAP_WARN_MS) {
         log('tickgap', '间隔=' + gap + 'ms（事件循环被卡）');
       }

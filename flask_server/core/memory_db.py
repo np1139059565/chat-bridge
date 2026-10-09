@@ -167,12 +167,11 @@ def get_conn():
     # 建表只在进程内做一次（详见 _ensure_schema_once）
     _ensure_schema_once(conn)
     _local.conn = conn
+    # 只在建连异常慢时记 WARN；正常建连（毫秒级）不记日志，
+    # 否则每个请求线程首次连库都打一条，日志会被建连记录淹没。
     _ms = (_t.perf_counter() - _t0) * 1000.0
-    # 建连超过 200ms 记 WARN（正常应远低于此），否则记 INFO。
     if _ms >= 200:
         app_log.warn("[db][%s] 建立记忆库连接 耗时=%.0fms" % (threading.current_thread().name, _ms))
-    else:
-        app_log.info("[db][%s] 建立记忆库连接 耗时=%.0fms" % (threading.current_thread().name, _ms))
     return conn
 
 

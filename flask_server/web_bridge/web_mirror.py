@@ -443,7 +443,8 @@ def mirror_report(messages):
     # 入库阶段：批量写入，成功则触发后台语音合成
     added = web_inbox.append_many(items)
     if added:
-        log("镜像入库", len(added), "条")
+        # 正常入库走 debug（默认不落盘）：每 2-3 秒一次，记 INFO 会淹没日志。
+        app_log.debug("[web][mirror]", "镜像入库", len(added), "条")
         # 入库后立刻在后台自动合成语音：不阻塞上报、网页无需点击即自动连播。
         schedule_auto_synth(added)
     return len(added)
