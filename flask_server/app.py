@@ -155,20 +155,26 @@ def _register_request_logging(app):
     app.after_request(_req_end_hook)
 
 
-def _register_watchdog(app, hang_seconds=150):
-    """卡死看门狗：请求超过 hang_seconds 未返回时，dump 全部线程堆栈。
+def _register_watchdog(app, hang_seconds=150, warn_seconds=10):
+    """卡死看门狗：请求挂起超 warn_seconds 记 WARN，超 hang_seconds dump 线程堆栈。
 
     目的：卡死时抓现场。此前只能看到「请求卡了多久」，看不到「卡在哪一行」；
     看门狗在超时后打印所有线程的调用栈，直接指出阻塞位置。
 
-    阈值必须大于「工具调用的最长正常耗时」，否则正常的慢工具会被误报为卡死：
-    内置工具兜底超时 60 秒（routes/tools.BUILTIN_TOOL_TIMEOUT），故取 150 秒留出余量。
-    @param hang_seconds 判定卡死的阈值（秒）
+    分两档的原因：界面请求正常在毫秒级完成，一旦挂起 10 秒即已明显异常，
+    此时先记一条 WARN（带请求路径与线程），让「界面被卡」在日志里立即可见，
+    不必等到 150 秒。dump 阈值须大于「工具调用的最长正常耗时」，否则正常的
+    慢工具会被误报为卡死：内置工具兜底超时 60 秒（routes/tools.BUILTIN_TOOL_TIMEOUT），
+    故取 150 秒留出余量。
+    @param hang_seconds dump 堆栈的阈值（秒）
+    @param warn_seconds 记录 WARN 的阈值（秒）
     """
     import threading
     # 已 dump 过的请求 id：避免同一卡死请求每轮都刷日志
     dumped = set()
-    threading.Thread(target=_watchdog_loop, args=(hang_seconds, dumped),
+    # 已 WARN 过的请求 id：避免同一挂起请求反复刷 WARN
+    warned = set()
+    threading.Thread(target=_watchdog_loop, args=(hang_seconds, dumped, warn_seconds, warned),
                      daemon=True, name="watchdog").start()
 
 
@@ -186,28 +192,42 @@ def _watchdog_dump_stacks(reason):
         app_log.error("[watchdog] %s 线程tid=%s 堆栈:\n%s" % (reason, tid, stack))
 
 
-def _watchdog_loop(hang_seconds, dumped):
-    """看门狗循环：每 3 秒巡检一次进行中请求，超时则 dump 全部线程堆栈。
+def _watchdog_loop(hang_seconds, dumped, warn_seconds=10, warned=None):
+    """看门狗循环：每 3 秒巡检一次进行中请求，分档记录挂起与卡死。
 
-    @param hang_seconds 判定卡死的阈值（秒）
-    @param dumped       已 dump 过的请求 id 集合（就地累加，避免重复刷日志）
+    - 挂起超 warn_seconds：记 WARN（含路径与线程），让界面被卡立即可见；
+    - 挂起超 hang_seconds：dump 全部线程堆栈，指出阻塞位置。
+    @param hang_seconds dump 阈值（秒）
+    @param dumped       已 dump 过的请求 id 集合（就地累加）
+    @param warn_seconds WARN 阈值（秒）
+    @param warned       已 WARN 过的请求 id 集合（就地累加，避免重复刷）
     """
     import time
     import app_log
+    if warned is None:
+        warned = set()
     while True:
         time.sleep(3)
         now = time.time()
         with _inflight_lock:
             snapshot = list(_inflight.items())
         for rid, info in snapshot:
-            if now - info["start"] < hang_seconds:
+            elapsed = now - info["start"]
+            # 第一档：挂起超 warn_seconds，先记 WARN（同一请求只记一次）
+            if elapsed >= warn_seconds and rid not in warned:
+                warned.add(rid)
+                app_log.warn(
+                    "[watchdog] 请求挂起 %s %s（线程=%s，已 %.0fs）"
+                    % (info["method"], info["path"], info["thread"], elapsed))
+            # 第二档：挂起超 hang_seconds，dump 全部线程堆栈
+            if elapsed < hang_seconds:
                 continue
             if rid in dumped:
                 continue
             dumped.add(rid)
             app_log.error(
                 "[watchdog] 请求疑似卡死 %s %s（线程=%s，已 %.0fs），dump 全部线程堆栈"
-                % (info["method"], info["path"], info["thread"], now - info["start"]))
+                % (info["method"], info["path"], info["thread"], elapsed))
             _watchdog_dump_stacks("卡死现场")
 
 
