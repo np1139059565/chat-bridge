@@ -181,6 +181,11 @@ def _call_builtin(name, params):
         task_id = command_tasks.submit(params)
         return jsonify(success=True, tool=name, async_mode=True,
                        task_id=task_id, status="pending")
+    # 工具执行耗时埋点：记录「哪个工具、耗时多久、是否超时」，
+    # 供排查「工具慢 / 界面被拖」——此前工具执行完全无日志，慢请求无从定位。
+    import time as _t
+    import app_log
+    _t0 = _t.perf_counter()
     try:
         # 独立线程 + 超时兜底：工具卡住时返回错误而非无限挂起请求
         result = _run_with_timeout(fn, params, BUILTIN_TOOL_TIMEOUT)
@@ -192,8 +197,17 @@ def _call_builtin(name, params):
             result,
             "请缩小范围后重试：如限制读取行数、缩小搜索范围、加文件类型过滤、"
             "或对命令输出做 head/tail 截断。")
+        # 工具正常返回：耗时超 1 秒记 WARN，便于捞出慢工具；否则记 DEBUG。
+        _ms = (_t.perf_counter() - _t0) * 1000.0
+        if _ms >= 1000:
+            app_log.warn("[tool]", "%s 耗时=%.0fms" % (name, _ms))
+        else:
+            app_log.debug("[tool]", "%s 耗时=%.0fms" % (name, _ms))
         return jsonify(success=True, tool=name, result=result)
     except Exception as e:
+        # 失败（含超时）：记录工具名与耗时，超时另有专门的错误响应
+        _ms = (_t.perf_counter() - _t0) * 1000.0
+        app_log.warn("[tool]", "%s 失败 耗时=%.0fms: %s" % (name, _ms, e))
         return tool_error(name, e)
 
 
@@ -255,9 +269,17 @@ def _call_external(name, ctool, params, page_url="", host_page_url=""):
             name, "外部工具未声明提供方: %s" % name, "ProviderMissing",
             "该外部工具缺少 provider 声明，无法确定执行方。")
     silent = bool(ctool.get("silent"))
+    # 外部工具转发耗时埋点：请求入队后要等提供方（扩展）来取走并回传，
+    # 等待上限 FORWARD_TIMEOUT（10 秒）是保险丝。记录实际等待时长，
+    # 便于区分「提供方没取走」与「提供方执行慢」。
+    import time as _t
+    import app_log
+    _t0 = _t.perf_counter()
     ok, data = external_tools.hub.dispatch(
         provider, name, params, silent=silent,
         page_url=page_url, host_page_url=host_page_url)
+    _ms = (_t.perf_counter() - _t0) * 1000.0
+    app_log.info("[tool]", "%s(外部) 等待=%.0fms 结果=%s" % (name, _ms, "成功" if ok else "未取走"))
     if not ok:
         return _external_error(
             name, "外部工具未在等待时限内被执行: %s" % name, "ForwardTimeout",
@@ -288,10 +310,22 @@ def _call_custom(name, params, page_url="", host_page_url=""):
         return disabled_resp(name)
     if (ctool.get("executor") or "script") == "external":
         return _call_external(name, ctool, params, page_url=page_url, host_page_url=host_page_url)
+    # 自定义脚本工具耗时埋点：脚本走子进程，慢起来可达其超时上限，
+    # 记录工具名与耗时，便于定位「哪个脚本工具拖慢了调用」。
+    import time as _t
+    import app_log
+    _t0 = _t.perf_counter()
     try:
         result = ct.run(ctool, params)
+        _ms = (_t.perf_counter() - _t0) * 1000.0
+        if _ms >= 1000:
+            app_log.warn("[tool]", "%s(自定义) 耗时=%.0fms" % (name, _ms))
+        else:
+            app_log.debug("[tool]", "%s(自定义) 耗时=%.0fms" % (name, _ms))
         return jsonify(success=True, tool=name, result=result)
     except Exception as e:
+        _ms = (_t.perf_counter() - _t0) * 1000.0
+        app_log.warn("[tool]", "%s(自定义) 失败 耗时=%.0fms: %s" % (name, _ms, e))
         return tool_error(name, e)
 
 
