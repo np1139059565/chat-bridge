@@ -252,7 +252,7 @@
         }, ctx.portSwitching ? '切换中…' : '保存并重启'),
         h('span', { class: 'hint' }, '端口不一致才重启：先起新服务、探通后才切换并退出旧服务；超时自动还原')
       ]),
-      // 工具结果 JSON 体积上限：写入后端 config.yaml，即时生效
+      // 工具结果 JSON 体积上限：写入后端 runtime.yaml，即时生效
       h('label', ['工具结果体积上限(字符)', h('input', {
         type: 'number', min: '1', step: '1',
         value: ctx.maxJsonChars,

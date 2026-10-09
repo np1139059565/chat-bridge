@@ -19,7 +19,7 @@ from pathlib import Path
 from tool_helpers import ToolParamError, abspath as _abspath
 
 
-# 默认支持的语言：后端可通过 config.yaml 的 tools.run_command.languages 覆盖。
+# 默认支持的语言：后端可通过 runtime.yaml 的 tools.run_command.languages 覆盖。
 # 注意「默认列表」与「解释器映射」是两个独立概念：
 #   - 前者决定 AI 能否用某语言（可在设置页勾选）；
 #   - 后者决定该语言实际怎么被调用，二者需同时具备才能执行。
@@ -63,7 +63,7 @@ def _normalize_langs(langs):
 
 
 def _read_langs_from_yaml():
-    """从 config.yaml 读取 tools.run_command.languages；失败或未配置时返回 None。"""
+    """从配置读取 tools.run_command.languages；失败或未配置时返回 None。"""
     # 配置文件读取统一走 yaml_utils.load_config_dict，避免多处重复实现
     import yaml_utils
     data = yaml_utils.load_config_dict()
@@ -71,7 +71,7 @@ def _read_langs_from_yaml():
 
 
 def _load_run_command_languages():
-    """读取 config.yaml 中 tools.run_command.languages；失败或未配置时返回默认列表。"""
+    """读取配置中 tools.run_command.languages；失败或未配置时返回默认列表。"""
     langs = _read_langs_from_yaml()
     if langs:
         return langs
@@ -117,7 +117,7 @@ def _resolve_timeout(raw):
     """解析命令超时（秒）：未传用默认值，非正整数抛参数错误。
 
     显式区分「未传」与「传了非法值」：以前用 `or` 兜底会把 0 静默替换成默认值，
-    调用方以为已关闭或缩短超时，实际仍按 60 秒执行，行为与预期不符。
+    调用方以为已关闭或缩短超时，实际仍按默认值执行，行为与预期不符。
     """
     if raw is None or (isinstance(raw, str) and raw.strip() == ""):
         return RUN_COMMAND_TIMEOUT

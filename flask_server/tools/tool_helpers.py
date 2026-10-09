@@ -185,14 +185,14 @@ def require(p, *names):
 
 
 # ---------- 结果 JSON 体积上限 ----------
-# 各工具返回的 JSON 序列化后不得超过该字符数（默认 10 万，可在 config.yaml 的
+# 各工具返回的 JSON 序列化后不得超过该字符数（默认 10 万，可在 runtime.yaml 的
 # limits.max_json_chars 覆盖）。超限时不截断，而是返回参数错误并提示 AI 缩小范围，
 # 避免把不完整的结果喂给 AI 导致误判。
 DEFAULT_MAX_JSON_CHARS = 100000
 
 
 def max_json_chars():
-    """读取 config.yaml 中 limits.max_json_chars；未配置时返回默认值。"""
+    """读取配置中 limits.max_json_chars；未配置时返回默认值。"""
     # 配置文件读取统一走 yaml_utils.load_config_dict，避免多处重复实现
     data = yaml_utils.load_config_dict()
     v = (data.get("limits") or {}).get("max_json_chars")

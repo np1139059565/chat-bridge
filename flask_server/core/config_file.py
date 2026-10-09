@@ -12,11 +12,23 @@
 
 保存时先读全文件、只替换自己那一段，避免覆盖其它分区的内容。
 """
+import os
+from pathlib import Path
+
 import paths
 
-# 两份合并后的配置文件路径
-DEFINITION_PATH = paths.DEFINITION_PATH
-RUNTIME_PATH = paths.RUNTIME_PATH
+# 两份合并后的配置文件路径。
+# 支持用环境变量 CHAT_BRIDGE_CONFIG_DIR 覆盖配置目录：
+# 供测试把读写重定向到临时目录，避免触碰真实配置。
+_CFG_DIR_ENV = "CHAT_BRIDGE_CONFIG_DIR"
+_cfg_dir_override = os.environ.get(_CFG_DIR_ENV)
+if _cfg_dir_override:
+    _cfg_dir = Path(_cfg_dir_override).resolve()
+    DEFINITION_PATH = _cfg_dir / "definition.yaml"
+    RUNTIME_PATH = _cfg_dir / "runtime.yaml"
+else:
+    DEFINITION_PATH = paths.DEFINITION_PATH
+    RUNTIME_PATH = paths.RUNTIME_PATH
 
 # 三个分区名（保持稳定，供各子系统按名读写）
 SECTIONS = ("app", "custom_tools", "bridge")

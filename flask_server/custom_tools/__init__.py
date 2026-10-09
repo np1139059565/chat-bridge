@@ -13,7 +13,7 @@
 """
 # 路径与常量
 from .paths import (
-    APP_DIR, PROJECT_ROOT, CT_PATH, NAME_RE,
+    APP_DIR, PROJECT_ROOT, NAME_RE,
     DEFAULT_SKILL_ROOTS, to_project_rel, resolve_to_abs, default_roots,
 )
 

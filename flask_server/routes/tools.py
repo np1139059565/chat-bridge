@@ -112,7 +112,7 @@ def tools():
             continue
         item = {"name": k, **v}
         if k == "run_command":
-            # 语言列表来自配置，随 config.yaml 变化
+            # 语言列表来自配置，随 runtime.yaml 变化
             item["languages"] = runtime.CONFIG.get("tools", {}).get("run_command", {}).get("languages", [])
         builtin.append(item)
     runtime.refresh_external_providers()

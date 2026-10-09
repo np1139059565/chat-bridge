@@ -8,9 +8,9 @@
 输出 SMOKE OK 表示全部断言通过；任一断言失败会抛异常并以非 0 退出码结束。
 
 隔离策略：本脚本先建一个临时工作目录，并通过环境变量
-CHAT_BRIDGE_CUSTOM_TOOLS_YAML 把 custom_tools 的落盘路径指向该目录下的
-tools.yaml，随后才导入 custom_tools。因此测试全程只读写临时文件，
-不会触碰 flask_server/config/custom_tools.yaml，结束后整个临时目录被删除。
+CHAT_BRIDGE_CONFIG_DIR 把配置读写目录指向该临时目录，随后才导入 custom_tools。
+因此测试全程只读写临时文件，不会触碰 flask_server/config/ 下的真实配置，
+结束后整个临时目录被删除。
 """
 import os
 import sys
@@ -25,18 +25,21 @@ _SERVER_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
-# 临时工作目录：存放测试用的 skill 与 custom_tools 落盘文件
+# 临时工作目录：存放测试用的 skill 与配置落盘文件
 root = tempfile.mkdtemp(prefix="skill_smoke_")
-# 关键：在导入 custom_tools 之前重定向落盘路径，确保测试不触碰真实配置
-os.environ["CHAT_BRIDGE_CUSTOM_TOOLS_YAML"] = os.path.join(root, "tools.yaml")
+# 关键：在导入 custom_tools 之前重定向配置读写目录，确保测试不触碰真实配置。
+# config_file 读取该环境变量后，definition.yaml / runtime.yaml 都落在临时目录内。
+os.environ["CHAT_BRIDGE_CONFIG_DIR"] = root
 
 import custom_tools as ct
+import config_file as cf
 
 try:
-    # 断言落盘路径确实落在临时目录内，避免误操作真实文件。
+    # 断言配置读写路径确实落在临时目录内，避免误操作真实文件。
     # 两侧都做真实路径归一：tempfile.mkdtemp 可能返回 8.3 短路径（如 ADMINI~1），
-    # 而 ct.CT_PATH 经 Path.resolve() 展开为长路径，直接字符串比较会误判不等。
-    assert os.path.realpath(os.path.dirname(str(ct.CT_PATH))) == os.path.realpath(root), ct.CT_PATH
+    # 而 Path.resolve() 会展开为长路径，直接字符串比较会误判不等。
+    assert os.path.realpath(str(cf.DEFINITION_PATH.parent)) == os.path.realpath(root), cf.DEFINITION_PATH
+    assert os.path.realpath(str(cf.RUNTIME_PATH.parent)) == os.path.realpath(root), cf.RUNTIME_PATH
 
     # ---------- 1) 构造测试用 skill ----------
     sd = os.path.join(root, "demo_skill")

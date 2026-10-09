@@ -24,7 +24,7 @@ chat-bridge-main/
 │   ├── server.py            # 兼容入口：委托 app.create_app()，保留 python server.py 启动方式
 │   ├── app.py               # 应用装配：create_app() / 蓝图注册 / CORS / 运行期初始化
 │   ├── runtime.py           # 运行期全局状态中心：app / impl / TOOLS / DISPATCH / CONFIG
-│   ├── config_store.py      # config.yaml 读写与合并
+│   ├── config_store.py      # 配置读写与合并（definition.yaml + runtime.yaml）
 │   ├── error_utils.py       # 错误分类与定位
 │   ├── responses.py         # 错误响应辅助
 │   ├── tool_helpers.py      # 工具通用辅助：参数校验、路径解析、体积控制
@@ -50,8 +50,8 @@ chat-bridge-main/
 │   ├── card_bus.py          # 卡片总线：登记 / 投递 / 确认已展示
 │   ├── rules.py             # 规则（rules/*.md）与优先级
 │   ├── prompt_sections.py   # 技能说明与技能清单收集
-│   ├── config.yaml          # 配置唯一来源
-│   └── custom_tools.yaml    # 已安装自定义工具清单（自动维护）
+│   ├── definition.yaml      # 全部定义，入库
+│   └── runtime.yaml         # 全部运行时与密钥，不入库
 ├── extend/                  # 镜像插件（Chrome MV3）
 │   ├── manifest.json
 │   ├── background.js        # 工具栏图标切换抽屉显隐
@@ -173,7 +173,7 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 ## 五、关键约定
 
-- **配置唯一来源**：`flask_server/config/config.yaml`，插件不持久化配置到浏览器（除面板挂靠侧、会话存档）。
+- **配置来源**：`flask_server/config/definition.yaml`（定义，入库）与 `runtime.yaml`（运行时与密钥，不入库）；插件不持久化配置到浏览器（除面板挂靠侧、会话存档）。
 - **参数查询先行**：AI 调用工具前应先 `get_tool_params` 核对参数名（不同工具参数名不统一）。
 - **路径约定**：文件类工具口径统一——绝对路径原样使用，相对路径以工程根为基准解析；skill 文档统一用 `list_skills` / `read_skill`（`skill` + skill 内相对 `file`）读取。
 - **单次一个工具块**：AI 每次回复只输出一个 JSON 代码块。

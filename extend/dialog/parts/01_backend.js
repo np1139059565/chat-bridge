@@ -278,7 +278,7 @@
 
   /**
    * 后端地址发现：config 不存浏览器，启动时探测若干候选端口找到 /config 端点。
-   * 这样即使 config.yaml 改了端口，也无需在浏览器里手动填地址。
+   * 这样即使 runtime.yaml 改了端口，也无需在浏览器里手动填地址。
    */
   M.discoverFlask = async function () {
     // 优先用上次探通的地址：端口改过后，刷新页面也能直接连回新端口，
@@ -339,7 +339,7 @@
     return 'aiMirrorConv_' + this.siteKey + '__' + (id || '__default__');
   };
 
-  /** 配置从后端 config.yaml 读取（不存浏览器）：连接地址、端口、工具上下线状态。 */
+  /** 配置从后端配置文件读取（不存浏览器）：连接地址、端口、工具上下线状态。 */
   M.loadConfig = async function () {
     try {
       const cfg = await D.apiFetch(this, '/config', {
@@ -365,7 +365,7 @@
     }
   };
 
-  /** 工具上 / 下线：写回后端 config.yaml，并立即刷新工具目录（影响 System Prompt）。 */
+  /** 工具上 / 下线：写回后端 runtime.yaml，并立即刷新工具目录（影响 System Prompt）。 */
   M.setToolEnabled = async function (name, enabled) {
     if (!this.configTools[name]) this.configTools[name] = {};
     this.configTools[name].enabled = enabled;   // 乐观更新
@@ -382,7 +382,7 @@
     }
   };
 
-  /** 保存 run_command 支持的语言列表（卡片勾选）并写回后端 config.yaml。 */
+  /** 保存 run_command 支持的语言列表（卡片勾选）并写回后端 runtime.yaml。 */
   M.setRunCommandLanguages = async function (languages) {
     const name = 'run_command';
     const enabled = !this.configTools[name] || this.configTools[name].enabled !== false;
@@ -426,8 +426,8 @@
   };
 
   /**
-   * 工具结果 JSON 体积上限：写回后端 config.yaml。
-   * tools_impl 每次调用现读 config.yaml，因此改完即时生效，无需重启。
+   * 工具结果 JSON 体积上限：写回后端 runtime.yaml。
+   * tools_impl 每次调用现读配置文件，因此改完即时生效，无需重启。
    */
   M.saveMaxJsonChars = async function () {
     const v = parseInt(this.maxJsonChars, 10);

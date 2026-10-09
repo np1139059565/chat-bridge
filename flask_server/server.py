@@ -3,7 +3,7 @@ AI 工具调用镜像插件 —— 本地 Flask 工具服务（兼容入口）
 
 服务实现已按职责拆分：
 - runtime.py        运行期全局状态（app / impl / TOOLS / DISPATCH / CONFIG）
-- config_store.py   config.yaml 读写与合并
+- config_store.py   配置读写与合并（definition.yaml + runtime.yaml）
 - error_utils.py    错误分类与定位
 - responses.py      错误响应辅助
 - routes/           各功能域蓝图
@@ -11,7 +11,7 @@ AI 工具调用镜像插件 —— 本地 Flask 工具服务（兼容入口）
 
 本文件保留原启动方式（python server.py），内部委托给 app.create_app()。
 支持 --host / --port 命令行参数：用于「改端口后自重启」时把新端口直接传给
-新进程，无需先写配置文件。命令行参数优先级高于 config.yaml。
+新进程，无需先写配置文件。命令行参数优先级高于 runtime.yaml。
 """
 import argparse
 
@@ -35,7 +35,7 @@ def _parse_cli_args(argv=None):
 
 
 if __name__ == "__main__":
-    # 端口 / 主机优先级：命令行 --port > config.yaml > 内置默认值。
+    # 端口 / 主机优先级：命令行 --port > runtime.yaml > 内置默认值。
     # 「改端口重启」时由重启逻辑追加 --port，新进程据此监听新端口。
     cli = _parse_cli_args()
     flask_cfg = runtime.CONFIG.get("flask", {})

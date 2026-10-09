@@ -62,7 +62,7 @@
 ### GET/POST /config
 
 - GET：读取配置（flask / limits / default_profile / site_profiles / tools / available_tools）。
-- POST：部分更新，写入 `config.yaml`。
+- POST：部分更新，写入配置文件（定义写 definition.yaml，运行时写 runtime.yaml）。
 
 POST 请求体示例：
 ```json
@@ -74,7 +74,7 @@ POST 请求体示例：
 
 响应：`{ success, saved, changed: [...], requireRestart }`。
 - `flask.host/port` 改动 `requireRestart=true`（需重启进程）。
-- 其它改动即时生效：POST 会同步更新 `runtime.CONFIG` 内存并写回 `config.yaml`；
+- 其它改动即时生效：POST 会同步更新 `runtime.CONFIG` 内存并写回配置文件；
   `run_command` 的语言列表每次调用现读配置文件。
 
 ### GET /prompt_sections

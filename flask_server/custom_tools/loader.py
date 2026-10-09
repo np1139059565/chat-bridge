@@ -6,7 +6,7 @@
 3. 命令拼装辅助：解释器推断、参数转字符串
 
 YAML 标量级处理（去注释 / 标量转换 / 引号转义）复用 yaml_utils，
-与 config.yaml 侧共用同一套规则。
+与主配置侧共用同一套规则。
 """
 import json
 from pathlib import Path
@@ -19,7 +19,7 @@ from .paths import NAME_RE, resolve_to_abs, to_project_rel
 def strip_comment(s):
     """去掉行首或空白后的 # 注释，但引号内的 # 不当注释（描述里可能含 #）。
 
-    实现已下沉到 yaml_utils.strip_comment，与 config.yaml 侧共用同一套规则。
+    实现已下沉到 yaml_utils.strip_comment，与主配置侧共用同一套规则。
     """
     return yaml_utils.strip_comment(s)
 
@@ -27,7 +27,7 @@ def strip_comment(s):
 def parse_scalar(v):
     """把 YAML 标量字符串转成 Python 值。
 
-    实现已下沉到 yaml_utils.coerce_scalar，与 config.yaml 侧共用同一套规则。
+    实现已下沉到 yaml_utils.coerce_scalar，与主配置侧共用同一套规则。
     """
     return yaml_utils.coerce_scalar(v)
 
@@ -35,7 +35,7 @@ def parse_scalar(v):
 def quote(s):
     """把字符串转义并包上双引号，用于写出 YAML 标量。
 
-    实现已下沉到 yaml_utils.quote，与 config.yaml 侧共用同一套规则。
+    实现已下沉到 yaml_utils.quote，与主配置侧共用同一套规则。
     """
     return yaml_utils.quote(s)
 

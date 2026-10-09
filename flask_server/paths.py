@@ -30,23 +30,13 @@ for _sub in (CORE_DIR, TOOLS_DIR):
         sys.path.insert(0, str(_sub))
 
 # ---------- 配置文件 ----------
-# 分为「定义」与「运行时」两份：
-#   定义文件入库，跨机器共享（有哪些工具、有哪些指令、站点映射等）；
-#   运行时文件排除出版本库（开关、端口、工具上下线等本机状态）。
+# 配置集中为两份：定义文件入库、跨机器共享（有哪些工具、有哪些指令、
+# 站点映射等）；运行时文件排除出版本库（开关、端口、工具上下线等本机状态）。
 # 这样改开关不会污染版本历史，新增指令又能正常入库。
-CONFIG_PATH = CONFIG_DIR / "config.yaml"
-CONFIG_RUNTIME_PATH = CONFIG_DIR / "config_runtime.yaml"
-CUSTOM_TOOLS_PATH = CONFIG_DIR / "custom_tools.yaml"
-CUSTOM_TOOLS_RUNTIME_PATH = CONFIG_DIR / "custom_tools_runtime.yaml"
-BRIDGE_SECRETS_PATH = CONFIG_DIR / "remote_bridge.yaml"
-BRIDGE_SETTINGS_PATH = CONFIG_DIR / "remote_bridge_settings.yaml"
-BRIDGE_RUNTIME_PATH = CONFIG_DIR / "remote_bridge_runtime.yaml"
-
-# ---------- 合并后的两份配置文件 ----------
-# 配置集中为两份，按「是否入库」划分（git 只能整文件忽略，故运行时必须独立一份）：
+# 两份文件内各含 app / custom_tools / bridge 三个分区，由各子系统各写各段。
+# 读写统一走 core/config_file.py，路径只在此处定义一次。
 #   definition.yaml —— 全部定义，入库（站点映射、工具定义、指令、选择器、主机地址）
 #   runtime.yaml    —— 全部运行时与密钥，不入库（开关、端口、凭证、工具上下线）
-# 每份内含 app / custom_tools / bridge 三个分区，由各子系统各写各段。
 DEFINITION_PATH = CONFIG_DIR / "definition.yaml"
 RUNTIME_PATH = CONFIG_DIR / "runtime.yaml"
 

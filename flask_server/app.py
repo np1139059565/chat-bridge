@@ -156,7 +156,7 @@ def _register_watchdog(app, hang_seconds=150):
     看门狗在超时后打印所有线程的调用栈，直接指出阻塞位置。
 
     阈值必须大于「工具调用的最长正常耗时」，否则正常的慢工具会被误报为卡死：
-    内置工具兜底超时 120 秒（routes/tools.py），故取 150 秒留出余量。
+    内置工具兜底超时 60 秒（routes/tools.BUILTIN_TOOL_TIMEOUT），故取 150 秒留出余量。
     @param hang_seconds 判定卡死的阈值（秒）
     """
     import threading

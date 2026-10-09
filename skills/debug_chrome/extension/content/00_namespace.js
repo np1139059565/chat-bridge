@@ -5,7 +5,7 @@ window.AIStyleDebug = (function () {
   const DRAWER_IFRAME_ID = 'ai-style-debug-iframe';
   const MAX_ELEMENTS = 5;
   const MAX_SHOT_WIDTH = 1280;
-  // 后端指向工具服务（chat-bridge）；端口与工具服务 config.yaml 的 flask.port 一致
+  // 后端指向工具服务（chat-bridge）；端口与工具服务 runtime.yaml 的 flask.port 一致
   // 后端地址默认值：与抽屉设置页输入框默认值一致，用户可手动修改；
   // 保留它，避免每次都要重新输入。
   const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';

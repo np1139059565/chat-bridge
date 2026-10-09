@@ -79,7 +79,7 @@
       this.config.flaskUrl = base;
       this.flaskUrlDraft = '';
       try { chrome.storage.local.set({ aiMirrorFlaskUrl: base }); } catch (e) { /* 忽略 */ }
-      // 把端口写进 config.yaml（此后重启也读得到）
+      // 把端口写进 runtime.yaml（此后重启也读得到）
       try {
         await D.apiFetch(this, '/config', {
           method: 'POST', body: { flask: { port: newPort } }, lenientJson: true

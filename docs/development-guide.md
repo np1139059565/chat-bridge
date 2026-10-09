@@ -13,7 +13,7 @@ cd flask_server
 pip install -r requirements.txt
 python server.py
 ```
-默认 `http://127.0.0.1:5000`。改端口：编辑 `config.yaml` 的 `flask.port` 并重启。
+默认 `http://127.0.0.1:5000`。改端口：编辑 `runtime.yaml` 的 `flask.port` 并重启。
 
 ### 镜像插件
 
@@ -39,7 +39,7 @@ python flask_server/scripts/_smoke_ct.py
 | 要改什么 | 去哪里 |
 |---|---|
 | 新增/修改内置工具 | `flask_server/tools/tools_impl.py`（改完需重启服务）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
-| 工具上线开关、端口、体积上限 | `flask_server/config/config.yaml` 或 `POST /config` |
+| 工具上线开关、端口、体积上限 | `flask_server/config/runtime.yaml` 或 `POST /config` |
 | 卡片总线行为 | `flask_server/core/card_bus.py` + `routes/cards.py` |
 | 外部工具转发 | `flask_server/core/external_tools.py` + `routes/ext.py` |
 | 运行期全局状态（工具表 / 配置） | `flask_server/runtime.py` |
@@ -167,7 +167,7 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 
 1. 在 `tool_meta.py` 的元数据表加参数声明，在 `tools_impl.py` 的 `DISPATCH` 注册实现函数。
 2. 重启服务。
-3. 在设置页上线（写 `config.yaml`）。
+3. 在设置页上线（写 `runtime.yaml`）。
 
 ### 新增一个 skill
 

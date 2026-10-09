@@ -7,7 +7,7 @@
 
   /**
    * 读取当前站点配置并回调。
-   * 站点规则按 hostname 自动识别（无需浏览器存储配置，配置统一由后端 config.yaml 管理）。
+   * 站点规则按 hostname 自动识别（无需浏览器存储配置，配置统一由后端配置文件管理）。
    * 容器选择器完全由预设规则决定——之前暴露的「自定义 class 选择器」无法稳定工作
    * （各站 class 含易变哈希），已撤销。
    * @param {Function} cb 回调，入参 { profile, container, profileLabel }

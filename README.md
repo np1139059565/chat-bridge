@@ -8,7 +8,7 @@ Chrome 扩展 + 本地 Flask 工具服务：在网页 AI 对话框与本地工�
 
 - **双向镜像**：网页对话 ↔ 扩展悬浮对话框实时同步。
 - **工具调用**：从对话中提取 `bridge-chat-call` 代码块，交给本地工具服务执行，结果写回对话。
-- **可上线 / 下线工具**：通过后端 `config.yaml` 控制每个工具是否出现在 System Prompt、是否可调用。
+- **可上线 / 下线工具**：通过后端 `config/runtime.yaml` 控制每个工具是否出现在 System Prompt、是否可调用。
 - **自定义工具 / Skill**：以标准 skill 形式扩展工具（`skills/` 下每个目录一个技能），支持安装、上下线与热更新清单。
 - **外部工具提供方**：`executor=external` 的工具经提供方通道（如页面调试扩展）转发执行，命令按目标页面定向。
 - **错误分类回传**：工具执行失败返回完整堆栈 + 错误分类（origin），便于区分「参数问题」与「工具代码缺陷」。
@@ -42,7 +42,7 @@ chat-bridge-main/
 │   ├── runtime.py             # 运行期全局状态中心
 │   ├── paths.py               # 路径基准唯一来源（导入引导）
 │   ├── core/                  # 核心支撑
-│   │   ├── config_store.py    # config.yaml 读写与合并
+│   │   ├── config_store.py    # 配置读写与合并（definition.yaml + runtime.yaml）
 │   │   ├── error_utils.py     # 错误分类与定位
 │   │   ├── responses.py       # 错误响应辅助
 │   │   ├── yaml_utils.py      # YAML 标量原语
@@ -59,8 +59,8 @@ chat-bridge-main/
 │   │   ├── tools_impl.py      # 内置工具实现与派发表
 │   │   └── run_command_impl.py# run_command 实现
 │   ├── config/                # 配置文件（纯数据）
-│   │   ├── config.yaml        # 配置唯一来源
-│   │   └── custom_tools.yaml  # 已安装自定义工具清单（自动维护）
+│   │   ├── definition.yaml    # 全部定义，入库
+│   │   └── runtime.yaml       # 全部运行时与密钥，不入库
 │   ├── data/                  # 运行时数据产物
 │   │   └── screenshots/       # 截图存盘目录
 │   ├── scripts/               # 服务内脚本
@@ -91,7 +91,7 @@ pip install -r requirements.txt
 python server.py
 ```
 
-默认监听 `http://127.0.0.1:5000`。改端口需在 `config.yaml` 把 `flask.port` 改掉并重启服务。
+默认监听 `http://127.0.0.1:5000`。改端口需在 `config/runtime.yaml` 把 `flask.port` 改掉并重启服务。
 
 ### 2. 加载 Chrome 扩展
 
@@ -99,23 +99,23 @@ python server.py
 2. 点击「加载已解压的扩展程序」，选择本项目的 `extend/` 目录。
 3. 点击工具栏图标显示 / 隐藏悬浮对话框。
 
-> 扩展通过后端下发的 `flaskUrl` 连接 Flask，配置不保存在浏览器中（统一由后端 `config.yaml` 管理）。
+> 扩展通过后端下发的 `flaskUrl` 连接 Flask，配置不保存在浏览器中（统一由后端配置文件管理）。
 
 ## 配置说明
 
-- **`flask_server/config/config.yaml`**：后端配置唯一来源。
+- **`flask_server/config/definition.yaml` 与 `runtime.yaml`**：后端配置来源（前者存定义、入库，后者存运行时与密钥、不入库）。
   - `flask.host` / `flask.port`：服务地址。
   - `default_profile` / `site_profiles`：按域名选择站点规则（`glm` / `deepseek`）。
   - `tools.<name>.enabled`：工具上下线开关。
   - `tools.run_command.languages`：`run_command` 支持的语言列表。
   - `limits.max_json_chars`：工具结果 JSON 体积上限。
-- **`flask_server/config/custom_tools.yaml`**：自定义工具清单，由插件自动维护。
-- **`flask_server/config/remote_bridge.yaml`**：远程桥接配置（QQ 凭证、推送开关、自定义指令），由设置页维护；`remote_bridge_state.json` 为其去重记账，自动生成。
+- 自定义工具清单由插件自动维护，存于 `definition.yaml` / `runtime.yaml` 的 `custom_tools` 分区。
+- 远程桥接配置（QQ 凭证、推送开关、自定义指令）由设置页维护，存于 `definition.yaml` / `runtime.yaml` 的 `bridge` 分区；`remote_bridge_state.json` 为其去重记账，自动生成。
 
 ## 自定义工具 / Skill
 
 通过扩展「设置」页可安装自定义工具：选择某个标准 skill 目录，插件会把它登记到
-`custom_tools.yaml` 并生成可调用工具。示例见 `skills/json_tool`（`json_validate`：校验并格式化 JSON）。
+自定义工具清单并生成可调用工具。示例见 `skills/json_tool`（`json_validate`：校验并格式化 JSON）。
 
 内置工具声明在 `tool_meta.py`、实现与派发表在 `tools_impl.py`；改动后需重启服务。
 

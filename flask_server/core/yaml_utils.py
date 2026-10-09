@@ -1,11 +1,11 @@
 """
 AI 工具调用镜像插件 —— YAML 处理公共原语
 
-本模块集中存放 config.yaml 与 custom_tools.yaml 两套受限解析器共用的底层函数：
+本模块集中存放主配置与自定义工具配置两套受限解析器共用的底层函数：
 - coerce_scalar：把 YAML 标量字符串转成 Python 值（bool / int / float / str / None）
 - strip_comment：去掉行内注释，但保留引号内的 #
 - quote：把 Python 字符串安全地写成带引号的 YAML 标量
-- load_config_dict：读取 flask_server/config/config.yaml 为字典（各工具读取配置的统一入口）
+- load_config_dict：读取主配置（definition.yaml + runtime.yaml 的 app 分区）为字典（各工具读取配置的统一入口）
 
 两个 YAML 文件各自的结构（块映射 / 工具列表）差异较大，其整体解析器仍保留在
 各自模块内；此处只合并真正重复的标量级处理与配置文件读取，避免同一逻辑多处维护。
