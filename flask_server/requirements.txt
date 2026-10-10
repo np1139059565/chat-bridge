@@ -1,4 +1,5 @@
 Flask>=2.3
+Werkzeug>=2.3
 PyYAML>=6.0
 websocket-client>=1.6
 numpy>=1.21
