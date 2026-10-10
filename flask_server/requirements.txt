@@ -1,3 +1,6 @@
+# 运行环境要求：Python 3.10 或更高版本
+# （server.py 启动时会校验；低于 3.10 会给出明确提示并退出）
+
 Flask>=2.3
 Werkzeug>=2.3
 PyYAML>=6.0

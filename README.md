@@ -85,6 +85,8 @@ chat-bridge-main/
 
 ### 1. 启动本地 Flask 工具服务
 
+> 需要 **Python 3.10 或更高版本**（启动时会校验，低于此版本会提示并退出）。
+
 ```bash
 cd flask_server
 pip install -r requirements.txt

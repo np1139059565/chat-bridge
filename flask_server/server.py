@@ -13,6 +13,22 @@ AI 工具调用镜像插件 —— 本地 Flask 工具服务（兼容入口）
 支持 --host / --port 命令行参数：用于「改端口后自重启」时把新端口直接传给
 新进程，无需先写配置文件。命令行参数优先级高于 runtime.yaml。
 """
+# --- Python 版本守卫（必须置于所有业务导入之前）---
+# 本工程最低要求 Python 3.10。低于此版本时，某些标准库 API 行为不同
+# （曾因 Path.write_text 的 newline 参数在 3.9 上不可用，导致配置写入失败、
+# 安装自定义工具报错，且极难定位）。此处提前拦截并给出清晰中文提示，
+# 避免用户面对一堆 import 报错却不知所以。
+import sys as _sys
+
+if _sys.version_info < (3, 10):
+    _sys.stderr.write(
+        "\n[启动失败] 本工程要求 Python 3.10 或更高版本。\n"
+        "当前版本：%d.%d.%d\n"
+        "请升级 Python 后重试（下载：https://www.python.org/downloads/）。\n\n"
+        % (_sys.version_info[0], _sys.version_info[1], _sys.version_info[2])
+    )
+    raise SystemExit(1)
+
 import argparse
 
 import runtime
