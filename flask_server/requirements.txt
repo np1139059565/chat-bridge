@@ -1,6 +1,7 @@
 Flask>=2.3
 PyYAML>=6.0
 websocket-client>=1.6
+numpy>=1.21
 
 # 远程桥接语音链路依赖
 pilk>=0.2.4
