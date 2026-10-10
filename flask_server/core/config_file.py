@@ -64,12 +64,17 @@ def _save(path, data):
     global _last_error
     try:
         import yaml
-        # newline="\n"：禁用 Python 的换行翻译。Windows 上 write_text 默认
-        # newline=None，会把 \n 翻成 \r\n，写出的配置即 CRLF，与仓库/工作区
-        # 要求的 LF 冲突，导致 git 反复把该文件标成 modified（假改动）。
-        path.write_text(
-            yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
-            encoding="utf-8", newline="\n")
+        # newline="\n"：禁用 Python 的换行翻译。Windows 上默认会把 \n 翻成 \r\n，
+        # 写出的配置即 CRLF，与仓库/工作区要求的 LF 冲突，导致 git 反复把该文件
+        # 标成 modified（假改动）。
+        #
+        # 注意：这里用内置 open() 而非 Path.write_text()。后者的 newline 参数
+        # 直到 Python 3.10 才加入；用它会要求运行环境 ≥3.10，旧版本直接抛
+        # TypeError，导致写盘失败（曾出现「一台机器能装、另一台报错」）。
+        # open() 的 newline 自 Python 3.0 即存在，兼容所有在支持的版本。
+        text = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+        with open(str(path), "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(text)
         _last_error = None
         return True
     except Exception as e:
