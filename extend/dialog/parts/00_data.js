@@ -18,28 +18,7 @@ window.AIMirrorDialog = (function () {
   };
   const log = D.log;
 
-  /**
-   * 统一的后端请求辅助：拼地址、按需序列化 JSON 请求体、检查响应状态、解析 JSON。
-   * @param {Object} ctx Vue 实例（读取 config.flaskUrl）
-   * @param {string} path 接口路径
-   * @param {Object} [options] fetch 选项
-   * @returns {Promise<Object>} 解析后的 JSON
-   */
-  D.apiFetch = async function (ctx, path, options) {
-    const opts = Object.assign({}, options || {});
-    const lenientJson = !!opts.lenientJson;
-    delete opts.lenientJson;
-    const base = (ctx.config.flaskUrl || '').replace(/\/+$/, '');
-    opts.headers = Object.assign({}, opts.headers || {});
-    if (opts.body && typeof opts.body !== 'string') {
-      opts.body = JSON.stringify(opts.body);
-      opts.headers['Content-Type'] = 'application/json';
-    }
-    const r = await fetch(base + path, opts);
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    if (lenientJson) return r.json().catch(function () { return {}; });
-    return r.json();
-  };
+  // 统一的后端请求辅助 D.apiFetch 已拆分到 parts/00a_api.js（控制本文件行数）。
 
   // 公共工具：由 lib/dom-utils.js 提供
   D.debounce = window.AIMirrorDomUtils.debounce;

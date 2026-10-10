@@ -47,8 +47,21 @@ def _load(path):
         return {}
 
 
+# 记录最近一次写入失败的真实原因。
+# 目的：让上层（如自定义工具安装）能把「为什么写不进去」转达给调用方，
+# 而不是只报一个笼统的「写入失败」——曾出现「安装谎报成功」与
+# 「只看到 HTTP 400 却不知原因」的排查困境。
+_last_error = None
+
+
+def get_last_error():
+    """返回最近一次写入失败的原因文本；无失败记录时返回空串。"""
+    return _last_error or ""
+
+
 def _save(path, data):
-    """写回一个分区配置文件；成功返回 True。"""
+    """写回一个分区配置文件；成功返回 True，失败返回 False 并记录原因。"""
+    global _last_error
     try:
         import yaml
         # newline="\n"：禁用 Python 的换行翻译。Windows 上 write_text 默认
@@ -57,8 +70,10 @@ def _save(path, data):
         path.write_text(
             yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
             encoding="utf-8", newline="\n")
+        _last_error = None
         return True
     except Exception as e:
+        _last_error = "%s：%s" % (path.name, e)
         app_log.warn("[config_file]", "写入 %s 失败：%s" % (path.name, e))
         return False
 

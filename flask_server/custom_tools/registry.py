@@ -70,7 +70,8 @@ def install(skill_dir, names=None):
         # 写盘失败必须报错：否则会「谎报安装成功」——前端显示已安装，
         # 但配置未落盘，刷新后重新读文件即变回未安装（曾出现的症状）。
         if not save_tools(tools):
-            raise RuntimeError("写入自定义工具配置失败，安装未生效")
+            raise RuntimeError("写入自定义工具配置失败（%s），安装未生效"
+                               % (config_file.get_last_error() or "原因未知"))
     return installed
 
 
