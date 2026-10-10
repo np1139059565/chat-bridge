@@ -67,16 +67,23 @@ def install(skill_dir, names=None):
         tools[t["name"]] = t
         installed.append(t["name"])
     if installed:
-        save_tools(tools)
+        # 写盘失败必须报错：否则会「谎报安装成功」——前端显示已安装，
+        # 但配置未落盘，刷新后重新读文件即变回未安装（曾出现的症状）。
+        if not save_tools(tools):
+            raise RuntimeError("写入自定义工具配置失败，安装未生效")
     return installed
 
 
 def remove(name):
-    """删除一个自定义工具；存在并删除成功返回 True。"""
+    """删除一个自定义工具；存在并删除成功返回 True。
+
+    写盘失败抛异常：否则会「谎报删除成功」，刷新后工具又出现。
+    """
     tools = load_tools()
     if name in tools:
         del tools[name]
-        save_tools(tools)
+        if not save_tools(tools):
+            raise RuntimeError("写入自定义工具配置失败，删除未生效")
         return True
     return False
 
@@ -119,7 +126,9 @@ def update(name, patch):
         return None
     _apply_scalar_fields(t, patch)
     _apply_list_fields(t, patch)
-    save_tools(tools)
+    # 写盘失败必须报错，避免「谎报更新成功」后刷新回退。
+    if not save_tools(tools):
+        raise RuntimeError("写入自定义工具配置失败，更新未生效")
     return t
 
 
@@ -136,7 +145,9 @@ def set_skill_enabled(skill_name, enabled):
             t["enabled"] = bool(enabled)
             changed.append(t.get("name"))
     if changed:
-        save_tools(tools)
+        # 写盘失败必须报错，避免「谎报上下线成功」后刷新回退。
+        if not save_tools(tools):
+            raise RuntimeError("写入自定义工具配置失败，上下线未生效")
     return changed
 
 
