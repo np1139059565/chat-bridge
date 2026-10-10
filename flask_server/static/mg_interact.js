@@ -215,13 +215,21 @@
   };
 
   // 清理某节点之前的全部旧节点（二次确认，破坏性最强）
+  // 会话隔离：必须带当前会话 conv_id，只清理本会话内更早的节点，
+  // 否则会跨会话误删其它会话的历史节点（不可恢复）。
   MG.cleanOlder = function (node) {
-    if (!confirm('确定清理节点 #' + node.id + ' 之前的全部旧节点？\n此操作不可恢复，且数量可能很大。')) return;
-    if (!confirm('再次确认：真的要删除所有这些旧节点吗？')) return;
+    var conv = document.getElementById('conv') ? document.getElementById('conv').value.trim() : '';
+    if (!conv) {
+      alert('请先在上方选择具体会话。\n「全部会话」视图下不允许清理旧节点，以免误删其它会话。');
+      return;
+    }
+    if (!confirm('确定清理会话「' + conv + '」内节点 #' + node.id + ' 之前的全部旧节点？\n此操作不可恢复，且数量可能很大。')) return;
+    if (!confirm('再次确认：真的要删除这些旧节点吗？')) return;
     fetch('/memory/node/clean_older', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ node_id: node.id })
+      body: JSON.stringify({ node_id: node.id, conv_id: conv })
     }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.success === false) { alert('清理失败：' + (d.error || '未知错误')); return; }
       alert('已清理 ' + ((d && d.deleted) || 0) + ' 个节点');
       MG.load();
     }).catch(function () { alert('清理失败'); });

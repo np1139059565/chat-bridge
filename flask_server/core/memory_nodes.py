@@ -245,22 +245,33 @@ def descendant_ids(root_id, sources=None, stop_at_user=False):
     return out
 
 
-def ids_older_than(node_id):
-    """取创建时间早于某节点的全部节点 id（不含自身）。
+def ids_older_than(node_id, conv_id, site_key=None):
+    """取「同一会话内」创建时间早于某节点的节点 id（不含自身）。
 
     以目标节点的 created_at 为界；同一时刻用 id 兜底，保证「之前」稳定。
-    @param node_id 参照节点 id
-    @return 更早的节点 id 列表
+
+    会话隔离是硬约束：所有会话的节点共用同一条时间轴，若只按时间筛，
+    会跨会话删除其它会话里更早的节点（造成不可恢复的越界删除）。
+    故这里强制按 conv_id 过滤；site_key 传了就一并限定站点。
+    @param node_id  参照节点 id
+    @param conv_id  会话 id（必填，隔离边界）
+    @param site_key 站点标识；None 表示不限站点
+    @return 同会话内更早的节点 id 列表
     """
     conn = get_conn()
     row = conn.execute("SELECT created_at FROM nodes WHERE id=?", (node_id,)).fetchone()
     if not row:
         return []
     ts = row["created_at"] or 0
-    rows = conn.execute(
-        "SELECT id FROM nodes WHERE deleted=0 AND (created_at < ? OR (created_at = ? AND id < ?))",
-        (ts, ts, node_id),
-    ).fetchall()
+    # 会话过滤：先限定同一 conv_id（（可选）同一 site_key），再按时间取更早的
+    sql = ("SELECT id FROM nodes WHERE deleted=0 AND conv_id=? "
+           "AND (created_at < ? OR (created_at = ? AND id < ?))")
+    args = [conv_id, ts, ts, node_id]
+    if site_key is not None:
+        sql = ("SELECT id FROM nodes WHERE deleted=0 AND conv_id=? AND site_key=? "
+               "AND (created_at < ? OR (created_at = ? AND id < ?))")
+        args = [conv_id, site_key, ts, ts, node_id]
+    rows = conn.execute(sql, args).fetchall()
     return [r["id"] for r in rows]
 
 

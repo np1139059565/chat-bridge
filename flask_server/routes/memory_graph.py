@@ -113,7 +113,12 @@ def node_clean_older():
     nid = data.get("node_id")
     if not nid:
         return _err("缺少 node_id")
-    ids = memory_nodes.ids_older_than(nid)
+    # 会话隔离硬约束：必须传 conv_id，缺失直接拒绝，绝不退化成「全库删除」。
+    # 所有会话的节点共用同一条时间轴，不限定会话就会误删其它会话更早的节点。
+    conv_id = (data.get("conv_id") or "").strip()
+    if not conv_id:
+        return _err("缺少 conv_id（清理旧节点必须限定会话，防止误删其它会话）")
+    ids = memory_nodes.ids_older_than(nid, conv_id, data.get("site_key") or None)
     deleted = memory_nodes.hard_delete_many(ids)
     # 同样清理会话表里因节点删除而悬空的树键引用。
     memory_conversations.prune_dangling_refs()
