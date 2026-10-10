@@ -6,10 +6,13 @@
 # 缺失时自动跳过，不会把环境问题误报成代码问题。
 #
 # 钩子清单：
-#   1. syntax     —— 校验本次改动文件的语法（py / js / json / yaml）
-#   2. hygiene    —— 拦截临时备份文件与超过 450 行的源码（与拆分约定一致）
-#   3. quality    —— 结构质量九项检查（参数 / 嵌套 / 长行 / 文件复杂度 / 函数个数 /
-#                    JS 函数体 / 注释率 / 循环导入 / 命名），全量扫描
+#   1. syntax          —— 校验本次改动文件的语法（py / js / json / yaml）
+#   2. hygiene         —— 拦截临时备份文件与超过 450 行的源码（与拆分约定一致）
+#   3. quality         —— 结构质量九项检查（参数 / 嵌套 / 长行 / 文件复杂度 / 函数个数 /
+#                         JS 函数体 / 注释率 / 循环导入 / 命名），全量扫描
+#   4. doc-sync        —— 路由 / 工具是否都已收录进 api-reference.md
+#   5. js-tests        —— 前端纯逻辑测试（node --test）
+#   6. host-theme-sync —— 主题副本与真源一致性校验（单一真源）
 #
 # 安装（每台机器执行一次）：
 #   pre-commit install
@@ -54,6 +57,14 @@ repos:
         name: 前端逻辑测试（node --test）
         description: 运行 flask_server/tests/js 下的前端纯逻辑测试；无 node 时跳过
         entry: python scripts/hooks/check_js_tests.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: host-theme-sync
+        name: 主题副本同步（单一真源）
+        description: 校验 host_theme 副本与真源 shared/host_theme.js 一致，防止改一处忘一处
+        entry: python scripts/sync_host_theme.py --check
         language: system
         pass_filenames: false
         always_run: true
