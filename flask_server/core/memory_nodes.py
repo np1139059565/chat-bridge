@@ -133,6 +133,26 @@ def touch_hit(node_id):
     maybe_commit(conn)
 
 
+def touch_hits(node_ids):
+    """批量标记命中：一批节点一次更新（hit+1、记录最后命中时间）。
+
+    检索命中登记用：一次检索可能命中多条，逐条 touch_hit 会产生 N 次写、
+    每次都要抢写锁；改为一句话批量更新，写次数降到 1 次，持锁时间大幅缩短，
+    减少与其它写入的竞争。
+    @param node_ids 命中的节点 id 列表
+    """
+    ids = [int(x) for x in (node_ids or []) if x is not None]
+    if not ids:
+        return
+    conn = get_conn()
+    now = _now()
+    conn.executemany(
+        "UPDATE nodes SET hit_count=hit_count+1, last_hit_at=? WHERE id=?",
+        [(now, nid) for nid in ids],
+    )
+    maybe_commit(conn)
+
+
 def set_strength(node_id, strength):
     """直接写强度值（衰减计算用）。"""
     conn = get_conn()

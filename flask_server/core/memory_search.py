@@ -18,13 +18,29 @@ import memory_edges
 import memory_keywords
 
 
+# plans 表保留的最大记录数：够 denoise_by_plans 取最近 20 条去噪即可，
+# 多留冗余但绝不允许无限增长——否则每次检索都插一条、永不清理，表会一直涨。
+_PLANS_KEEP = 200
+
+
 def plan_submit(plan_text, session_id=""):
-    """接口 A：暂存任务计划原文，返回 plan_id。纯写入，不检索。"""
+    """接口 A：暂存任务计划原文，返回 plan_id。纯写入，不检索。
+
+    写入后顺带裁掉超出上限的旧计划，避免 plans 表只增不减、无限膨胀。
+    只影响去噪用的历史计划（保留最近 _PLANS_KEEP 条，远多于去噪所需的 20 条）。
+    """
     pid = uuid.uuid4().hex[:16]
     conn = get_conn()
     conn.execute(
         "INSERT INTO plans (plan_id, session_id, text, created_at) VALUES (?,?,?,?)",
         (pid, session_id, plan_text or "", int(time.time())),
+    )
+    # 裁剪：仅保留最近 _PLANS_KEEP 条。按创建时间倒序（同一秒用 rowid 兜底，
+    # 保证排序稳定，不会误删刚写入的这条）。
+    conn.execute(
+        "DELETE FROM plans WHERE rowid NOT IN ("
+        " SELECT rowid FROM plans ORDER BY created_at DESC, rowid DESC LIMIT ?)",
+        (_PLANS_KEEP,),
     )
     conn.commit()
     return pid
@@ -178,13 +194,18 @@ def _sort_by_focus(enriched, focus):
 
 
 def _rank(scores, valid_keywords, focus, top_k):
-    """按交集置信度加权，按 focus 排序，返回命中列表。"""
+    """按交集置信度加权，按 focus 排序，返回命中列表。
+
+    命中登记改为「先收集、再一次批量写」：本函数是只读检索，
+    不应在遍历里逐条抢写锁；批量写把写次数从 N 降到 1，
+    缩短持锁时间，减少与其它写入的竞争（登记语义不变）。
+    """
     enriched = _enrich_scores(scores, valid_keywords)
     _sort_by_focus(enriched, focus)
     out = []
+    hit_ids = []
     for node, final, jac in enriched[:top_k]:
-        # 命中计数 + 突触强化
-        memory_nodes.touch_hit(node["id"])
+        hit_ids.append(node["id"])
         out.append({
             "node_id": node["id"],
             "source": node.get("source"),
@@ -198,4 +219,6 @@ def _rank(scores, valid_keywords, focus, top_k):
             "strength": round(float(node.get("strength") or 0.0), 4),
             "created_at": node.get("created_at") or 0,
         })
+    # 命中登记：一次批量更新，避免逐条写库反复抢锁
+    memory_nodes.touch_hits(hit_ids)
     return out

@@ -311,6 +311,15 @@ def distill_node(node_id, use_llm=False):
         memory_nodes.set_essence(node_id, essence, keywords, vector)
     finally:
         end_batch(conn)
+    # 增量更新内存索引：把这条新记忆补进倒排桶，使检索的内存预筛
+    # 立即能看到它，不必等下次全量重载（否则新节点短期内用不上快速索引）。
+    try:
+        import memory_loader
+        memory_loader.index_node(
+            node_id, source, essence, keywords,
+            node.get("tier"), node.get("strength"))
+    except Exception as e:
+        app_log.warn("[memory]", "索引增量更新失败 node=%s: %s" % (node_id, e))
     # 第二步·事务外：接入事件层（建突触、给用户发言挂影子）。
     # 这些是只读扫描 + 内存计算 + 逐条短事务写边，不再长时间持有写锁。
     try:

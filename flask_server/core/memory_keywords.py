@@ -36,6 +36,30 @@ by from we you they he she i me my your our their not no yes can should would co
 # LLM 精筛 provider：默认 None。注册后签名 (text, candidates) -> list[str]
 _llm_provider = None
 
+# 可选中文分词器：装了 jieba 就用它切词，没装则回退短语块切分。
+# 做成可选而非强制依赖，与本项目「零依赖优先」的风格一致（如向量检索不依赖向量库）。
+# 首次使用时才尝试导入，避免无 jieba 的环境在 import 期付出代价。
+_tokenizer = None
+_tokenizer_ready = False
+
+
+def _get_tokenizer():
+    """返回可用的中文分词器切词函数；无可用分词器返回 None。
+
+    优先 jieba（若已安装）；导入失败静默回退，不影响规则提词。
+    @return 切词函数（str -> list[str]）或 None
+    """
+    global _tokenizer, _tokenizer_ready
+    if _tokenizer_ready:
+        return _tokenizer
+    _tokenizer_ready = True
+    try:
+        import jieba
+        _tokenizer = lambda s: [w for w in jieba.cut(s) if w.strip()]
+    except Exception:
+        _tokenizer = None
+    return _tokenizer
+
 
 def register_llm_provider(fn):
     """注册 LLM 精筛 provider（可插拔）。
@@ -98,14 +122,19 @@ def _score_identifiers(text, scores):
 
 
 def _score_cjk_phrases(text, scores):
-    """中文短语块计分：按标点/连接词切块，整块作为候选，权重按长度给。
+    """中文短语计分：优先用分词器切词，无分词器时回退短语块切分。
 
+    装了 jieba 等分词器时，切出的词更准；没装则用「按标点与虚词切块」
+    的规则法（精度有限，但零依赖）。两条路径都做同样的停用词过滤与长度过滤。
     @param text   待扫描文本
     @param scores 计分表（就地累加）
     """
+    tok = _get_tokenizer()
     for m in _RE_CJK.finditer(text):
         seg = m.group(0)
-        for phrase in _split_phrases(seg):
+        # 有分词器：按词切；无分词器：按标点与虚词切短语块
+        phrases = tok(seg) if tok else _split_phrases(seg)
+        for phrase in phrases:
             if len(phrase) < 2:                 # 过短不成词
                 continue
             if phrase in _STOPWORDS or _all_stop(phrase):  # 停用词过滤

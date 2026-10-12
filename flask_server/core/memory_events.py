@@ -94,8 +94,12 @@ def _try_link(new_node_id, nk, cand_id, ok):
     # 这样「两个节点间多个关键词相同」才真正影响突触强度，
     # 而非此前固定 +0.2（与交集数无关，走查确认的断层）。
     delta = 0.2 * min(len(inter), 5) / 5.0
+    # 建边初始权重归一到 0~1：全系统权重语义即 0~1（饱和强化封顶 1.0、
+    # 衰减按 0~1 设计）。此前直接传交集词数（可达 5+）会超纲，
+    # 使首次建出的边权重与后续强化/衰减口径不一致。
+    init_weight = min(1.0, len(inter) / 5.0)
     # 把导致关联的关键词一并存入：前端悬停连线时据此说明「因哪些词相连」。
-    memory_edges.add_edge(lo, hi, "associative", weight=float(len(inter)),
+    memory_edges.add_edge(lo, hi, "associative", weight=init_weight,
                           keywords=sorted(inter), reinforce_delta=delta)
     return True
 

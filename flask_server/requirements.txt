@@ -6,6 +6,8 @@ Werkzeug>=2.3
 PyYAML>=6.0
 websocket-client>=1.6
 numpy>=1.21
+# 中文分词（记忆系统关键词提取；未安装时代码自动回退短语块切分）
+jieba>=0.42
 
 # 远程桥接语音链路依赖
 pilk>=0.2.4
