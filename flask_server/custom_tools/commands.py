@@ -14,18 +14,16 @@ import app_log
 
 
 def _online_skill_dirs():
-    """返回已上线 skill 的 {skill_name: skill_dir}。
+    """返回已上线 skill 的 {skill_name: skill_dir 绝对路径}。
 
-    判定口径与工具一致：只要该 skill 有任一工具 enabled，即视为上线。
-    skill_dir 存的是项目根相对路径，调用方按需再用 resolve_to_abs 还原。
+    判定口径统一为技能级开关（skills.is_skill_online），与技能清单、说明段落一致：
+    技能自身上线即纳入，不再依赖其工具是否 enabled——指令的执行端在 _parse_command
+    里另有「工具存在且上线」的校验，两道判定各司其职。
     """
+    from .skills import skill_dir_map, is_skill_online
     out = {}
-    for t in load_tools().values():
-        if not t.get("enabled"):
-            continue
-        name = (t.get("skill_name") or "").strip()
-        d = (t.get("skill_dir") or "").strip()
-        if name and d:
+    for name, d in skill_dir_map().items():
+        if is_skill_online(name) and d:
             out[name] = d
     return out
 

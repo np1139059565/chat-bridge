@@ -30,10 +30,17 @@ def prompt_section_list():
 
 @bp.route("/skills/<skill>/enabled", methods=["PUT", "OPTIONS"])
 def skill_set_enabled(skill):
-    """技能一键上 / 下线：批量设置该技能下全部工具的 enabled，并刷新提供方注册表。"""
+    """技能一键上 / 下线：写技能级开关并同步其工具，刷新提供方注册表。
+
+    技能不存在或写盘失败时返回 400 与明确原因，不再静默返回成功——
+    避免「点了没反应却显示已上线」的误导。无工具技能也会成功（changed 为空）。
+    """
     data = request.get_json(force=True, silent=True) or {}
     enabled = bool(data.get("enabled"))
-    changed = ct.set_skill_enabled(skill, enabled)
+    try:
+        changed = ct.set_skill_enabled(skill, enabled)
+    except Exception as e:
+        return jsonify({"ok": False, "skill": skill, "error": str(e)}), 400
     # 上下线会改变提供方工具集合（external 工具是否注册）
     runtime.refresh_external_providers()
     return jsonify({"ok": True, "skill": skill, "enabled": enabled, "changed": changed})

@@ -43,21 +43,23 @@ def external_providers():
 
 
 def prompt_sections():
-    """收集各技能的统一说明（tool.json 的 prompt 字段）。
+    """收集已上线技能的统一说明。
 
-    生效条件：该技能下有至少一个工具处于上线状态。
-    返回 [ { skill, text } ]，技能名取 skill_name。
+    生效条件：技能自身处于上线状态（技能级开关，见 skills.is_skill_online）。
+    说明来源：tool.json 顶层 prompt 优先，缺失时取 SKILL.md 正文首段；因此没有
+    工具、只有说明文档的技能同样能注入。返回 [ { skill, text } ]。
     """
-    sections = {}
-    for t in load_tools().values():
-        if not t.get("enabled"):
+    # 延迟导入，避免与 skills 模块形成导入环
+    from .skills import skill_dir_map, is_skill_online, skill_prompt
+    out = []
+    for name, d in skill_dir_map().items():
+        if not is_skill_online(name):
             continue
-        text = (t.get("skill_prompt") or "").strip()
+        text = skill_prompt(name, d)
         if not text:
             continue
-        skill = t.get("skill_name") or ""
-        sections[skill] = text
-    return [{"skill": k, "text": v} for k, v in sections.items()]
+        out.append({"skill": name, "text": text})
+    return out
 
 
 def public_meta(tool):

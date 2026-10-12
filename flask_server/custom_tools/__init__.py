@@ -39,3 +39,9 @@ from .meta import (
 
 # 扫描
 from .scan import scan_dir
+
+# 技能级状态与发现（技能独立开关、技能发现、说明提取）
+from .skills import (
+    load_skill_state, save_skill_state, set_skill_state,
+    is_skill_online, skill_dir_map, online_skill_names, skill_prompt,
+)

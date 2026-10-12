@@ -36,8 +36,9 @@
   M.setSkillEnabled = async function (name, enabled) {
     const skill = this.skillsManage.find((s) => s.name === name);
     const affected = skill ? skill.tools.map((t) => t.name) : [];
-    // 乐观更新：技能内工具 + 自定义工具列表中的同名项
+    // 乐观更新：技能自身开关 + 技能内工具 + 「工具」区块中的同名项
     if (skill) {
+      skill.enabled = enabled;
       skill.tools.forEach((t) => { t.enabled = enabled; });
       skill.enabled_count = enabled ? skill.tools.length : 0;
     }
@@ -46,16 +47,19 @@
       if (ct) ct.enabled = enabled;
     });
     try {
-      await D.apiFetch(this, '/skills/' + encodeURIComponent(name) + '/enabled', {
+      const resp = await D.apiFetch(this, '/skills/' + encodeURIComponent(name) + '/enabled', {
         method: 'PUT',
         body: { enabled: enabled },
       });
+      // 后端明确失败时（技能不存在 / 写盘失败）抛出，走回滚分支，避免静默成功
+      if (resp && resp.ok === false) throw new Error(resp.error || '保存失败');
       await this.loadCustomTools();
       await this.fetchTools();        // 影响 System Prompt 与工具树
       await this.loadSkillsManage();  // 回读真实状态，避免乐观值与后端不一致
       this.toast(enabled ? ('技能已上线：' + name) : ('技能已下线：' + name));
     } catch (e) {
       if (skill) {
+        skill.enabled = !enabled;
         skill.tools.forEach((t) => { t.enabled = !enabled; });
         skill.enabled_count = enabled ? 0 : skill.tools.length;
       }
@@ -149,7 +153,8 @@
     const name = s.name;
     const total = s.tool_count || 0;
     const onCount = (s.tools || []).filter((t) => t.enabled).length;
-    const allOn = total > 0 && onCount === total;
+    // 上线状态以技能自身开关为准，与「有没有工具」无关：无工具技能同样可上下线
+    const on = !!s.enabled;
     return h('div', { class: 'skill-item', key: name }, [
       h('div', { class: 'tree-node', onClick: () => ctx.toggleSkill(name) }, [
         h('span', { class: 'caret' }, ctx.skillsExpanded[name] ? '▾' : '▸'),
@@ -159,11 +164,10 @@
       ]),
       h('div', { class: 'tool-btns' }, [
         h('button', {
-          class: 'switch ' + (allOn ? 'on' : 'off'),
-          disabled: total === 0,
-          title: '一键控制该技能下全部工具的上下线',
-          onClick: () => ctx.setSkillEnabled(name, !allOn)
-        }, allOn ? '技能已上线' : '技能已下线')
+          class: 'switch ' + (on ? 'on' : 'off'),
+          title: '一键控制该技能及其工具的上下线',
+          onClick: () => ctx.setSkillEnabled(name, !on)
+        }, on ? '技能已上线' : '技能已下线')
       ]),
       ctx.skillsExpanded[name] ? h('div', { class: 'tree-detail' }, [
         // 工具列表：每项可单独上下线，改动与「工具」区块同源

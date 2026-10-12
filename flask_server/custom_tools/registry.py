@@ -134,11 +134,22 @@ def update(name, patch):
 
 
 def set_skill_enabled(skill_name, enabled):
-    """把某个技能下的全部工具批量设为上线 / 下线，并落盘。
+    """设置技能一键上下线：写技能级开关，并顺带批量设置该技能下的全部工具。
 
-    用于设置页「技能一键上下线」：技能是容器，其包含的工具共享同一开关。
-    返回受影响的工具名列表；技能不存在或没有工具时返回空列表。
+    技能是独立实体：即便该技能没有任何工具，开关也应生效并落盘——否则无工具
+    技能会永远无法上线（历史缺陷）。工具开关仍随之同步，保持「一键」的既有语义；
+    无工具时 changed 为空属正常，不再据此判定失败。
+    返回受影响的工具名列表（可能为空）。
     """
+    # 延迟导入，避免与 skills 模块形成导入环
+    from .skills import set_skill_state, skill_dir_map
+    # 技能必须存在：避免为不存在的名字凭空写开关
+    if skill_name not in skill_dir_map():
+        raise ValueError("技能不存在：%s" % skill_name)
+    # 1) 落技能级开关（无工具技能也能成功，这是本次修复的核心）
+    if not set_skill_state(skill_name, enabled):
+        raise RuntimeError("写入技能开关失败，上下线未生效")
+    # 2) 顺带把该技能下的全部工具设为同一状态；无工具时为空列表，属正常
     tools = load_tools()
     changed = []
     for t in tools.values():

@@ -37,20 +37,22 @@ def _tools_by_skill():
 def skills():
     """返回【已上线】技能清单：[ { name, summary, tools } ]，tools 为该技能包含的工具名列表。
 
-    只纳入至少有一个已上线工具的技能：工具全部下线（含技能一键下线）后，
-    该技能不再出现在 System Prompt 的技能列表中，避免与 sections() 口径不一致。
-    设置页所需的「全部技能」视图由 skills_manage() 单独提供，不受此处过滤影响。
+    是否上线由技能自身的开关决定，与「有没有工具」无关：没有工具、只有说明文档
+    的技能同样纳入（tools 为空列表），其说明经 sections() 注入 System Prompt，
+    口径与 sections() 保持一致。技能集合以技能目录为准，摘要缺失时为空串。
+    设置页所需的「全部技能」视图由 skills_manage() 单独提供。
     """
+    from custom_tools.skills import is_skill_online, skill_dir_map
     by_skill = _tools_by_skill()
+    summaries = {s["name"]: s["summary"] for s in list_skills()}
     out = []
-    for s in list_skills():
-        tools = sorted(by_skill.get(s["name"], []))
-        if not tools:
+    for name in sorted(skill_dir_map().keys()):
+        if not is_skill_online(name):
             continue
         out.append({
-            "name": s["name"],
-            "summary": s["summary"],
-            "tools": tools,
+            "name": name,
+            "summary": summaries.get(name, ""),
+            "tools": sorted(by_skill.get(name, [])),
         })
     return out
 
@@ -92,13 +94,18 @@ def _manage_tools_by_skill():
     return by_skill
 
 
-def _manage_row(name, tools, summaries):
-    """组装设置页单个技能的行：摘要、工具列表与上下线计数。"""
+def _manage_row(name, tools, summaries, enabled):
+    """组装设置页单个技能的行：摘要、工具列表、上下线计数与技能自身开关。
+
+    enabled 为技能自身的上线状态（与工具是否上线解耦），供界面渲染一键开关；
+    tool_count 可能为 0（无工具技能），此时开关仍可用。
+    """
     tools = sorted(tools, key=lambda x: x.get("name") or "")
     return {
         "name": name,
         "summary": summaries.get(name, ""),
         "tools": tools,
+        "enabled": bool(enabled),
         "tool_count": len(tools),
         "enabled_count": sum(1 for x in tools if x.get("enabled")),
         "doc_file": "SKILL.md",
@@ -109,13 +116,15 @@ def skills_manage():
     """技能管理视图，供设置页「技能」区块渲染。
 
     与 skills() 的区别：
-    - 覆盖 skills 根目录下的全部技能，而非只含带说明文档的；
+    - 覆盖全部技能（技能目录 ∪ 已安装工具所属技能），而非只含已上线的；
     - 每个技能附带其包含的完整工具定义（含 enabled 与来源信息），
       便于界面直接渲染工具行与一键上下线开关；
+    - 附带技能自身开关状态，无工具技能同样可被上下线；
     - 附带文档路径约定，供界面编辑 SKILL.md。
     """
+    from custom_tools.skills import is_skill_online, skill_dir_map
     by_skill = _manage_tools_by_skill()
     # 技能摘要：优先取 SKILL.md / README.md 首行
     summaries = {s["name"]: s["summary"] for s in list_skills()}
-    names = sorted(set(_skill_dirs()) | set(by_skill.keys()))
-    return [_manage_row(n, by_skill.get(n, []), summaries) for n in names]
+    names = sorted(set(skill_dir_map().keys()) | set(by_skill.keys()))
+    return [_manage_row(n, by_skill.get(n, []), summaries, is_skill_online(n)) for n in names]

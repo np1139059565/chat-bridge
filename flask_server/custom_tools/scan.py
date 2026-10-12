@@ -23,7 +23,18 @@ def _resolve_scan_root(d):
 
 
 def _scan_one_skill(sub, installed):
-    """扫描单个 skill 子目录，返回结果条目；解析失败时携带 error 字段。"""
+    """扫描单个 skill 子目录，返回结果条目；解析失败时携带 error 字段。
+
+    无 tool.json（只有说明文档）的技能视为合法技能：工具列表为空，不报错——
+    这类无工具技能同样可以一键上线并注入说明，故扫描阶段必须能发现它们。
+    """
+    if not (sub / "tool.json").exists():
+        # 无工具定义：仅作为「空技能」登记，供设置页上下线
+        return {
+            "skill_dir": to_project_rel(sub),
+            "skill_name": sub.name,
+            "tools": [],
+        }
     try:
         parsed = parse_skill(sub)
         return {
@@ -45,14 +56,21 @@ def _scan_one_skill(sub, installed):
         }
 
 
+def _looks_like_skill(sub):
+    """判断子目录是否像一个 skill：含 tool.json，或含说明文档（SKILL.md / README.md）。"""
+    if (sub / "tool.json").exists():
+        return True
+    return (sub / "SKILL.md").exists() or (sub / "README.md").exists()
+
+
 def scan_dir(d):
-    """扫描某目录下的可安装 skill（含 tool.json 的子目录）。"""
+    """扫描某目录下的可安装 skill（含 tool.json 或说明文档的子目录）。"""
     root = _resolve_scan_root(d)
     installed = load_tools()
     results = []
     for sub in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda x: x.name):
-        # 仅处理含 tool.json 的子目录（其余视为普通目录跳过）
-        if not (sub / "tool.json").exists():
+        # 处理含 tool.json 或说明文档的子目录；其余视为普通目录跳过
+        if not _looks_like_skill(sub):
             continue
         results.append(_scan_one_skill(sub, installed))
     return results
