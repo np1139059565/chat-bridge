@@ -218,6 +218,30 @@
   };
 
   /**
+   * 生成工具截图的精简回传标记（bridge-chat-res）。
+   *
+   * 与 resultText 的区别：这里只保留「身份 + 文件名」，不含图片 base64，
+   * 也不含完整 result。图片另经 auto_send_image 贴入输入框、并按文件名回挂；
+   * 本标记随图作为正文，仅用于让镜像端认出这是「工具结果」而非用户发言，
+   * 同时保持文本极短，避免膨胀。
+   * @param {Object} card 工具卡片
+   * @returns {string} 精简的 bridge-chat-res JSON 文本
+   */
+  M.screenshotMark = function (card) {
+    const nonce = this.ensureNonce(card);
+    const saved = ((card.result || {}).data || {}).saved || null;
+    const payload = {
+      tool: card.tool,
+      type: 'bridge-chat-res',
+      nonce: nonce,
+      success: true,
+      result: { saved: saved ? { name: saved.name, path: saved.path } : null }
+    };
+    // 紧凑序列化（不缩进）：正文越短越好，仅承载身份与文件名。
+    return JSON.stringify(payload);
+  };
+
+  /**
    * 复制图片到剪贴板。
    * 用 ClipboardItem 写二进制；环境不支持时提示用户右键另存。
    * @param {string} dataUrl 图片 dataURL

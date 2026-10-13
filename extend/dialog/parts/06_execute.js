@@ -271,8 +271,24 @@
     }
     const shot = D.extractScreenshot(card.result);
     if (shot) {
-      // 图片：交给内容脚本写进输入框并发送。统一经发送队列，避免与告警抢跑。
-      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot });
+      // 工具截图：与「网页版用户发图」同一形态——图片贴入输入框，正文只带一段
+      // 精简的 bridge-chat-res 标记（含 tool/nonce/文件名，不含图片数据）。
+      // 再登记「标记文本 → 截图文件名」关联，待消息入树时按文本把图片以文件名
+      // 挂回（见 05_messages._attachPendingImages）。如此：
+      //   1) 正文含 bridge-chat-res → 镜像端判为「工具结果」，不误触记忆窗口；
+      //   2) 正文不含 base64 → 不会膨胀；
+      //   3) 图片按文件名引用，与网页版用户发图一致，不依赖网页 DOM。
+      const mark = this.screenshotMark(card);
+      const saved = ((card.result || {}).data || {}).saved || null;
+      try {
+        if (saved && saved.name) {
+          const conv = this.ensureConv(this.activeConv);
+          if (!Array.isArray(conv.pendingImages)) conv.pendingImages = [];
+          conv.pendingImages.push({ text: mark, names: [saved.name], dir: 'screenshot' });
+          if (this._persist) this._persist();
+        }
+      } catch (e) { log('登记截图回挂失败：' + e); }
+      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: mark });
       return;
     }
     // 文本结果同样经队列，保证一次只回传一条、与其它回传串行。

@@ -453,6 +453,10 @@ QQ ↔ 网页 AI 的双向桥接接口。抽屉插件与后端交互，把网页
 
 读取已保存的网页图片。返回图片二进制（带长缓存）。
 
+### GET /api/web/screenshot-file/<name>
+
+读取已保存的工具截图（debug_chrome 的 get_page_snapshot 结果）。返回图片二进制（带长缓存）。
+
 ### POST /api/web/voice
 
 从网页发送语音。请求含音频数据；返回 `{ success, name }`。

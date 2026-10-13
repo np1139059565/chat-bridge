@@ -314,6 +314,23 @@ def web_image_file(name):
     return send_file(path, mimetype=mime, conditional=True, max_age=604800)
 
 
+@bp.route("/api/web/screenshot-file/<name>", methods=["GET", "OPTIONS"])
+def web_screenshot_file(name):
+    """取工具截图文件（debug_chrome 的 get_page_snapshot 结果），供前端渲染 <img>。
+
+    工具截图存于 screenshots 目录，与网页图片目录分开；本路由与 image-file
+    同一套目录穿越防护，只允许纯文件名且必须落在 screenshots 目录内。
+    前端据此把工具截图按文件名挂到对应消息上，无需把 base64 塞进正文。
+    """
+    path = _safe_under(name, paths.SCREENSHOTS_DIR)
+    if not path:
+        return jsonify(success=False, error="not_found"), 404
+    ext = path.rsplit(".", 1)[-1].lower()
+    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+    # max_age：截图文件名唯一（时间戳+序号）、内容不变，故设强缓存。
+    return send_file(path, mimetype=mime, conditional=True, max_age=604800)
+
+
 @bp.route("/api/web/audio/<name>", methods=["GET", "OPTIONS"])
 def web_audio(name):
     """取语音音频文件：浏览器据此自动播放。"""

@@ -150,9 +150,11 @@
     const used = [];
     (incoming || []).forEach((m) => {
       if (!m || m.role !== 'user') return;
-      // 取该消息的文字：用户消息多为 paragraph 块
-      const text = (m.blocks || []).filter(function (b) { return b && b.type === 'paragraph'; })
-        .map(function (b) { return b.text || ''; }).join(' ').trim();
+      // 取该消息的文字：用户消息多为 paragraph 块；工具截图回传的是
+      // bridge-chat-res JSON 文本，渲染后可能落在 code 块，故一并采集。
+      const text = (m.blocks || []).filter(function (b) {
+        return b && (b.type === 'paragraph' || b.type === 'code');
+      }).map(function (b) { return b.text || b.code || ''; }).join(' ').trim();
       if (!text) return;
       for (let i = 0; i < pend.length; i++) {
         if (used.indexOf(i) >= 0) continue;
@@ -160,8 +162,13 @@
         // 按文字包含匹配：网页回显的文字与卡片文字一致即可命中
         if (p.text && text.indexOf(p.text) >= 0) {
           used.push(i);
+          // 按登记的目录类型选取图路由：工具截图存 screenshots 目录，
+          // 走 screenshot-file；网页图片走 image-file。两者的图片文件名不通用。
+          const base = (p.dir === 'screenshot')
+            ? '/api/web/screenshot-file/'
+            : '/api/web/image-file/';
           const imgBlocks = (p.names || []).slice().reverse().map(function (n) {
-            return { type: 'image', src: '/api/web/image-file/' + encodeURIComponent(n), alt: '图片' };
+            return { type: 'image', src: base + encodeURIComponent(n), alt: '图片' };
           });
           // 双写之一：改本轮 incoming 的消息对象
           imgBlocks.slice().reverse().forEach(function (b) { m.blocks.unshift(b); });
