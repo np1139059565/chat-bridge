@@ -243,12 +243,21 @@
    * @returns {VNode} 消息节点
    */
   D.renderToolResultMessage = function (ctx, m, mKey) {
+    const blocks = D.toArray(m.blocks);
+    // 默认折叠：工具结果往往是一大段 JSON，展开会独占大量纵向空间、
+    // 把其它消息挤出视野。故只常显「工具」标题行，点击才展开内容。
+    const open = !!ctx.toolMsgOpen[mKey];
     return h('div', { class: 'msg tool-result', key: mKey }, [
       h('div', { class: 'bubble' }, [
-        h('div', { class: 'who' }, [
-          h('span', {}, '工具')
+        h('div', {
+          class: 'who',
+          onClick: () => { ctx.toolMsgOpen[mKey] = !open; }
+        }, [
+          h('span', { class: 'caret' }, open ? '▾' : '▸'),
+          h('span', {}, '工具'),
+          open ? null : h('span', { class: 'user-preview' }, '（' + blocks.length + ' 块，点击展开）')
         ]),
-        h('div', { class: 'blocks' }, D.toArray(m.blocks).map((b, j) => D.renderBlock(ctx, b, j, mKey)))
+        open ? h('div', { class: 'blocks' }, blocks.map((b, j) => D.renderBlock(ctx, b, j, mKey))) : null
       ])
     ]);
   };

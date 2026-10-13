@@ -163,6 +163,9 @@ window.AIMirrorDialog = (function () {
       thinkOpen: Vue.reactive({}),
       userOpen: Vue.reactive({}),
       stackOpen: Vue.reactive({}),
+      // 工具结果消息（bridge-chat-res）折叠状态：镜像区默认折叠，
+      // 避免那段大 JSON 独占纵向空间；点击标题行展开。
+      toolMsgOpen: Vue.reactive({}),
       entryChecked: Vue.reactive({}),
       entryOpen: Vue.reactive({}),
       sessionSearch: '',
