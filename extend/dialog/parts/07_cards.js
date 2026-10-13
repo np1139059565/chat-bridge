@@ -163,16 +163,6 @@
    */
   D._renderToolResult = function (ctx, card, readonly, kids) {
     if (card.status === 'done') {
-      // 结果区默认折叠以省纵向空间：头部一行常显，点击展开/收起。
-      // 默认态与思考块一致：只读模式（会话记录留档）默认展开，镜像区默认折叠。
-      const open = (ctx.toolResultOpen[card.id] === undefined)
-        ? readonly : !!ctx.toolResultOpen[card.id];
-      const isShot = !!D.extractScreenshot(card.result);
-      kids.push(h('div', {
-        class: 'result-head',
-        onClick: () => { ctx.toolResultOpen[card.id] = !open; }
-      }, (open ? '▾' : '▸') + ' 结果' + (isShot ? '（截图）' : '')));
-      if (!open) return;
       // 结果是截图时，渲染等比缩放的图片；否则仍以文本展示结果。
       const shot = D.extractScreenshot(card.result);
       if (shot) {
