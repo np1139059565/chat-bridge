@@ -272,9 +272,7 @@
     const shot = D.extractScreenshot(card.result);
     if (shot) {
       // 图片：交给内容脚本写进输入框并发送。统一经发送队列，避免与告警抢跑。
-      // 图文合一：随图带上本工具结果的 bridge-chat-res 文本，使镜像端 msgSource
-      // 能凭该标记把这条判为「工具结果」而非「用户发言」，避免误触记忆窗口。
-      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: this.resultText(card) });
+      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot });
       return;
     }
     // 文本结果同样经队列，保证一次只回传一条、与其它回传串行。
