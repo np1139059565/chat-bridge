@@ -194,6 +194,37 @@
   };
 
   /**
+   * 克隆工具结果并剔除内嵌的图片 base64。
+   *
+   * 截图工具的结果形如 { data:{ screenshot:'data:image/...', saved:{...} } }，
+   * 其中 screenshot 是整段 base64，若原样序列化进回传文本会急剧膨胀。
+   * 图片已随消息单独发送，文本里无需再带，故置空并标注省略，
+   * 只保留 saved（文件名 / 本地路径）这类短信息。
+   * 采用逐层浅拷贝：不复制 base64 字符串，仅将引用置空，开销极小。
+   * @param {*} result 工具结果
+   * @returns {*} 剔除图片后的新结果；入参非对象时原样返回
+   */
+  M._resultWithoutImage = function (result) {
+    if (!result || typeof result !== 'object') return result;
+    const out = {};
+    Object.keys(result).forEach(function (k) { out[k] = result[k]; });
+    if (out.data && typeof out.data === 'object') {
+      const d = {};
+      Object.keys(out.data).forEach(function (k) { d[k] = out.data[k]; });
+      if (typeof d.screenshot === 'string') {
+        d.screenshot = '';
+        d.screenshot_omitted = true;
+      }
+      out.data = d;
+    }
+    if (typeof out.screenshot === 'string') {
+      out.screenshot = '';
+      out.screenshot_omitted = true;
+    }
+    return out;
+  };
+
+  /**
    * 回传给 AI 的结果：bridge-chat-res 结构化 JSON。
    * 失败时带上「错误分类 + 完整堆栈」，让 AI 能分清参数写错还是工具代码缺陷。
    */
@@ -202,7 +233,9 @@
     const payload = { tool: card.tool, type: 'bridge-chat-res', nonce: nonce };
     if (card.status === 'done') {
       payload.success = true;
-      payload.result = card.result;
+      // 剔除内嵌图片 base64：截图已随消息单独发送，文本里只留简短信息，
+      // 与网页版截图「图片走 image 字段、文本保持简短」的做法一致。
+      payload.result = this._resultWithoutImage(card.result);
     } else {
       payload.success = false;
       payload.origin = card.origin || 'unknown';
