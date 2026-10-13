@@ -260,6 +260,19 @@
   border: 1px dashed var(--cb-border-strong);
 }
 
+/* 工具结果区的折叠标题行：默认折叠，点击展开/收起。
+   样式与思考块标题行一致，明确「可点」的视觉提示。 */
+.result-head {
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted);
+  margin-top: var(--cb-sp-1);
+}
+
+.result-head:hover {
+  color: var(--cb-primary);
+}
+
 /* 参数预览 / 结果 / 错误：内容都是 JSON 文本，统一用等宽字体，
    与 .usage、.stack 保持一致，便于对齐阅读 */
 .params-json {

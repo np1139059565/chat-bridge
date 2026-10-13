@@ -163,6 +163,8 @@ window.AIMirrorDialog = (function () {
       thinkOpen: Vue.reactive({}),
       userOpen: Vue.reactive({}),
       stackOpen: Vue.reactive({}),
+      // 工具结果区折叠状态：镜像区默认折叠以省纵向空间，点击标题行展开。
+      toolResultOpen: Vue.reactive({}),
       entryChecked: Vue.reactive({}),
       entryOpen: Vue.reactive({}),
       sessionSearch: '',
