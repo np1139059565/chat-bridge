@@ -191,9 +191,25 @@
     ]);
   }
 
-  /** 条目类型 → 展示用标签。只显示角色（用户/AI），省略块数以节省横向空间。 */
+  /**
+   * 条目类型 → 展示用标签。
+   *
+   * 工具结果（bridge-chat-res）与质量告警虽以 user 角色落地，但它们是机器产物、
+   * 不是用户说的话。仅凭 role 会把它们全部标成「用户」（历史遗留故障）。
+   * 故优先按 source 判定：tool → 工具；否则 user → 用户、assistant → AI。
+   * source 缺失（旧数据）时退回按 role 判定，保持兼容。
+   * @param {Object} e 条目摘要（含 kind / role / source）
+   * @returns {string} 展示标签
+   */
   function kindLabel(e) {
-    if (e.kind === 'message') return e.role === 'user' ? '用户' : 'AI';
+    if (e.kind === 'message') {
+      const src = e.source || '';
+      if (src === 'tool') return '工具';
+      if (src === 'assistant') return 'AI';
+      if (src === 'user') return '用户';
+      // 回退：旧数据无 source 字段，按 role 判定
+      return e.role === 'user' ? '用户' : 'AI';
+    }
     return e.label || '';
   }
 

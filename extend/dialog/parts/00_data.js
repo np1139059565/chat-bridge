@@ -331,6 +331,10 @@ window.AIMirrorDialog = (function () {
             cardIds: cardIds,
             finishedAt: finishedAt || null,
             role: node.role || '',
+            // source：来源标记（user / assistant / tool）。工具结果以 user 角色落地，
+            // 仅凭 role 会把工具结果标成「用户」。会话记录标签据此字段区分工具，
+            // 故必须带上，供 kindLabel 判定。
+            source: node.source || '',
             name: node.name || '',
             preview: D.firstLine(node),
             // 是否为外部调用信封（external-call）：在会话记录列表里单独着色标记。
