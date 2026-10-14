@@ -88,6 +88,24 @@
     const st = this._ensureMemoryState();
     const uid = this._lastRealUserId(incoming);
     if (!uid) return false;                       // 本轮无真实用户发言
+    // 诊断：打印被判定为「真实用户发言」的那条消息详情。
+    // 排查「工具结果/截图误触发记忆警告」：开窗只应由真实用户发言引起，
+    // 一旦是工具结果误开窗，这里打出的来源、块类型与文本即可当场锁定真凶。
+    try {
+      const list = incoming || [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        const m = list[i];
+        if (m && m.role === 'user' && this.isRealUserMessage(m) && this.msgId(m) === uid) {
+          const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
+          const types = blocks.map(function (b) { return (b && b.type) || '?'; }).join(',');
+          const txt = blocks.map(function (b) { return b && (b.text || b.code || ''); })
+            .join(' ').slice(0, 120);
+          log('记忆检查[诊断]：开窗消息 uid=' + uid + ' role=' + m.role
+            + ' source=' + this.msgSource(m) + ' 块类型=[' + types + '] 文本=' + txt);
+          break;
+        }
+      }
+    } catch (e) { /* 诊断失败不影响主流程 */ }
     if (uid === st.lastUserId) return false;      // 与上一条相同，非新发言
     // 新的用户发言：打开新窗口，等待 AI 先检索
     st.armed = true;
