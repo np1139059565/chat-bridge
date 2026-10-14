@@ -279,9 +279,14 @@
         if (idx >= list.length) {
           // 全部贴完：等预览就绪后写文字，再等发送按钮就绪、回车发送一次
           setTimeout(function () {
-            if (text) A.writeInputValue(ta, text);
+            // 贴图是异步过程（逐张间隔 + 收尾等待），期间站点可能重建输入框，
+            // 函数开头取的 ta 会脱离 DOM，导致文字写进已不在页面的元素，
+            // 消息只剩图片而无 bridge-chat-res 标记，被镜像端误判为用户发言。
+            // 故写文字与回车前，重新查找当前真实输入框（查不到再退回旧引用）。
+            const taNow = A.findInputBox() || ta;
+            if (text) A.writeInputValue(taNow, text);
             A.waitSendReady(function () {
-              setTimeout(function () { A.pressEnter(ta); }, 300);
+              setTimeout(function () { A.pressEnter(taNow); }, 300);
             });
           }, TAIL);
           return;

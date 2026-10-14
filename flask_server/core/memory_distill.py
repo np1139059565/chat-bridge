@@ -253,6 +253,25 @@ def _join_tool_brief(tool, brief, raw):
     return head.replace("\n", " ")[:200] or raw.replace("\n", " ")[:200]
 
 
+def _assistant_text(blocks):
+    """从助手消息 blocks 里只抽自然语言文本块，跳过代码块。
+
+    助手回复里的 code 块多是工具调用 JSON、语音 JSON 等机器串，
+    它们不属于「结论 / 进度」，混入精华会让精华变成不可读的腰斩 JSON。
+    故只取 text 块拼成正文；无 text 块时返回空串，由调用方兜底。
+    @param blocks 原始内容块
+    @return 自然语言正文
+    """
+    parts = []
+    for b in (blocks or []):
+        if not isinstance(b, dict):
+            continue
+        t = b.get("text") or ""
+        if t:
+            parts.append(str(t))
+    return "\n".join(parts).strip()
+
+
 def _essence_for(source, text, blocks):
     """按来源生成精华文本。
 
@@ -269,8 +288,10 @@ def _essence_for(source, text, blocks):
     if source == "tool":
         # 工具结果：优先解析出「工具名 + 结果摘要」，解析失败再退回文本截断
         return _tool_essence(text)
-    # assistant：剔除寒暄开头，取正文
-    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    # assistant：只取自然语言文本块（跳过代码块），再剔除寒暄开头。
+    # 用 text 兜底：极少数助手消息可能没有 text 块（如纯代码回复）。
+    body_text = _assistant_text(blocks) or text
+    lines = [ln.strip() for ln in body_text.splitlines() if ln.strip()]
     if lines:
         greetings = ("好的", "没问题", "当然", "让我", "我来", "首先", "接下来")
         while lines and lines[0].startswith(greetings):

@@ -156,7 +156,10 @@ def decay_edges(half_life_days=30, floor=0.1):
     rows = conn.execute(
         "SELECT id, weight, last_active_at FROM edges WHERE kind='associative' AND weight > 0"
     ).fetchall()
-    changed = 0
+    # 先算出所有要更新的 (新权重, 边 id)，再一次性 executemany 批量写。
+    # 逐条 conn.execute 在边多时会产生 N 次语句级开销（含慢SQL追踪回调），
+    # 是衰减耗时的大头；executemany 把 N 次语句开销摊薄成一批，显著提速。
+    updates = []
     for r in rows:
         idle = now - (r["last_active_at"] or now)
         if idle < span:
@@ -166,10 +169,11 @@ def decay_edges(half_life_days=30, floor=0.1):
         new_w = r["weight"] * factor
         if new_w < floor:
             new_w = 0.0
-        conn.execute("UPDATE edges SET weight=? WHERE id=?", (new_w, r["id"]))
-        changed += 1
+        updates.append((new_w, r["id"]))
+    if updates:
+        conn.executemany("UPDATE edges SET weight=? WHERE id=?", updates)
     maybe_commit(conn)
-    return changed
+    return len(updates)
 
 
 def edges_from(src, kind=None):

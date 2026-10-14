@@ -69,6 +69,12 @@ _save_worker = serial_worker.SerialWorker(
 # 只存内存，进程重启后首次保存自然全量；会话删除时清除对应项。
 _saved_sig = {}
 _sig_lock = threading.Lock()
+# 缓存条目上限：签名缓存是「只增不减」的字典，长期运行、会话越开越多时
+# 内存会持续膨胀。超过上限即按插入顺序淘汰最旧的一批（dict 保序），
+# 被淘汰的条目下次保存时按「内容已变」重写一次，代价极小、结果正确。
+_SIG_CACHE_MAX = 20000
+# 单次淘汰比例：每次超限淘汰 1/4，避免频繁触发淘汰。
+_SIG_EVICT_RATIO = 4
 
 
 def save_conversation(conv_id, site_key, conv):
@@ -100,6 +106,20 @@ def _distill_new(conv_id):
             memory_distill.distill_async(pending)
     except Exception as e:
         app_log.warn("[mem][save] 触发蒸馏失败 conv=%s: %s" % (conv_id, e))
+
+
+def _evict_sig_cache_locked():
+    """超限时按插入顺序淘汰最旧的一批签名缓存（调用方须已持 _sig_lock）。
+
+    淘汰量取上限的 1/4，把「每写一条就淘汰一次」摊薄成「偶尔淘汰一批」。
+    被淘汰条目下次保存会按内容已变重写，不影响正确性。
+    """
+    if len(_saved_sig) <= _SIG_CACHE_MAX:
+        return
+    evict_n = max(1, _SIG_CACHE_MAX // _SIG_EVICT_RATIO)
+    # dict 保持插入顺序，先插入的即最旧，逐个删即可
+    for k in list(_saved_sig.keys())[:evict_n]:
+        _saved_sig.pop(k, None)
 
 
 def _node_sig(node, parent_msg):
@@ -193,6 +213,7 @@ def _write_nodes(node_by_msg, parent_of, conv_id, site_key):
         changed.add(mid)
         with _sig_lock:
             _saved_sig[cache_key] = (sig, nid)
+            _evict_sig_cache_locked()   # 超限即淘汰最旧一批，防内存无限增长
     return id_map, changed
 
 

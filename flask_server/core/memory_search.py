@@ -118,13 +118,22 @@ def _fts_search(keywords, limit):
     if pre:
         for nid, hits in pre:
             scores[nid] = hits
-    # 回退（或补充）：数据库 LIKE。内存已给出候选时也补齐，避免缓存滞后漏掉新节点
-    for kw in keywords:
-        like = "%" + kw + "%"
-        rows = conn.execute(
-            "SELECT id FROM nodes WHERE (essence LIKE ? OR keywords LIKE ?) AND deleted=0 LIMIT ?",
-            (like, like, limit),
-        ).fetchall()
+    # 回退（或补充）：数据库 LIKE。内存已给出候选时也补齐，避免缓存滞后漏掉新节点。
+    # 多个关键词合并成「一条 SQL」：原实现每个关键词各跑一条全表 LIKE，
+    # N 个词即 N 条查询；改为把各词的 (essence LIKE ? OR keywords LIKE ?)
+    # 用 OR 拼成一条，查询次数从 N 降到 1，记忆量大时检索更快。
+    if keywords:
+        conds = []
+        args = []
+        for kw in keywords:
+            like = "%" + kw + "%"
+            conds.append("(essence LIKE ? OR keywords LIKE ?)")
+            args.extend([like, like])
+        sql = ("SELECT id FROM nodes WHERE deleted=0 AND ("
+               + " OR ".join(conds) + ") LIMIT ?")
+        # 上限随关键词数放大，避免合并后因单条 LIMIT 过小而截断候选
+        args.append(limit * len(keywords))
+        rows = conn.execute(sql, args).fetchall()
         for r in rows:
             scores[r["id"]] = scores.get(r["id"], 0) + 1
     # 按命中数降序，转成 (node_id, rank)

@@ -135,6 +135,10 @@ def _score_cjk_phrases(text, scores):
         # 有分词器：按词切；无分词器：按标点与虚词切短语块
         phrases = tok(seg) if tok else _split_phrases(seg)
         for phrase in phrases:
+            # 无分词器时，规则切块会产出首尾残留虚词的碎片（如「户规范读完」），
+            # 先用 _trim_phrase 剥掉首尾虚词字；有分词器时切词已较准，
+            # 清理对其无害，故两条路径统一做一次。
+            phrase = _trim_phrase(phrase)
             if len(phrase) < 2:                 # 过短不成词
                 continue
             if phrase in _STOPWORDS or _all_stop(phrase):  # 停用词过滤
@@ -158,23 +162,45 @@ def _rank_candidates(scores):
     return kept
 
 
+# 短语切分边界：只保留「纯虚词」字。
+# 关键教训：早先把「用 要 到 为 给 对 从 做 拿 取 来 …」也当边界，会切碎实词——
+# 「用」是边界，「用户规范读完」就被切成「户规范读完」，产出无法检索的残片。
+# 故边界表只收「几乎只作虚词、极少作实词首字」的字；像「用」这种高频实词首字一律剔除，
+# 宁可让相邻词粘成一块（语义完整、可包含匹配），也不切出断头残片。
+_BOUNDARY_CHARS = set(
+    "的 了 和 与 或 是 在 就 都 也 很 还 并 及 之 其 这 那 而 且 但 因 则 等 着 过 "
+    "同 跟 按 于 使 让 请 把 被 我 你 他 它 们 有 无 不 没 会 能 可 "
+    "里 时 后 前 上 下 中 内 外 地 得 再 又 才 只 更 最 太 好 多 少 个 些 位 件 次 种 点 令"
+)
+
+
+def _trim_phrase(phrase):
+    """剥离短语块首尾的单字虚词，缓解切块产生的「断头词」碎片。
+
+    按虚词切块时，残留虚词会粘到相邻词上，产出「户规范读完」这类
+    以虚词字开头/结尾的碎片（「用户」的「用」被切走，只剩「户」）。
+    此处剥掉首尾边界字；剥离后不足 2 字视为无效碎片，返回空串。
+    @param phrase 待清理的短语块
+    @return 清理后的短语；无效返回空串
+    """
+    s = str(phrase or "")
+    while s and s[0] in _BOUNDARY_CHARS:   # 反复剥离开头虚词字
+        s = s[1:]
+    while s and s[-1] in _BOUNDARY_CHARS:  # 反复剥离结尾虚词字
+        s = s[:-1]
+    return s if len(s) >= 2 else ""
+
+
 def _split_phrases(seg):
     """把一段连续汉字按连接词切成短语块。
 
     连接词/单字虚词作为边界（如「的」「和」「要」「是」「在」「，」），
     切出的每块是一个语义单元。块内不再细分。
     """
-    # 切分边界：单字虚词（这些字单独出现时多为连接/助词，不宜作关键词）
-    boundaries = set(
-        "的 了 和 与 或 要 是 在 我 你 他 它 们 把 被 给 对 从 到 为 就 都 也 很 还 "
-        "并 及 以 之 其 这 那 有 无 不 没 会 能 可 请 让 使 于 而 且 但 因 由 如 若 "
-        "则 等 着 过 向 往 同 跟 按 依 据 靠 用 拿 取 做 干 搞 将 来 里 时 后 前 上 "
-        "下 中 内 外 地 得 再 又 才 只 更 最 太 好 多 少 个 些 位 件 次 种 点 令"
-    )
     blocks = []
     cur = []
     for ch in seg:
-        if ch in boundaries:
+        if ch in _BOUNDARY_CHARS:
             if cur:
                 blocks.append("".join(cur))
                 cur = []
