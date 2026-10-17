@@ -155,6 +155,36 @@ def _register_request_logging(app):
     app.after_request(_req_end_hook)
 
 
+def _register_liveness(app, interval_seconds=10):
+    """存活心跳：独立线程每 interval_seconds 打一条日志，作为「进程还活着」的基线。
+
+    为什么需要它：请求日志只能证明「请求进来了」，看门狗也只能在
+    「请求已进入应用、且进程仍在调度」时发声。若整段静默——既无请求日志、
+    也无看门狗告警——则「进程被长时间占住」与「请求根本没到达本机」两种原因
+    无法区分。有心跳即可二分：静默期间心跳仍按时出现 → 进程正常，问题在网络层；
+    心跳一并消失 → 进程自身停摆。
+
+    心跳带递增序号：便于按「缺了第几拍」估算进程停摆的真实区间。
+    @param interval_seconds 心跳间隔（秒）
+    """
+    import threading
+    import time
+    import app_log
+
+    def _beat():
+        n = 0
+        while True:
+            time.sleep(interval_seconds)
+            n += 1
+            try:
+                app_log.info("[alive] 心跳 #%d" % n)
+            except Exception:
+                # 打点失败绝不能让线程退出，否则基线自己先没了
+                pass
+
+    threading.Thread(target=_beat, daemon=True, name="liveness").start()
+
+
 def _register_watchdog(app, hang_seconds=150, warn_seconds=10):
     """卡死看门狗：请求挂起超 warn_seconds 记 WARN，超 hang_seconds dump 线程堆栈。
 
@@ -305,6 +335,8 @@ def create_app():
     _register_request_logging(app)
     # 卡死看门狗：请求超时未返回时 dump 全部线程堆栈，直接指出卡在哪一行
     _register_watchdog(app)
+    # 存活心跳：定时打点，用于区分「进程停摆」与「请求未到达」
+    _register_liveness(app)
     # 全局异常日志：未捕获异常也落盘，避免只看到 500 却不知原因
     _register_error_logging(app)
     # 请求结束关闭本线程的记忆库连接：及时释放，不依赖 GC 时机
