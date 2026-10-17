@@ -14,12 +14,23 @@ pilk>=0.2.4
 vosk>=0.3.45
 edge-tts>=7.2.8
 
-# 语音合成多引擎依赖
-# pyttsx3  调用系统 SAPI5 语音，离线可用
+# ===== 语音合成：可 pip 安装的部分 =====
+# pyttsx3  调用系统 SAPI5 语音，离线可用（Windows 自带中文语音包即可工作）
 # lameenc  纯 Python MP3 编码器，免 ffmpeg
-# soundfile 读取 WAV（多引擎统一转 MP3 的中间格式）
+# soundfile 读取 WAV（各引擎统一转 MP3 的中间格式）
 pyttsx3>=2.90
 lameenc>=1.7
 soundfile>=0.12
 # pywin32 提供 pythoncom（SAPI 需先初始化 COM），仅 Windows 需要
 pywin32>=306; sys_platform == "win32"
+
+# ===== 语音合成：pip 装不了的部分 =====
+# Piper 本地引擎由「独立可执行文件 + ONNX 模型」组成，二者都不是 Python 包，
+# 无法写进本文件，pip install -r requirements.txt 不会装它们：
+#   piper.exe 及其 dll   约 20MB
+#   zh_CN-huayan-medium.onnx 及其 .json   约 63MB
+# 缺少时语音功能自动回落到 pyttsx3（已在上方声明），服务可正常启动。
+# 需要 Piper 时，在仓库根目录执行一次性安装脚本：
+#   python scripts/setup_piper.py
+# 说明：PyPI 上另有 piper-tts 包，但那是另一套 Python 实现，其中文支持会额外
+# 引入 transformers/tokenizers 等较重依赖，且模型仍需单独下载，故不采用。

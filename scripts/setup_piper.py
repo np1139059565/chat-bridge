@@ -2,21 +2,40 @@
 
 作用：把本地离线语音引擎 Piper 及其中文模型下载到 models/tts/piper/。
 
-为什么需要本脚本：
-    models/ 目录体积大、可重新下载，已被 .gitignore 排除，不进版本库。
-    新环境克隆后该目录为空，语音功能会按配置回落到其它引擎；
-    想用本地引擎时跑一次本脚本即可补齐，无需手工找下载地址。
+【为什么本脚本不可省略】
+    pip install -r requirements.txt 装不齐语音合成所需的全部组件。
+    能装与不能装的界限如下：
+
+    pip 能装（已在 flask_server/requirements.txt 声明）：
+        pyttsx3 / lameenc / soundfile / pywin32
+
+    pip 装不了（只能由本脚本获取）：
+        piper.exe 及其 dll        约 20MB，独立可执行文件，非 Python 包
+        zh_CN-huayan-medium.onnx  约 63MB，模型权重，非 Python 包
+
+    因此仅执行 pip install 时，系统语音（pyttsx3）可用，
+    Piper 本地引擎不可用；语音功能会自动回落，服务照常启动。
+    要用 Piper，就跑一次本脚本。
+
+【为什么不用 PyPI 上的 piper-tts】
+    PyPI 存在 piper-tts 包，但它与这里采用的 rhasspy 版二进制是两套实现；
+    其中文支持需额外安装 [zh] 扩展，会引入 transformers / tokenizers /
+    huggingface-hub 等较重依赖，且模型文件同样不含在包内、仍需单独下载。
+    综合取舍后采用「独立二进制 + 模型文件」方案，体积与依赖更可控。
+
+【模型为何不入库】
+    models/ 体积大且可重新下载，已被 .gitignore 排除。
+    新环境克隆后该目录为空，属预期状态，不是安装失败。
 
 用法（在仓库根目录）：
     python scripts/setup_piper.py            # 缺什么补什么，已存在的跳过
     python scripts/setup_piper.py --force    # 全部重新下载
-    python scripts/setup_piper.py --mirror   # 强制走国内镜像（默认已镜像优先）
 
 下载源：
     Piper 程序  GitHub Releases
     模型文件    HuggingFace（国内常连不上，默认先试 hf-mirror.com）
 
-退出码：0 = 全部就绪；1 = 有文件下载失败。
+退出码：0 = 全部就绪；1 = 有文件下载失败（此时语音自动回落，不影响启动）。
 """
 import os
 import shutil

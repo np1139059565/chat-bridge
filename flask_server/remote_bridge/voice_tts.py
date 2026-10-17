@@ -7,6 +7,12 @@
   pyttsx3  调用系统 SAPI5 语音，输出 WAV，再编码为 MP3；离线、零安装。
   edge_tts 微软在线合成，直接输出 MP3；需联网，非官方接口。
 
+安装分工（重要）：
+  pyttsx3 是纯 Python 包，pip install -r requirements.txt 即可装好。
+  piper 是「独立可执行文件 + ONNX 模型」，二者都不是 Python 包，pip 装不了，
+  需在仓库根目录跑一次 python scripts/setup_piper.py 获取。
+  未装 piper 时 auto 模式自动回落到 pyttsx3，不影响服务启动。
+
 切换方式：配置 bridge.push.voice_engine。
   - 固定引擎名（piper / pyttsx3 / edge_tts）：失败即返回错误，不降级。
   - auto：按 bridge.push.voice_fallback 的逗号分隔顺序逐个尝试。
