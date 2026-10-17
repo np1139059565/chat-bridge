@@ -360,10 +360,32 @@
   });
   document.getElementById('btnSend').addEventListener('click', sendMessage);
 
+  // ---------- 轮询调度 ----------
+  // 用「可重建的定时器」而非裸 setInterval。
+  //
+  // 为什么：手机浏览器切后台会冻结定时器，回前台后不保证自动恢复，
+  // 冻结久了甚至可能直接丢弃该定时器。被丢弃后页面再也不轮询，
+  // 表现为「切回来显示无法连接、要再切出去切回来才好」——
+  // 因为再次切换会走一遍可见性回调、重新拉起轮询。
+  // 故切后台时主动停表，回前台时显式重建，不依赖浏览器是否恢复。
+  var POLL_INTERVAL = 2500;
+  var pollTimer = null;
+
+  /** 启动（或重建）轮询定时器。 */
+  function startPolling() {
+    stopPolling();
+    pollTimer = setInterval(function () { fetchMessages(false); }, POLL_INTERVAL);
+  }
+
+  /** 停止轮询定时器。 */
+  function stopPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
   // ---------- 首次加载：铺历史 + 启动轮询 ----------
   clientLog('page', 'load 开始首次铺历史');
   fetchMessages(true);
-  setInterval(function () { fetchMessages(false); }, 2500);
+  startPolling();
   // 不再单独发心跳：每 3 秒一条纯属噪音。页面是否仍在运行，
   // 由轮询（slow / fail）与性能监控（tickgap）共同反映——它们异常时才有记录。
   // 性能监控：长任务（主线程被占）与定时器实时间隔。
@@ -380,14 +402,16 @@
   // 回到前台若不主动拉，会等到下一个周期甚至更久才看到新消息。
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      // 切后台：立刻掐断在途请求并解锁。
-      // 不掐的话，它会一直挂着，回来后补拉被 skip(busy) 挡掉，
-      // 用户体感就是「切回来发不出消息、还要等一会儿」。
+      // 切后台：停表 + 掐断在途请求并解锁。
+      // 停表是为了回前台时能拿到一个「干净的新定时器」——冻结期间的老定时器
+      // 可能已被浏览器丢弃，继续依赖它会永久停摆（表现为回来显示无法连接）。
+      stopPolling();
       abortInflightPoll('hidden');
       return;
     }
-    // 回前台：先清掉可能残留的旧轮次（冻结期间没跑完的），再立即补拉，
-    // 保证「切回来」看到的是最新消息，而不是等下一个轮询周期。
+    // 回前台：重建定时器 + 清残留 + 立即补拉。
+    // 重建定时器是关键：不重建就只能指望浏览器自己恢复那个可能已被丢弃的定时器。
+    startPolling();
     abortInflightPoll('visible');
     fetchMessages(false);
   });
