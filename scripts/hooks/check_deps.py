@@ -45,6 +45,8 @@ IMPORT_ALIAS = {
     "sklearn": "scikitlearn",
     "dotenv": "pythondotenv",
     "dateutil": "pythondateutil",
+    "pythoncom": "pywin32",
+    "win32com": "pywin32",
 }
 
 # requirements 行首包名：字母数字与 . _ -

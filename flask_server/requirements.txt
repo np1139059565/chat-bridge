@@ -13,3 +13,13 @@ jieba>=0.42
 pilk>=0.2.4
 vosk>=0.3.45
 edge-tts>=7.2.8
+
+# 语音合成多引擎依赖
+# pyttsx3  调用系统 SAPI5 语音，离线可用
+# lameenc  纯 Python MP3 编码器，免 ffmpeg
+# soundfile 读取 WAV（多引擎统一转 MP3 的中间格式）
+pyttsx3>=2.90
+lameenc>=1.7
+soundfile>=0.12
+# pywin32 提供 pythoncom（SAPI 需先初始化 COM），仅 Windows 需要
+pywin32>=306; sys_platform == "win32"

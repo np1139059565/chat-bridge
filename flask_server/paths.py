@@ -67,5 +67,13 @@ LOGS_DIR = DATA_DIR / "logs"
 RULES_DIR = PROJECT_ROOT / "rules"
 SKILLS_ROOT = PROJECT_ROOT / "skills"
 
+# ---------- 本地模型目录（不入库） ----------
+# 体积大、可重新下载的模型统一放工程根的 models/，已在 .gitignore 中排除。
+# 新环境克隆后此处为空，相关功能按配置自动降级，不影响其它模块启动。
+MODELS_DIR = PROJECT_ROOT / "models"
+# 语音合成模型子目录：Piper 的 .onnx 模型与可执行文件放这里。
+TTS_DIR = MODELS_DIR / "tts"
+PIPER_DIR = TTS_DIR / "piper"
+
 # 供错误定位做前缀匹配用（字符串形式）
 APP_DIR_STR = str(APP_DIR)
