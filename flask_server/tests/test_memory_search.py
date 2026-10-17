@@ -105,6 +105,26 @@ class TestMemorySearch(unittest.TestCase):
         self.assertIsNotNone(pre)
         self.assertGreaterEqual(len(pre), 1)
 
+    def test_fts_search_escapes_like_wildcards(self):
+        """关键词含 LIKE 通配符时按字面匹配，不误命中相似节点。
+
+        背景：
+            LIKE 里的 % 与 _ 是通配符。关键词含这两个字符且不转义时，
+            _ 会匹配任意单个字符，使「a_b」错误命中「axb」，
+            检索结果混入无关节点。
+
+        验证：
+            含 a_b 的节点被命中，含 axb 的节点不被命中。
+        """
+        import memory_loader
+        memory_loader.invalidate()  # 清空内存预筛，确保走数据库 LIKE 回退分支
+        nid_real = _mk_node("mw1", "变量 a_b 的命名规范", ["a_b"])
+        nid_fake = _mk_node("mw2", "变量 axb 的命名规范", ["axb"])
+        hits = memory_search._fts_search(["a_b"], 10)
+        got = [nid for nid, _rank in hits]
+        self.assertIn(nid_real, got)      # 字面命中应保留
+        self.assertNotIn(nid_fake, got)   # 通配符误命中应被排除
+
 
 if __name__ == "__main__":
     unittest.main()

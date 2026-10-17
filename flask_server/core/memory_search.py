@@ -126,8 +126,12 @@ def _fts_search(keywords, limit):
         conds = []
         args = []
         for kw in keywords:
-            like = "%" + kw + "%"
-            conds.append("(essence LIKE ? OR keywords LIKE ?)")
+            # LIKE 的通配符 % 与 _ 必须先转义，否则关键词里含这两个字符时
+            # 会被当成通配符，匹配到本不该命中的节点。
+            # 转义符选用反斜杠，故反斜杠本身也要先转义（顺序不能颠倒）。
+            safe = kw.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            like = "%" + safe + "%"
+            conds.append("(essence LIKE ? ESCAPE '\\' OR keywords LIKE ? ESCAPE '\\')")
             args.extend([like, like])
         sql = ("SELECT id FROM nodes WHERE deleted=0 AND ("
                + " OR ".join(conds) + ") LIMIT ?")
