@@ -144,6 +144,23 @@ test('语音块：嵌套大括号内文本正确配平', () => {
   assert.strictEqual(M.parseVoiceBlock(block), 'a{b}c');
 });
 
+test('语音块：标题块里的裸 JSON 也能提取', () => {
+  // 语音块漂移时可能落在任意文本载体里，不只段落；
+  // 此前只扫 paragraph，导致这类形态取不到、被误报「语音缺失」。
+  const block = { type: 'heading', text: '{"type":"bridge-voice","text":"标题里的语音"}' };
+  assert.strictEqual(M.parseVoiceBlock(block), '标题里的语音');
+});
+
+test('语音块：列表块元素里的裸 JSON 也能提取', () => {
+  const block = { type: 'list', items: ['第一项', '{"type":"bridge-voice","text":"列表里的语音"}'] };
+  assert.strictEqual(M.parseVoiceBlock(block), '列表里的语音');
+});
+
+test('语音块：标题与列表都无语音时返回空串', () => {
+  assert.strictEqual(M.parseVoiceBlock({ type: 'heading', text: '普通标题' }), '');
+  assert.strictEqual(M.parseVoiceBlock({ type: 'list', items: ['a', 'b'] }), '');
+});
+
 // ---------- parseExternalCall ----------
 
 test('外部信封：user 消息的代码块被识别', () => {

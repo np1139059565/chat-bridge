@@ -129,6 +129,7 @@
    */
   M.parseVoiceBlock = function (block) {
     if (!block) return '';
+    // 代码块：先整段按 JSON 精确解析（标准形态），失败再退回扫描。
     if (block.type === 'code') {
       const src = String(block.code || '').trim();
       if (src.charAt(0) === '{') {
@@ -139,7 +140,22 @@
       }
       return pickVoiceJson(src);
     }
-    if (block.type === 'paragraph') return pickVoiceJson(block.text);
+    // 其余「带文本的块」一律扫描：语音块漂移成裸 JSON 时，可能落在段落、
+    // 标题、引用、列表等任意文本载体里。此前只扫 paragraph，导致落在其它
+    // 文本块中的语音块取不到，被误报为「语音缺失」——与后端提取器口径不一致。
+    const text = (block.text != null) ? String(block.text) : '';
+    if (text) {
+      const got = pickVoiceJson(text);
+      if (got) return got;
+    }
+    // 列表块：元素数组，逐项扫描。
+    if (block.items && block.items.length) {
+      const list = window.AIMirrorDomUtils.toArray(block.items);
+      for (let i = 0; i < list.length; i++) {
+        const got = pickVoiceJson(String(list[i] == null ? '' : list[i]));
+        if (got) return got;
+      }
+    }
     return '';
   };
 
