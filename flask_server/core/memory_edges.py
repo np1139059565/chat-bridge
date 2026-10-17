@@ -205,9 +205,20 @@ def edges_within(node_ids):
     ids = list(node_ids)
     if not ids:
         return []
-    placeholders = ",".join("?" for _ in ids)
-    rows = get_conn().execute(
-        "SELECT * FROM edges WHERE src_node IN (%s) AND dst_node IN (%s)" % (placeholders, placeholders),
-        ids + ids,
-    ).fetchall()
-    return [dict(r) for r in rows]
+    # 分批查询：SQLite 单条语句的参数总数上限由编译选项 SQLITE_MAX_VARIABLE_NUMBER 决定。
+    # 常见发行版的默认值是 999，本机实测为 32766（版本相关，不能假定）。
+    # 本查询对每个 id 绑两次（src 一次、dst 一次），按默认值 999 计算单批最多 499 个；
+    # 取 400 留余量，使代码在默认编译参数的环境里同样不会抛
+    # OperationalError: too many SQL variables。
+    batch_size = 400
+    conn = get_conn()
+    result = []
+    for start in range(0, len(ids), batch_size):
+        chunk = ids[start:start + batch_size]          # 当前批次的 id 子集
+        placeholders = ",".join("?" for _ in chunk)    # 为子集生成占位符
+        rows = conn.execute(
+            "SELECT * FROM edges WHERE src_node IN (%s) AND dst_node IN (%s)" % (placeholders, placeholders),
+            chunk + chunk,                              # 两个 IN 各绑一次同一子集
+        ).fetchall()
+        result.extend(dict(r) for r in rows)            # 合并本批结果
+    return result

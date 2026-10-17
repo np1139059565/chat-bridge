@@ -67,7 +67,14 @@ def _spawn(extra_args=None, delay=0.0):
         kw["creationflags"] = 0x00000008
     else:
         kw["start_new_session"] = True
-    subprocess.Popen(popen_cmd, **kw)
+    try:
+        subprocess.Popen(popen_cmd, **kw)
+    finally:
+        # 子进程已拿到自己的句柄副本（stdout/stderr 由 Popen 内部复制），
+        # 父进程这份必须关掉，否则父进程存活期间句柄一直悬挂。
+        # log_f 可能是 DEVNULL 占位符而非文件对象，故先判断类型。
+        if hasattr(log_f, "close"):
+            log_f.close()
 
 
 def _port_alive(port, host="127.0.0.1"):
