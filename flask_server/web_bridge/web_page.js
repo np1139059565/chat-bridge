@@ -106,6 +106,30 @@
   // ---------- 拉取消息 ----------
   // 轮询健壮性：pollBusy 防重入；failCount 连续失败计数（超容差才显示断开）。
   var pollBusy = false, failCount = 0;
+  // 在途轮询的可中止句柄：页面切后台时主动中止，避免「回来还要干等超时」。
+  // inflightCtrl 是 AbortController；inflightTimer 是那 6 秒超时器。
+  var inflightCtrl = null, inflightTimer = null;
+
+  /**
+   * 主动中止在途轮询，并立即释放忙碌标记。
+   *
+   * 为什么需要：手机切到别的应用时，浏览器会冻结页面定时器，但在途的 fetch
+   * 不会随之结束。切回前台后，这轮请求仍占着 pollBusy，补拉会被 skip(busy)
+   * 挡掉，只能干等它自己 6 秒超时——用户看到的就是「回来还要卡一会儿」。
+   * 这里直接掐断它并解锁，让回到前台的那次补拉能立刻跑起来。
+   *
+   * 注意：中止会让该轮进入 catch 计一次失败，故中止前把 pollBusy 先清掉，
+   * 并让失败分支不把「主动中止」算作断连（由 isAbort 判断）。
+   */
+  function abortInflightPoll() {
+    if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null; }
+    var c = inflightCtrl;
+    inflightCtrl = null;
+    pollBusy = false;
+    if (c) {
+      try { c.abort(); } catch (e) { /* 已结束或环境不支持：忽略 */ }
+    }
+  }
   // 容差：连续失败达到此值才判定断开。原值 2 太小——后端偶发慢一次，
   // 再叠加一次就显示断开，用户体验为「时不时断十几秒」。放宽到 4，
   // 并配合更短的超时，让「真断开」也能较快识别、偶发抖动能扛过去。
@@ -126,7 +150,10 @@
     // 由 10 秒收紧到 6 秒：轮询每 2.5 秒一次，6 秒足够正常请求完成；
     // 更短超时让偶发卡顿更快被跳过、更快进入下一轮重试，减少「断开」停留时长。
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    // 记录本轮控制器与超时器：页面切后台时需要外部主动中止（见 abortInflightPoll）
+    inflightCtrl = ctrl;
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 6000);
+    inflightTimer = timer;
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -158,13 +185,26 @@
       .catch(function (err) {
         // 失败分类（区分「发不出去」与「发出去了没回应」）由 WebLogic 统一实现，
         // 页面不再内联——同一逻辑在发送路径也复用，避免两处各写一份。
+        // 主动中止（切后台 / 回前台补拉前掐断）不算断连：
+        // 它是预期行为，若计入失败会误报「连接断开」，也会污染 failCount。
+        var isAbort = (err && err.name === 'AbortError');
+        if (isAbort) {
+          if (!history) clientLog('poll', 'aborted（主动中止，不计失败）');
+          return;
+        }
         var kind = WebLogic.classifyFailKind(err && err.name, err && err.message);
         var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
         if (!history) clientLog('poll', 'fail ' + (Date.now() - _t0) + 'ms kind=' + kind + offline + ' failCount=' + (failCount + 1));
         failCount += 1;   // 连续失败超容差才显示断开，避免抖动就闪断
         if (WebLogic.shouldShowDisconnected(failCount, FAIL_TOLERANCE)) setStatus(false);
       })
-      .then(function () { clearTimeout(timer); pollBusy = false; });
+      .then(function () {
+        clearTimeout(timer);
+        // 只清理「本轮自己的」句柄，避免把后续轮次的句柄误清。
+        if (inflightCtrl === ctrl) inflightCtrl = null;
+        if (inflightTimer === timer) inflightTimer = null;
+        pollBusy = false;
+      });
   }
 
   function setStatus(ok) {
@@ -335,7 +375,17 @@
   // 页面重新可见时立即补拉一次：手机切后台会暂停定时器，
   // 回到前台若不主动拉，会等到下一个周期甚至更久才看到新消息。
   document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) fetchMessages(false);
+    if (document.hidden) {
+      // 切后台：立刻掐断在途请求并解锁。
+      // 不掐的话，它会一直挂着，回来后补拉被 skip(busy) 挡掉，
+      // 用户体感就是「切回来发不出消息、还要等一会儿」。
+      abortInflightPoll();
+      return;
+    }
+    // 回前台：先清掉可能残留的旧轮次（冻结期间没跑完的），再立即补拉，
+    // 保证「切回来」看到的是最新消息，而不是等下一个轮询周期。
+    abortInflightPoll();
+    fetchMessages(false);
   });
 })();
 
