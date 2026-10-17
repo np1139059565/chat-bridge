@@ -260,6 +260,7 @@ bridge:
     steps:
     - /rf
     - /sa on
+    - /dc
     - /rs
     interval: 5
   - name: /reai
