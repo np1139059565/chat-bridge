@@ -30,7 +30,14 @@ window.AIMirrorDialog = (function () {
   // 导致「未定义」被误当作「开」、或保存时把开关配置悄悄抹掉。
   D.DEFAULT_BRIDGE_PUSH = {
     user: true, tool: true, ai: true, thinking: false, voice: false,
-    check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true
+    check_code_only: true, check_thinking: true, check_multi_call: true, check_memory: true,
+    // 语音合成引擎：auto 按 fallback 顺序降级；也可固定为 piper / pyttsx3 / edge_tts。
+    // 与后端 bridge_store._default_config() 的同名字段保持一致。
+    voice_engine: 'auto',
+    voice_fallback: 'piper,pyttsx3,edge_tts',
+    // 音色与语速：留空表示用系统默认。
+    pyttsx3_voice: 'Microsoft Huihui Desktop - Chinese (Simplified)',
+    pyttsx3_rate: 150
   };
 
   /**

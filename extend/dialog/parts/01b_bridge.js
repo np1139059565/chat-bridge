@@ -206,6 +206,20 @@
     this.saveBridge();
   };
 
+  /**
+   * 设置推送配置里的单个字段并保存。
+   *
+   * 供下拉框等非开关控件使用：与 toggleBridgePush 共用同一份 bridgePush，
+   * 保存时随 push 整体提交，无需为每类控件各写一套保存逻辑。
+   * @param {string} key 字段名，如 voice_engine
+   * @param {*} value 新值
+   */
+  M.setBridgePushField = function (key, value) {
+    if (!key) return;
+    this.bridgePush[key] = value;
+    this.saveBridge();
+  };
+
   // 指令的增删改与元素选择入口已移到 01c_bridge_cmd.js，
   // 便于控制本文件长度，并让指令管理集中在一处。
 

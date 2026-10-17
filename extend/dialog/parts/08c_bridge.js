@@ -106,7 +106,40 @@
       pushRow(ctx, 'tool', '工具消息'),
       pushRow(ctx, 'ai', 'AI 消息'),
       pushRow(ctx, 'thinking', '思考过程（默认不推，冗长）'),
-      pushRow(ctx, 'voice', '语音（识别 + 合成，关闭则丢弃语音）')
+      pushRow(ctx, 'voice', '语音（识别 + 合成，关闭则丢弃语音）'),
+      // 语音引擎选择：仅当语音开关打开时才有意义，但始终显示便于预先配置
+      renderVoiceEngineRow(ctx)
+    ]);
+  }
+
+  /**
+   * 渲染「语音合成引擎」选择行。
+   *
+   * 引擎说明（与后端 voice_tts.py 一致）：
+   *   auto    按下方顺序逐个尝试，前一个失败自动降级到下一个（推荐）
+   *   piper   本地神经网络，离线、音质较好，需先跑 scripts/setup_piper.py
+   *   pyttsx3 系统自带语音，离线、零安装，音质一般
+   *   edge_tts 微软在线合成，目前接口已失效，仅作历史保留
+   *
+   * 选择后立即保存（与开关行为一致），保存后后端重启桥接生效。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 选择行
+   */
+  function renderVoiceEngineRow(ctx) {
+    const cur = ctx.bridgePush.voice_engine || 'auto';
+    const opts = [
+      ['auto', '自动（按顺序降级）'],
+      ['piper', 'Piper（本地，需安装）'],
+      ['pyttsx3', '系统语音（离线）'],
+      ['edge_tts', 'edge-tts（在线，当前失效）']
+    ];
+    return h('div', { class: 'bridge-push-row', key: 'voice_engine' }, [
+      h('span', { class: 'bridge-push-label' }, '语音合成引擎'),
+      h('select', {
+        class: 'bridge-sel-input',
+        value: cur,
+        onChange: (e) => ctx.setBridgePushField('voice_engine', e.target.value)
+      }, opts.map(([v, label]) => h('option', { value: v, selected: v === cur }, label)))
     ]);
   }
 
