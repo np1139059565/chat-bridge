@@ -121,11 +121,15 @@
    * 注意：中止会让该轮进入 catch 计一次失败，故中止前把 pollBusy 先清掉，
    * 并让失败分支不把「主动中止」算作断连（由 isAbort 判断）。
    */
-  function abortInflightPoll() {
+  function abortInflightPoll(why) {
     if (inflightTimer) { clearTimeout(inflightTimer); inflightTimer = null; }
     var c = inflightCtrl;
     inflightCtrl = null;
     pollBusy = false;
+    // 无条件留痕：不管当时有没有在途请求都记一条，并注明触发原因与是否有请求被掐断。
+    // 目的：让「新代码是否在页面上运行」有确定的证据，不必依赖「恰好有请求在飞」这种
+    // 概率条件——否则切后台时若上一轮刚好已完成，就什么都不会记，无法判断改动是否生效。
+    clientLog('poll', 'abort(' + (why || '') + ') inflight=' + (c ? 'yes' : 'no'));
     if (c) {
       try { c.abort(); } catch (e) { /* 已结束或环境不支持：忽略 */ }
     }
@@ -379,12 +383,12 @@
       // 切后台：立刻掐断在途请求并解锁。
       // 不掐的话，它会一直挂着，回来后补拉被 skip(busy) 挡掉，
       // 用户体感就是「切回来发不出消息、还要等一会儿」。
-      abortInflightPoll();
+      abortInflightPoll('hidden');
       return;
     }
     // 回前台：先清掉可能残留的旧轮次（冻结期间没跑完的），再立即补拉，
     // 保证「切回来」看到的是最新消息，而不是等下一个轮询周期。
-    abortInflightPoll();
+    abortInflightPoll('visible');
     fetchMessages(false);
   });
 })();
