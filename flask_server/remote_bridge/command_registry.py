@@ -150,8 +150,21 @@ def _check_name_free(name, index, customs):
 
 
 def _available_subcommands(index, customs):
-    """收集可用的子指令名集合：内置（含别名）+ 其它自定义指令（含别名）。"""
+    """收集可用的子指令名集合：内置（含别名）+ 外部指令 + 其它自定义指令（含别名）。
+
+    为什么必须含外部指令：分发时 handle_command 会先查内置、再查外部、最后查自定义，
+    外部指令（如 debug_chrome 声明的 /dc）是能真正执行的。若此处漏掉它们，
+    用户在组合指令里引用一个可执行的子指令，却会被判定「不存在」而无法保存——
+    校验口径必须与分发口径一致，否则就是误判。
+    """
     available = set(BUILTIN.keys()) | set(_ALIAS_MAP.keys())
+    # 外部指令：直接复用分发侧的清单来源，不在此另抄一份，避免两处漂移。
+    try:
+        from custom_tools.commands import external_command_names
+        available |= set(external_command_names())
+    except Exception:
+        # 外部指令读取失败不应阻断保存校验：退化为只认内置与自定义。
+        pass
     for i, c in enumerate(customs):
         if i == index:
             continue
