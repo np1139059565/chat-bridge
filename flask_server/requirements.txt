@@ -9,6 +9,12 @@ numpy>=1.21
 # 中文分词（记忆系统关键词提取；未安装时代码自动回退短语块切分）
 jieba>=0.42
 
+# ===== 测试框架 =====
+# pytest 用于跑 tests/ 下的用例；未安装时可用标准库 unittest 兜底：
+#   python -m pytest tests -q
+#   python -m unittest discover -s tests -t . -v
+pytest>=7.0
+
 # 远程桥接语音链路依赖
 pilk>=0.2.4
 vosk>=0.3.45

@@ -22,6 +22,8 @@ import numpy as np
 
 import paths
 import app_log
+# 诊断能力（慢 SQL 追踪、建连耗时统计）独立成模块，本文件只负责连接与建表
+from memory_db_diag import install_slow_query_trace, record_conn_cost, conn_stats  # noqa: F401
 
 # 线程局部存储：每个线程持有一份独立连接（SQLite 连接不可跨线程共享）
 _local = threading.local()
@@ -163,15 +165,14 @@ def get_conn():
     conn.execute("PRAGMA synchronous=NORMAL")
     # 慢 SQL 追踪：记录执行超过阈值的语句，用于定位「哪条 SQL 卡住」。
     # 诊断用，不改变查询行为。
-    _install_slow_query_trace(conn)
+    install_slow_query_trace(conn)
     # 建表只在进程内做一次（详见 _ensure_schema_once）
     _ensure_schema_once(conn)
     _local.conn = conn
     # 只在建连异常慢时记 WARN；正常建连（毫秒级）不记日志，
     # 否则每个请求线程首次连库都打一条，日志会被建连记录淹没。
     _ms = (_t.perf_counter() - _t0) * 1000.0
-    if _ms >= 200:
-        app_log.warn("[db][%s] 建立记忆库连接 耗时=%.0fms" % (threading.current_thread().name, _ms))
+    record_conn_cost(_ms)  # 累计统计建连耗时，便于回答「一天慢了多少次」
     return conn
 
 
@@ -188,13 +189,15 @@ def close_conn():
     if conn is not None:
         try:
             conn.close()
-        except Exception:
-            # 关闭失败不影响调用方（连接本就要丢弃）
-            pass
+        except Exception as e:
+            # 关闭失败不影响调用方（连接本就要丢弃），但要留痕迹便于排查
+            app_log.warn("[db] 关闭记忆库连接失败：%s" % e)
         # 清除线程局部引用，确保下次 get_conn 重建
         try:
             del _local.conn
-        except Exception:
+        except Exception as e:
+            # 删除线程局部属性失败时兜底置空，同时记录原因
+            app_log.warn("[db] 清除线程局部连接失败：%s" % e)
             _local.conn = None
 
 
@@ -217,97 +220,33 @@ def _ensure_wal_once(conn):
             return
         try:
             conn.execute("PRAGMA journal_mode=WAL")
-        except sqlite3.OperationalError:
-            # 已被其它进程设为 WAL 或暂时锁住：不阻断，继续用连接
-            pass
+        except sqlite3.OperationalError as e:
+            # 已被其它进程设为 WAL 或暂时锁住：不阻断，继续用连接，但要留痕
+            app_log.warn("[db] 设置 WAL 模式失败（继续以默认模式运行）：%s" % e)
         _wal_ready = True
 
 
-# 进程级建表标志：确保建表语句（含 FTS5 虚拟表）全程只执行一次。
+# 进程级建表标志：记录「已完成建表的库文件路径」。
+# 用路径而非布尔值：库文件被删除、替换或切换到新路径时，路径比对不相等即重新建表，
+# 避免旧标志让新库跳过建表、后续查询报 no such table。
 _schema_lock = threading.Lock()
-_schema_ready = False
+_schema_ready_path = None
 
 
 def _ensure_schema_once(conn):
-    """建表只在进程内做一次；后续新线程连接直接跳过，避免重复建表拖垮请求。"""
-    global _schema_ready
-    if _schema_ready:
+    """对同一个库文件只建表一次；库路径变化时重新建表。
+
+    @param conn 当前线程的数据库连接
+    """
+    global _schema_ready_path
+    db_path = str(paths.MEMORY_DB_PATH)  # 本次连接对应的库文件路径
+    if _schema_ready_path == db_path:     # 同一库文件且已建过表：直接跳过
         return
     with _schema_lock:
-        if _schema_ready:
+        if _schema_ready_path == db_path:  # 双重检查：等锁期间可能已被其它线程建好
             return
         _ensure_schema(conn)
-        _schema_ready = True
-
-
-# 慢 SQL 阈值（毫秒）：超过即记日志
-_SLOW_SQL_MS = 100
-
-# 进度回调粒度：SQLite 每执行多少条虚拟机指令回调一次。
-# 取值偏大以减少回调开销；短语句可能一次都不触发，自然不计时、不告警——
-# 这正是期望行为（短查询本就不该告警）。
-_SQL_PROGRESS_INTERVAL = 2000
-
-
-def _install_slow_query_trace(conn):
-    """给连接装慢 SQL 追踪：只统计语句「真正执行」的时间，不含线程空闲。
-
-    为什么不能只用 set_trace_callback：
-        它只在每条语句「执行前」回调一次。若用「两次回调的时间差」当作
-        上一条 SQL 的耗时，就把两条语句之间线程的全部空闲时间也算了进去——
-        后台调度线程跑完一轮后 sleep(1800) 约 30 分钟，这 30 分钟会被误记到
-        它上一条 SQL 头上，产生「慢SQL 1800000ms」这类假告警。
-
-    改用 set_progress_handler 计时：
-        它在语句「执行过程中」周期性回调，只在 SQL 真运行时触发，sleep 期间
-        不会触发。一次执行期内「首次回调 → 末次回调」的时间差即为真实执行
-        时长，不含任何空闲。结算时机沿用「下一条语句执行前」（trace 回调里）。
-    记录里带线程名，便于区分是「请求线程」还是「后台调度线程」在拖。
-    """
-    state = {"sql": "", "first_tick": None, "last_tick": None}
-    try:
-        conn.set_trace_callback(lambda sql: _slow_sql_trace(state, sql))
-        conn.set_progress_handler(lambda: _slow_sql_progress(state), _SQL_PROGRESS_INTERVAL)
-    except Exception:
-        pass
-
-
-def _slow_sql_settle(state):
-    """结算当前语句：只有发生过进度回调（即真的执行过）才计时与告警。
-
-    @param state 追踪状态字典（sql / first_tick / last_tick）
-    """
-    if state["first_tick"] is not None:
-        ms = (state["last_tick"] - state["first_tick"]) * 1000.0
-        if ms >= _SLOW_SQL_MS:
-            app_log.warn("[db][%s] 慢SQL %.1fms: %s" % (
-                threading.current_thread().name, ms,
-                " ".join(state["sql"].split())[:120]))
-
-
-def _slow_sql_trace(state, sql):
-    """语句执行前的 trace 回调：先结算上一条，再开始记录新一条。
-
-    @param state 追踪状态字典
-    @param sql   即将执行的语句
-    """
-    _slow_sql_settle(state)
-    state["sql"] = sql or ""
-    state["first_tick"] = None
-    state["last_tick"] = None
-
-
-def _slow_sql_progress(state):
-    """语句执行中的进度回调：记录首次与末次时刻；返回 0 表示不中止查询。
-
-    @param state 追踪状态字典
-    @returns 恒为 0（不中止查询）
-    """
-    now = time.time()
-    if state["first_tick"] is None:
-        state["first_tick"] = now
-    state["last_tick"] = now
-    return 0
+        _schema_ready_path = db_path      # 记录本次已建表的库路径
 
 
 def _migrate_columns(conn):
@@ -424,10 +363,10 @@ def reset_for_tests(db_path):
     调用方需先把 paths.MEMORY_DB_PATH 指向临时文件，再调本函数。
     @param db_path 临时库路径（Path）
     """
-    global _local, _schema_ready, _wal_ready
+    global _local, _schema_ready_path, _wal_ready
     # 复位建表 / WAL 标志：否则切到临时库后 _ensure_schema_once 直接返回，
-    # 临时库不会建表（真实库若已建过表，本进程内 _schema_ready 恒为 True）。
-    _schema_ready = False
+    # 临时库不会建表（真实库若已建过表，本进程内 _schema_ready_path 已记录真实库路径）。
+    _schema_ready_path = None
     _wal_ready = False
     # 关闭当前线程的旧连接，丢弃线程局部，使下次 get_conn 用新路径重连
     old = getattr(_local, "conn", None)
