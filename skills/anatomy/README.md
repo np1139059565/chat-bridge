@@ -11,16 +11,32 @@
 
 | 动作 | 参数 | 返回 |
 | --- | --- | --- |
-| `list` | 无 | 全部示例目录，及各自是否带预构建 HTML |
+| `list` | 无 | 全部示例目录，及各自是否有预构建 HTML、是否可构建 |
 | `export` | `example`（必填）、`file`（可选） | 复制 HTML 到 `flask_server/static/anatomy/`，返回 `/static/anatomy/...` 可访问路径 |
+| `build` | `example`（必填）、`file`（可选） | 先用 Node 执行该示例的 `build.mjs` 重新生成，再导出并返回路径 |
 
-示例导出后可通过 `http://127.0.0.1:5000` 加返回的 `url_path` 在浏览器查看。
+产物导出后可通过 `http://127.0.0.1:5000` 加返回的 `url_path` 在浏览器查看。
 
 ## 运行环境
 
-- 本工具只用 Python 标准库，**不需要 Node.js**。
-- 因此只能导出 `examples/` 中**已预构建**的 HTML；`spot-plate`、`test-rig` 两个示例没有预构建成品，需本机安装 Node.js 20.10 以上后用 `node build.mjs` 现场构建。
-- 生成全新插图的能力来自 `SKILL.md` 的绘图方法论，由宿主 AI 按文档执行，不经过本工具脚本。
+- `export` 只用 Python 标准库，不需要 Node.js。
+- `build` 需要 Node.js 20.10 以上。脚本按「工程 `runtime/node/` 下的便携版 → 系统 PATH」的顺序查找，找到即用。
+- 构建子进程有 50 秒上限（自定义工具单次执行上限为 60 秒）。示例越大越容易超时；超时会明确提示改用 `export` 导出已预构建的成品。
+
+## 示例可构建性
+
+| 示例 | 预构建 HTML | 可构建 |
+| --- | --- | --- |
+| `arcade-cabinet` | 有 | 是 |
+| `desk-computer` | 有 | 是 |
+| `dial-indicator` | 有 | 是 |
+| `raptor-engine` | 有 | 是 |
+| `ripple-tank` | 有 | 是 |
+| `turning-dial` | 有 | 是 |
+| `spot-plate` | 无 | 否，React 组件形式，无 `build.mjs` |
+| `test-rig` | 无 | 否，React 组件形式，无 `build.mjs` |
+
+生成全新插图的能力来自 `SKILL.md` 的绘图方法论，由宿主 AI 按文档执行，不经过本工具脚本。
 
 ## 目录说明
 
