@@ -231,6 +231,36 @@ custom_tools:
     executor: external
     provider: debug_chrome
     enabled: true
+  - name: anatomy_illustration
+    description: 列出或导出 Anatomy 技能的等距插图成品。action=list 返回所有示例及其是否带预构建 HTML；action=export
+      把指定示例的 HTML 复制到本地服务静态目录并返回可访问网址，供网页直接展示。
+    skill_name: anatomy
+    skill_prompt: Anatomy 是一个制作高细节、可交互等距 SVG 插图的技能：它不画方框箭头，而是发明一台真实机器，让机器的运转方式本身就是要解释的概念。适用于技术文档、博客、落地页中的原理插图。本工具用于列出并导出技能自带的成品插图到本地服务静态目录，返回可直接访问的网址。
+    skill_dir: skills\anatomy
+    script: scripts/anatomy_tool.py
+    interpreter: python
+    arg_style: flag
+    fixed_args: []
+    parameters:
+    - name: action
+      type: string
+      required: true
+      description: 动作：list 列出全部示例；export 导出指定示例
+    - name: example
+      type: string
+      required: false
+      description: 示例目录名，如 dial-indicator、raptor-engine、desk-computer；action=export
+        时必填
+    - name: file
+      type: string
+      required: false
+      description: 指定具体 HTML 文件名，默认取标准主题成品
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: true
 bridge:
   intents: 0
   command_params:

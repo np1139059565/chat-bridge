@@ -33,6 +33,11 @@ EXEMPT_PREFIXES = (
     "skills/debug_chrome/extension/vendor/",
     "extend/lib/vue.global.prod.js",
     "skills/debug_chrome/extension/shared/vendor/",
+    # anatomy 技能的示例与绘图库为上游第三方产物，行数由原始生成器决定
+    "skills/anatomy/examples/",
+    "skills/anatomy/kit/",
+    # 插图的导出副本，内容与示例一致，属运行时产物
+    "flask_server/static/anatomy/",
 )
 
 

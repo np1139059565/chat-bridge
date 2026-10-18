@@ -212,6 +212,9 @@ def check_comment_ratio(root):
     """检查 7：注释率低于阈值（注释行 / 总行，含 Python docstring）。"""
     out = []
     for p in qcommon.iter_files(root, (".py", ".js")):
+        # 第三方库与生成产物不参与注释率检查
+        if qcommon.is_exempt(os.path.relpath(p, root)):
+            continue
         lines = qcommon.read_lines(p)
         if len(lines) < 30:
             continue  # 太短的文件注释率无参考意义
