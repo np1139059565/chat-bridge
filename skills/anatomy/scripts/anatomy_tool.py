@@ -8,7 +8,7 @@
 
 运行环境：
 - export 只用 Python 标准库，无需 Node。
-- build 需要 Node.js 20.10 以上，脚本会自动在工程 runtime/ 目录与系统 PATH 中查找。
+- build 需要 Node.js 20.10 以上，脚本会自动在系统标准安装目录与系统 PATH 中查找。
 """
 import argparse        # 命令行参数解析
 import glob            # 按通配符查找文件
@@ -27,7 +27,8 @@ SKILL_DIR = PROJECT_ROOT / "skills" / "anatomy"           # 本技能目录
 EXAMPLES_DIR = SKILL_DIR / "examples"                     # 示例插图目录
 STATIC_DIR = PROJECT_ROOT / "flask_server" / "static"     # Flask 静态资源目录
 EXPORT_DIR = STATIC_DIR / "anatomy"                       # 插图导出的子目录
-RUNTIME_NODE_DIR = PROJECT_ROOT / "runtime" / "node"      # 便携版 Node 的存放目录
+# Node 的标准安装位置（系统级安装，与工程目录解耦）
+NODE_STANDARD_DIR = Path(r"C:\Program Files\nodejs")
 
 # 构建子进程的超时（秒）。
 # 自定义工具单次执行上限为 60 秒，这里留出余量给后续复制与结果输出。
@@ -56,13 +57,12 @@ def list_examples():
 def find_node():
     """查找可用的 Node 可执行文件，返回其路径；找不到返回 None。
 
-    查找顺序：工程 runtime/ 下的便携版 → 系统 PATH 中的 node。
+    查找顺序：系统标准安装目录 → 系统 PATH 中的 node。
     """
     exe = "node.exe" if os.name == "nt" else "node"       # 按平台确定可执行文件名
-    if RUNTIME_NODE_DIR.is_dir():                         # 便携版目录存在时优先使用
-        hits = sorted(RUNTIME_NODE_DIR.glob("**/" + exe))  # 递归查找 node 可执行文件
-        if hits:                                          # 找到即返回第一个
-            return str(hits[0])
+    std = NODE_STANDARD_DIR / exe                         # 系统标准安装位置
+    if std.is_file():                                     # 标准位置存在时优先使用
+        return str(std)
     return shutil.which("node")                           # 回退到系统 PATH
 
 
