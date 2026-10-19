@@ -266,9 +266,16 @@
     if (!messages.length) return;
     // 静默上报：失败不打扰用户，桥接层没开时后端直接返回 0
     try {
+      // openid：从 QQ 卡片里缓存的推送目标（见 pollExternalCards）。
+      // 带上它，后端就不必靠「最近是谁发的」去猜；为空时后端会积压消息，
+      // 等用户下一条 QQ 消息重建窗口后补推，不会丢。
       D.apiFetch(this, '/api/bridge/report', {
         method: 'POST',
-        body: { conversationId: this.activeConv, messages: messages }
+        body: {
+          conversationId: this.activeConv,
+          messages: messages,
+          openid: this._bridgeQQOpenid || ''
+        }
       }).catch(function () { /* 桥接未启用时忽略 */ });
     } catch (e) { /* 忽略 */ }
   };

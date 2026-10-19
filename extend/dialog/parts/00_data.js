@@ -185,6 +185,9 @@ window.AIMirrorDialog = (function () {
       theme: 'light',
       _extTimer: null,
       panelVisible: false,
+      // QQ 用户标识：从 QQ 卡片 payload 里缓存，上报切片时随请求带上。
+      // 只存内存、不进存档：它属于当前这次 QQ 会话，重启后由下一条卡片带回。
+      _bridgeQQOpenid: '',
       promptSections: [],
       skills: [],
       skillsManage: [],

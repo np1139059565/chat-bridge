@@ -303,7 +303,24 @@ def _synth_pyttsx3(text, out_path, cfg):
             rate = 150
         engine.setProperty("rate", max(80, min(rate, 300)))
         engine.save_to_file(text, wav_path)        # 指定输出文件
-        engine.runAndWait()                        # 阻塞直到写盘完成
+        # runAndWait 是同步阻塞调用，Windows SAPI 在长跑服务里可能永久不返回。
+        # 放到独立线程里跑并设超时：超时就放弃本次合成、不再等它，
+        # 否则会永久占住一个合成名额，把后续所有语音与上报一并拖死。
+        # 该线程设为守护线程，即使永不返回也不会阻止进程退出。
+        import threading
+        _done = threading.Event()
+
+        def _run():
+            try:
+                engine.runAndWait()
+            except Exception:
+                pass                                # 异常由下方文件检查兜底
+            finally:
+                _done.set()
+
+        threading.Thread(target=_run, daemon=True).start()
+        if not _done.wait(SYNTH_TIMEOUT):
+            return False, "pyttsx3 合成超时（%d 秒）" % SYNTH_TIMEOUT
         if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
             return False, "pyttsx3 未产出有效音频"
         return voice_mp3.ensure_mp3(wav_path, out_path)     # 统一转 MP3
@@ -378,7 +395,17 @@ def text_to_voice(text, out_path, voice=None):
         return False, "未配置可用的语音引擎"
 
     # 并发闸门：最多 MAX_CONCURRENT_SYNTH 条同时合成，其余排队等待。
-    with _synth_sem:
+    #
+    # 关键：必须带超时获取，不能用 `with _synth_sem`。
+    # 本地引擎（pyttsx3 → SAPI）的 runAndWait 可能永久不返回，一旦卡住就会
+    # 永久占住一个信号量名额；名额耗尽的瞬间，此后所有合成都会阻塞在获取处，
+    # 连日志都打不出来（阻塞发生在进入引擎之前），上报线程随之卡死、
+    # 「处理中」标记永不释放，表现为消息全哑、只能重启恢复。
+    # 超时获取可保证「卡死的那次只丢它自己」，不牵连后续合成。
+    acquired = _synth_sem.acquire(timeout=SYNTH_TIMEOUT)
+    if not acquired:
+        return False, "合成闸门等待超时（%d 秒），可能有合成卡死占用名额" % SYNTH_TIMEOUT
+    try:
         errors = []
         for name in order:
             ok, err = _dispatch(name, text, out_path, voice, cfg)
@@ -392,5 +419,7 @@ def text_to_voice(text, out_path, voice=None):
             errors.append("[%s] %s" % (name, err))
             # 失败时清掉可能残留的半成品，避免下次误判
             _safe_remove(out_path)
+    finally:
+        _synth_sem.release()
 
     return False, "；".join(errors) if errors else "所有语音引擎均失败"

@@ -121,13 +121,6 @@ def init_bridge():
     凭证未填或依赖未装时，其余工具功能照常可用。
     """
     try:
-        # 先恢复被动回复窗口：窗口原先只存内存，重启即丢，
-        # 会导致启动后所有推送都判「窗口已关闭」而静默丢弃。
-        # 恢复失败不影响启动，仅记日志。
-        try:
-            message_router.restore_window()
-        except Exception as e:
-            log("恢复回复窗口失败（不阻断启动）：", e)
         return bridge.start()
     except Exception as e:
         log("初始化异常（不阻断服务启动）：", e)

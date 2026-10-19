@@ -108,6 +108,16 @@
       // 取到卡片说明本对话框当前可见且在消费卡片；若关闭后仍看到这条，
       // 即说明可见性同步没生效。
       if (cards.length) log('取到外部卡片 ' + cards.length + ' 张：', cards.map((c) => c.id).join(', '));
+      // 缓存 QQ 用户标识：卡片的 payload 里带着 openid（后端投递时写入）。
+      // 上报消息切片时把它带上，后端无需再靠「猜最近是谁发的」来定位推送目标。
+      // 只存内存：它属于当前这次 QQ 会话，重启后由下一条 QQ 卡片重新带回。
+      cards.forEach((c) => {
+        const oid = c && c.payload && c.payload.openid;
+        if (oid && oid !== this._bridgeQQOpenid) {
+          this._bridgeQQOpenid = oid;
+          log('已缓存 QQ 用户标识：' + String(oid).slice(0, 8));
+        }
+      });
       // 确保当前会话对象存在再写入：curConv 在会话未建立时会回退到共享的
       // EMPTY_CONV，直接 push 会把卡片写进这个全局空壳，随后创建真实会话对象时
       // 读不到，表现为「卡片莫名消失」。

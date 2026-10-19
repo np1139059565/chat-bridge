@@ -239,45 +239,13 @@ def _write_state(state):
         app_log.warn("[bridge]", "写回去重状态失败：", e)
 
 
-def get_last_openid():
-    """读取最近一次 QQ 来消息的用户 openid；无记录返回空串。
-
-    持久化的原因：抽屉上报不带 openid，推送只能靠「最近发消息的人」兜底。
-    该值若只存内存，服务一重启即丢失，此后所有上报因 openid 为空被静默丢弃，
-    表现为「消息生成了却一条也收不到，非要再发条 QQ 消息才恢复」。
-    """
-    return str(_read_state().get("last_openid") or "")
-
-
-def set_last_openid(openid):
-    """记住最近一次 QQ 来消息的用户 openid 并落盘。
-
-    @param openid 用户标识；为空时忽略（不覆盖已有值）
-    """
-    if not openid:
-        return
-    _write_state({"last_openid": openid})
-
-
-def get_last_window():
-    """读取被动回复窗口快照；无记录返回空字典。
-
-    窗口（msg_id / 过期时间 / 序号 / 收件人）原先只存内存，服务一重启即丢失，
-    此后所有推送都判「窗口已关闭」而静默丢弃，表现为「重启后一条也收不到」。
-    @returns {openid, msg_id, expire, seq}；无记录时为空字典
-    """
-    info = _read_state().get("last_window")
-    return dict(info) if isinstance(info, dict) else {}
-
-
-def set_last_window(info):
-    """保存被动回复窗口快照，供重启后恢复。
-
-    @param info {openid, msg_id, expire, seq}；为空或缺 msg_id 时忽略
-    """
-    if not info or not info.get("msg_id"):
-        return
-    _write_state({"last_window": info})
+# 说明：openid 与被动回复窗口一律不落盘。
+# 二者都是「当前这次 QQ 会话」的运行时状态：窗口带 msg_id 与序号，
+# 序号在同一 msg_id 下必须唯一，重启后若把旧窗口原样恢复、
+# 却从 1 重新计数，必然与已用序号相撞被 QQ 判重丢弃（40054005）。
+# 因此它们的生命周期严格跟随进程：进程没了就重建，
+# 由用户下一条 QQ 消息重新打开窗口。推送时若窗口已失效，
+# 消息进入待推缓存积压，待新窗口建立后自动补推。
 
 
 # 去重集合的内存缓存：{ 会话 id: set(消息 id) }

@@ -94,9 +94,6 @@ def _remember_window(openid, msg_id):
     换新 msg_id（用户又发了消息）时归零重新计数。
     """
     global _last_openid
-    # 落盘：抽屉上报不带 openid，此处是推送目标的唯一来源。
-    # 只存内存的话，服务重启即丢失，之后所有上报因 openid 为空被静默丢弃。
-    bridge_store.set_last_openid(openid)
     with _lock:
         _last_openid = openid
         old = _windows.get(openid)
@@ -110,39 +107,9 @@ def _remember_window(openid, msg_id):
             "seq": seq,
         }
         _windows[openid] = win
-    # 落盘：窗口只存内存的话，服务一重启即丢失，此后所有推送都判「窗口已关闭」
-    # 而静默丢弃。存盘后重启可原样恢复，用户无需重新发消息。
-    bridge_store.set_last_window(dict(win, openid=openid))
-
-
-def restore_window():
-    """从磁盘恢复最近一次被动回复窗口（服务启动时调用）。
-
-    窗口原先只存内存，进程重启即丢失，此后所有推送都判「窗口已关闭」
-    而静默丢弃，表现为「重启后一条也收不到，必须再发条 QQ 消息才恢复」。
-    这里在启动时把落盘快照读回内存，未过期的窗口可直接继续使用。
-    """
-    info = bridge_store.get_last_window()
-    if not info:
-        return
-    openid = info.get("openid") or ""
-    msg_id = info.get("msg_id") or ""
-    if not openid or not msg_id:
-        return
-    expire = float(info.get("expire") or 0)
-    if expire <= time.time():
-        # 已过期：不恢复（被动回复窗口有时效，过期后本就该等新消息）
-        return
-    global _last_openid
-    with _lock:
-        _last_openid = openid
-        _windows[openid] = {
-            "msg_id": msg_id,
-            "expire": expire,
-            "seq": int(info.get("seq") or 0),
-        }
-    log("已从磁盘恢复回复窗口 openid=%s msg_id=%s 剩余=%.0f 秒"
-        % (openid[:8], msg_id[:8], expire - time.time()))
+    log("窗口已更新 openid=%s msg_id=%s 有效期至=%s"
+        % (openid[:8], str(msg_id)[:8],
+           time.strftime("%H:%M:%S", time.localtime(win["expire"]))))
 
 
 def get_last_openid():
@@ -178,13 +145,10 @@ def next_seq(openid):
         if not w or time.time() >= w["expire"]:
             return None, 0
         w["seq"] = w.get("seq", 0) + 1
-        seq = w["seq"]
-        msg_id = w["msg_id"]
-        # 递增后立即落盘：QQ 按 (msg_id, msg_seq) 去重，重复序号会被静默丢弃
-        # （错误码 40054005），接口却仍可能返回 200。若只在收到新消息时存盘，
-        # 重启后 seq 会退回旧值、与已用序号相撞，表现为「发出去了但对方收不到」。
-        bridge_store.set_last_window(dict(w, openid=openid))
-        return msg_id, seq
+        # 序号只活在内存：QQ 按 (msg_id, msg_seq) 去重，重复即丢弃（40054005）。
+        # 窗口与序号都随进程存亡，不跨重启复用，故不存在「恢复出旧 msg_id
+        # 却从 1 重数、与已用序号相撞」的问题。
+        return w["msg_id"], w["seq"]
 
 
 def note_incoming(openid, msg_id):
@@ -361,12 +325,10 @@ def _remove_voice_file(path):
 def _resolve_openid(payload):
     """确定推送目标 openid：优先用上报值，回退到「最近发消息的人」。
 
-    兜底值优先取内存，内存为空再读持久化记录。
-    抽屉上报不带 openid，这个兜底是唯一的推送目标来源；
-    它若为空，handle_report 会直接返回、消息被静默丢弃。
+    来源优先级：上报体自带 > 前端缓存（随上报传来）> 后端内存里「最近发消息的人」。
+    三者都没有就返回空串，由调用方把消息积压起来，等新窗口建立后补推。
     """
-    return (payload.get("openid") or _last_openid
-            or bridge_store.get_last_openid() or "")
+    return payload.get("openid") or _last_openid or ""
 
 
 def _push_card_result(qq_client, openid, card, push):
@@ -415,29 +377,32 @@ def handle_report(qq_client, payload):
     if not qq_client:
         return 0
     conv_id = payload.get("conversationId") or "__default__"
-    openid = _resolve_openid(payload)
     messages = payload.get("messages") or []
-    # 丢弃时告警：上报体不带 openid，只能靠「最近发消息的人」兜底。
-    # 该兜底值已持久化，正常不会再为空；一旦为空说明状态文件丢失或从未收到过
-    # QQ 消息，此时整条推送链会静默失效，必须留下痕迹而不是悄悄返回。
-    if not openid or not messages:
-        log("上报被丢弃：openid=%s 消息数=%d"
-            % ((openid[:8] if openid else "空"), len(messages)))
+    # 先缓存切片再判空：openid 缺失时消息不能丢，要留到窗口恢复后补推。
+    # 若放在判空之后，这一轮消息既没推送也没进待推缓存，等于永久丢失。
+    global _last_client
+    _last_client = qq_client
+    _last_report[conv_id] = payload
+    openid = _resolve_openid(payload)
+    # 目标缺失时告警：上报体不带 openid，只能靠「最近发消息的人」兜底。
+    # 兜底值只存内存，进程重启后为空；此时不是丢弃，而是等用户发下一条
+    # QQ 消息重建窗口后，由续期重放自动补推。
+    if not messages:
         return 0
     # 合并上次推送失败的消息：它们可能已滚出可见区、不再出现在切片里，
     # 靠这份缓存获得重试机会（成功 / 跳过后自动移出，见本函数末尾 set_pending）。
     messages = bridge_store.merge_pending(conv_id, messages)
+    if not openid:
+        # 无推送目标：消息全部转入待推缓存积压，等用户发下一条 QQ 消息
+        # 重建窗口后，由续期重放自动补推。这里只记日志，不丢弃。
+        bridge_store.set_pending(conv_id, messages)
+        log("无推送目标，已积压 %d 条待窗口恢复后补推" % len(messages))
+        return 0
     # 条数上限：长时间不开 QQ 后重开，切片可能堆积几百条。只取最新的一批处理，
     # 更旧的直接丢弃——它们多半已被后续消息覆盖，用户要的也是「最后几条」。
     # 这一步在合成/推送之前，确保后续的网络调用次数被硬性封顶，接口不会被拖死。
     if len(messages) > MAX_PUSH_PER_REPORT:
         messages = messages[-MAX_PUSH_PER_REPORT:]
-    # 缓存最近一次切片与客户端：用户续期窗口后据此重放，补推滞后消息。
-    # 只存引用，不深拷贝：切片可能很大，且重放时只读。
-    global _last_client
-    _last_client = qq_client
-    _last_report[conv_id] = payload
-
     push = bridge_store.get_config().get("push") or {}
     # 第一步（锁外）：预合成语音。
     # 合成是网络调用、可能很慢，绝不能在本会话推送锁内做——否则该会话一卡

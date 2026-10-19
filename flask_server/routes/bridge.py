@@ -108,6 +108,10 @@ def bridge_report():
         if started is not None:
             # 上一轮仍在跑且未超时：跳过本次（抽屉会重复上报全量，不丢消息）
             if now - started < _REPORT_BUSY_TIMEOUT:
+                # 跳过必须留痕：此处静默返回会让「上报进了但什么都没发生」
+                # 完全查不到，是排查时最容易误判成「前端没上报」的盲区。
+                app_log.warn("[bridge]", "上报跳过（上一轮已跑 %.0f 秒）会话 %s"
+                             % (now - started, conv))
                 return jsonify(success=True, pushed=0, skipped=True)
             # 超时：判定上一轮卡死，强制接管并告警，否则该会话永久静默
             app_log.warn("[bridge]", "上报处理超时 %.0f 秒，强制接管会话 %s"

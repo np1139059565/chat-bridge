@@ -23,6 +23,12 @@ def log(*args):
 
 VOICE_MARKER = '{"type":"bridge-voice"'
 
+# 单条语音合成的超时（秒）。本地引擎（pyttsx3 → Windows SAPI）是同步阻塞调用，
+# 长跑服务里可能长时间不返回甚至永久卡死；卡住会让整个上报处理线程不退出，
+# 该会话「处理中」标记永不释放，此后每条上报都被跳过（消息全哑、只能重启）。
+# 故给合成设上限：超时即放弃本条语音，正文照常推送。
+SYNTH_TIMEOUT_SECONDS = 20
+
 
 def _scan_json_object(text, start):
     """从 text[start] 起做大括号配平扫描，返回完整 JSON 对象的结束下标。
@@ -182,7 +188,27 @@ def synthesize_voice(m):
     _synth_seq[0] += 1
     name = "out_%d_%d.mp3" % (int(time.time() * 1000), _synth_seq[0])
     out_path = str(paths.VOICE_DIR / name)
-    ok, err = voice_tts.text_to_voice(voice_text, out_path)
+    # 超时保护：合成是同步阻塞调用（本地引擎内部走 SAPI，Windows 上可能
+    # 长时间不返回甚至永久卡死）。跑在独立线程里，超时就放弃语音。
+    # 若不设超时，卡死会连带整个上报处理线程不退出，使该会话「处理中」
+    # 标记永不释放，此后每条上报都被跳过——表现为消息全哑、只能重启恢复。
+    import threading
+    result = {}
+
+    def _worker():
+        try:
+            result["val"] = voice_tts.text_to_voice(voice_text, out_path)
+        except Exception as e:                     # 合成异常不能拖垮上报主流程
+            result["val"] = (False, "合成线程异常：%s" % e)
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+    t.join(SYNTH_TIMEOUT_SECONDS)
+    if t.is_alive():
+        # 超时：线程仍在跑（可能永远不返回），放弃本次语音，正文照常推送
+        log("语音合成超时 %.0f 秒，跳过本条语音（正文照推）" % SYNTH_TIMEOUT_SECONDS)
+        return ""
+    ok, err = result.get("val") or (False, "合成线程无返回")
     if not ok:
         log("语音合成失败：", err)
         return ""
