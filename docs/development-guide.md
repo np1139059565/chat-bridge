@@ -8,7 +8,7 @@
 
 ### 本地工具服务
 
-Windows 下双击 `flask_server/start_server.cmd` 即可启动：脚本自动切目录、选 Python、缺失依赖时安装，并透传命令行参数。
+Windows 下双击 `flask_server/start_server.cmd` 即可启动：脚本自动切目录、选 Python、缺失依赖时安装，先结束占用目标端口的旧进程，并透传命令行参数。
 
 ```bat
 cd flask_server

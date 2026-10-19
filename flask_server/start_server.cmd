@@ -1,7 +1,7 @@
 @echo off
 rem ============================================================
 rem chat-bridge 本地工具服务一键启动脚本
-rem 用途：双击即可启动 Flask 工具服务，省去手打三条命令。
+rem 用途：双击即可启动 Flask 工具服务；启动前自动清理占用目标端口的旧进程。
 rem 用法：start_server.cmd            使用配置文件里的主机与端口
 rem       start_server.cmd --port 5001  临时指定端口（优先级最高）
 rem       start_server.cmd --host 0.0.0.0 --port 5001
@@ -10,7 +10,7 @@ rem ============================================================
 rem 把控制台代码页切换为 UTF-8，保证中文提示不乱码
 chcp 65001 >nul
 
-rem 关闭命令回显后开启变量延迟展开，便于在 if 块内判断变量
+rem 开启变量延迟展开，便于在 if / for 块内读取最新变量值
 setlocal enabledelayedexpansion
 
 rem 切换到脚本自身所在目录（即 flask_server），避免从别处双击时路径错位
@@ -67,7 +67,56 @@ if errorlevel 1 (
 )
 
 rem ------------------------------------------------------------
-rem 第三步：启动服务，并把命令行参数原样透传给 server.py
+rem 第三步：确定要使用的端口
+rem 优先级与 server.py 保持一致：命令行 --port > runtime.yaml > 5000
+rem ------------------------------------------------------------
+set "PORT="
+set "PREV_ARG="
+
+rem 遍历全部命令行参数，取 --port 后面紧跟的那个值
+for %%a in (%*) do (
+  if /i "!PREV_ARG!"=="--port" set "PORT=%%~a"
+  set "PREV_ARG=%%~a"
+)
+
+rem 命令行没给端口时，调用助手脚本读取配置里的端口
+rem 单独成脚本是为了避开 cmd 里嵌套引号调用 Python 的转义陷阱
+if not defined PORT (
+  for /f "delims=" %%p in ('!PY_CMD! scripts\get_flask_port.py 2^>nul') do set "PORT=%%p"
+)
+
+rem 仍拿不到就退回服务端内置默认端口 5000
+if not defined PORT set "PORT=5000"
+
+echo [信息] 目标端口：!PORT!
+
+rem ------------------------------------------------------------
+rem 第四步：杀掉占用该端口的旧进程，避免端口被占导致启动失败
+rem 只处理处于 LISTENING 状态的记录，取其 PID 后强制结束
+rem ------------------------------------------------------------
+set "PIDS="
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /R /C:":!PORT! " ^| findstr /C:"LISTENING"') do (
+  set "PIDS=!PIDS! %%p"
+)
+
+if defined PIDS (
+  echo [提示] 端口 !PORT! 被占用，正在结束旧进程：!PIDS!
+  for %%p in (!PIDS!) do (
+    taskkill /F /PID %%p >nul 2>nul
+    if errorlevel 1 (
+      echo [警告] 结束进程 %%p 失败，可能权限不足；请以管理员身份重试。
+    ) else (
+      echo [信息] 已结束进程 %%p。
+    )
+  )
+  rem 给系统一点时间释放端口，避免新进程立刻绑定失败
+  timeout /t 1 /nobreak >nul
+) else (
+  echo [信息] 端口 !PORT! 当前空闲。
+)
+
+rem ------------------------------------------------------------
+rem 第五步：启动服务，并把命令行参数原样透传给 server.py
 rem 例如 --host / --port 会被 server.py 解析并覆盖配置文件
 rem ------------------------------------------------------------
 echo [启动] 正在启动本地工具服务，按 Ctrl+C 可停止 ...

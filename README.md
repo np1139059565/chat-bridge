@@ -87,7 +87,7 @@ chat-bridge-main/
 
 > 需要 **Python 3.10 或更高版本**（启动时会校验，低于此版本会提示并退出）。
 
-**一键启动（Windows）**：双击 `flask_server/start_server.cmd`。脚本会自动切换到服务端目录、挑选可用 Python、依赖缺失时安装 `requirements.txt`，随后启动服务。
+**一键启动（Windows）**：双击 `flask_server/start_server.cmd`。脚本会自动切换到服务端目录、挑选可用 Python、依赖缺失时安装 `requirements.txt`，并先结束占用目标端口的旧进程，随后启动服务。
 
 在终端中可传参覆盖主机与端口：
 
