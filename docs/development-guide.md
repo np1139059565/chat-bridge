@@ -124,19 +124,20 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 混在 `remote_bridge.yaml` 一个文件里，而该文件因含密钥被 gitignore 排除——
 结果换机器时指令跟着凭证一起丢失。
 
-**现状**（`flask_server/config/` 与 `flask_server/data/` 下）：
+**现状**：桥接配置不再独立成文件，而是集中在两份主配置的 `bridge` 分区里
+（`flask_server/config/` 与 `flask_server/data/` 下）：
 
-| 文件 | 内容 | 是否入库 |
+| 文件 | 分区内容 | 是否入库 |
 |---|---|---|
-| `config/remote_bridge.yaml` | 仅 QQ 凭证 | 否（gitignore） |
-| `config/remote_bridge_settings.yaml` | 开关、指令、选择器等 | 是 |
+| `config/definition.yaml` | `bridge` 分区：指令、选择器、订阅事件位等定义 | 是 |
+| `config/runtime.yaml` | `bridge` 分区：凭证、总开关、推送开关等运行时 | 否（gitignore） |
 | `data/remote_bridge_state.json` | 已推送去重记账 | 否（运行时产物） |
 
-`bridge_store.py` 的 `_read_merged()` 负责合并读取，并在读到旧格式
-（密钥文件里混有非密钥字段）时**自动迁移**：把非密钥字段搬到设置文件。
+`bridge_store.py` 的 `_read_merged()` 负责从两份文件的 `bridge` 分区合并读取；
+写入时按字段类别分流：`SETTING_KEYS` 进定义分区，`RUNTIME_KEYS` 与 `SECRET_KEYS` 进运行时分区。
 
-**新增配置项时**：先判断它含不含密钥，决定写入哪个文件。
-`SECRET_KEYS` 列出只进密钥文件的字段。
+**新增配置项时**：先判断它含不含密钥、是否随本机状态变化，决定写入哪个分区。
+`SECRET_KEYS` 列出只进 runtime.yaml 的字段（`app_id` / `app_secret`）。
 
 ### 3.8 路径基准
 
@@ -194,7 +195,7 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 |---|---|---|
 | M1 | `extend/dialog/parts/00_data.js` / `04_sessions.js` | （已修）外部卡片曾未按会话隔离 / 不持久化 |
 | M2 | `extend/dialog/parts/06_execute.js` | （已修）关闭自动开关后外部卡片曾卡死 |
-| M3 | `flask_server/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
+| M3 | `flask_server/core/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
 | D1 | `flask_server/routes/ext.py` | （已修）提供方通道按 `page_url` / `is_open` 定向，目标页面工具未开即逸散 |
 | D2 | `skills/debug_chrome/extension/content/03_heartbeat.js` | 抽屉折叠即停轮询 → 10 秒后判离线（仅影响指示灯） |
 | D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |

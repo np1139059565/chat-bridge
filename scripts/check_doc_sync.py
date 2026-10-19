@@ -132,18 +132,125 @@ def _check_tools(doc):
     return _report_missing("工具", missing)
 
 
+# 文档目录：本项校验覆盖 docs 下全部 Markdown，而非仅接口文档
+DOCS_DIR = os.path.join(ROOT, "docs")
+# 被引用路径的识别模式：反引号包裹、含目录分隔符、带具体扩展名
+# 只匹配形如 a/b/c.py 的具体路径；含 * 或 < > 的模式串（通配 / 占位）不参与校验
+PATH_REF_PATTERN = re.compile(r"`([A-Za-z0-9_\-./]+\.(?:py|js|md|yaml|json|css|html))`")
+
+# 历史记录类文档：记录的是当时的文件状态与改动过程，其中的旧路径属史实，
+# 不随代码演进同步，故不参与「引用文件是否存在」校验。
+HISTORY_DOCS = (
+    "refactor-plan.md",      # 重构执行计划与批次记录
+    "code-review-report.md", # 走查当时的结论快照
+)
+
+
+def collect_path_refs():
+    """扫描 docs 下全部 Markdown，收集其中以反引号包裹的具体文件路径。
+
+    只收含目录分隔符的路径（如 flask_server/core/memory_db.py），
+    纯文件名（如 definition.yaml）存在多处同名可能，无法唯一定位，故跳过。
+
+    @returns 路径字符串集合（原样，未归一化）
+    """
+    out = set()
+    if not os.path.isdir(DOCS_DIR):
+        return out
+    for fn in sorted(os.listdir(DOCS_DIR)):
+        if not fn.endswith(".md"):
+            continue
+        # 历史记录类文档记录当时状态，不参与现行引用校验
+        if fn in HISTORY_DOCS:
+            continue
+        p = os.path.join(DOCS_DIR, fn)
+        try:
+            text = open(p, "r", encoding="utf-8", errors="ignore").read()
+        except Exception:
+            continue
+        for m in PATH_REF_PATTERN.finditer(text):
+            ref = m.group(1)
+            # 通配符与占位写法不是真实路径，跳过
+            if "*" in ref or "<" in ref or "?" in ref:
+                continue
+            # 仅保留含目录分隔符的引用，避免同名文件误判
+            if "/" not in ref:
+                continue
+            # 演示用假路径不参与校验
+            if any(pat in ref for pat in REF_SKIP_PATTERNS):
+                continue
+            out.add(ref)
+    return out
+
+
+# 引用路径的解析基准：文档中既有工程根相对路径，也有模块内相对路径，
+# 逐个基准尝试，任一命中即视为有效，避免把相对写法误报为缺漏。
+REF_BASES = (
+    "",                      # 工程根
+    "flask_server",          # 服务端模块内相对
+    "flask_server/routes",   # 路由文件常以同目录名引用
+    "extend",                # 插件内相对
+    "extend/content",
+    "extend/dialog",
+    "extend/dialog/parts",
+    "extend/dialog/styles",
+    "extend/lib",
+    "skills",
+    # 调试扩展自身的文档以其扩展根为基准书写
+    "skills/debug_chrome/extension",
+    "skills/debug_chrome/extension/content",
+    "skills/debug_chrome/extension/shared",
+    "skills/debug_chrome/extension/drawer",
+)
+
+# 示例占位：文档中用于演示的假路径，并非真实文件引用，不参与校验
+REF_SKIP_PATTERNS = (
+    "xxx/",      # 如 skills/xxx/SKILL.md 这类演示用占位
+    "example/",
+    "示例/",
+)
+
+
+def _check_path_refs():
+    """校验文档中引用的文件路径是否真实存在；返回缺漏条数。
+
+    目的：文档里写到的模块被删除或改名后，此处立即报警，
+    避免文档长期引用不存在的文件却无人察觉。
+
+    解析策略：对每个引用依次套用 REF_BASES 中的基准，任一命中即通过；
+    全部基准都不命中才算缺漏。这样可容纳文档里「模块内相对」的写法，
+    同时仍能发现「文件已被移走、文档还写着旧位置」这类真实漂移。
+
+    @returns 缺漏条数
+    """
+    missing = []
+    for ref in sorted(collect_path_refs()):
+        rel = ref.replace("/", os.sep)
+        # 逐个基准尝试解析，命中即跳出
+        found = False
+        for base in REF_BASES:
+            target = os.path.join(ROOT, base, rel) if base else os.path.join(ROOT, rel)
+            # 归一化 .. 片段后再判断，兼容 ../lib/dom-utils.js 这类写法
+            if os.path.exists(os.path.normpath(target)):
+                found = True
+                break
+        if not found:
+            missing.append(ref)
+    return _report_missing("文档引用的文件", missing)
+
+
 def main():
-    """执行路由与工具的文档收录校验。"""
+    """执行路由、工具与文档引用路径的收录校验。"""
     doc = read_doc()
     if not doc:
         print("接口文档不存在或为空：%s" % API_DOC)
         return 1
     # 文档做参数占位归一化，消除 <id> / <card_id> 之类的写法差异
-    problems = _check_routes(normalize_route(doc)) + _check_tools(doc)
+    problems = _check_routes(normalize_route(doc)) + _check_tools(doc) + _check_path_refs()
     if problems:
         print("\n文档同步校验未通过：共 %d 项缺漏。" % problems)
         return 1
-    print("文档同步校验通过：路由与工具均已收录。")
+    print("文档同步校验通过：路由、工具与文档引用路径均一致。")
     return 0
 
 
