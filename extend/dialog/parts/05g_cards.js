@@ -35,9 +35,10 @@
     const state = {
       armedLast: null,        // 滚动轮次里被「上膛」的最新卡片（仅最后一条消息上的）
       rerunCard: null,        // 重复卡片重跑候选（严格受限旁路，见下方判定）
-      pendingMsgIssue: null,  // 消息级补充告警暂存：建卡后统一决定落点
-      pendingHolder: null,    // 该告警所属消息的承载对象
-      firstToolCard: null,    // 本轮第一张工具卡片（告警无候选可搭时退回它）
+      // 告警按消息归属收集：每条消息的检查结论只登记在自己名下，
+      // 由落点决策按消息逐条分发，不存在跨消息共用的暂存槽。
+      msgIssues: [],
+      firstToolCard: null,    // 本轮第一张工具卡片（供重跑等旁路使用）
       // isFreshReply：本轮是否属 AI 新鲜回复（与上报同一判定）。
       // 检测/回传用它取代「reason==='generate'」，避免采集来源漂移时漏检测。
       isFreshReply: !!isFreshReply
@@ -45,7 +46,7 @@
     incoming.forEach((m, mi) => {
       this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
     });
-    this._decideIssueTarget(autoCandidates, state, reason);
+    this._decideIssueTarget(autoCandidates, state, reason, isFreshReply);
     return { autoCandidates: autoCandidates, armedLast: state.armedLast, rerunCard: state.rerunCard };
   };
 
@@ -70,16 +71,15 @@
     if (node) m.cards = holder.cards;
     const blocks = window.AIMirrorDomUtils.toArray(m.blocks);
     const issue = this._messageIssue(m, mi, incoming.length, reason, memoryIssue, blocks, state.isFreshReply);
-    // 告警一律作为质量门禁：任何告警都不执行工具，直接把告警当作卡片结果回传
-    // ——告警与工具结果互斥，只留一个。两条路径最终都落成卡片的 preIssue：
-    //   · 致命类（fatal，如多个调用块）→ 随建卡作为 blockIssue（见下方 blockIssue）。
-    //   · 补充类（advisory，如语音缺失 / 思考非中文 / 只含代码块 / 记忆滞后）→ 先暂存，
-    //     建卡后由 _decideIssueTarget 统一决定落到哪张卡片上。
-    if (issue && issue.severity === 'advisory') {
-      state.pendingMsgIssue = issue;
-      state.pendingHolder = holder;
+    // 告警是「这条消息」的检查结论，只登记在这条消息名下。
+    // 致命类（fatal，如多个调用块）当场作为卡片 preIssue：它依赖本条的工具调用块，
+    // 天然属于本条消息；补充类（advisory）建卡后由 _decideIssueTarget 按消息分发给它自己的卡片。
+    // msg_id：把归属消息的指纹写进告警本身，卡片路径与独立回传路径
+    // 都用「会话 + msg_id + 问题码」作为去重键，保证同一消息的同一问题只回传一次。
+    if (issue) issue.msg_id = this.msgId(m);
+    if (issue && issue.severity !== 'fatal') {
+      state.msgIssues.push({ holder: holder, issue: issue });
     }
-    // 致命类才随卡片作为 preIssue；补充类已由上面暂存，避免重复。
     const blockIssue = (issue && issue.severity === 'fatal') ? issue : null;
     blocks.forEach((b) => {
       this._buildCardForBlock(holder, m, b, mi, incoming, reason, scrollOnly, blockIssue, autoCandidates, state);
@@ -122,25 +122,55 @@
   };
 
   /**
-   * 消息级告警落点决策：告警一律作为质量门禁。
-   * 规则：有工具卡片可搭，就把告警挂成该卡片的 preIssue（执行时被拦下、
-   * 直接回传告警，不调用工具）；没有卡片（纯文字回复）才走独立回传。
+   * 告警落点决策：每条告警只归属产生它的那条消息。
+   *
+   * 两条路径，都由消息自身决定，不做跨消息搬运：
+   *   1) 该消息自己有工具卡片 → 挂到该消息自己的一张卡片上作为 preIssue，
+   *      执行时被拦下、直接把告警当结果回传；
+   *   2) 该消息自己没有卡片（纯文字回复）→ 独立回传，报文里带这条消息的 id。
+   * 两条路径都先按「会话 + 消息 id + 问题码」去重，同一条消息的同一问题只回传一次。
    */
-  M._decideIssueTarget = function (autoCandidates, state, reason) {
-    if (!state.pendingMsgIssue) return;
-    // 告警要挂到「本轮会被自动执行的那张卡片」上，否则挂在未执行的卡片上
-    // 会导致告警丢失。自动执行取候选末位（最新），故优先挂候选末位；无候选时退回
-    // 第一张工具卡片（如滚动轮次只建卡不自动执行）。
-    const target = (autoCandidates.length ? autoCandidates[autoCandidates.length - 1] : state.firstToolCard);
-    if (target) {
-      // 质量门禁：一旦检出问题就不执行工具，直接把告警当作卡片结果回传
-      //（告警与工具结果互斥，只留一个）。这样「必须经质量检查通过才执行卡片」。
-      if (!target.preIssue) target.preIssue = state.pendingMsgIssue;
-    } else {
-      // 无卡片可搭：走独立回传（纯文字回复也能被提醒）。
-      // 判定与上报一致，用 isFreshReply 而非 reason，避免采集来源漂移时漏回传。
-      this._scheduleMessageIssue(state.pendingHolder, state.pendingMsgIssue, state.isFreshReply);
+  M._decideIssueTarget = function (autoCandidates, state, reason, isFreshReply) {
+    const list = state.msgIssues || [];
+    for (let i = 0; i < list.length; i++) {
+      const holder = list[i].holder;
+      const issue = list[i].issue;
+      const target = this._pickOwnToolCard(holder, autoCandidates);
+      if (target) {
+        // 质量门禁：挂在本消息自己卡片上，执行时直接以告警作结果、不调用工具。
+        if (!target.preIssue) target.preIssue = issue;
+      } else {
+        // 本消息没有可承载的卡片：独立回传，报文携带这条消息的 id 表明归属。
+        this._scheduleMessageIssue(holder, issue, isFreshReply);
+      }
     }
+  };
+
+  /**
+   * 从某条消息自己的卡片里挑一张承载告警：优先本轮自动候选、其次未执行的在册卡片。
+   * 只在该消息的 cards 表里找，绝不跨消息借用。
+   * @param {Object} holder 消息承载对象
+   * @param {Array} autoCandidates 本轮自动执行候选
+   * @returns {Object|null} 卡片；无则 null
+   */
+  M._pickOwnToolCard = function (holder, autoCandidates) {
+    const cards = (holder && holder.cards) || {};
+    const ids = Object.keys(cards);
+    const own = [];
+    for (let i = 0; i < ids.length; i++) {
+      const c = cards[ids[i]];
+      if (c && c.isTool) own.push(c);
+    }
+    if (!own.length) return null;
+    // 优先本轮会被自动执行的那张（候选末位），它就是本消息最新卡片。
+    for (let i = autoCandidates.length - 1; i >= 0; i--) {
+      if (own.indexOf(autoCandidates[i]) >= 0) return autoCandidates[i];
+    }
+    // 否则取本消息最后一张尚未执行的工具卡片。
+    for (let i = own.length - 1; i >= 0; i--) {
+      if (!own[i].executed) return own[i];
+    }
+    return own[own.length - 1];
   };
 
   /**
@@ -241,12 +271,14 @@
     // 与工具卡片的自动回传保持一致：自动开关关闭时不回传，避免打扰
     if (!this.autoSendEnabled) return;
     const mid = window.AIMirrorDomUtils.messageFingerprint(holder);
-    // 去重：同一会话内「同一消息 + 同一问题」只回传一次；刷新后重新提醒。
-    // 存在实例字段上，不写进共享的 EMPTY_CONV，避免污染空会话常量。
-    const store = this._msgIssueSent || (this._msgIssueSent = {});
-    const key = this.activeConv + '|' + mid + '|' + issue.error;
-    if (store[key]) return;
-    store[key] = true;
+    // 归属消息 id 缺省时补上：本条告警就是这条消息的检查结论。
+    if (!issue.msg_id) issue.msg_id = mid;
+    // 去重：与卡片回传路径共用同一个键（会话 + 归属消息 + 问题码），
+    // 同一消息的同一问题只回传一次，刷新后重新提醒。
+    if (!this._markIssueSent(issue)) {
+      log('消息级质量回传跳过（已回传过）：' + issue.error);
+      return;
+    }
     // 以工具结果（bridge-chat-res）格式回传，而非纯文本。
     // 关键：镜像靠「内容含 bridge-chat-res」判定工具结果（见 05f_parse.msgSource），
     // 故这条落地即被判为 tool 来源：不冒用「用户」前缀、不算真实用户发言
@@ -258,7 +290,8 @@
       type: 'bridge-chat-res',
       nonce: 'qr-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
       success: true,
-      result: { issue: issue.error, message: issue.message }
+      // msg_id：这条告警归属的消息指纹，供回传端与日志核对「告警来自哪条回复」。
+      result: { issue: issue.error, message: issue.message, msg_id: mid }
     };
     D.enqueueSend({ type: 'auto_send', text: JSON.stringify(payload, null, 2) });
     log('消息级质量回传（无卡片，独立入队）：' + issue.error);

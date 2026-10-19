@@ -95,7 +95,27 @@
     if (this._persist) this._persist();
     // 质量问题回传不受 noReply 约束：noReply 的本意是「成功结果不必回传」，
     // 而质量不合格必须让 AI 知道并修正，否则卡片看似完成、AI 却收不到反馈。
-    if (isAuto && this.autoSendEnabled) this.scheduleAutoSend(card);
+    // 去重：与独立回传路径同一套键（会话 + 归属消息 + 问题码），
+    // 同一条消息的同一问题只回传一次，重复建卡 / 重复执行都不会刷屏。
+    if (isAuto && this.autoSendEnabled && this._markIssueSent(card.preIssue)) {
+      this.scheduleAutoSend(card);
+    }
+  };
+
+  /**
+   * 登记一条告警已回传，返回是否首次（true 表示可以回传）。
+   * 键为「会话 + 归属消息 id + 问题码」；同一键只放行一次。
+   * 告警缺少归属消息 id 时一律放行——此类告警由调用方保证不重复产生。
+   * @param {Object} issue 告警对象（含 msg_id 与 error）
+   * @returns {boolean} 是否首次回传
+   */
+  M._markIssueSent = function (issue) {
+    if (!issue || !issue.msg_id) return true;
+    const store = this._msgIssueSent || (this._msgIssueSent = {});
+    const key = this.activeConv + '|' + issue.msg_id + '|' + (issue.error || '');
+    if (store[key]) return false;
+    store[key] = true;
+    return true;
   };
 
   /**
