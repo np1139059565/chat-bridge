@@ -64,12 +64,31 @@ iter_files = qcommon.iter_files
 read_lines = qcommon.read_lines
 is_comment_or_blank = qcommon.is_comment_or_blank
 cyclomatic = qcommon.cyclomatic
+is_exempt = qcommon.is_exempt
+
+
+def _iter_targets(root, exts=None):
+    """遍历参与检查的文件，剔除豁免清单中的第三方产物与生成副本。
+
+    豁免规则由 qcommon.is_exempt 统一维护，此处只负责应用，
+    保证三个检查环节口径一致。
+
+    @param root 工程根目录
+    @param exts 限定扩展名元组；缺省沿用 qcommon 的源码扩展名
+    @returns 逐个产出未被豁免的文件绝对路径
+    """
+    for p in iter_files(root, exts):
+        # 相对路径用于比对豁免前缀
+        rel = os.path.relpath(p, root)
+        if is_exempt(rel):
+            continue
+        yield p
 
 
 def check_large_files(root):
     """检查一：文件总行数超过阈值。"""
     out = []
-    for p in iter_files(root):
+    for p in _iter_targets(root):
         lines = read_lines(p)
         if len(lines) > FILE_LINE_LIMIT:
             out.append((os.path.relpath(p, root), len(lines)))
@@ -95,7 +114,7 @@ def _scan_py_file(p, root, out):
 def check_py_functions(root):
     """检查二：Python 函数体长度与圈复杂度超过阈值。"""
     out = []
-    for p in iter_files(root):
+    for p in _iter_targets(root):
         if p.endswith(".py"):
             _scan_py_file(p, root, out)
     return sorted(out, key=lambda x: -x[4])
@@ -131,7 +150,7 @@ def _index_windows(index, norm, rel):
 def check_duplicates(root):
     """检查三：规范化后的连续 DUP_WINDOW 行在多处出现（仅针对代码文件）。"""
     index = collections.defaultdict(list)
-    for p in iter_files(root, DUP_EXTS):
+    for p in _iter_targets(root, DUP_EXTS):
         rel = os.path.relpath(p, root)
         # 同步生成的副本跳过：内容刻意与真源一致，不参与重复统计
         if qcommon.is_dup_exempt(rel):
