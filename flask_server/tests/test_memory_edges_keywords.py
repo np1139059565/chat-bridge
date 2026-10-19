@@ -26,25 +26,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBTestBase
 import memory_edges
 
 
-class TestEdgeKeywords(unittest.TestCase):
+class TestEdgeKeywords(MemoryDBTestBase):
     """验证 keywords 列存在、可读写，且迁移对旧库有效。"""
 
-    def setUp(self):
-        # 重定向到临时库，避免触碰真实库
-        self.tmp = tempfile.mkdtemp(prefix="memedges_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
+    PREFIX = "memedges_test_"
 
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _edge_columns(self):
         """取 edges 表当前全部列名。"""

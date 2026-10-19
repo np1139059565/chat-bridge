@@ -137,12 +137,29 @@ def _normalize_lines(path):
     return norm
 
 
+def _is_import_line(text):
+    """判断一行是否属于导入区样板（导入语句或路径引导语句）。
+
+    路径引导（sys.path.insert）与导入语句成对出现、内容固定，
+    各模块的导入区因此天然相似，同样不应计入重复。
+
+    @param text 已规范化的行文本
+    @returns 属导入区样板时返回 True
+    """
+    return (text.startswith("import ") or text.startswith("from ")
+            or text.startswith("sys.path.insert"))
+
+
 def _index_windows(index, norm, rel):
     """把文件内每个滑动窗口登记到全局索引。"""
     for i in range(len(norm) - DUP_WINDOW + 1):
         key = tuple(x[1] for x in norm[i:i + DUP_WINDOW])
         # 窗口内容过短的不算重复（多为 import、单行赋值等）
         if sum(len(k) for k in key) < 80:
+            continue
+        # 整窗都是导入语句的不算重复：各模块的导入区天然相似，
+        # 反映的是「依赖相同」而非「实现重复」，不应据此要求合并
+        if all(_is_import_line(k) for k in key):
             continue
         index[key].append((rel, norm[i][0]))
 

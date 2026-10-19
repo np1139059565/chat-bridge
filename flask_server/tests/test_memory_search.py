@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBTestBase
 import memory_nodes
 import memory_search
 
@@ -45,21 +46,11 @@ def _mk_node(msg_id, essence, keywords):
     return nid
 
 
-class TestMemorySearch(unittest.TestCase):
+class TestMemorySearch(MemoryDBTestBase):
     """验证锚定验证、命中与拒绝、内存预筛。"""
 
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="memsearch_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
+    PREFIX = "memsearch_test_"
 
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_plan_submit_returns_id(self):
         """plan_submit 应返回非空 plan_id，且能取回原文。"""

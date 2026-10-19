@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBTestBase
 import memory_nodes
 import memory_conversations as mc
 
@@ -42,24 +43,17 @@ def _node(role, text):
             "blocks": [{"type": "text", "text": text}], "cards": {}}
 
 
-class _DBBase(unittest.TestCase):
-    """记忆库重定向到临时目录，测试互不干扰、不碰真实库。"""
+class _DBBase(MemoryDBTestBase):
+    """在临时库之外，每个用例还需清空会话增量签名缓存。"""
+
+    PREFIX = "memconv_test_"
 
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="memconv_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
+        """先重定向记忆库，再清空签名缓存。"""
+        super().setUp()
         # 清空增量签名缓存，避免上一用例的缓存影响本用例
         with mc._sig_lock:
             mc._saved_sig.clear()
-
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
 
 class TestPureHelpers(unittest.TestCase):

@@ -28,6 +28,7 @@ import paths  # noqa: F401  触发路径引导
 import memory_db
 import memory_nodes
 import memory_events
+from tests.memory_db_base import MemoryDBTestBase
 
 
 def _mk_user_node(msg_id, essence, keywords):
@@ -44,21 +45,10 @@ def _mk_user_node(msg_id, essence, keywords):
     return nid
 
 
-class _DBBase(unittest.TestCase):
-    """把记忆库重定向到临时目录，测试互不干扰、不碰真实库。"""
+class _DBBase(MemoryDBTestBase):
+    """本文件所有用例共用临时库；临时目录前缀见类属性。"""
 
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="memevents_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
-
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
-        shutil.rmtree(self.tmp, ignore_errors=True)
+    PREFIX = "memevents_test_"
 
 
 class TestPureHelpers(unittest.TestCase):

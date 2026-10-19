@@ -28,6 +28,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBAndRulesTestBase
 import memory_nodes
 import memory_wal
 import memory_solidify
@@ -45,24 +46,10 @@ def _mk_node(msg_id, essence, keywords):
     return nid
 
 
-class _Base(unittest.TestCase):
-    """记忆库与规则目录都重定向到临时目录。"""
+class _Base(MemoryDBAndRulesTestBase):
+    """记忆库与规则目录都重定向到临时目录；前缀见类属性。"""
 
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="memsolidify_test_")
-        self._orig_dbdir = paths.MEMORY_DB_DIR
-        self._orig_dbpath = paths.MEMORY_DB_PATH
-        self._orig_rules = paths.RULES_DIR
-        paths.MEMORY_DB_DIR = Path(self.tmp) / "memory"
-        paths.RULES_DIR = Path(self.tmp) / "rules"
-        memory_db.reset_for_tests(Path(self.tmp) / "memory" / "test.db")
-
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dbdir
-        paths.MEMORY_DB_PATH = self._orig_dbpath
-        paths.RULES_DIR = self._orig_rules
-        shutil.rmtree(self.tmp, ignore_errors=True)
+    PREFIX = "memsolidify_test_"
 
 
 class TestWalCheckpoint(_Base):

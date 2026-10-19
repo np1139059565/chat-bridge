@@ -25,25 +25,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBTestBase
 import memory_edges
 import memory_decay
 
 
-class TestDecayEdges(unittest.TestCase):
+class TestDecayEdges(MemoryDBTestBase):
     """验证突触强化缩放、带权邻居排序、分级升降。"""
 
-    def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="memdecay_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
+    PREFIX = "memdecay_test_"
 
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _edge_weight(self, src, dst):
         conn = memory_db.get_conn()

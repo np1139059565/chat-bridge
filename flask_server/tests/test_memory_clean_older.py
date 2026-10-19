@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBTestBase
 import memory_nodes
 
 
@@ -36,15 +37,14 @@ def _ins(conn, node_id, conv, ts, site_key="glm"):
     )
 
 
-class TestIdsOlderThanIsolation(unittest.TestCase):
+class TestIdsOlderThanIsolation(MemoryDBTestBase):
     """ids_older_than 的会话隔离边界。"""
 
+    PREFIX = "clean_older_test_"
+
     def setUp(self):
-        self.tmp = tempfile.mkdtemp(prefix="clean_older_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
+        """先重定向记忆库，再准备两个会话的节点数据。"""
+        super().setUp()
         conn = memory_db.get_conn()
         # 会话 A：节点 1(100)、2(200)；会话 B：节点 3(150)、4(300)
         _ins(conn, 1, "A", 100)
@@ -52,11 +52,6 @@ class TestIdsOlderThanIsolation(unittest.TestCase):
         _ins(conn, 3, "B", 150)
         _ins(conn, 4, "B", 300)
         conn.commit()
-
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
 
     def test_only_same_conversation(self):
         """A 会话内更早的只有节点 1，不包含 B 会话的 3。"""

@@ -23,24 +23,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import memory_db
+from tests.memory_db_base import MemoryDBTestBase
 
 
-class TestCloseConn(unittest.TestCase):
+class TestCloseConn(MemoryDBTestBase):
     """验证 close_conn() 显式关闭当前线程连接，且可安全重建。"""
 
-    def setUp(self):
-        # 把数据库重定向到临时目录，避免触碰真实库
-        self.tmp = tempfile.mkdtemp(prefix="memdb_test_")
-        self._orig_dir = paths.MEMORY_DB_DIR
-        self._orig_path = paths.MEMORY_DB_PATH
-        paths.MEMORY_DB_DIR = Path(self.tmp)
-        memory_db.reset_for_tests(Path(self.tmp) / "test.db")
+    PREFIX = "memdb_test_"
 
-    def tearDown(self):
-        memory_db.close_conn()
-        paths.MEMORY_DB_DIR = self._orig_dir
-        paths.MEMORY_DB_PATH = self._orig_path
-        shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_get_conn_creates_connection(self):
         """get_conn 应能建立连接。"""
