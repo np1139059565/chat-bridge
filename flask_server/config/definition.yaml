@@ -278,7 +278,7 @@ bridge:
     - /new
     - /csp
     - /sa on
-    interval: 4
+    interval: 5
   - name: /crp
     label: 清空消息记录并重新解析
     steps:
@@ -292,7 +292,7 @@ bridge:
     - /sa on
     - /dc
     - /rs
-    interval: 3
+    interval: 4
   - name: /reai
     label: 重新生成
     selector: document.querySelector('.ds-virtual-list--printable .ds-virtual-list-visible-items
