@@ -29,14 +29,18 @@ def log(*args):
 
 
 def presynth_voice(messages, push):
-    """锁外预合成本轮要推的 AI 语音，返回 {消息id: 音频路径}。
+    """取本轮可用的语音路径：只查缓存，不做任何合成。
 
-    合成是网络调用、可能很慢，必须在会话推送锁外完成，锁内才不致被拖住。
+    设计要点——「文字优先」：合成一条语音要一秒以上，若在推文字前做完，
+    用户要等整批语音合成完毕才看到第一条回音。故此处只做零成本的缓存查找，
+    命中的直接随正文一起推；未命中的留到文字全部推完后，由
+    postsynth_and_push_voice 并发合成再补推。
+
     @param messages 本轮消息列表
     @param push     推送开关字典
-    @returns {消息id: 音频路径}；未开语音或合成失败时为空字典
+    @returns {消息id: 音频路径}；未开语音或无缓存命中时为空字典
     """
-    from . import message_router as mr
+    from . import voice_cache
     voice_paths = {}
     if not push.get("voice"):
         return voice_paths
@@ -44,13 +48,81 @@ def presynth_voice(messages, push):
         mid = m.get("id") or ""
         if not mid or not _should_synth(m, push):
             continue
-        try:
-            path = mr._synthesize_voice(m)
-            if path:
-                voice_paths[mid] = path
-        except Exception as e:
-            log("语音预合成失败（不影响主流程）：", e)
+        text = _voice_text_of(m)
+        cached = voice_cache.lookup(text) if text else ""
+        if cached:
+            voice_paths[mid] = cached
     return voice_paths
+
+
+def postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths):
+    """文字推完后补语音：并发合成未命中的，逐条推给 QQ。
+
+    在会话推送锁之外调用：语音推送只是补充，不该占住正文推送锁。
+    合成按「文本内容哈希」入缓存，网页点播用过的音频直接复用。
+
+    @param qq_client   QQClient 实例
+    @param openid      收件人
+    @param messages    本轮消息列表
+    @param push        推送开关字典
+    @param voice_paths 已有的 {消息id: 音频路径}（就地补充，含缓存命中项）
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from app_limits import MAX_CONCURRENT_SYNTH
+    from . import voice_cache
+    if not push.get("voice"):
+        return
+    # 只补「要合成但还没有路径」的消息
+    pending = []
+    for m in messages:
+        mid = m.get("id") or ""
+        if not mid or mid in voice_paths or not _should_synth(m, push):
+            continue
+        text = _voice_text_of(m)
+        if text:
+            pending.append((mid, text))
+    if not pending:
+        return
+
+    def _one(item):
+        mid, text = item
+        try:
+            from . import message_router as mr
+            path = mr._synthesize_voice_text(text)
+            return mid, (voice_cache.store(text, path) if path else "")
+        except Exception as e:
+            log("语音合成失败（不影响主流程）：", e)
+            return mid, ""
+
+    # 并发合成：串行时十几条会把补推拖后十几秒；上限取自 app_limits
+    results = []
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, MAX_CONCURRENT_SYNTH)) as pool:
+            results = list(pool.map(_one, pending))
+    except Exception as e:
+        log("语音并发合成异常（不影响主流程）：", e)
+    # 按原顺序逐条推语音，保持「文本→语音」的对应关系
+    for mid, path in results:
+        if not path:
+            continue
+        try:
+            from .message_voice import push_voice
+            push_voice(qq_client, openid, path)
+        except Exception as e:
+            log("语音推送失败（不影响主流程）：", e)
+
+
+def _voice_text_of(m):
+    """取一条消息的朗读文本（供缓存键与合成使用）。
+
+    @param m 消息对象
+    @returns 朗读文本；无语音返回空串
+    """
+    try:
+        from .message_voice import extract_voice_from_blocks
+        return extract_voice_from_blocks(m) or ""
+    except Exception:
+        return ""
 
 
 def _should_synth(m, push):
@@ -130,15 +202,21 @@ def push_message_bodies(ctx, m, pushed, seen_keys, voice_paths):
 
 
 def remove_voice_file(path):
-    """删除预合成的临时语音文件（推完或正文失败后调用），失败静默。
+    """删除临时的语音文件（推完或正文失败后调用），失败静默。
 
-    纯文件操作、不含任何状态，与推送编排同属出向流程，故随编排置于本模块。
-    @param path 临时音频路径；为空时直接返回
+    缓存目录里的成品一律不删：那是按文本哈希复用的一次性投入，删掉等于
+    下次同一条文本又要重合成。只有临时目录里的合成产物才随推随删。
+
+    @param path 音频路径；为空时直接返回
     """
     if not path:
         return
     try:
         import os
+        import paths
+        cache_dir = str(paths.VOICE_DIR / "cache")
+        if os.path.abspath(os.path.dirname(path)) == os.path.abspath(cache_dir):
+            return                          # 缓存成品：保留，供下次复用
         os.remove(path)
     except OSError:
         pass

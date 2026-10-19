@@ -181,6 +181,21 @@ def synthesize_voice(m):
     voice_text = extract_voice_from_blocks(m)
     if not voice_text:
         return ""
+    return synthesize_voice_text(voice_text)
+
+
+def synthesize_voice_text(voice_text):
+    """把一段朗读文本合成为 MP3，返回本地路径；失败返回空串。
+
+    与 synthesize_voice 的区别：入参是文本而非消息，供「按文本哈希缓存」
+    与「多线程并发合成」两条路径直接调用——它们拿不到消息对象，
+    只认朗读内容本身。
+    @param voice_text 朗读文本
+    @returns 音频文件绝对路径；空文本/失败空串
+    """
+    voice_text = (voice_text or "").strip()
+    if not voice_text:
+        return ""
     import os
     import paths
     from . import voice_tts

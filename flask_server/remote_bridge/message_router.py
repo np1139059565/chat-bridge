@@ -228,6 +228,7 @@ from .message_voice import (
     extract_voice_from_blocks as _extract_voice_from_blocks,
     push_voice,
     synthesize_voice as _synthesize_voice,
+    synthesize_voice_text as _synthesize_voice_text,
 )
 
 
@@ -429,21 +430,18 @@ def handle_report(qq_client, payload):
     # 第一步（锁外）：预合成语音。
     # 合成是网络调用、可能很慢，绝不能在本会话推送锁内做——否则该会话一卡
     # 就会长时间占用其推送锁、上报线程堆满、服务器拒绝连接（必须重启才恢复）。
-    # 在锁外先把本轮要推的 AI 语音统统合成好，得到 {消息id: 音频路径}，
-    # 锁内只按序推送，既保住「文本→语音」顺序，又不占锁。
-    # 推送编排已抽到 message_flow 模块，此处延迟导入避免循环依赖。
+    # 第一步（锁外）：只查缓存，不做合成。合成一条要一秒以上，若在此做完，
+    # 用户得等整批语音合成完才看到第一条回音；未命中的留到文字推完后补。
     from . import message_flow
     voice_paths = message_flow.presynth_voice(messages, push)
 
     # 第二步（会话锁内）：整段「读已推集合 → 逐条推送 → 写回」对同一会话串行执行：
     # 否则同会话多个上报并发会读到同一份集合，导致同一条被推两次（重复）、顺序穿插（乱序）。
-    # 按会话分锁：不同会话各用各的锁，一个慢会话不会拖住其它会话的推送。
     with _lock_for(conv_id):
         sent = message_flow.push_batch_locked(qq_client, openid, conv_id, messages, push, voice_paths)
 
-    # 兜底清理：预合成了语音、但正文已推过（未进 _push_one）的，其音频没人删，
-    # 在此统一清掉，避免临时文件堆积。
-    for _mid, _p in voice_paths.items():
-        _remove_voice_file(_p)
+    # 第三步（锁外）：文字已全部送达，再并发合成剩余语音并补推。
+    # 放锁外：语音只是补充，不该占住正文推送锁。
+    message_flow.postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths)
     return sent
 
