@@ -227,10 +227,14 @@ def _write_state(state):
     @param state 要写入的字段字典
     """
     try:
-        old = _read_state()      # 先取现有内容
-        old.update(state)        # 用本次字段覆盖同名键
-        BRIDGE_STATE_PATH.write_text(
-            json.dumps(old, ensure_ascii=False), encoding="utf-8")
+        # 加锁：本函数是「读—改—写」，若两个写者并发（如已推记账与窗口存盘），
+        # 会互相覆盖对方刚写的字段而丢数据。_lock 为可重入锁，
+        # 从 mark_pushed 等持锁路径调用本函数也不会自锁死。
+        with _lock:
+            old = _read_state()      # 先取现有内容
+            old.update(state)        # 用本次字段覆盖同名键
+            BRIDGE_STATE_PATH.write_text(
+                json.dumps(old, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
         app_log.warn("[bridge]", "写回去重状态失败：", e)
 
@@ -253,6 +257,27 @@ def set_last_openid(openid):
     if not openid:
         return
     _write_state({"last_openid": openid})
+
+
+def get_last_window():
+    """读取被动回复窗口快照；无记录返回空字典。
+
+    窗口（msg_id / 过期时间 / 序号 / 收件人）原先只存内存，服务一重启即丢失，
+    此后所有推送都判「窗口已关闭」而静默丢弃，表现为「重启后一条也收不到」。
+    @returns {openid, msg_id, expire, seq}；无记录时为空字典
+    """
+    info = _read_state().get("last_window")
+    return dict(info) if isinstance(info, dict) else {}
+
+
+def set_last_window(info):
+    """保存被动回复窗口快照，供重启后恢复。
+
+    @param info {openid, msg_id, expire, seq}；为空或缺 msg_id 时忽略
+    """
+    if not info or not info.get("msg_id"):
+        return
+    _write_state({"last_window": info})
 
 
 # 去重集合的内存缓存：{ 会话 id: set(消息 id) }

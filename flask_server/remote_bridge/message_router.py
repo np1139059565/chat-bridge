@@ -104,11 +104,45 @@ def _remember_window(openid, msg_id):
         seq = 0
         if old and old.get("msg_id") == msg_id:
             seq = old.get("seq", 0)
-        _windows[openid] = {
+        win = {
             "msg_id": msg_id,
             "expire": time.time() + WINDOW_SECONDS,
             "seq": seq,
         }
+        _windows[openid] = win
+    # 落盘：窗口只存内存的话，服务一重启即丢失，此后所有推送都判「窗口已关闭」
+    # 而静默丢弃。存盘后重启可原样恢复，用户无需重新发消息。
+    bridge_store.set_last_window(dict(win, openid=openid))
+
+
+def restore_window():
+    """从磁盘恢复最近一次被动回复窗口（服务启动时调用）。
+
+    窗口原先只存内存，进程重启即丢失，此后所有推送都判「窗口已关闭」
+    而静默丢弃，表现为「重启后一条也收不到，必须再发条 QQ 消息才恢复」。
+    这里在启动时把落盘快照读回内存，未过期的窗口可直接继续使用。
+    """
+    info = bridge_store.get_last_window()
+    if not info:
+        return
+    openid = info.get("openid") or ""
+    msg_id = info.get("msg_id") or ""
+    if not openid or not msg_id:
+        return
+    expire = float(info.get("expire") or 0)
+    if expire <= time.time():
+        # 已过期：不恢复（被动回复窗口有时效，过期后本就该等新消息）
+        return
+    global _last_openid
+    with _lock:
+        _last_openid = openid
+        _windows[openid] = {
+            "msg_id": msg_id,
+            "expire": expire,
+            "seq": int(info.get("seq") or 0),
+        }
+    log("已从磁盘恢复回复窗口 openid=%s msg_id=%s 剩余=%.0f 秒"
+        % (openid[:8], msg_id[:8], expire - time.time()))
 
 
 def get_last_openid():
@@ -144,7 +178,13 @@ def next_seq(openid):
         if not w or time.time() >= w["expire"]:
             return None, 0
         w["seq"] = w.get("seq", 0) + 1
-        return w["msg_id"], w["seq"]
+        seq = w["seq"]
+        msg_id = w["msg_id"]
+        # 递增后立即落盘：QQ 按 (msg_id, msg_seq) 去重，重复序号会被静默丢弃
+        # （错误码 40054005），接口却仍可能返回 200。若只在收到新消息时存盘，
+        # 重启后 seq 会退回旧值、与已用序号相撞，表现为「发出去了但对方收不到」。
+        bridge_store.set_last_window(dict(w, openid=openid))
+        return msg_id, seq
 
 
 def note_incoming(openid, msg_id):
@@ -196,8 +236,12 @@ def push_text(qq_client, openid, text, markdown=False):
         log("窗口已关闭，暂不推送")
         return False
     ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq, markdown=markdown)
-    if not ok:
-        log("推送失败：", data)
+    # 推送结果一律留痕：成功也记（含 msg_id 前 8 位与序号）。
+    # QQ 侧按 (msg_id, msg_seq) 去重，序号冲突会被静默丢弃且接口仍返回成功，
+    # 只记失败日志会让「发出去了但对方收不到」这种情况完全查不到。
+    log("推送结果 ok=%s openid=%s msg_id=%s seq=%s 长度=%d%s"
+        % (ok, openid[:8], str(msg_id)[:8], seq, len(text or ""),
+           "" if ok else (" 错误=" + str(data)[:200])))
     return ok
 
 
