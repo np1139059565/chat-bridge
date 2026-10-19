@@ -51,8 +51,10 @@ def run_worker(worker, text_path, wav_path, voice, rate, timeout):
         [sys.executable, worker, text_path, wav_path, voice, str(rate)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    _, err = _wait_or_kill(proc, timeout)
-    if err:
+    # _wait_or_kill 返回单一值：成功时是子进程 stderr 字节，超时是错误描述字符串
+    err = _wait_or_kill(proc, timeout)
+    # 超时返回的是字符串而非字节，据此判定失败并直接返回，不进产物校验
+    if isinstance(err, str):
         return False, err
     return _check_output(proc, err, wav_path)
 
