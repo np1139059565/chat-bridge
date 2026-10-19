@@ -129,6 +129,21 @@ def push_message_bodies(ctx, m, pushed, seen_keys, voice_paths):
     return sent, failed
 
 
+def remove_voice_file(path):
+    """删除预合成的临时语音文件（推完或正文失败后调用），失败静默。
+
+    纯文件操作、不含任何状态，与推送编排同属出向流程，故随编排置于本模块。
+    @param path 临时音频路径；为空时直接返回
+    """
+    if not path:
+        return
+    try:
+        import os
+        os.remove(path)
+    except OSError:
+        pass
+
+
 def push_message_cards(ctx, m, pushed, seen_keys):
     """推送单条消息挂带的卡片结果（按「消息id#卡片id」去重）。
 

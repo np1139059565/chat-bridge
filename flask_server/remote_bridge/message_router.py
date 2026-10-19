@@ -151,14 +151,26 @@ def next_seq(openid):
         return w["msg_id"], w["seq"]
 
 
-def note_incoming(openid, msg_id):
+def note_incoming(openid, msg_id, qq_client=None):
     """收到用户新消息时调用：刷新窗口，并补推此前的滞后消息。
 
     关键：窗口更新与消息推送本是解耦的——推送只由抽屉上报触发。
     因此用户发消息（尤其是指令）虽续了期，却不会自动补推积压消息，
     表现为「发了新问题，上一条才姗姗来迟」。这里在续期后主动重放
     最近一次上报切片：此时窗口已开，去重复用已推集合，滞后者得以补推。
+
+    @param openid    发来消息的 QQ 用户
+    @param msg_id    该消息的 id（用作被动回复窗口）
+    @param qq_client QQ 客户端引用；传入则记录为补推用的客户端。
+                     补推依赖客户端才能发 HTTP，而它原先只在网页上报时
+                     被赋值——服务重启后若用户先发 QQ 指令、网页端尚未
+                     上报，补推会因取不到客户端而整段跳过，积压消息要等
+                     下次网页上报才推得出去。由网关在收到消息时一并传入，
+                     补推即刻生效。
     """
+    global _last_client
+    if qq_client is not None:
+        _last_client = qq_client
     _remember_window(openid, msg_id)
     _replay_last_report()
 
@@ -311,15 +323,9 @@ def _push_voice_after(qq_client, openid, m, voice_paths, text_ok):
     _remove_voice_file(path)
 
 
-def _remove_voice_file(path):
-    """删除预合成的临时语音文件（推完或正文失败后调用），失败静默。"""
-    if not path:
-        return
-    try:
-        import os
-        os.remove(path)
-    except OSError:
-        pass
+# 临时语音文件清理是纯文件操作、不含状态，与推送编排同属出向流程，
+# 已随推送编排迁至 message_flow；此处按原名导入，保持既有调用不变。
+from .message_flow import remove_voice_file as _remove_voice_file
 
 
 # 网页端在指令与上报体系里的固定标识（与 command_dispatch.WEB_OPENID 同值）。

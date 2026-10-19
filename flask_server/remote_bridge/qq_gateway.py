@@ -53,7 +53,10 @@ class QqGateway:
         # 用户发消息即续期：刷新被动回复窗口。
         # 语音也在此续期——识别后要把文字回发，需要窗口开着。
         if msg_id:
-            message_router.note_incoming(openid, msg_id)
+            # 一并传入客户端：补推积压消息需要它。原先该引用只在网页上报时
+            # 才被赋值，服务重启后若用户先发 QQ 指令，补推会因缺客户端而跳过，
+            # 积压消息要等下一次网页上报才推得出去。
+            message_router.note_incoming(openid, msg_id, self.qq_client)
 
         # 语音消息：正文 content 通常为空，音频在 attachments 里。
         # 先于「content 判空」处理，否则语音会被当成空消息丢掉。

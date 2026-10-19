@@ -110,6 +110,25 @@ class TestNoteIncoming(_Base):
         self.assertEqual(second[0], msg_id)
         self.assertEqual(first[1] + 1, second[1], "序号未按 1 递增")
 
+    def test_note_incoming_records_client_for_replay(self):
+        """收到 QQ 消息时必须记下客户端，补推才发得出去。
+
+        补推依赖 _last_client，而它原先只在网页上报时被赋值。服务重启后
+        若用户先发 QQ 指令、网页端尚未上报，补推会因取不到客户端而整段跳过，
+        积压消息要等下一次网页上报才推得出去——表现为「指令有回复，但 QQ
+        迟迟收不到堆积的消息」。契约：网关收到消息即把客户端交进来。
+        """
+        sentinel = object()
+        mr.note_incoming("openid-abc", "msg-010", sentinel)
+        self.assertIs(mr._last_client, sentinel, "收到 QQ 消息后未记录客户端")
+
+    def test_note_incoming_without_client_keeps_existing(self):
+        """未传客户端时保留既有引用，不清空。"""
+        keep = object()
+        mr._last_client = keep
+        mr.note_incoming("openid-abc", "msg-011")
+        self.assertIs(mr._last_client, keep, "未传客户端时不应清掉既有引用")
+
     def test_new_message_resets_seq(self):
         """换新 msg_id 时序号从 0 重新计数。"""
         openid = "openid-abc"
