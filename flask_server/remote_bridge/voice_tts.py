@@ -40,6 +40,7 @@ import threading
 
 from . import bridge_log
 from . import voice_mp3
+from . import voice_pyttsx3_runner
 
 
 def log(*args):
@@ -259,65 +260,80 @@ def _synth_piper(text, out_path, cfg):
 
 # ==================== 五、pyttsx3 引擎（系统语音） ====================
 
+def _pyttsx3_worker_path():
+    """定位子进程合成脚本，并确认它确实存在。
+
+    脚本与本模块同目录，用模块自身位置推导而非固定路径，
+    保证工程整体移动后仍能找到。
+
+    @returns 脚本绝对路径；不存在时返回 None
+    """
+    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyttsx3_worker.py")
+    return worker if os.path.exists(worker) else None
+
+
+def _pyttsx3_params(cfg):
+    """从配置中取出 pyttsx3 的音色与语速。
+
+    语速非法或缺失时回退到 150（SAPI 默认语速），
+    避免把非数字值直接传给子进程。
+
+    @param cfg 语音配置字典
+    @returns (voice, rate)：音色名（可能为空字符串）与整数语速
+    """
+    voice = (cfg.get("pyttsx3_voice") or "").strip()
+    try:
+        rate = int(cfg.get("pyttsx3_rate") or 150)
+    except Exception:
+        rate = 150
+    return voice, rate
+
+
 def _synth_pyttsx3(text, out_path, cfg):
     """系统引擎：调 Windows SAPI5 合成 WAV，再编码为 MP3。
 
-    为何在独立子进程里跑（关键）：
-        SAPI 是进程级单例资源。若在主进程里把 runAndWait 放进守护线程、
-        超时后放弃等待，那个线程不会结束——它继续卡在 SAPI 调用里，
-        永久占住这份资源。每失败一次就多一个僵尸线程，最终所有合成都在
-        闸门处排队超时，只能重启恢复。
-        改为子进程后，超时直接杀掉整个进程，SAPI 随进程被系统回收，
-        主进程不残留任何状态，失败只影响这一次调用。
+    合成在 pyttsx3_worker.py 子进程内完成，超时即杀进程；
+    为何必须隔离进程，见该脚本模块头与 voice_pyttsx3_runner 的说明。
 
     @param text     待合成文本
     @param out_path 输出 MP3 路径
     @param cfg      语音配置字典
     @returns (ok, error)
     """
-    import subprocess
-    import sys
-    import tempfile
-
-    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyttsx3_worker.py")
-    if not os.path.exists(worker):
+    worker = _pyttsx3_worker_path()
+    if not worker:
         return False, "未找到 pyttsx3 合成脚本"
 
-    wav_path = out_path + ".tmp.wav"
+    voice, rate = _pyttsx3_params(cfg)
+
+    return _exec_pyttsx3(worker, out_path, text, voice, rate)
+
+
+def _exec_pyttsx3(worker, out_path, text, voice, rate):
+    """写文本、跑子进程、转 MP3，并确保临时文件被清理。
+
+    临时文件路径由 out_path 派生，无需调用方另行传入。
+
+    @param worker   子进程脚本路径
+    @param out_path 最终 MP3 路径
+    @param text     待合成文本
+    @param voice    音色名
+    @param rate     语速
+    @returns (ok, error)
+    """
+    # 临时文件与最终产物同目录，便于统一清理
     text_path = out_path + ".tmp.txt"
-    voice = (cfg.get("pyttsx3_voice") or "").strip()
-    try:
-        rate = int(cfg.get("pyttsx3_rate") or 150)
-    except Exception:
-        rate = 150
-
-    # 文本走临时文件而非命令行：朗读文本可能很长、含引号换行，命令行转义易出错
-    try:
-        with open(text_path, "w", encoding="utf-8") as f:
-            f.write(text or "")
-    except OSError as e:
-        return False, "写入合成文本失败：%s" % e
+    wav_path = out_path + ".tmp.wav"
+    # 文本落临时文件后由子进程读取；子进程侧的调度细节由 runner 模块负责
+    write_err = voice_pyttsx3_runner.write_synth_text(text_path, text)
+    if write_err:
+        return False, write_err
 
     try:
-        proc = subprocess.Popen(
-            [sys.executable, worker, text_path, wav_path, voice, str(rate)],
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        try:
-            _, err = proc.communicate(timeout=SYNTH_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            # 超时：连同子进程一并杀掉，SAPI 随进程回收，主进程不留僵尸
-            proc.kill()
-            try:
-                proc.communicate(timeout=5)
-            except Exception:
-                pass
-            return False, "pyttsx3 合成超时（%d 秒）" % SYNTH_TIMEOUT
-        if proc.returncode != 0:
-            detail = (err or b"").decode("utf-8", "replace").strip()[:120]
-            return False, "pyttsx3 失败：%s" % (detail or ("退出码 %d" % proc.returncode))
-        if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
-            return False, "pyttsx3 未产出有效音频"
+        ok, err = voice_pyttsx3_runner.run_worker(
+            worker, text_path, wav_path, voice, rate, SYNTH_TIMEOUT)
+        if not ok:
+            return False, err
         return voice_mp3.ensure_mp3(wav_path, out_path)     # 统一转 MP3
     except Exception as e:
         return False, "pyttsx3 异常：%s" % e

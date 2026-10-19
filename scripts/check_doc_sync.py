@@ -146,11 +146,44 @@ HISTORY_DOCS = (
 )
 
 
+def _is_valid_ref(ref):
+    """判断一条引用是否值得做存在性校验。
+
+    排除三类：通配 / 占位写法（含 * < > ?）、无目录分隔符的纯文件名
+    （同名文件太多，无法唯一定位）、文档中的演示用假路径。
+
+    @param ref 从文档中提取到的路径字符串
+    @returns 需要校验时返回 True
+    """
+    if "*" in ref or "<" in ref or "?" in ref:
+        return False
+    if "/" not in ref:
+        return False
+    return not any(pat in ref for pat in REF_SKIP_PATTERNS)
+
+
+def _scan_doc_refs(path, out):
+    """扫描单个文档，把其中有效的引用路径追加到 out。
+
+    @param path 文档路径
+    @param out  收集结果集合（原地追加）
+    """
+    try:
+        text = open(path, "r", encoding="utf-8", errors="ignore").read()
+    except Exception:
+        return
+    for m in PATH_REF_PATTERN.finditer(text):
+        ref = m.group(1)
+        if _is_valid_ref(ref):
+            out.add(ref)
+
+
 def collect_path_refs():
     """扫描 docs 下全部 Markdown，收集其中以反引号包裹的具体文件路径。
 
     只收含目录分隔符的路径（如 flask_server/core/memory_db.py），
     纯文件名（如 definition.yaml）存在多处同名可能，无法唯一定位，故跳过。
+    历史记录类文档记录当时状态，其中的旧路径属史实，不参与校验。
 
     @returns 路径字符串集合（原样，未归一化）
     """
@@ -158,28 +191,9 @@ def collect_path_refs():
     if not os.path.isdir(DOCS_DIR):
         return out
     for fn in sorted(os.listdir(DOCS_DIR)):
-        if not fn.endswith(".md"):
+        if not fn.endswith(".md") or fn in HISTORY_DOCS:
             continue
-        # 历史记录类文档记录当时状态，不参与现行引用校验
-        if fn in HISTORY_DOCS:
-            continue
-        p = os.path.join(DOCS_DIR, fn)
-        try:
-            text = open(p, "r", encoding="utf-8", errors="ignore").read()
-        except Exception:
-            continue
-        for m in PATH_REF_PATTERN.finditer(text):
-            ref = m.group(1)
-            # 通配符与占位写法不是真实路径，跳过
-            if "*" in ref or "<" in ref or "?" in ref:
-                continue
-            # 仅保留含目录分隔符的引用，避免同名文件误判
-            if "/" not in ref:
-                continue
-            # 演示用假路径不参与校验
-            if any(pat in ref for pat in REF_SKIP_PATTERNS):
-                continue
-            out.add(ref)
+        _scan_doc_refs(os.path.join(DOCS_DIR, fn), out)
     return out
 
 
