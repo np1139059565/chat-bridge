@@ -108,7 +108,47 @@
       pushRow(ctx, 'thinking', '思考过程（默认不推，冗长）'),
       pushRow(ctx, 'voice', '语音（识别 + 合成，关闭则丢弃语音）'),
       // 语音引擎选择：仅当语音开关打开时才有意义，但始终显示便于预先配置
-      renderVoiceEngineRow(ctx)
+      renderVoiceEngineRow(ctx),
+      // 音色选择：选项随当前引擎变化（系统语音 / 本地模型 / 在线音色）
+      renderVoiceToneRow(ctx)
+    ]);
+  }
+
+  /**
+   * 渲染「音色」选择行。
+   *
+   * 三类引擎的音色来源完全不同，选项由后端 /api/bridge/voices 按引擎给出：
+   *   pyttsx3 —— Windows 系统语音（读注册表）
+   *   piper   —— 本地模型文件（每个 .onnx 一个音色）
+   *   edge_tts—— 在线固定音色名
+   * 因此切换引擎后必须重新拉取选项，否则下拉里还是上一个引擎的音色。
+   *
+   * 保存时按引擎写入各自字段：pyttsx3_voice / piper_model / edge_tts_voice。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 选择行
+   */
+  function renderVoiceToneRow(ctx) {
+    const engine = ctx.bridgePush.voice_engine || 'auto';
+    const list = ctx._voiceToneList || [];
+    // 当前值按实际生效的引擎取对应配置字段
+    const real = ctx._voiceToneEngine || engine;
+    const field = real === 'piper' ? 'piper_model'
+      : (real === 'edge_tts' ? 'edge_tts_voice' : 'pyttsx3_voice');
+    const cur = ctx.bridgePush[field] || '';
+    const opts = list.map((v) => h('option', {
+      value: v.id, selected: v.id === cur
+    }, v.name));
+    if (!opts.length) {
+      // 拉取中或该引擎无可选音色：给一个占位项，避免下拉空白
+      opts.push(h('option', { value: cur, selected: true }, cur || '（暂无可选音色）'));
+    }
+    return h('div', { class: 'bridge-push-row', key: 'voice_tone' }, [
+      h('span', { class: 'bridge-push-label' }, '语音音色'),
+      h('select', {
+        class: 'bridge-sel-input',
+        value: cur,
+        onChange: (e) => ctx.setBridgePushField(field, e.target.value)
+      }, opts)
     ]);
   }
 

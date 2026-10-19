@@ -81,6 +81,24 @@ def bridge_config():
     return jsonify(success=True, config=cfg, status=bridge.status())
 
 
+@bp.route("/api/bridge/voices", methods=["GET", "OPTIONS"])
+def bridge_voices():
+    """列出某引擎可选音色，供设置页下拉选择。
+
+    查询参数 engine 缺省时取当前配置实际生效的引擎（auto 取 fallback 首个）。
+    三类引擎音色来源不同：系统语音读注册表、Piper 读本地模型文件、
+    edge-tts 取内置清单，故由 voice_voices 统一封装。
+    """
+    from remote_bridge import voice_voices
+    engine = (request.args.get("engine") or "").strip() or None
+    try:
+        data = voice_voices.list_voices(engine)
+    except Exception as e:
+        app_log.warn("[bridge]", "列举音色失败：", e)
+        return jsonify(success=False, error=str(e), engine=engine or "", voices=[], current="")
+    return jsonify(success=True, **data)
+
+
 @bp.route("/api/bridge/report", methods=["POST", "OPTIONS"])
 def bridge_report():
     """接收抽屉上报的消息切片，分类去重后推送到 QQ。

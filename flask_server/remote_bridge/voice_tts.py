@@ -262,83 +262,69 @@ def _synth_piper(text, out_path, cfg):
 def _synth_pyttsx3(text, out_path, cfg):
     """系统引擎：调 Windows SAPI5 合成 WAV，再编码为 MP3。
 
-    SAPI 依赖 COM，在非主线程调用前需初始化 COM；结束时释放，
-    避免长跑服务里线程反复创建导致 COM 引用泄漏。
+    为何在独立子进程里跑（关键）：
+        SAPI 是进程级单例资源。若在主进程里把 runAndWait 放进守护线程、
+        超时后放弃等待，那个线程不会结束——它继续卡在 SAPI 调用里，
+        永久占住这份资源。每失败一次就多一个僵尸线程，最终所有合成都在
+        闸门处排队超时，只能重启恢复。
+        改为子进程后，超时直接杀掉整个进程，SAPI 随进程被系统回收，
+        主进程不残留任何状态，失败只影响这一次调用。
+
     @param text     待合成文本
     @param out_path 输出 MP3 路径
     @param cfg      语音配置字典
     @returns (ok, error)
     """
-    try:
-        import pyttsx3
-    except Exception:
-        return False, "未安装 pyttsx3"
+    import subprocess
+    import sys
+    import tempfile
 
-    # 非主线程需自行初始化 COM，否则 SAPI 调用会抛异常
-    com_ready = False
-    try:
-        import pythoncom
-        pythoncom.CoInitialize()
-        com_ready = True
-    except Exception:
-        pass                                       # 非 Windows 或已初始化，继续尝试
+    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pyttsx3_worker.py")
+    if not os.path.exists(worker):
+        return False, "未找到 pyttsx3 合成脚本"
 
     wav_path = out_path + ".tmp.wav"
-    engine = None
+    text_path = out_path + ".tmp.txt"
+    voice = (cfg.get("pyttsx3_voice") or "").strip()
     try:
-        engine = pyttsx3.init(driverName="sapi5")  # 指定 SAPI5，避免走其它后端
-        # 按配置的音色名匹配；同时比对 name 与 id，兼容不同系统的命名差异
-        target = (cfg.get("pyttsx3_voice") or "").strip().lower()
-        if target:
-            for v in engine.getProperty("voices"):
-                name = (getattr(v, "name", "") or "").lower()
-                vid = (getattr(v, "id", "") or "").lower()
-                if target in name or target in vid:
-                    engine.setProperty("voice", v.id)
-                    break
-        # 语速：SAPI 默认约 200，配置值过低会拖慢合成，做一次范围收敛
+        rate = int(cfg.get("pyttsx3_rate") or 150)
+    except Exception:
+        rate = 150
+
+    # 文本走临时文件而非命令行：朗读文本可能很长、含引号换行，命令行转义易出错
+    try:
+        with open(text_path, "w", encoding="utf-8") as f:
+            f.write(text or "")
+    except OSError as e:
+        return False, "写入合成文本失败：%s" % e
+
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, worker, text_path, wav_path, voice, str(rate)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
         try:
-            rate = int(cfg.get("pyttsx3_rate") or 150)
-        except Exception:
-            rate = 150
-        engine.setProperty("rate", max(80, min(rate, 300)))
-        engine.save_to_file(text, wav_path)        # 指定输出文件
-        # runAndWait 是同步阻塞调用，Windows SAPI 在长跑服务里可能永久不返回。
-        # 放到独立线程里跑并设超时：超时就放弃本次合成、不再等它，
-        # 否则会永久占住一个合成名额，把后续所有语音与上报一并拖死。
-        # 该线程设为守护线程，即使永不返回也不会阻止进程退出。
-        import threading
-        _done = threading.Event()
-
-        def _run():
+            _, err = proc.communicate(timeout=SYNTH_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            # 超时：连同子进程一并杀掉，SAPI 随进程回收，主进程不留僵尸
+            proc.kill()
             try:
-                engine.runAndWait()
+                proc.communicate(timeout=5)
             except Exception:
-                pass                                # 异常由下方文件检查兜底
-            finally:
-                _done.set()
-
-        threading.Thread(target=_run, daemon=True).start()
-        if not _done.wait(SYNTH_TIMEOUT):
+                pass
             return False, "pyttsx3 合成超时（%d 秒）" % SYNTH_TIMEOUT
+        if proc.returncode != 0:
+            detail = (err or b"").decode("utf-8", "replace").strip()[:120]
+            return False, "pyttsx3 失败：%s" % (detail or ("退出码 %d" % proc.returncode))
         if not os.path.exists(wav_path) or os.path.getsize(wav_path) == 0:
             return False, "pyttsx3 未产出有效音频"
         return voice_mp3.ensure_mp3(wav_path, out_path)     # 统一转 MP3
     except Exception as e:
         return False, "pyttsx3 异常：%s" % e
     finally:
-        if engine is not None:
-            try:
-                engine.stop()                      # 释放引擎内部资源
-            except Exception:
-                pass
-        _safe_remove(wav_path)                     # 清临时文件
-        if com_ready:
-            try:
-                import pythoncom
-                pythoncom.CoUninitialize()         # 与 CoInitialize 成对释放
-            except Exception:
-                pass
+        _safe_remove(text_path)                # 清临时文本
+        _safe_remove(wav_path)                 # 清临时 WAV
+
 
 
 # ==================== 六、分发与入口 ====================
@@ -354,7 +340,10 @@ def _dispatch(engine, text, out_path, voice, cfg):
     @returns (ok, error)
     """
     if engine == "edge_tts":
-        return _synth_edge(text, out_path, voice)
+        # 音色来源：调用方显式指定 > 配置项 > 内置默认。
+        # 与 piper / pyttsx3 一致，三类引擎都能从配置切音色。
+        v = voice or (cfg.get("edge_tts_voice") or "")
+        return _synth_edge(text, out_path, v)
     if engine == "piper":
         return _synth_piper(text, out_path, cfg)
     if engine == "pyttsx3":
@@ -423,3 +412,7 @@ def text_to_voice(text, out_path, voice=None):
         _synth_sem.release()
 
     return False, "；".join(errors) if errors else "所有语音引擎均失败"
+
+# 音色清单（按引擎列举可选音色）在 voice_voices 模块，由调用方直接导入。
+# 本模块不反向导入它：voice_voices 依赖本模块的配置读取与超时常量，
+# 反向导入会形成循环，具体表现为从 voice_voices 一侧首次导入时失败。

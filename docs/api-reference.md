@@ -385,6 +385,14 @@ QQ ↔ 网页 AI 的双向桥接接口。抽屉插件与后端交互，把网页
 部分更新桥接配置并重启桥接（凭证 / 开关变化需重建长连接）。
 请求为待更新字段的字典；返回 `{ success }`。
 
+### GET /api/bridge/voices
+
+列出某引擎可选音色，供设置页音色下拉使用。
+查询参数 `engine`（可选，缺省取当前配置实际生效的引擎；auto 取 fallback 首个）。
+三类引擎音色来源不同：pyttsx3 读 Windows 系统语音（子进程列举，避免占用 SAPI）、
+piper 读本地模型文件、edge_tts 取内置音色清单。
+返回 `{ success, engine, voices: [{id, name}], current }`。
+
 ### POST /api/bridge/report
 
 抽屉上报消息切片，触发向 QQ 推送。

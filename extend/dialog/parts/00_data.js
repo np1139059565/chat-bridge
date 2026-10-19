@@ -210,6 +210,9 @@ window.AIMirrorDialog = (function () {
       // 引用唯一默认值来源（见文件头部 D.DEFAULT_BRIDGE_PUSH 注释）。
       // 浅拷贝一份，避免多实例共享同一对象导致互相污染。
       bridgePush: Object.assign({}, D.DEFAULT_BRIDGE_PUSH),
+      // 音色下拉的数据与状态：清单由 loadVoiceTones 拉取，渲染只读这些字段。
+      // _voiceToneFor 记录清单对应的引擎，切换引擎时据此判断是否需重新拉取。
+      _voiceToneList: [], _voiceToneFor: '', _voiceToneEngine: '',
       bridgeCommands: [],
       bridgePicking: false, bridgePicked: null, bridgeEditIdx: null,  // 元素选择状态
       // 指令录入（拆多行以避免超长行）

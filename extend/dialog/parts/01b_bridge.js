@@ -99,6 +99,8 @@
       }
       // 标记配置已成功加载：状态轮询据此判断是否需要重试加载。
       this._bridgePushLoaded = true;
+      // 配置就绪后再拉音色清单：渲染只读结果，不在渲染里发请求。
+      this.loadVoiceTones();
     } catch (e) {
       // 后端不可达：本次配置未取到，开关停留在默认值。
       // 标记未加载，交由状态轮询自动重试，直至取到后端配置——
@@ -217,7 +219,32 @@
   M.setBridgePushField = function (key, value) {
     if (!key) return;
     this.bridgePush[key] = value;
+    // 换引擎就重新拉音色清单：三类引擎的音色来源完全不同（系统语音 /
+    // 本地模型 / 在线音色），不换清单的话下拉里还是上一个引擎的选项。
+    if (key === 'voice_engine') this.loadVoiceTones();
     this.saveBridge();
+  };
+
+  /**
+   * 拉取当前引擎的可选音色清单，供设置页音色下拉使用。
+   *
+   * 渲染函数只读 this._voiceToneList，不发请求：Vue 的渲染须保持纯粹，
+   * 在渲染里发起网络请求会在每次重渲染时重复触发，甚至引起状态回环。
+   * @returns {Promise<void>}
+   */
+  M.loadVoiceTones = async function () {
+    const engine = this.bridgePush.voice_engine || 'auto';
+    this._voiceToneFor = engine;
+    try {
+      const data = await D.apiFetch(this, '/api/bridge/voices?engine=' + encodeURIComponent(engine), {
+        headers: { 'Accept': 'application/json' }
+      });
+      if (this._voiceToneFor !== engine) return;    // 期间又切了引擎，丢弃旧结果
+      this._voiceToneList = (data && data.voices) || [];
+      this._voiceToneEngine = (data && data.engine) || engine;
+    } catch (e) {
+      this._voiceToneList = [];
+    }
   };
 
   // 指令的增删改与元素选择入口已移到 01c_bridge_cmd.js，

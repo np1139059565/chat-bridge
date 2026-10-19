@@ -72,6 +72,8 @@ def _default_config():
             # pyttsx3 音色名（Windows SAPI5）与语速；留空表示用系统默认音色。
             "pyttsx3_voice": "Microsoft Huihui Desktop - Chinese (Simplified)",
             "pyttsx3_rate": 150,
+            # edge_tts 音色名（在线引擎）；留空时用内置默认中文音色。
+            "edge_tts_voice": "zh-CN-XiaoxiaoNeural",
             # 质量检测开关：与推送开关同区存放，供前端设置页读写。
             # 默认全开；显式关时对应检测不跑。字段在此列出，避免读写时丢键。
             "check_code_only": True,
