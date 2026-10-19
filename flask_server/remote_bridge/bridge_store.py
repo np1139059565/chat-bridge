@@ -220,12 +220,39 @@ def _read_state():
 
 
 def _write_state(state):
-    """写回去重状态文件。"""
+    """写回去重状态文件（与现有内容合并，不覆盖其它字段）。
+
+    合并写入：状态文件里除已推集合外，还存着 last_openid 等字段。
+    若直接用新字典整体覆盖，会把其它字段一并抹掉，故先读旧内容再更新。
+    @param state 要写入的字段字典
+    """
     try:
+        old = _read_state()      # 先取现有内容
+        old.update(state)        # 用本次字段覆盖同名键
         BRIDGE_STATE_PATH.write_text(
-            json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            json.dumps(old, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
         app_log.warn("[bridge]", "写回去重状态失败：", e)
+
+
+def get_last_openid():
+    """读取最近一次 QQ 来消息的用户 openid；无记录返回空串。
+
+    持久化的原因：抽屉上报不带 openid，推送只能靠「最近发消息的人」兜底。
+    该值若只存内存，服务一重启即丢失，此后所有上报因 openid 为空被静默丢弃，
+    表现为「消息生成了却一条也收不到，非要再发条 QQ 消息才恢复」。
+    """
+    return str(_read_state().get("last_openid") or "")
+
+
+def set_last_openid(openid):
+    """记住最近一次 QQ 来消息的用户 openid 并落盘。
+
+    @param openid 用户标识；为空时忽略（不覆盖已有值）
+    """
+    if not openid:
+        return
+    _write_state({"last_openid": openid})
 
 
 # 去重集合的内存缓存：{ 会话 id: set(消息 id) }

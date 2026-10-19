@@ -7,6 +7,7 @@
 - POST /api/bridge/result   抽屉回传指令执行结果，转发到 QQ
 """
 import threading
+import time
 
 from flask import Blueprint, jsonify, request
 
@@ -24,9 +25,19 @@ bp = Blueprint("bridge", __name__)
 _report_busy = {}
 _report_lock = threading.Lock()
 
+# 上报处理超时（秒）：后台推送线程若卡死（如本地语音合成无响应），
+# 「处理中」标记会永远不释放，此后每一轮上报都被静默跳过，
+# 表现为「消息生成了却一条也收不到，重启才恢复」。
+# 超过此时长即视为卡死，允许新一轮接管，并记录告警。
+_REPORT_BUSY_TIMEOUT = 120
 
-def _run_report_async(data):
-    """把 QQ 推送放到后台线程执行，完成后清除该会话的「处理中」标记。"""
+
+def _run_report_async(data, token):
+    """把 QQ 推送放到后台线程执行，完成后清除该会话的「处理中」标记。
+
+    @param data  上报体
+    @param token 本轮标记的时间戳，用于确认清除的是自己这一轮
+    """
     conv = data.get("conversationId") or "__default__"
 
     def worker():
@@ -36,7 +47,10 @@ def _run_report_async(data):
             app_log.warn("[bridge]", "后台推送失败：", e)
         finally:
             with _report_lock:
-                _report_busy.pop(conv, None)
+                # 仅当标记仍属于本轮时才清除：
+                # 本轮若已超时并被新一轮接管，不能误删新标记。
+                if _report_busy.get(conv) == token:
+                    _report_busy.pop(conv, None)
 
     threading.Thread(target=worker, daemon=True).start()
 
@@ -87,11 +101,19 @@ def bridge_report():
     # 同一会话上一轮仍在处理则跳过——抽屉会重报全量切片，跳过不丢消息，
     # 同时天然形成背压，避免线程无限堆积。
     conv = data.get("conversationId") or "__default__"
+    now = time.time()
+    token = now
     with _report_lock:
-        if conv in _report_busy:
-            return jsonify(success=True, pushed=0, skipped=True)
-        _report_busy[conv] = True
-    _run_report_async(data)
+        started = _report_busy.get(conv)
+        if started is not None:
+            # 上一轮仍在跑且未超时：跳过本次（抽屉会重复上报全量，不丢消息）
+            if now - started < _REPORT_BUSY_TIMEOUT:
+                return jsonify(success=True, pushed=0, skipped=True)
+            # 超时：判定上一轮卡死，强制接管并告警，否则该会话永久静默
+            app_log.warn("[bridge]", "上报处理超时 %.0f 秒，强制接管会话 %s"
+                         % (now - started, conv))
+        _report_busy[conv] = token
+    _run_report_async(data, token)
     return jsonify(success=True, accepted=True)
 
 

@@ -94,6 +94,9 @@ def _remember_window(openid, msg_id):
     换新 msg_id（用户又发了消息）时归零重新计数。
     """
     global _last_openid
+    # 落盘：抽屉上报不带 openid，此处是推送目标的唯一来源。
+    # 只存内存的话，服务重启即丢失，之后所有上报因 openid 为空被静默丢弃。
+    bridge_store.set_last_openid(openid)
     with _lock:
         _last_openid = openid
         old = _windows.get(openid)
@@ -312,8 +315,14 @@ def _remove_voice_file(path):
 
 
 def _resolve_openid(payload):
-    """确定推送目标 openid：优先用上报值，回退到「最近发消息的人」。"""
-    return payload.get("openid") or _last_openid or ""
+    """确定推送目标 openid：优先用上报值，回退到「最近发消息的人」。
+
+    兜底值优先取内存，内存为空再读持久化记录。
+    抽屉上报不带 openid，这个兜底是唯一的推送目标来源；
+    它若为空，handle_report 会直接返回、消息被静默丢弃。
+    """
+    return (payload.get("openid") or _last_openid
+            or bridge_store.get_last_openid() or "")
 
 
 def _push_card_result(qq_client, openid, card, push):
@@ -364,7 +373,12 @@ def handle_report(qq_client, payload):
     conv_id = payload.get("conversationId") or "__default__"
     openid = _resolve_openid(payload)
     messages = payload.get("messages") or []
+    # 丢弃时告警：上报体不带 openid，只能靠「最近发消息的人」兜底。
+    # 该兜底值已持久化，正常不会再为空；一旦为空说明状态文件丢失或从未收到过
+    # QQ 消息，此时整条推送链会静默失效，必须留下痕迹而不是悄悄返回。
     if not openid or not messages:
+        log("上报被丢弃：openid=%s 消息数=%d"
+            % ((openid[:8] if openid else "空"), len(messages)))
         return 0
     # 合并上次推送失败的消息：它们可能已滚出可见区、不再出现在切片里，
     # 靠这份缓存获得重试机会（成功 / 跳过后自动移出，见本函数末尾 set_pending）。
