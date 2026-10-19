@@ -63,21 +63,22 @@ class _Base(unittest.TestCase):
             mock.patch.object(mr.bridge_store, "set_pending", self.store.set_pending),
             mock.patch.object(mr.bridge_store, "merge_pending", self.store.merge_pending),
         ]
+        # 状态隔离：把模块级可变状态整体替换成「本用例专属的空副本」，
+        # 用例结束由 mock 自动还原为原对象。这样测试只会动到副本，
+        # 不会清空真实运行中的窗口与缓存——即使测试与生产同进程也安全。
+        self._patches += [
+            mock.patch.object(mr, "_windows", {}),
+            mock.patch.object(mr, "_last_report", {}),
+            mock.patch.object(mr, "_last_openid", ""),
+            mock.patch.object(mr, "_last_client", None),
+        ]
         for p in self._patches:
             p.start()
-        # 每个用例从「无窗口、无最近发消息人」的干净状态开始
-        mr._windows.clear()
-        mr._last_openid = ""
-        mr._last_client = None
-        mr._last_report.clear()
 
     def tearDown(self):
-        for p in self._patches:
+        # 逆序还原：后补的状态副本先还原，避免中途残留半套状态
+        for p in reversed(self._patches):
             p.stop()
-        mr._windows.clear()
-        mr._last_openid = ""
-        mr._last_client = None
-        mr._last_report.clear()
 
 
 class TestNoteIncoming(_Base):
@@ -194,6 +195,38 @@ class TestNoStaleDiskReferences(unittest.TestCase):
             found,
             "message_router 仍通过 bridge_store 调用已删除的落盘函数：%s" % found,
         )
+
+
+class TestStateIsolation(unittest.TestCase):
+    """F：测试必须隔离模块状态，不得清空运行中的真实窗口。"""
+
+    def test_setup_replaces_state_with_private_copies(self):
+        """用例夹具必须用「替换副本」而不是「清空原对象」。
+
+        同进程运行（或被别的工具导入执行）时，直接 clear 会把生产窗口
+        一并抹掉，表现为 QQ 推送突然全部报「窗口已关闭」。
+        这里锁死契约：夹具结束后原对象必须还是同一个、内容原样保留。
+        """
+        # 先写入一份「生产状态」
+        mr._windows["prod-openid"] = {"msg_id": "prod-msg", "expire": 9e18, "seq": 0}
+        mr._last_report["conv-prod"] = {"conversationId": "conv-prod"}
+        origin_windows = mr._windows
+        origin_report = mr._last_report
+
+        case = _Base("setUp")
+        case.setUp()
+        try:
+            # 夹具运行期间，被测代码看到的是副本，不是生产对象
+            self.assertIsNot(mr._windows, origin_windows, "夹具未替换窗口状态")
+            self.assertNotIn("prod-openid", mr._windows, "夹具期间仍能读到生产窗口")
+        finally:
+            case.tearDown()
+
+        # 夹具结束后：对象与内容都必须原样还原
+        self.assertIs(mr._windows, origin_windows, "夹具结束后窗口对象未还原")
+        self.assertIn("prod-openid", mr._windows, "夹具结束后生产窗口被清空")
+        self.assertIs(mr._last_report, origin_report, "夹具结束后上报缓存对象未还原")
+        self.assertIn("conv-prod", mr._last_report, "夹具结束后上报缓存被清空")
 
 
 if __name__ == "__main__":
