@@ -141,6 +141,22 @@ class TestResolveOpenid(_Base):
         """两处都没有时返回空串，由调用方转积压。"""
         self.assertEqual(mr._resolve_openid({}), "")
 
+    def test_web_openid_falls_back_to_qq_user(self):
+        """网页端标识不得成为 QQ 推送目标。
+
+        网页端上报固定带 openid=web-user。若照单全收，这个非空值会盖掉
+        QQ 用户的窗口键，此后所有推送都查不到窗口而报「窗口已关闭」、
+        消息静默丢弃，且网页端每上报一次就重新污染一次，直到重启。
+        契约：遇到网页端标识时跳过，回退到最近发来 QQ 消息的用户。
+        """
+        mr._last_openid = "19501CD1"
+        self.assertEqual(mr._resolve_openid({"openid": mr.WEB_OPENID}), "19501CD1")
+
+    def test_web_openid_without_qq_user_returns_empty(self):
+        """没有 QQ 用户可回退时返回空串，交由调用方积压。"""
+        mr._last_openid = ""
+        self.assertEqual(mr._resolve_openid({"openid": mr.WEB_OPENID}), "")
+
 
 class TestReportWithoutOpenid(_Base):
     """D：无推送目标时必须积压，绝不能丢。"""

@@ -322,13 +322,29 @@ def _remove_voice_file(path):
         pass
 
 
-def _resolve_openid(payload):
-    """确定推送目标 openid：优先用上报值，回退到「最近发消息的人」。
+# 网页端在指令与上报体系里的固定标识（与 command_dispatch.WEB_OPENID 同值）。
+# 此处就地定义而不导入：message_router 被 command_dispatch 间接引用，
+# 跨模块导入会形成循环。
+WEB_OPENID = "web-user"
 
-    来源优先级：上报体自带 > 前端缓存（随上报传来）> 后端内存里「最近发消息的人」。
-    三者都没有就返回空串，由调用方把消息积压起来，等新窗口建立后补推。
+
+def _resolve_openid(payload):
+    """确定 QQ 推送目标 openid：优先用上报值，回退到「最近发消息的人」。
+
+    来源优先级：上报体自带 > 后端内存里「最近发消息的人」。
+
+    网页端上报的 openid 是固定标识 web-user，它不是 QQ 推送目标：
+    若照单全收，这个非空值会盖掉 QQ 用户的窗口键，导致此后所有推送
+    都查不到窗口而被判「窗口已关闭」、静默丢弃。故遇到该标识时跳过，
+    回退到最近一个真正发来 QQ 消息的用户。
+
+    @param payload 上报体（含 openid 字段，可能为空或为网页端标识）
+    @returns QQ 推送目标 openid；无从确定时为空串，由调用方转积压
     """
-    return payload.get("openid") or _last_openid or ""
+    openid = payload.get("openid") or ""
+    if openid and openid != WEB_OPENID:
+        return openid
+    return _last_openid or ""
 
 
 def _push_card_result(qq_client, openid, card, push):
