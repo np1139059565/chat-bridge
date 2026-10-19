@@ -19,74 +19,101 @@
 ## 二、目录职责
 
 ```
-chat-bridge-main/
-├── flask_server/            # 本地工具服务（Python / Flask）
-│   ├── server.py            # 兼容入口：委托 app.create_app()，保留 python server.py 启动方式
-│   ├── app.py               # 应用装配：create_app() / 蓝图注册 / CORS / 运行期初始化
-│   ├── runtime.py           # 运行期全局状态中心：app / impl / TOOLS / DISPATCH / CONFIG
-│   ├── config_store.py      # 配置读写与合并（definition.yaml + runtime.yaml）
-│   ├── error_utils.py       # 错误分类与定位
-│   ├── responses.py         # 错误响应辅助
-│   ├── tool_helpers.py      # 工具通用辅助：参数校验、路径解析、体积控制
-│   ├── tool_meta.py         # 内置工具元数据声明（描述 + 参数表）
-│   ├── tools_impl.py        # 内置工具实现
-│   ├── yaml_utils.py        # YAML 标量原语（合并原两套实现）
-│   ├── routes/              # 各功能域蓝图
-│   │   ├── tools.py         # /tools、/tool
-│   │   ├── prompts.py       # /prompt_sections、/（首页）
-│   │   ├── config_route.py  # /config
-│   │   ├── custom_tools.py  # /custom_tools 系列
-│   │   ├── rules.py         # /rules 系列
-│   │   ├── cards.py         # /api/cards 系列（外部卡片）
-│   │   └── ext.py           # /api/ext/<provider>（提供方通道）
-│   ├── custom_tools/        # 标准 skill 的解析 / 注册 / 执行（包）
-│   │   ├── paths.py         # 路径基准与常量
-│   │   ├── loader.py        # custom_tools.yaml 与 tool.json 解析、命令拼装
-│   │   ├── registry.py      # 注册表读写、安装/删除/更新、本地执行
-│   │   ├── meta.py          # 对外视图（provider 分组、说明段落、元数据）
-│   │   ├── scan.py          # 目录扫描
-│   │   └── skill_docs.py    # 技能内文档（SKILL.md 等）的读取与写回
-│   ├── external_tools.py    # 外部工具提供方注册表：队列、心跳、转发与等待
-│   ├── card_bus.py          # 卡片总线：登记 / 投递 / 确认已展示
-│   ├── rules.py             # 规则（rules/*.md）与优先级
-│   ├── prompt_sections.py   # 技能说明与技能清单收集
-│   ├── definition.yaml      # 全部定义，入库
-│   └── runtime.yaml         # 全部运行时与密钥，不入库
-├── extend/                  # 镜像插件（Chrome MV3）
+chat-bridge/
+├── flask_server/                 # 本地工具服务（Python / Flask）
+│   ├── server.py                 # 兼容入口：委托 app.create_app()，保留 python server.py 启动方式
+│   ├── app.py                    # 应用装配：create_app() / 蓝图注册 / CORS / 运行期初始化
+│   ├── runtime.py                # 运行期全局状态中心：app / impl / TOOLS / DISPATCH / CONFIG
+│   ├── paths.py                  # 路径基准与常量
+│   ├── config/                   # 配置文件目录
+│   │   ├── definition.yaml       # 全部定义，入库
+│   │   └── runtime.yaml          # 全部运行时与密钥，不入库
+│   ├── core/                     # 核心支撑（37 个模块，见下表）
+│   ├── routes/                   # 各功能域蓝图（13 个，见下表）
+│   ├── remote_bridge/            # 远程桥接（QQ ↔ 网页 AI，25 个模块，见下表）
+│   ├── web_bridge/               # 网页版机器人（5 个模块，见下表）
+│   ├── custom_tools/             # 标准 skill 的解析 / 注册 / 执行（包）
+│   ├── tools/                    # 内置工具实现与元数据
+│   ├── static/                   # 静态资源（记忆图谱页、anatomy 导出等）
+│   ├── tests/                    # 后端测试
+│   └── data/                     # 运行期数据（不入库）
+├── extend/                       # 镜像插件（Chrome MV3）
 │   ├── manifest.json
-│   ├── background.js        # 工具栏图标切换抽屉显隐
-│   ├── lib/                 # 公共前端模块
-│   │   ├── vue.global.prod.js
-│   │   └── dom-utils.js     # debounce / hashStr / textOf
-│   ├── content/             # 内容脚本（按序号加载的分片）
-│   │   ├── 00_state.js      # 命名空间 A、共享 state、站点规则 PROFILES、日志
-│   │   ├── 01_panel.js      # 面板注入与外观、post 通道
-│   │   ├── 02_blocks.js     # 代码块解析、消息构造、extractBlocks
-│   │   ├── 03_bridge.js     # 会话/历史项识别、sendPage、粘贴发送
-│   │   ├── 04_observer.js   # 观察器与生命周期
-│   │   └── 05_index.js      # 入口：消息监听、巡检、初始化
-│   └── dialog/              # 抽屉页面
+│   ├── background.js             # 工具栏图标切换抽屉显隐
+│   ├── lib/                      # 公共前端模块（vue.global.prod.js / dom-utils.js）
+│   ├── content/                  # 内容脚本（按序号加载）
+│   │   ├── 00_state.js           # 命名空间、共享 state、站点规则 PROFILES、日志
+│   │   ├── 01_panel.js           # 面板注入与外观、post 通道
+│   │   ├── 02_blocks.js          # 代码块解析、消息构造、extractBlocks
+│   │   ├── 03_bridge.js          # 会话/历史项识别、sendPage、粘贴发送
+│   │   ├── 04_observer.js        # 观察器与生命周期
+│   │   ├── 05_index.js           # 入口：消息监听、巡检、初始化
+│   │   ├── 06_picker.js          # 元素选择器
+│   │   └── injected_clipboard.js # 主世界剪贴板注入
+│   └── dialog/                   # 抽屉页面
 │       ├── dialog.html
-│       ├── app.js           # 装配入口（createApp + 组件装配）
-│       ├── parts/           # 抽屉逻辑分片（00_data ~ 09_skills，含 07_render）
-│       └── styles/          # 样式分片（00_tokens ~ 05_narrow）
-├── skills/                  # 标准 skill（自定义工具来源）
-│   └── debug_chrome/        # 页面调试扩展
-│       ├── tool.json        # 工具声明（provider / prompt / tools）
-│       ├── SKILL.md         # 技能说明（信封结构与处理规则）
-│       ├── README.md
-│       └── extension/       # 调试扩展代码
-│           ├── manifest.json
-│           ├── service_worker.js
-│           ├── drawer.html
-│           ├── content/     # 内容脚本（00_namespace ~ 08_injected_main）
-│           ├── drawer/      # 抽屉脚本分片（00_config ~ 05_main）
-│           ├── drawer-styles/  # 抽屉样式分片（00_tokens ~ 06_focus）
-│           ├── shared/      # 共享模块（url-utils.js）
-│           └── vendor/      # 前端依赖（vue.global.prod.js）
-├── rules/                   # 用户规则（*.md）+ _meta.json（优先级）
-└── docs/                    # 文档
+│       ├── app.js                # 装配入口（createApp + 组件装配）
+│       ├── parts/                # 抽屉逻辑分片（00_data ~ 09_skills）
+│       └── styles/               # 样式分片（00_tokens ~ 05_narrow）
+├── skills/                       # 标准 skill：anatomy / debug_chrome / json_tool
+├── rules/                        # 用户规则（*.md）+ _meta.json（优先级）
+├── scripts/                      # 质量与卫生检查脚本、Git 钩子
+└── docs/                         # 文档
 ```
+
+### 服务端子模块明细
+
+**core/（核心支撑）**
+
+| 文件 | 职责 |
+|---|---|
+| `config_store.py` / `config_file.py` | 主配置读写、分区合并 |
+| `card_bus.py` | 卡片总线：统一登记外部卡片并投递给镜像插件 |
+| `external_tools.py` | 外部工具提供方注册与转发（队列、心跳、等待） |
+| `envelope.py` | 外部调用信封解析（共享） |
+| `rules.py` / `rule_enforce.py` | 规则文件管理与可机械判定的程序化校验 |
+| `prompt_sections.py` | 供 System Prompt 注入的技能说明段落与技能清单 |
+| `memory_*.py` | 记忆系统，见下方「记忆系统」小节 |
+| `app_log.py` / `log_sink.py` | 全局日志与落盘（按天分文件、异步写入） |
+| `serial_worker.py` | 串行工作队列（共享） |
+| `service_control.py` | 服务进程控制：重启与滚动重启 |
+| `ui_priority.py` | 界面请求优先级（后台维护主动让路） |
+| `screenshot_store.py` | 截图存盘统一入口 |
+| `graph_data.py` | 记忆图谱图数据组装（纯函数） |
+| `json_utils.py` / `yaml_utils.py` | JSON 安全反序列化 / YAML 标量原语 |
+| `error_utils.py` / `responses.py` | 错误分类与定位 / 错误响应辅助 |
+| `app_limits.py` | 数量上限的唯一来源 |
+
+**routes/（功能域蓝图）**
+
+| 文件 | 职责 |
+|---|---|
+| `tools.py` / `prompts.py` / `config_route.py` | `/tools`、`/tool`、`/prompt_sections`、`/`（首页）、`/config` |
+| `custom_tools.py` / `rules.py` | `/custom_tools` 系列、`/rules` 系列 |
+| `cards.py` / `ext.py` | `/api/cards` 系列（外部卡片）、`/api/ext/<provider>`（提供方通道） |
+| `bridge.py` | 远程桥接上报接口 |
+| `web.py` / `web_clientlog.py` | 网页版资源与前端日志 |
+| `memory_graph.py` / `memory_graph_page.py` | 记忆图谱 HTTP 接口与图谱页面 |
+
+**remote_bridge/（远程桥接：QQ ↔ 网页 AI）**
+
+| 分组 | 文件 | 职责 |
+|---|---|---|
+| QQ 协议 | `qq_gateway.py` / `qq_client.py` / `qq_event_parse.py` / `qq_media.py` | 事件分发、机器人协议层、事件解析与下载、富媒体发送 |
+| 消息 | `message_router.py` / `message_flow.py` / `message_parse.py` / `outbound.py` | 分流与推送、上报推送流程、解析与块文本组装、出站正文组装 |
+| 语音 | `voice_tts.py` / `voice_voices.py` / `voice_cache.py` / `voice_mp3.py` | 多引擎合成、音色清单、成品缓存、WAV 转 MP3 |
+| 语音（其他） | `pyttsx3_worker.py` / `voice_asr.py` / `voice_pending.py` / `message_voice.py` | 合成子进程、语音识别、待确认文字暂存、出向语音提取与推送 |
+| 指令 | `command_registry.py` / `command_dispatch.py` / `command_external.py` / `command_panel.py` | 指令表与校验、抽屉命令下发、外部指令、QQ 指令执行 |
+| 存储与日志 | `bridge_store.py` / `bridge_log.py` / `json_scan.py` | 配置与去重记账、异步日志、文本内 JSON 扫描 |
+| 图片 | `message_images.py` | 网页消息内图片的推送 |
+
+**web_bridge/（网页版机器人）**
+
+| 文件 | 职责 |
+|---|---|
+| `web_inbox.py` / `web_inbox_store.py` | 对话收件箱存储层与持久化层 |
+| `web_mirror.py` | 出站镜像 |
+| `audio_prune.py` | 网页音频目录回收 |
 
 ### 记忆系统（flask_server/core/memory_*.py）
 
@@ -106,7 +133,13 @@ chat-bridge-main/
 | `memory_events.py` | 事件聚类、突触建边、三条护栏 |
 | `memory_search.py` | 双接口防幻觉检索 |
 | `memory_loader.py` | 启动加载进内存 |
-| `routes/memory_graph.py` | 记忆系统 HTTP 接口（含 `/memory-graph` 图谱页） |
+| `memory_notes.py` | 笔记层（每日记忆 journal / 错题本 notebook） |
+| `memory_db_diag.py` | 数据库诊断层（连接耗时、表容量、异常归因） |
+| `memory_scheduler.py` | 后台调度（衰减与事件聚类的周期任务） |
+| `memory_solidify.py` | 固化层（升为规则文件 / 写入错题本） |
+| `memory_wal.py` | 记忆库 WAL 维护 |
+| `memory_text.py` | 消息块文本抽取（共享） |
+| `routes/memory_graph.py` / `memory_graph_page.py` | 记忆系统 HTTP 接口与图谱页面 |
 
 数据落 `flask_server/data/memory/memory.db`（不入库）；图谱页在 `flask_server/static/memory_graph.html`（入库）。
 
@@ -171,6 +204,37 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 ---
 
+### 4.4 语音链路
+
+语音是网页对话镜像与 QQ 推送共用的一条出向通道，位于 `flask_server/remote_bridge/`。
+
+### 合成：多引擎、子进程隔离
+
+| 环节 | 模块 | 说明 |
+|---|---|---|
+| 引擎选择与调度 | `voice_tts.py` | 按配置的 fallback 顺序选引擎；`pyttsx3` / `piper` / `edge_tts` 三选一，统一输出 MP3 |
+| pyttsx3 隔离 | `pyttsx3_worker.py` | 独立子进程运行，不随主进程生命周期退出。Windows 的 SAPI 是单例资源，放主进程会占死，故隔离 |
+| 音色清单 | `voice_voices.py` | 三类引擎音色来源不同：pyttsx3 读系统语音、piper 读本地模型文件、edge_tts 取内置清单 |
+| 编码 | `voice_mp3.py` | WAV 转 MP3 |
+| 成品缓存 | `voice_cache.py` | 按文本哈希复用，避免同一句话重复合成 |
+
+### 出向：从消息到推送
+
+```
+上报消息到达
+  → message_voice.py 从消息中提取语音文本（优先取语音朗读块，缺省回退正文）
+  → voice_cache 命中则直接复用，未命中走 voice_tts 合成（受 MAX_CONCURRENT_SYNTH 并发闸门约束）
+  → message_flow.postsynth_and_push_voice() 推送成品
+```
+
+关键限制见 `docs/limits-reference.md`：`SYNTH_TIMEOUT`（单次合成超时）、`MAX_CONCURRENT_SYNTH`（最大并发合成数）。
+
+### 入向：QQ 语音识别
+
+`voice_asr.py` 负责 SILK 解码与 vosk 转文字；识别结果经 `voice_pending.py` 暂存为待确认文本，由用户在设置页确认后再进入正常对话流。
+
+---
+
 ## 五、关键约定
 
 - **配置来源**：`flask_server/config/definition.yaml`（定义，入库）与 `runtime.yaml`（运行时与密钥，不入库）；插件不持久化配置到浏览器（除面板挂靠侧、会话存档）。
@@ -189,6 +253,8 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 - `docs/api-reference.md`：HTTP 接口清单。
 - `docs/development-guide.md`：运行、调试、常见任务、约定。
+- `docs/limits-reference.md`：各项数量上限与超时常量的出处。
+- `docs/memory-system-review.md`：记忆系统走查结论。
 - `docs/refactor-plan.md`：代码走查与重构执行计划（含目录规划与批次记录）。
 - `docs/remote-bridge-plan.md`：远程桥接方案（QQ ↔ 网页 AI），含架构选型、消息分流、推送通道与落地顺序。
 - `docs/remote-bridge-guide.md`：远程桥接使用说明（面向使用者），含配置步骤、指令、常见问题与当前限制。
