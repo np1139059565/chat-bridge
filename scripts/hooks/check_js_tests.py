@@ -58,15 +58,24 @@ def main():
     if not os.path.isdir(test_dir):
         print("跳过前端测试：无 %s" % test_dir)
         return 0
-    # node --test 自动发现目录下的 *.test.js
-    proc = subprocess.run([node, "--test", test_dir], capture_output=True)
+    # 先展开出具体测试文件：新版 node 会把目录参数当作模块路径解析，
+    # 直接传目录会报 MODULE_NOT_FOUND，因此改为传文件列表。
+    test_files = sorted(glob.glob(os.path.join(test_dir, "*.test.js")))
+    if not test_files:
+        print("跳过前端测试：%s 下无 *.test.js" % test_dir)
+        return 0
+    # node --test 接收具体文件路径，逐个发现并运行
+    proc = subprocess.run([node, "--test"] + test_files, capture_output=True)
     out = (proc.stdout or b"").decode("utf-8", "replace")
     err = (proc.stderr or b"").decode("utf-8", "replace")
     if proc.returncode == 0:
-        # 只回显汇总行，避免刷屏
+        # 只回显汇总行，避免刷屏。
+        # node 新版汇总行以「ℹ 」开头，旧版以「# 」开头，两种都识别。
         for line in (out + err).splitlines():
-            if line.startswith(("# tests", "# pass", "# fail")):
-                print(line)
+            stripped = line.strip()
+            if stripped.startswith(("# tests", "# pass", "# fail",
+                                    "ℹ tests", "ℹ pass", "ℹ fail")):
+                print(stripped)
         return 0
     # 失败：完整打印，便于定位
     print(out)

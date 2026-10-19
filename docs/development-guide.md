@@ -8,12 +8,21 @@
 
 ### 本地工具服务
 
+Windows 下双击 `flask_server/start_server.cmd` 即可启动：脚本自动切目录、选 Python、缺失依赖时安装，并透传命令行参数。
+
+```bat
+cd flask_server
+start_server.cmd --port 5001
+```
+
+等价的手动步骤：
+
 ```bash
 cd flask_server
 pip install -r requirements.txt
 python server.py
 ```
-默认 `http://127.0.0.1:5000`。改端口：编辑 `runtime.yaml` 的 `flask.port` 并重启。
+默认 `http://127.0.0.1:5000`。改端口：编辑 `runtime.yaml` 的 `flask.port` 并重启，或用 `start_server.cmd --port <端口>` 临时覆盖。
 
 ### 镜像插件
 
