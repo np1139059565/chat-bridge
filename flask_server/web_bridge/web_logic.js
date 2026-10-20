@@ -102,6 +102,48 @@
     return awayMs > threshold;
   }
 
+  /**
+   * 判断当前输入是否具备发送条件：有文字或有图片即可发。
+   *
+   * 两者都为空时不发，避免向服务端投递一条空消息、白占一次网络往返。
+   * @param {string} text          已裁剪的输入文本
+   * @param {number} imageCount    待发图片张数
+   * @returns {boolean} 可发送返回 true
+   */
+  function canSend(text, imageCount) {
+    var hasText = !!String(text == null ? '' : text).trim();
+    var hasImage = (parseInt(imageCount, 10) || 0) > 0;
+    return hasText || hasImage;
+  }
+
+  /**
+   * 判断一次发送是否成功。
+   *
+   * 以 HTTP 响应的 ok 标记为准：网络层抛错时没有响应对象，一律视为失败。
+   * @param {Object} res 响应对象（可能为 null）
+   * @returns {boolean} 成功返回 true
+   */
+  function isSendOk(res) {
+    return !!(res && res.ok);
+  }
+
+  /**
+   * 生成发送失败的分类标签。
+   *
+   * 有响应时按 HTTP 状态码归类（服务端拒绝），无响应时按异常类型归类
+   * （超时 / 网络错），与轮询共用同一套分类口径。
+   * @param {Object} res 响应对象（可能为 null）
+   * @param {string} errName 异常的 name
+   * @param {string} errMsg  异常的 message
+   * @returns {string} 形如 'http500' 或 'timeout(...)' 的标签
+   */
+  function sendFailKind(res, errName, errMsg) {
+    // 收到了响应：说明请求已送达，问题在服务端
+    if (res) return 'http' + res.status;
+    // 没有响应：请求未送达或未返回，按异常类型细分
+    return classifyFailKind(errName, errMsg);
+  }
+
   var api = {
     classifyFailKind: classifyFailKind,
     offlineSuffix: offlineSuffix,
@@ -110,6 +152,9 @@
     shouldSkipPoll: shouldSkipPoll,
     isAbortError: isAbortError,
     shouldReloadAfterHidden: shouldReloadAfterHidden,
+    canSend: canSend,
+    isSendOk: isSendOk,
+    sendFailKind: sendFailKind,
   };
 
   // 浏览器：挂到 window；node：导出为模块

@@ -107,3 +107,62 @@ test('重载判定：未记录切后台时刻时不重载', () => {
 test('重载判定：时间回拨导致的负值不重载', () => {
   assert.strictEqual(logic.shouldReloadAfterHidden(-5000, 30000), false);
 });
+
+test('可发送判定：有文字可发', () => {
+  assert.strictEqual(logic.canSend('hello', 0), true);
+});
+
+test('可发送判定：只有图片也可发', () => {
+  assert.strictEqual(logic.canSend('', 1), true);
+});
+
+test('可发送判定：文字与图片都有可发', () => {
+  assert.strictEqual(logic.canSend('hi', 2), true);
+});
+
+test('可发送判定：两者都为空不发', () => {
+  assert.strictEqual(logic.canSend('', 0), false);
+});
+
+test('可发送判定：纯空白文字视为空', () => {
+  // 空格与换行经 trim 后为空，不应被当成有内容
+  assert.strictEqual(logic.canSend('   \n\t ', 0), false);
+});
+
+test('可发送判定：非法图片数按 0 处理', () => {
+  assert.strictEqual(logic.canSend('', undefined), false);
+  assert.strictEqual(logic.canSend('', null), false);
+});
+
+test('可发送判定：文字为 null 时按空处理', () => {
+  assert.strictEqual(logic.canSend(null, 0), false);
+  assert.strictEqual(logic.canSend(null, 1), true);
+});
+
+test('发送成功判定：ok 为真算成功', () => {
+  assert.strictEqual(logic.isSendOk({ ok: true, status: 200 }), true);
+});
+
+test('发送成功判定：ok 为假算失败', () => {
+  assert.strictEqual(logic.isSendOk({ ok: false, status: 500 }), false);
+});
+
+test('发送成功判定：无响应对象算失败', () => {
+  // 网络层抛错时没有响应对象
+  assert.strictEqual(logic.isSendOk(null), false);
+  assert.strictEqual(logic.isSendOk(undefined), false);
+});
+
+test('发送失败分类：有响应时按 HTTP 状态码', () => {
+  assert.strictEqual(logic.sendFailKind({ status: 500 }, '', ''), 'http500');
+  assert.strictEqual(logic.sendFailKind({ status: 413 }, '', ''), 'http413');
+});
+
+test('发送失败分类：无响应时按异常类型', () => {
+  assert.strictEqual(logic.sendFailKind(null, 'AbortError', ''), 'timeout(已发出,无响应)');
+  assert.strictEqual(logic.sendFailKind(null, 'TypeError', ''), 'neterr(未发出/断连)');
+});
+
+test('发送失败分类：无响应且无异常名时回退 unknown', () => {
+  assert.strictEqual(logic.sendFailKind(null, '', ''), 'unknown');
+});

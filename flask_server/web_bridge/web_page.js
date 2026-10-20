@@ -231,17 +231,17 @@
   // ---------- 发送消息（文字与图片一起发出） ----------
   function sendMessage() {
     var text = inputEl.value.trim();
-    // 无文字也无图片：不发送
-    if (!text && pendingImages.length === 0) return;
+    // 无文字也无图片：不发送（判定口径见 WebLogic.canSend）
+    if (!WebLogic.canSend(text, pendingImages.length)) return;
     // 快照本次待发内容：失败时可原样恢复，避免消息静默丢失。
     var snapshotText = text;
     var snapshotImgs = pendingImages.slice();
     // 只有发送成功才清空输入与图片；失败则恢复现场并提示。
     // 失败时记录原因类型：超时（已发出无响应）/ 网络错（未发出）/ 服务端错误。
     var finish = function (res, err) {
-      if (res && res.ok) { clientLog('send', 'ok'); clearImages(); fetchMessages(false); return; }
+      if (WebLogic.isSendOk(res)) { clientLog('send', 'ok'); clearImages(); fetchMessages(false); return; }
       // 失败分类与轮询共用 WebLogic，避免两处各写一份分类逻辑。
-      var kind = res ? ('http' + res.status) : WebLogic.classifyFailKind(err && err.name, err && err.message);
+      var kind = WebLogic.sendFailKind(res, err && err.name, err && err.message);
       var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
       clientLog('send', 'fail kind=' + kind + offline);
       inputEl.value = snapshotText;
