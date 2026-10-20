@@ -374,6 +374,30 @@ def recent(limit=50):
     return {"seq": int(state.get("seq") or 0), "messages": messages}
 
 
+def before_seq(before, limit=50):
+    """取比给定 seq 更早的一批消息（向上翻历史用）。
+
+    与 list_since 方向相反：那边取更新的，这边取更旧的。用于前端滑到底部时
+    懒加载更早的消息，避免首屏一次铺满全部历史把手机内存撑爆。
+    @param before 已渲染的最早一条消息的 seq；只返回 seq 严格小于它的消息
+    @param limit  单次最多返回条数
+    @returns {messages, has_more}：messages 按时间正序；has_more 表示是否还有更早的
+    """
+    try:
+        cur = int(before)
+    except (TypeError, ValueError):
+        cur = 0
+    with _timed_lock('before_seq'):
+        state = _read_state()
+    messages = state.get("messages") or []
+    older = [m for m in messages if int(m.get("seq") or 0) < cur]
+    # 还有更早的：取最靠近 cur 的一批（末尾），保证与当前已渲染的内容连续
+    has_more = len(older) > limit
+    if has_more:
+        older = older[-limit:]
+    return {"messages": older, "has_more": has_more}
+
+
 def clear():
     """清空收件箱（供调试或用户主动重置）。"""
     with _timed_lock('clear'):

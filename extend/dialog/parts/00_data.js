@@ -88,7 +88,7 @@ window.AIMirrorDialog = (function () {
 
   // 后端不可达时的占位清单：只列名称。
   D.FALLBACK_TOOL_NAMES = [
-    'list_dir', 'search_file', 'search_content', 'read_file',
+    'list_dir', 'search_file', 'search_content', 'read_file', 'read_image',
     'list_skills', 'read_skill', 'read_lints', 'replace_in_file',
     'write_to_file', 'delete_file', 'list_rules', 'read_rule',
     'get_tool_params', 'run_command'

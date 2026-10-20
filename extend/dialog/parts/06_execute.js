@@ -311,6 +311,12 @@
       D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: mark });
       return;
     }
+    // 引用型结果（file_ref）：正文已移出工具结果，需先取回正文再粘贴。
+    const refs = this._collectFileRefs(card.result);
+    if (refs.length) {
+      this._sendFileRefs(card, refs);
+      return;
+    }
     // 文本结果同样经队列，保证一次只回传一条、与其它回传串行。
     D.enqueueSend({ type: 'auto_send', text: this.resultText(card) });
   };

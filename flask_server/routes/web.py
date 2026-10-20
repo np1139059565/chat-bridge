@@ -286,13 +286,24 @@ def web_messages():
     - history：为 1 时返回最近一批历史（首次打开页面用），否则按游标增量
     @returns {success, seq, messages}
     """
+    # before：向上翻历史用——返回比该 seq 更早的一批消息（前端滑到底部时懒加载）
+    before = request.args.get("before")
+    if before:
+        try:
+            blimit = int(request.args.get("limit", "50"))
+        except ValueError:
+            blimit = 50
+        # 单批上限 100：翻历史是交互式操作，一次给太多会重新撑大页面
+        data = web_inbox.before_seq(before, max(1, min(blimit, 100)))
+        return jsonify(success=True, **data)
     cursor = request.args.get("cursor", "0")
     try:
         limit = int(request.args.get("limit", "200"))
     except ValueError:
         limit = 200
     if request.args.get("history") == "1":
-        data = web_inbox.recent(limit if limit < 200 else 50)
+        # 首次铺屏只给最近 50 条：其余靠滑到底部懒加载，避免一次渲染过多撑爆手机内存
+        data = web_inbox.recent(50)
     else:
         data = web_inbox.list_since(cursor, limit)
     return jsonify(success=True, **data)

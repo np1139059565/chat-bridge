@@ -4,13 +4,16 @@
  * ============================================================ */
 (function () {
   'use strict';
-  var renderMarkdown = window.WebRender.renderMarkdown, composeBody = window.WebRender.composeBody,
-    renderCommandPanel = window.WebRender.renderCommandPanel;
+  var renderMarkdown = window.WebRender.renderMarkdown, composeBody = window.WebRender.composeBody;
 
   // ---------- 全局状态 ----------
   var cursor = 0;            // 已拉取到的最大 seq
   var seen = {};             // 已渲染消息 id，防重复
   var lastRenderedTs = 0;    // 最后一条渲染消息的时间戳（判断是否该吸顶）
+
+  // ---------- DOM 上限与懒加载 ----------
+  // 页面保留条数、裁剪与向前翻页的实现见 web_dom_limit.js（window.WebDom）。
+  // 初始化在其后（依赖 listEl 与 renderMessage 均已就绪）。
 
   var listEl = document.getElementById('list');
   var inputEl = document.getElementById('input');
@@ -33,9 +36,11 @@
   // @param allowAuto 是否允许该条语音自动播放。
   //   历史加载（首次铺屏）传 false：已存在的语音不该一进页面就自动播；
   //   增量拉取传 true：解锁后新到的语音才自动播。
-  function renderMessage(m, allowAuto) {
+  function renderMessage(m, allowAuto, atBottom) {
     if (!m || seen[m.id]) return false;
     seen[m.id] = true;
+    // 维护「DOM 中最早一条」的锚点：懒加载据此向前翻页
+    if (window.WebDom) window.WebDom.note(m.seq);
     var role = m.role || 'ai';
     // 角色 → 显示名与样式类。system 为指令回执（如 /help 输出），单独配色。
     var who = role === 'user' ? '我' : (role === 'ai' ? 'AI' : (role === 'system' ? '系统' : '工具'));
@@ -72,9 +77,14 @@
     el.innerHTML =
       '<div class="who">' + who + keyTag + '<span class="time">' + fmtTime(m.ts) + '</span></div>' +
       '<div class="body">' + composeBody(body, audio) + '</div>';
-    // 倒序：最新插入到列表最前面
-    if (listEl.firstChild) listEl.insertBefore(el, listEl.firstChild);
-    else listEl.appendChild(el);
+    // 倒序：最新插入到列表最前面；懒加载更早的消息时插到末尾
+    if (atBottom) {
+      listEl.appendChild(el);
+    } else if (listEl.firstChild) {
+      listEl.insertBefore(el, listEl.firstChild);
+    } else {
+      listEl.appendChild(el);
+    }
     // 语音播放器：绑定解锁与自动播放（历史语音不自动播，见 allowAuto）
     var au = el.querySelector('audio');
     if (au && window.WebVoice) window.WebVoice.bind(au, !!allowAuto);
@@ -176,6 +186,8 @@
         var _rt0 = Date.now();
         msgs.forEach(function (m) { renderMessage(m, allowAuto); });
         var _rt = Date.now() - _rt0;
+        // 新消息到达：按 DOM 上限裁剪（实现见 web_dom_limit.js）
+        if (!history && window.WebDom) window.WebDom.afterAppend();
         // 渲染是主线程同步操作，渲染条数多 / 单条重时会明显占主线程，
         // 这里记渲染条数与耗时：若耗时大，就是「页面卡住」的嫌疑点。
         if (!history && (msgs.length || _rt > 200)) {
@@ -317,36 +329,15 @@
   }
 
   // ---------- 指令展开面板 ----------
-  // 点击指令按钮向上展开快捷键列表；点某条指令即填入输入框等待发送。
-  // 指令数据从后端 /api/web/commands 取，新增内置指令时面板自动出现。
-  var btnCmd = document.getElementById('btnCmd');
-  var cmdPanel = document.getElementById('cmdPanel');
-  var cmdGrid = document.getElementById('cmdGrid');
-  var cmdLoaded = false;
-
-  /** 拉取指令快捷键列表并渲染成分区内网格（内置/自定义，各按首字母排序）。 */
-  function loadCommands() {
-    fetch('/api/web/commands', { headers: { 'Accept': 'application/json' } })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || !data.success) return;
-        var groups = data.groups || { builtin: data.commands || [], custom: [] };
-        // 点选即填入输入框并留尾随空格：需要参数的指令便于补参数，其余发送时会被 trim。
-        renderCommandPanel(cmdGrid, groups, function (c) {
-          inputEl.value = c + ' ';
-          inputEl.focus();
-          cmdPanel.classList.remove('on');
-        });
-      })
-      .catch(function () { /* 取不到指令时面板为空，不阻断聊天 */ });
+  // 实现在 web_commands.js（window.WebCommands），此处仅完成初始化。
+  if (window.WebCommands) {
+    window.WebCommands.init({
+      btnCmd: document.getElementById('btnCmd'),
+      cmdPanel: document.getElementById('cmdPanel'),
+      cmdGrid: document.getElementById('cmdGrid'),
+      inputEl: inputEl
+    });
   }
-
-  // 展开 / 收起指令面板（首次展开时懒加载指令列表）
-  btnCmd.addEventListener('click', function (e) {
-    e.preventDefault();
-    if (!cmdLoaded) { loadCommands(); cmdLoaded = true; }
-    cmdPanel.classList.toggle('on');
-  });
 
   // ---------- 输入框自适应高度 ----------
   function autoGrow() {
@@ -382,6 +373,17 @@
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
+  // ---------- DOM 上限与懒加载初始化 ----------
+  // 注入容器、渲染函数、反注册回调与日志函数，之后由模块自行管理裁剪与翻页。
+  if (window.WebDom) {
+    window.WebDom.init({
+      listEl: listEl,
+      render: function (m, allowAuto, atBottom) { return renderMessage(m, allowAuto, atBottom); },
+      evict: function (seq) { delete seen['w-' + seq]; },
+      log: clientLog
+    });
+  }
+
   // ---------- 首次加载：铺历史 + 启动轮询 ----------
   clientLog('page', 'load 开始首次铺历史');
   fetchMessages(true);
@@ -400,17 +402,28 @@
   });
   // 页面重新可见时立即补拉一次：手机切后台会暂停定时器，
   // 回到前台若不主动拉，会等到下一个周期甚至更久才看到新消息。
+  // 切后台超过该阈值（毫秒）时，回前台整页重载。
+  // 依据：手机浏览器在后台会冻结页面、按内存压力回收标签页；停留过久后事件循环
+  // 积压、DOM 陈旧，继续复用旧页面容易出现长时间无响应。重载能拿到干净状态。
+  var RELOAD_AFTER_HIDDEN_MS = 30000;
+  var hiddenAt = 0;
+
   document.addEventListener('visibilitychange', function () {
     if (document.hidden) {
-      // 切后台：停表 + 掐断在途请求并解锁。
-      // 停表是为了回前台时能拿到一个「干净的新定时器」——冻结期间的老定时器
-      // 可能已被浏览器丢弃，继续依赖它会永久停摆（表现为回来显示无法连接）。
+      // 切后台：记录时刻 + 停表 + 掐断在途请求并解锁。
+      hiddenAt = Date.now();
       stopPolling();
       abortInflightPoll('hidden');
       return;
     }
+    // 回前台：后台停留超过阈值则整页重载，避免复用陈旧页面
+    var away = hiddenAt ? (Date.now() - hiddenAt) : 0;
+    if (away > RELOAD_AFTER_HIDDEN_MS) {
+      clientLog('page', 'reload（后台 ' + Math.round(away / 1000) + 's）');
+      setTimeout(function () { location.reload(); }, 200);
+      return;
+    }
     // 回前台：重建定时器 + 清残留 + 立即补拉。
-    // 重建定时器是关键：不重建就只能指望浏览器自己恢复那个可能已被丢弃的定时器。
     startPolling();
     abortInflightPoll('visible');
     fetchMessages(false);

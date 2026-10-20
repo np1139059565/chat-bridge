@@ -218,7 +218,8 @@ POST 请求体示例：
 | `list_dir` | `dir_path` | `ignore_globs` |
 | `search_file` | `dir_path`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
 | `search_content` | `pattern` | `dir_path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
-| `read_file` | `file_path`（绝对路径原样，相对路径以工程根为基准） | `offset`, `limit` |
+| `read_file` | `file_path` 或 `file_paths`（二选一；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；正文超 4KB 且位于工程内时结果为 `file_ref`（含 `path`、`lines`、`preview`），正文由前端经 `/api/web/text-file` 取回；`file_paths` 单次上限 20 个文件 |
+| `read_image` | `file_path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
 | `list_skills` | — | — |
 | `read_skill` | `skill`, `file` | `offset`, `limit` |
 | `read_lints` | — | `paths`, `severity` |
@@ -456,6 +457,12 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 ### POST /api/web/image
 
 从网页发送一张图片。请求含图片数据（base64）；返回 `{ success, name }`。
+
+### GET /api/web/text-file
+
+按路径取回文本文件片段，供前端把大段正文粘贴进对话。查询参数：`path`（工程内路径）、`start`（起始行，从 1 开始）、`end`（结束行，含）。
+
+返回 `{ success, path, content, lines, total_lines }`。仅限工程根内文件，拒绝点文件；单次正文上限 2MB，超出返回 413。不生成临时副本。
 
 ### GET /api/web/image-file/<name>
 

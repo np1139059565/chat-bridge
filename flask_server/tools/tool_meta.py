@@ -56,12 +56,22 @@ TOOLS = {
         ],
     },
     "read_file": {
-        # 路径口径与写文件类工具一致：绝对路径原样，相对路径以工程根为基准
-        "description": "读取本地文件内容（绝对路径原样，相对路径以工程根为基准），支持指定偏移与行数",
+        # 路径口径与写文件类工具一致：绝对路径原样，相对路径以工程根为基准。
+        # 正文超过内联阈值时结果改为 file_ref 引用，正文由前端取回后粘贴进对话。
+        "description": "读取本地文件内容（绝对路径原样，相对路径以工程根为基准），支持指定偏移与行数，支持一次读取多个文件",
         "parameters": [
-            {"name": "file_path", "type": "string", "required": True, "description": "文件路径（绝对路径原样，相对路径以工程根为基准）"},
+            {"name": "file_path", "type": "string", "required": False, "description": "单个文件路径（与 file_paths 二选一）"},
+            {"name": "file_paths", "type": "array", "required": False, "description": "多个文件路径数组，一次读取多个文件（最多 20 个，与 file_path 二选一）"},
             {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
             {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
+        ],
+    },
+    "read_image": {
+        # 结果结构与 get_page_snapshot 对齐：图片经现有截图粘贴链路进网页 AI，
+        # 正文只带精简标记，不把图片二进制写进对话
+        "description": "读取本地图片文件并贴入网页 AI 输入框（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB）",
+        "parameters": [
+            {"name": "file_path", "type": "string", "required": True, "description": "图片路径（绝对路径原样，相对路径以工程根为基准）"},
         ],
     },
     "list_skills": {

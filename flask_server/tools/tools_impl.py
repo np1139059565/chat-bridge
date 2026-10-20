@@ -13,6 +13,8 @@ import re
 import fnmatch
 from pathlib import Path
 
+# 截图存盘：read_image 复用同一落盘实现，使图片文件名与截图链路一致
+
 from tool_meta import TOOLS
 from tool_helpers import (
     ToolParamError,  # 重导出：服务侧通过 runtime.impl.ToolParamError 判定参数错误
@@ -221,39 +223,17 @@ def t_search_content(p):
     )
 
 
-def _read_text_segment(fp, offset, limit):
-    """按行读取文件片段（fp 为绝对路径），返回内容与行数。"""
-    offset = int(offset or 1)
-    with open(fp, "r", encoding="utf-8", errors="replace") as fh:
-        lines = fh.readlines()
-    start = max(0, offset - 1)
-    end = len(lines) if limit is None else start + int(limit)
-    return {
-        "path": str(fp),
-        "content": "".join(lines[start:end]),
-        "total_lines": len(lines),
-        "_read_lines": max(0, end - start),
-    }
-
-
-def t_read_file(p):
-    """读取文件内容，支持 offset / limit 分段。
-
-    路径口径与写文件类工具保持一致：绝对路径原样使用，相对路径以工程根为基准解析。
-    """
-    _normalize_aliases(p)
-    _require(p, "file_path")
-    fp = _abspath(p.get("file_path"))
-    res = _read_text_segment(fp, p.get("offset", 1), p.get("limit"))
-    read_lines = res.pop("_read_lines")
-    total = res["total_lines"]
-    return enforce_size_limit(
-        res,
-        "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
-        "本次读取约 %d 行（文件共 %d 行），请改读更少的行。" % (read_lines, total),
-    )
-
-
+# 文件读取类工具（read_file / read_image）已拆到独立模块，重导出公开名，
+# 保持 DISPATCH 与 get_tool_params 的既有引用不变。
+from file_read_impl import (
+    INLINE_TEXT_BYTES,
+    MAX_BATCH_FILES,
+    MAX_IMAGE_BYTES,
+    IMAGE_MIME,
+    _read_text_segment,
+    t_read_file,
+    t_read_image,
+)
 def t_list_skills(p):
     """列出本机可用的 skill：返回 [{ name, summary }]。"""
     return {"skills": list_skills(), "skillsDir": str(SKILLS_ROOT)}
@@ -404,6 +384,7 @@ DISPATCH = {
     "search_file": t_search_file,
     "search_content": t_search_content,
     "read_file": t_read_file,
+    "read_image": t_read_image,
     "list_skills": t_list_skills,
     "read_skill": t_read_skill,
     "read_lints": t_read_lints,
