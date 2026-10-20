@@ -7,6 +7,11 @@
 - 主模块 tools_impl.py 需保持在仓库行数上限内，故按既有约定
   （run_command_impl / memory_search_impl / memory_quality_impl）拆出并重导出。
 
+正文传递方式（与截图一致）：
+- 正文不放进工具结果，而是转成 dataURL 放在 data.screenshot；
+- 前端按同一条粘贴链路把正文作为文件附件贴进输入框，
+  AI 看到的是附件而非对话正文，工具结果本身保持极小。
+
 路径口径：绝对路径原样，相对路径以工程根为基准（与写文件类工具一致）。
 """
 import base64
@@ -41,13 +46,7 @@ def _read_text_segment(fp, offset, limit):
 
 
 def _load_one(file_path, offset, limit):
-    """读取单个文件片段，返回组装用的原始信息（不做体积判定）。
-
-    @param file_path 文件路径（绝对路径原样，相对路径以工程根为基准）
-    @param offset    起始行（从 1 开始）
-    @param limit     读取行数
-    @returns {path, lines, total_lines, content, read_lines}
-    """
+    """读取单个文件片段，返回组装用的原始信息（不做体积判定）。"""
     fp = _abspath(file_path)
     res = _read_text_segment(fp, offset, limit)
     read_lines = res.pop("_read_lines")
@@ -62,14 +61,39 @@ def _load_one(file_path, offset, limit):
     }
 
 
+def _as_paste_payload(text, file_name, meta):
+    """把正文包装成与截图一致的结果结构，供前端走粘贴链路。
+
+    - data.screenshot 放 dataURL（此处为 text/plain），前端据此派发粘贴事件；
+    - data.saved 带文件名，前端按文件名登记回挂；
+    - 结果本身只带路径、行数与文件名，不含正文。
+    @param text      正文（已按需拼接好）
+    @param file_name 附件文件名
+    @param meta      额外元信息（路径、行范围、总数等）
+    @returns 工具结果字典
+    """
+    raw = text.encode("utf-8")
+    data_url = "data:text/plain;base64," + base64.b64encode(raw).decode("ascii")
+    # 文本附件不落盘：dataURL 已在结果里，前端直接据此构造 File 粘贴。
+    # 落盘仅对截图有意义（镜像按文件名回挂图片），文本挂回去只会渲染出错误内容，
+    # 故 saved 保持为空，前端据此跳过回挂。
+    out = {
+        "data": {
+            "screenshot": data_url,
+            "saved": None,
+            "file_name": file_name,
+        },
+    }
+    out.update(meta or {})
+    return out
+
+
 def t_read_file(p):
     """读取文件内容，支持 offset / limit 分段，支持一次读取多个文件。
 
-    路径口径与写文件类工具保持一致：绝对路径原样使用，相对路径以工程根为基准解析。
-
-    返回结构与截图工具对称：正文放在 data.text，由前端取出后粘贴进对话；
-    回传给 AI 的只有精简的 bridge-chat-res 标记。体积上限沿用统一的
-    limits.max_json_chars（界面可配），超限时提示缩小读取范围。
+    正文不随工具结果回传：转成 dataURL 放在 data.screenshot，由前端按与截图
+    相同的粘贴链路贴进输入框。体积上限沿用统一的 limits.max_json_chars
+    （界面可配），超限时提示缩小读取范围。
     """
     _normalize_aliases(p)
     offset = p.get("offset", 1)
@@ -87,35 +111,40 @@ def t_read_file(p):
         chunks = []
         metas = []
         total_lines_read = 0
-        max_total = 0
         for one in paths_param:
             it = _load_one(one, offset, limit)
             total_lines_read += it["read_lines"]
-            max_total = max(max_total, it["total_lines"])
-            # 每段带「路径 行范围」头，便于在对话中区分来源
+            # 每段带「路径 行范围」头，便于在附件中区分来源
             chunks.append("===== %s 行 %d-%d =====\n%s" % (
                 it["path"], it["lines"][0], it["lines"][1], it["content"]))
             metas.append({"path": it["path"], "lines": it["lines"],
                           "total_lines": it["total_lines"]})
-        return enforce_size_limit(
-            {"data": {"text": "\n\n".join(chunks)}, "count": len(metas), "files": metas},
+        joined = "\n\n".join(chunks)
+        # 体积校验：超限时报错并提示缩小范围
+        enforce_size_limit(
+            {"data": {"text": joined}},
             "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
             "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
+        )
+        return _as_paste_payload(
+            joined, "%d_files.txt" % len(metas),
+            {"count": len(metas), "files": metas, "total_lines": total_lines_read},
         )
 
     # 单文件模式
     _require(p, "file_path")
     it = _load_one(p.get("file_path"), offset, limit)
-    return enforce_size_limit(
-        {
-            "data": {"text": it["content"]},
-            "path": it["path"],
-            "lines": it["lines"],
-            "total_lines": it["total_lines"],
-        },
+    # 体积校验：超限时报错并提示缩小范围
+    enforce_size_limit(
+        {"data": {"text": it["content"]}},
         "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
         "本次读取约 %d 行（文件共 %d 行），请改读更少的行。"
         % (it["read_lines"], it["total_lines"]),
+    )
+    base_name = os.path.basename(it["path"]) or "file.txt"
+    return _as_paste_payload(
+        it["content"], base_name,
+        {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]},
     )
 
 
@@ -174,6 +203,7 @@ def t_read_image(p):
         "data": {
             "screenshot": data_url,
             "saved": ({"name": saved["name"], "path": saved["path"]} if saved else None),
+            "file_name": os.path.basename(fp),
         },
         "path": str(fp),
         "size": size,

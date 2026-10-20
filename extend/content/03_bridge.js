@@ -230,16 +230,30 @@
    * 图片写入依赖站点实现，失败时回传提示，由用户手动粘贴。
    * @param {string} dataUrl 图片 dataURL
    */
-  /** 把单个 dataURL 转成 File 对象；非图片或解析失败返回 null。 */
-  A._dataUrlToFile = function (dataUrl, idx) {
+  // MIME → 扩展名映射：决定附件文件名，图片与文本各按真实类型命名
+  const MIME_EXT = {
+    'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif',
+    'image/webp': 'webp', 'image/bmp': 'bmp',
+    'text/plain': 'txt', 'application/json': 'json', 'text/markdown': 'md'
+  };
+
+  /**
+   * 把单个 dataURL 转成 File 对象；解析失败返回 null。
+   * 图片与文本同一套转换：文本附件按 txt 命名，使 AI 收到的是文件而非正文。
+   * @param {string} dataUrl dataURL（图片或文本）
+   * @param {number} idx 序号，用于无文件名时兜底命名
+   * @param {string} [name] 指定文件名（如原文件名），缺省按类型生成
+   */
+  A._dataUrlToFile = function (dataUrl, idx, name) {
     try {
       const parts = String(dataUrl).split(',');
       const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/png';
       const bin = atob(parts[1] || '');
       const arr = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-      const ext = mime.indexOf('jpeg') >= 0 ? 'jpg' : 'png';
-      return new File([arr], 'image_' + idx + '.' + ext, { type: mime });
+      const ext = MIME_EXT[mime] || (mime.indexOf('jpeg') >= 0 ? 'jpg' : 'png');
+      const fileName = name || ('file_' + idx + '.' + ext);
+      return new File([arr], fileName, { type: mime });
     } catch (e) {
       return null;
     }
@@ -250,9 +264,10 @@
    * 多张图放在同一个 paste 事件里一次性贴入（站点会按多图处理），
    * 随后写入文字、只回车一次，保证「图文合一、多图一条消息」。
    * @param {string|string[]} dataUrlOrList 单张 dataURL 或 dataURL 数组
-   * @param {string} text 随图文字（可空）
+   * @param {string} text 随附件文字（可空）
+   * @param {string} [fileName] 附件文件名（文本文件用原文件名；图片可空）
    */
-  A.pasteImageToWebpageAI = function (dataUrlOrList, text) {
+  A.pasteImageToWebpageAI = function (dataUrlOrList, text, fileName) {
     const ta = A.findInputBox();
     if (!ta) {
       A.warn('pasteImageToWebpageAI: 未找到网页 AI 输入框');
@@ -291,7 +306,8 @@
           }, TAIL);
           return;
         }
-        const file = A._dataUrlToFile(list[idx], idx);
+        // 传文件名：单张时用调用方给的名字；多张时只给第一张，其余按类型兜底
+        const file = A._dataUrlToFile(list[idx], idx, (idx === 0 ? fileName : ''));
         idx++;
         if (!file) { step(); return; }
         const dt = new DataTransfer();

@@ -218,7 +218,7 @@ POST 请求体示例：
 | `list_dir` | `dir_path` | `ignore_globs` |
 | `search_file` | `dir_path`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
 | `search_content` | `pattern` | `dir_path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
-| `read_file` | `file_path` 或 `file_paths`（二选一；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；正文随结果返回在 `data.text`（批量时已按「路径 行范围」拼好），由前端粘贴进对话，回传 AI 的只有精简标记；`file_paths` 单次上限 20 个文件，正文总量受 `limits.max_json_chars` 约束 |
+| `read_file` | `file_path` 或 `file_paths`（二选一；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；正文不放进结果，而是转成 `data:text/plain` 的 dataURL 放在 `data.screenshot`（与截图同构），由前端作为附件粘贴进输入框，回传 AI 的只有精简标记；文件名见 `data.file_name`，批量时已按「路径 行范围」拼好；`file_paths` 单次上限 20 个文件，正文总量受 `limits.max_json_chars` 约束 |
 | `read_image` | `file_path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
 | `list_skills` | — | — |
 | `read_skill` | `skill`, `file` | `offset`, `limit` |

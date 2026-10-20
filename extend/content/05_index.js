@@ -20,7 +20,8 @@
     else if (d.type === 'auto_send') A.pasteToWebpageAI(d.text || '');
     // 图文合一：dataUrl 之外可带 text；贴图后把 text 写进同一输入框，只发一次
     // 多图兼容：优先用数组 dataUrls，回退单张 dataUrl
-    else if (d.type === 'auto_send_image') A.pasteImageToWebpageAI(d.dataUrls || d.dataUrl || '', d.text || '');
+    // fileName：附件文件名（文本文件用原文件名）；图片可空，按类型兜底命名
+    else if (d.type === 'auto_send_image') A.pasteImageToWebpageAI(d.dataUrls || d.dataUrl || '', d.text || '', d.fileName || '');
     else if (d.type === 'request_theme') {
       // 对话框就绪后主动询问主题，避免 iframe 加载早于主题推送而错过首帧
       A.postTheme();

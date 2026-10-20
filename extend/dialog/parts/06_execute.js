@@ -260,9 +260,9 @@
       this.toast('已回传结果到网页 AI');
       return;
     }
-    // 结果是截图时复制图片；否则照常复制结果文本。
+    // 结果是图片时复制图片；文本附件与普通结果照常复制结果文本。
     const shot = D.extractScreenshot(card.result);
-    if (shot) {
+    if (shot.indexOf('data:image/') === 0) {
       this.copyImage(shot);
       return;
     }
@@ -308,13 +308,11 @@
           if (this._persist) this._persist();
         }
       } catch (e) { log('登记截图回挂失败：' + e); }
-      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: mark });
-      return;
-    }
-    // 正文型结果（read_file 的 data.text）：正文粘贴进对话，回传只带精简标记。
-    const body = D.extractText(card.result);
-    if (body) {
-      this._emitText(card, body);
+      // fileName：附件文件名（read_file 用原文件名；截图无此字段，按类型兜底）
+      D.enqueueSend({
+        type: 'auto_send_image', dataUrl: shot, text: mark,
+        fileName: String(((card.result || {}).data || {}).file_name || '')
+      });
       return;
     }
     // 其余文本结果照常回传完整 JSON。

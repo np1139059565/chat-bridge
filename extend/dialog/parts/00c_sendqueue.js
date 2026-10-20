@@ -79,7 +79,14 @@
         const src = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
         const urls = [];
         for (let i = 0; i < src.length; i++) urls.push(String(src[i]));
-        window.parent.postMessage(plain({ type: 'auto_send_image', dataUrls: urls, dataUrl: urls[0] || '', text: String(item.text || '') }), '*');
+        // fileName：附件文件名（文本文件用原文件名，图片可空按类型兜底）
+        window.parent.postMessage(plain({
+          type: 'auto_send_image',
+          dataUrls: urls,
+          dataUrl: urls[0] || '',
+          text: String(item.text || ''),
+          fileName: String(item.fileName || '')
+        }), '*');
         wait = Q.imageGap;
       } else {
         window.parent.postMessage(plain({ type: 'auto_send', text: String(item.text || '') }), '*');
