@@ -10,8 +10,10 @@
 依赖说明（避免循环导入）：
 - 本模块顶层只依赖通用模块（bridge_store、bridge_log）；
 - 对 message_router 内的推送原语（_push_one / _push_images_block /
-  _push_card_result / _synthesize_voice / _should_push / _remove_voice_file /
-  push_voice），一律在函数内延迟导入，避免与 message_router 形成顶层循环。
+  _push_card_result / _should_push / _synthesize_voice_text），一律在函数内
+  延迟导入，避免与 message_router 形成顶层循环；
+- 语音推送函数 push_voice 来自 message_voice，同样在函数内延迟导入；
+- remove_voice_file 由本模块自己实现，供 message_router 导入使用。
 """
 from collections import namedtuple
 
@@ -69,40 +71,71 @@ def postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths):
     """
     from concurrent.futures import ThreadPoolExecutor
     from app_limits import MAX_CONCURRENT_SYNTH
-    from . import voice_cache
+    # 未开语音开关：本轮不补推
     if not push.get("voice"):
         return
     # 只补「要合成但还没有路径」的消息
+    pending = _collect_pending(messages, push, voice_paths)
+    if not pending:
+        return
+    # 并发合成：串行时十几条会把补推拖后十几秒；上限取自 app_limits
+    results = []
+    try:
+        with ThreadPoolExecutor(max_workers=max(1, MAX_CONCURRENT_SYNTH)) as pool:
+            results = list(pool.map(_synth_one, pending))
+    except Exception as e:
+        log("语音并发合成异常（不影响主流程）：", e)
+    # 按原顺序逐条推语音，保持「文本→语音」的对应关系
+    _push_voice_results(qq_client, openid, results)
+
+
+def _collect_pending(messages, push, voice_paths):
+    """筛出「需要合成、但还没有音频路径」的消息。
+
+    @param messages    本轮消息列表
+    @param push        推送开关字典
+    @param voice_paths 已命中缓存的 {消息id: 音频路径}
+    @returns [(消息id, 朗读文本), ...]；无需合成时为空列表
+    """
     pending = []
     for m in messages:
         mid = m.get("id") or ""
+        # 无 id、已有路径、或本不该合成：跳过
         if not mid or mid in voice_paths or not _should_synth(m, push):
             continue
         text = _voice_text_of(m)
         if text:
             pending.append((mid, text))
-    if not pending:
-        return
+    return pending
 
-    def _one(item):
-        mid, text = item
-        try:
-            from . import message_router as mr
-            path = mr._synthesize_voice_text(text)
-            return mid, (voice_cache.store(text, path) if path else "")
-        except Exception as e:
-            log("语音合成失败（不影响主流程）：", e)
-            return mid, ""
 
-    # 并发合成：串行时十几条会把补推拖后十几秒；上限取自 app_limits
-    results = []
+def _synth_one(item):
+    """合成一条语音并写入缓存，返回 (消息id, 音频路径)。
+
+    失败不抛出：语音是补充能力，合成不了不应影响其它条目。
+    @param item (消息id, 朗读文本) 二元组
+    @returns (消息id, 音频路径)；合成失败时路径为空串
+    """
+    from . import voice_cache
+    mid, text = item
     try:
-        with ThreadPoolExecutor(max_workers=max(1, MAX_CONCURRENT_SYNTH)) as pool:
-            results = list(pool.map(_one, pending))
+        from . import message_router as mr
+        path = mr._synthesize_voice_text(text)
+        return mid, (voice_cache.store(text, path) if path else "")
     except Exception as e:
-        log("语音并发合成异常（不影响主流程）：", e)
-    # 按原顺序逐条推语音，保持「文本→语音」的对应关系
-    for mid, path in results:
+        log("语音合成失败（不影响主流程）：", e)
+        return mid, ""
+
+
+def _push_voice_results(qq_client, openid, results):
+    """按合成结果的原有顺序逐条推送语音。
+
+    @param qq_client QQClient 实例
+    @param openid    收件人
+    @param results   [(消息id, 音频路径), ...]
+    """
+    for _mid, path in results:
+        # 合成失败的条目没有路径，直接跳过
         if not path:
             continue
         try:
@@ -185,7 +218,8 @@ def push_message_bodies(ctx, m, pushed, seen_keys, voice_paths):
     mid = m.get("id") or ""
     sent = 0
     failed = False
-    # 工具结果是在 AI 消息推过之后才产生的，故正文与结果必须各自去重，
+    # 正文与图片各自去重、各自判成败：正文推过不等于图片推过。
+    # 工具结果是在 AI 消息推过之后才产生的，正文与结果必须分开记账，
     # 否则「消息已推过」会把后来的结果一并挡掉。
     if mid and mid not in pushed:
         status = mr._push_one(ctx.qq_client, ctx.openid, m, ctx.push, voice_paths)
@@ -196,9 +230,41 @@ def push_message_bodies(ctx, m, pushed, seen_keys, voice_paths):
             seen_keys.append(mid)
         elif status == 'fail':
             failed = True
-        # 图片推送：按「消息id#img」去重，与正文各自独立
-        sent += mr._push_images_block(ctx.qq_client, ctx.openid, m, ctx.push, pushed, seen_keys)
+    # 图片推送：按「消息id#img」独立去重，不受正文是否推过的约束。
+    # 图片发送失败时同样不记账，并标记本条需重试——否则正文一旦记入已推集合，
+    # 图片将再无机会补发。
+    img_sent, img_failed = push_message_images(ctx, m, pushed, seen_keys)
+    sent += img_sent
+    if img_failed:
+        failed = True
     return sent, failed
+
+
+def push_message_images(ctx, m, pushed, seen_keys):
+    """推送单条消息里的图片块（按「消息id#img」去重）。
+
+    与正文完全解耦：正文是否推过、推成没推成，都不影响图片的判定。
+    @param ctx       推送上下文（客户端 + 收件人 + 开关）
+    @param m         消息对象
+    @param pushed    已推送集合
+    @param seen_keys 本轮已记账 key 列表（就地追加）
+    @returns (成功张数, 是否有可重试的失败) 二元组
+    """
+    from . import message_router as mr
+    mid = m.get("id") or ""
+    # 无消息 id 时无法记账去重：直接尝试推送，成败都不留痕
+    if not mid:
+        return mr._push_images_block(ctx.qq_client, ctx.openid, m, ctx.push, pushed, seen_keys)
+    ikey = mid + "#img"
+    # 已推过或本轮已记账：跳过
+    if ikey in pushed or ikey in seen_keys:
+        return 0, False
+    n, img_failed = mr._push_images_block(ctx.qq_client, ctx.openid, m, ctx.push, pushed, seen_keys)
+    # 有图成功发出：整条图片记为已推，下轮不再重复评估
+    if n > 0:
+        seen_keys.append(ikey)
+    # 返回「可重试失败」标记：调用方据此把本条挂进待推缓存
+    return n, img_failed
 
 
 def remove_voice_file(path):

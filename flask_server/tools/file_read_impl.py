@@ -125,71 +125,91 @@ def _as_file_payload(text, file_name, meta):
     return out
 
 
-def t_read_file(p):
-    """读取文件内容，支持 offset / limit 分段，支持一次读取多个文件。
+def _is_whole_file(offset, limit):
+    """判断本次请求是否为「整文件」读取（未指定 limit 且从头开始）。
 
-    正文不随工具结果回传：转成 dataURL 放在 data.screenshot，由前端按与截图
-    相同的粘贴链路贴进输入框。体积上限沿用统一的 limits.max_json_chars
-    （界面可配），超限时提示缩小读取范围。
+    @param offset 起始行
+    @param limit  读取行数；None 表示不限
+    @returns 整文件读取返回 True
     """
-    _normalize_aliases(p)
-    offset = p.get("offset", 1)
-    limit = p.get("limit")
+    return limit is None and int(offset or 1) <= 1
 
-    # 批量模式：file_paths 为数组，一次读取多个文件，减少往返次数
-    paths_param = p.get("file_paths")
-    if paths_param:
-        if not isinstance(paths_param, list):
-            raise ToolParamError("file_paths 必须是字符串数组")
-        if len(paths_param) > MAX_BATCH_FILES:
-            raise ToolParamError(
-                "一次最多读取 %d 个文件，当前传入 %d 个" % (MAX_BATCH_FILES, len(paths_param))
-            )
-        # 整文件批量：全部给源文件引用，不读内容也不生成副本
-        if limit is None and int(offset or 1) <= 1:
-            refs = []
-            for one in paths_param:
-                fp = _abspath(one)
-                if not os.path.isfile(fp):
-                    raise ToolParamError("文件不存在：%s" % one)
-                _check_whole_size(fp)
-                refs.append(_as_source_ref(fp))
-            return {"data": {"files": refs}, "count": len(refs)}
-        chunks = []
-        metas = []
-        total_lines_read = 0
-        for one in paths_param:
-            it = _load_one(one, offset, limit)
-            total_lines_read += it["read_lines"]
-            # 每段带「路径 行范围」头，便于在附件中区分来源
-            chunks.append("===== %s 行 %d-%d =====\n%s" % (
-                it["path"], it["lines"][0], it["lines"][1], it["content"]))
-            metas.append({"path": it["path"], "lines": it["lines"],
-                          "total_lines": it["total_lines"]})
-        joined = "\n\n".join(chunks)
-        # 体积校验：超限时报错并提示缩小范围
-        enforce_size_limit(
-            {"data": {"text": joined}},
-            "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
-            "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
-        )
-        return _as_file_payload(
-            joined, "%d_files.txt" % len(metas),
-            {"count": len(metas), "files": metas, "total_lines": total_lines_read},
-        )
 
-    # 单文件模式
-    _require(p, "file_path")
-    fp = _abspath(p.get("file_path"))
-    # 未指定 offset / limit：整文件读取，只给源文件引用，不读内容也不生成副本。
-    # 前端按路径取原始字节后直接构造 File 粘贴，省去 base64 往返与额外落盘。
-    if limit is None and int(offset or 1) <= 1:
+def _read_batch_whole(paths_param):
+    """批量整文件读取：每个文件只给源文件引用，不读内容、不生成副本。
+
+    @param paths_param 文件路径列表
+    @returns 工具结果字典
+    """
+    refs = []
+    for one in paths_param:
+        fp = _abspath(one)
+        # 路径校验：必须是已存在的普通文件
         if not os.path.isfile(fp):
-            raise ToolParamError("文件不存在：%s" % p.get("file_path"))
+            raise ToolParamError("文件不存在：%s" % one)
+        # 体积校验：整文件虽不回传内容，但过大也会撑爆前端内存
         _check_whole_size(fp)
-        return {"data": {"file": _as_source_ref(fp)}}
-    # 分段读取：生成片段内容，作为文本附件交由前端粘贴
-    it = _load_one(p.get("file_path"), offset, limit)
+        refs.append(_as_source_ref(fp))
+    return {"data": {"files": refs}, "count": len(refs)}
+
+
+def _read_batch_segment(paths_param, offset, limit):
+    """批量分段读取：逐文件取片段，拼成一份带来源标注的文本附件。
+
+    @param paths_param 文件路径列表
+    @param offset      起始行
+    @param limit       读取行数
+    @returns 工具结果字典
+    """
+    chunks = []      # 各文件正文片段，带「路径 行范围」头
+    metas = []       # 各文件的行范围与总行数元信息
+    total_lines_read = 0
+    for one in paths_param:
+        it = _load_one(one, offset, limit)
+        total_lines_read += it["read_lines"]
+        # 每段带「路径 行范围」头，便于在附件中区分来源
+        chunks.append("===== %s 行 %d-%d =====\n%s" % (
+            it["path"], it["lines"][0], it["lines"][1], it["content"]))
+        metas.append({"path": it["path"], "lines": it["lines"],
+                      "total_lines": it["total_lines"]})
+    joined = "\n\n".join(chunks)
+    # 体积校验：超限时报错并提示缩小范围
+    enforce_size_limit(
+        {"data": {"text": joined}},
+        "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
+        "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
+    )
+    return _as_file_payload(
+        joined, "%d_files.txt" % len(metas),
+        {"count": len(metas), "files": metas, "total_lines": total_lines_read},
+    )
+
+
+def _read_single_whole(raw_path):
+    """单个整文件读取：只给源文件引用，不读内容也不生成副本。
+
+    前端按路径取原始字节后直接构造 File 粘贴，省去 base64 往返与额外落盘。
+    @param raw_path 请求里的原始路径（用于报错提示）
+    @returns 工具结果字典
+    """
+    fp = _abspath(raw_path)
+    # 路径校验：必须是已存在的普通文件
+    if not os.path.isfile(fp):
+        raise ToolParamError("文件不存在：%s" % raw_path)
+    # 体积校验：过大时提示改用分段读取
+    _check_whole_size(fp)
+    return {"data": {"file": _as_source_ref(fp)}}
+
+
+def _read_single_segment(raw_path, offset, limit):
+    """单个文件分段读取：生成片段内容，作为文本附件交由前端粘贴。
+
+    @param raw_path 请求里的原始路径
+    @param offset   起始行
+    @param limit    读取行数
+    @returns 工具结果字典
+    """
+    it = _load_one(raw_path, offset, limit)
     # 体积校验：超限时报错并提示缩小范围
     enforce_size_limit(
         {"data": {"text": it["content"]}},
@@ -202,6 +222,41 @@ def t_read_file(p):
         it["content"], base_name,
         {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]},
     )
+
+
+def t_read_file(p):
+    """读取文件内容，支持 offset / limit 分段，支持一次读取多个文件。
+
+    正文不随工具结果回传：转成 dataURL 放在 data.screenshot，由前端按与截图
+    相同的粘贴链路贴进输入框。体积上限沿用统一的 limits.max_json_chars
+    （界面可配），超限时提示缩小读取范围。
+
+    按「批量 / 单个」与「整文件 / 分段」两个维度共四种组合分发到对应实现。
+    """
+    _normalize_aliases(p)
+    offset = p.get("offset", 1)
+    limit = p.get("limit")
+    # 批量模式：file_paths 为数组，一次读取多个文件，减少往返次数
+    paths_param = p.get("file_paths")
+    if paths_param:
+        # 类型与数量校验
+        if not isinstance(paths_param, list):
+            raise ToolParamError("file_paths 必须是字符串数组")
+        if len(paths_param) > MAX_BATCH_FILES:
+            raise ToolParamError(
+                "一次最多读取 %d 个文件，当前传入 %d 个" % (MAX_BATCH_FILES, len(paths_param))
+            )
+        # 整文件批量与分段批量各自处理
+        if _is_whole_file(offset, limit):
+            return _read_batch_whole(paths_param)
+        return _read_batch_segment(paths_param, offset, limit)
+    # 单文件模式
+    _require(p, "file_path")
+    raw_path = p.get("file_path")
+    # 整文件与分段各自处理
+    if _is_whole_file(offset, limit):
+        return _read_single_whole(raw_path)
+    return _read_single_segment(raw_path, offset, limit)
 
 
 # 图片读取体积上限（字节）：超过则拒绝，避免超大文件撑爆 HTTP 响应与前端内存

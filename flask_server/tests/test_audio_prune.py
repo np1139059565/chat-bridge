@@ -104,7 +104,9 @@ class TestPruneAudio(_Base):
     def test_default_limit_matches_retention(self):
         """默认上限应与统一保留口径一致（消息与音频同源）。"""
         from app_limits import MAX_AUDIO_FILES, MAX_MESSAGES
-        self.assertEqual(web_mirror.MAX_AUDIO_FILES, MAX_AUDIO_FILES)
+        # 上限常量的实际归属是 audio_prune（web_mirror 只转出回收函数）
+        from web_bridge import audio_prune
+        self.assertEqual(audio_prune.MAX_AUDIO_FILES, MAX_AUDIO_FILES)
         # 音频与消息同口径：消息还在时，其引用的音频一定还在
         self.assertEqual(MAX_AUDIO_FILES, MAX_MESSAGES)
 

@@ -354,23 +354,33 @@ def web_audio(name):
     return send_file(path, mimetype="audio/mpeg", conditional=True, max_age=604800)
 
 
-# 正在后台合成的 seq 集合：避免同一条被多次点播时重复合成。
-_synth_inflight = set()
-_synth_lock = __import__("threading").Lock()
+# 语音合成的「占用标记 + 后台线程」统一由 web_mirror 维护：
+# 网页点播与上报自动合成共用同一份状态，同一条消息只合成一次。
+def _ensure_voice_synth(seq, text):
+    """确保某条消息的语音已安排合成，并返回前端应展示的状态。
 
-
-def _synth_worker(seq, text):
-    """后台合成线程：合成完成后把文件名回填到收件箱，并释放占用标记。"""
+    合成在后台线程执行，本函数立即返回，不在请求里等合成完成。
+    @param seq  消息序号
+    @param text 待朗读文本
+    @returns 'processing'：已安排或正在合成；'failed'：合成模块不可用
+    """
     try:
         from web_bridge import web_mirror
-        name = web_mirror.synthesize_voice(text)
-        if name:
-            web_inbox.set_voice(seq, name)
     except Exception as e:
-        app_log.warn("[web]", "按需合成失败：", e)
-    finally:
-        with _synth_lock:
-            _synth_inflight.discard(seq)
+        app_log.warn("[web]", "语音合成模块不可用：", e)
+        return "failed"
+    # start_synth 内部去重：已在合成中会直接返回 False，不会重复起线程
+    web_mirror.start_synth(seq, text)
+    return "processing"
+
+
+def _is_synth_pending(seq):
+    """查询某条消息的语音是否正在后台合成（委托 web_mirror）。"""
+    try:
+        from web_bridge import web_mirror
+        return web_mirror.is_synth_pending(seq)
+    except Exception:
+        return False
 
 
 @bp.route("/api/web/voice-ensure", methods=["POST", "GET", "OPTIONS"])
@@ -395,13 +405,10 @@ def web_voice_ensure():
     text = str(msg.get("voice_text") or "")
     if not text:
         return jsonify(success=False, error="no_voice_text")
-    # 已在合成中：不重复启动
-    import threading
-    with _synth_lock:
-        if seq in _synth_inflight:
-            return jsonify(success=True, status="processing")
-        _synth_inflight.add(seq)
-    threading.Thread(target=_synth_worker, args=(seq, text), daemon=True).start()
+    # 启动合成：内部已做去重，重复点播不会重复合成
+    status = _ensure_voice_synth(seq, text)
+    if status == "failed":
+        return jsonify(success=False, error="synth_unavailable")
     return jsonify(success=True, status="processing")
 
 
@@ -421,8 +428,8 @@ def web_voice_status():
         return jsonify(success=False, error="not_found")
     if msg.get("voice"):
         return jsonify(success=True, status="ready", name=msg.get("voice"))
-    with _synth_lock:
-        pending = seq in _synth_inflight
+    # 是否正在合成：统一向 web_mirror 查询，与点播路径共用同一份状态
+    pending = _is_synth_pending(seq)
     if pending or str(msg.get("voice_text") or ""):
         return jsonify(success=True, status="processing")
     return jsonify(success=False, error="no_voice_text")

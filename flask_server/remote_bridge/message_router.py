@@ -354,40 +354,48 @@ def _resolve_openid(payload):
     return _last_openid or ""
 
 
-def _push_card_result(qq_client, openid, card, push):
-    """推送一条工具卡片结果到 QQ。
+# 卡片与图片推送的实现已迁至 message_images（与图片处理同属一处）；
+# 此处按原名导入，保持本模块与 message_flow 的既有调用不变。
+_push_card_result = message_images.push_card_result
+_push_images_block = message_images.push_images_block
 
-    只处理截图类结果（发图片，与 /sp 同路）。文本结果不在此推送：
-    它经「回传网页 AI → 成为一条消息 → 镜像抓取」本来就能到 QQ，
-    在此再推会重复。
-    受 tool 推送开关控制，与正文消息一致。
+
+def _prepare_batch(qq_client, conv_id, payload):
+    """上报预处理：缓存切片、定位推送目标、合并积压、限制条数。
+
+    把「推什么、推给谁」确定下来，推送编排本身交给 handle_report。
     @param qq_client QQClient 实例
-    @param openid 目标用户
-    @param card 卡片结果 {id, tool, status, path}
-    @param push 推送开关字典
-    @returns 是否发送成功
+    @param conv_id   会话标识
+    @param payload   上报体
+    @returns (openid, messages)；无消息可处理或已转入积压时返回 None
     """
-    if not push.get("tool", True):
-        return False
-    img_path = card.get("path") or ""
-    if not img_path:
-        return False
-    return push_image(qq_client, openid, img_path)
-
-
-def _push_images_block(qq_client, openid, m, push, pushed, seen_keys):
-    """推送一条消息里的图片块并记账，返回成功张数。
-
-    从 handle_report 内层循环抽出，避免嵌套过深；seen_keys 就地追加。
-    """
-    mid = m.get("id") or ""
-    ikey = (mid + "#img") if mid else ""
-    if ikey and (ikey in pushed or ikey in seen_keys):
-        return 0
-    n = message_images.push_message_images(qq_client, openid, m, push, push_image)
-    if n > 0 and ikey:
-        seen_keys.append(ikey)
-    return n
+    messages = payload.get("messages") or []
+    # 先缓存切片再判空：openid 缺失时消息不能丢，要留到窗口恢复后补推。
+    # 若放在判空之后，这一轮消息既没推送也没进待推缓存，等于永久丢失。
+    global _last_client
+    _last_client = qq_client
+    _last_report[conv_id] = payload
+    openid = _resolve_openid(payload)
+    # 目标缺失时告警：上报体不带 openid，只能靠「最近发消息的人」兜底。
+    # 兜底值只存内存，进程重启后为空；此时不是丢弃，而是等用户发下一条
+    # QQ 消息重建窗口后，由续期重放自动补推。
+    if not messages:
+        return None
+    # 合并上次推送失败的消息：它们可能已滚出可见区、不再出现在切片里，
+    # 靠这份缓存获得重试机会（成功 / 跳过后自动移出）。
+    messages = bridge_store.merge_pending(conv_id, messages)
+    if not openid:
+        # 无推送目标：消息全部转入待推缓存积压，等用户发下一条 QQ 消息
+        # 重建窗口后，由续期重放自动补推。这里只记日志，不丢弃。
+        bridge_store.set_pending(conv_id, messages)
+        log("无推送目标，已积压 %d 条待窗口恢复后补推" % len(messages))
+        return None
+    # 条数上限：长时间不开 QQ 后重开，切片可能堆积几百条。只取最新的一批处理，
+    # 更旧的直接丢弃——它们多半已被后续消息覆盖，用户要的也是「最后几条」。
+    # 这一步在合成/推送之前，确保后续的网络调用次数被硬性封顶，接口不会被拖死。
+    if len(messages) > MAX_PUSH_PER_REPORT:
+        messages = messages[-MAX_PUSH_PER_REPORT:]
+    return openid, messages
 
 
 def handle_report(qq_client, payload):
@@ -400,38 +408,17 @@ def handle_report(qq_client, payload):
     if not qq_client:
         return 0
     conv_id = payload.get("conversationId") or "__default__"
-    messages = payload.get("messages") or []
-    # 先缓存切片再判空：openid 缺失时消息不能丢，要留到窗口恢复后补推。
-    # 若放在判空之后，这一轮消息既没推送也没进待推缓存，等于永久丢失。
-    global _last_client
-    _last_client = qq_client
-    _last_report[conv_id] = payload
-    openid = _resolve_openid(payload)
-    # 目标缺失时告警：上报体不带 openid，只能靠「最近发消息的人」兜底。
-    # 兜底值只存内存，进程重启后为空；此时不是丢弃，而是等用户发下一条
-    # QQ 消息重建窗口后，由续期重放自动补推。
-    if not messages:
+    prepared = _prepare_batch(qq_client, conv_id, payload)
+    # 无消息可处理，或已转入积压：本轮无事可做
+    if not prepared:
         return 0
-    # 合并上次推送失败的消息：它们可能已滚出可见区、不再出现在切片里，
-    # 靠这份缓存获得重试机会（成功 / 跳过后自动移出，见本函数末尾 set_pending）。
-    messages = bridge_store.merge_pending(conv_id, messages)
-    if not openid:
-        # 无推送目标：消息全部转入待推缓存积压，等用户发下一条 QQ 消息
-        # 重建窗口后，由续期重放自动补推。这里只记日志，不丢弃。
-        bridge_store.set_pending(conv_id, messages)
-        log("无推送目标，已积压 %d 条待窗口恢复后补推" % len(messages))
-        return 0
-    # 条数上限：长时间不开 QQ 后重开，切片可能堆积几百条。只取最新的一批处理，
-    # 更旧的直接丢弃——它们多半已被后续消息覆盖，用户要的也是「最后几条」。
-    # 这一步在合成/推送之前，确保后续的网络调用次数被硬性封顶，接口不会被拖死。
-    if len(messages) > MAX_PUSH_PER_REPORT:
-        messages = messages[-MAX_PUSH_PER_REPORT:]
+    openid, messages = prepared
     push = bridge_store.get_config().get("push") or {}
-    # 第一步（锁外）：预合成语音。
-    # 合成是网络调用、可能很慢，绝不能在本会话推送锁内做——否则该会话一卡
-    # 就会长时间占用其推送锁、上报线程堆满、服务器拒绝连接（必须重启才恢复）。
-    # 第一步（锁外）：只查缓存，不做合成。合成一条要一秒以上，若在此做完，
-    # 用户得等整批语音合成完才看到第一条回音；未命中的留到文字推完后补。
+    # 第一步（锁外）：查语音缓存，不做合成。
+    # 合成是网络调用、一条要一秒以上：若在此同步做完，用户得等整批语音合成完
+    # 才看到第一条回音；若放进会话推送锁内，该会话一卡就会长时间占锁、
+    # 上报线程堆满、服务器拒绝连接（必须重启才恢复）。
+    # 故此处只做零成本的缓存查找，未命中的留到文字全部推完后并发补合成。
     from . import message_flow
     voice_paths = message_flow.presynth_voice(messages, push)
 

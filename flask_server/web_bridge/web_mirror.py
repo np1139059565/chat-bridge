@@ -84,31 +84,18 @@ def synthesize_voice(text):
         voice = getattr(voice_tts, "DEFAULT_VOICE", "")
         last_err = ""
         for attempt in range(1, SYNTH_RETRY + 1):
-            fname = "out_" + str(int(time.time() * 1000)) + ".mp3"
-            out_path = str(paths.WEB_AUDIO_DIR / fname)
-            _t0 = time.perf_counter()
-            ok, err = voice_tts.text_to_voice(text, out_path)
-            _ms = (time.perf_counter() - _t0) * 1000.0
-            if ok:
-                # 成功：记录首次即成功还是重试后成功，供观察失败率。
+            fname, err, ms = _synth_once(voice_tts, text)
+            # 成功：记录首次即成功还是重试后成功，供观察失败率，再存缓存并回收旧音频
+            if fname:
                 if attempt > 1:
                     log("语音合成成功（第 %d 次尝试）文本=%d 音色=%s 耗时=%.0fms"
-                        % (attempt, tlen, voice, _ms))
-                # 顺手存入共享缓存：QQ 推送侧按同一份文本哈希查找，
-                # 同一条消息的朗读音频只合成一次，两处复用。
-                try:
-                    from remote_bridge import voice_cache
-                    voice_cache.store(text, out_path)
-                except Exception as e:
-                    log("写入语音缓存失败（不影响播放）：", e)
-                # 合成成功即顺手回收旧音频：每次新增一个文件，就把超出上限的最旧文件删掉，
-                # 无需额外定时器，目录大小自然收敛在上限附近。
-                prune_audio_files()
+                        % (attempt, tlen, voice, ms))
+                _cache_and_prune(text, str(paths.WEB_AUDIO_DIR / fname))
                 return fname
             last_err = err
             # 失败：记录足够定位的信息（文本长度、音色、耗时、第几次）。
             log("语音合成失败（第 %d/%d 次）文本=%d 音色=%s 耗时=%.0fms 原因=%s"
-                % (attempt, SYNTH_RETRY, tlen, voice, _ms, err))
+                % (attempt, SYNTH_RETRY, tlen, voice, ms, err))
             # 最后一次失败后不再等待；否则等一会儿再重试。
             if attempt < SYNTH_RETRY:
                 time.sleep(SYNTH_RETRY_INTERVAL)
@@ -118,6 +105,43 @@ def synthesize_voice(text):
     except Exception as e:
         log("语音合成异常：", e)
         return ""
+
+
+def _synth_once(voice_tts, text):
+    """尝试合成一次，返回结果三元组。
+
+    @param voice_tts 语音合成模块
+    @param text      待朗读文本
+    @returns (文件名, 错误信息, 耗时毫秒)；失败时文件名为空串
+    """
+    import paths
+    # 文件名用毫秒时间戳保证唯一，避免并发覆盖
+    fname = "out_" + str(int(time.time() * 1000)) + ".mp3"
+    out_path = str(paths.WEB_AUDIO_DIR / fname)
+    t0 = time.perf_counter()
+    ok, err = voice_tts.text_to_voice(text, out_path)
+    ms = (time.perf_counter() - t0) * 1000.0
+    return (fname if ok else ""), err, ms
+
+
+def _cache_and_prune(text, out_path):
+    """合成成功后写入共享缓存并回收旧音频。
+
+    缓存供 QQ 推送侧按同一份文本哈希查找，同一条消息的朗读音频只合成一次；
+    回收则让目录大小自然收敛在上限附近，无需额外定时器。
+    两件事都是附加优化，失败不影响本次播放。
+    @param text     朗读文本（缓存键）
+    @param out_path 已生成的音频文件路径
+    """
+    try:
+        from remote_bridge import voice_cache
+        voice_cache.store(text, out_path)
+    except Exception as e:
+        log("写入语音缓存失败（不影响播放）：", e)
+    try:
+        prune_audio_files()
+    except Exception as e:
+        log("回收旧音频失败（不影响播放）：", e)
 
 
 def _auto_synth(seq, text):
@@ -139,21 +163,50 @@ def _auto_synth(seq, text):
             _synth_inflight.discard(seq)
 
 
+def start_synth(seq, text):
+    """启动某条消息的后台语音合成；已在合成中则不重复启动。
+
+    网页点播（按需合成）与上报入库（自动合成）共用本函数，
+    因此两条路径共享同一个占用集合，同一条消息只会被合成一次。
+    @param seq  消息序号
+    @param text 待朗读文本
+    @returns True 表示本次新启动了合成；False 表示已在合成中或参数无效
+    """
+    seq = int(seq or 0)
+    text = str(text or "")
+    # 参数不全不启动
+    if not seq or not text:
+        return False
+    with _synth_lock:
+        # 已有同号任务在跑：直接返回，避免重复合成
+        if seq in _synth_inflight:
+            return False
+        _synth_inflight.add(seq)
+    threading.Thread(target=_auto_synth, args=(seq, text), daemon=True).start()
+    return True
+
+
+def is_synth_pending(seq):
+    """查询某条消息的语音是否正在后台合成。
+
+    @param seq 消息序号
+    @returns 正在合成返回 True
+    """
+    with _synth_lock:
+        return int(seq or 0) in _synth_inflight
+
+
 def schedule_auto_synth(added):
     """为刚入库、带朗读文本的 AI 消息启动后台自动合成。
 
     @param added web_inbox.append_many 返回的新增消息列表
     """
     for m in (added or []):
-        seq = int(m.get("seq") or 0)
-        text = str(m.get("voice_text") or "")
-        if not seq or not text or m.get("voice"):
+        # 已有音频的消息无需再合成
+        if m.get("voice"):
             continue
-        with _synth_lock:
-            if seq in _synth_inflight:
-                continue
-            _synth_inflight.add(seq)
-        threading.Thread(target=_auto_synth, args=(seq, text), daemon=True).start()
+        # 统一交给 start_synth：加锁、去重、起线程只在这一处实现
+        start_synth(m.get("seq"), m.get("voice_text"))
 
 
 def _extract_images(m):

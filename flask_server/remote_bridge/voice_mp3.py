@@ -71,34 +71,57 @@ def ensure_mp3(src_path, dst_mp3):
         return False, "缺少音频编码依赖：%s" % e
 
     try:
-        # 统一读成 float64 波形与采样率；always_2d 保证二维形状
-        data, rate = sf.read(src_path, dtype="float64", always_2d=True)
-        channels = data.shape[1]                            # 声道数
-        if channels not in (1, 2):
-            # MP3 只支持单声道与立体声；多声道取前两路，其余丢弃
-            data = data[:, :2]
-            channels = data.shape[1]
-        if rate not in MP3_RATES:
-            # 采样率不在 MP3 支持列表：选最接近的标准采样率并重采样
-            dst_rate = min(MP3_RATES, key=lambda r: abs(r - rate))
-            pcm = (data * 32767.0).clip(-32768, 32767).astype("int16").tobytes()
-            pcm = _resample(pcm, rate, dst_rate, channels)
-            rate = dst_rate
-        else:
-            # 采样率可用：直接量化为 16 位整型字节流
-            pcm = (data * 32767.0).clip(-32768, 32767).astype("int16").tobytes()
-
-        enc = lameenc.Encoder()                             # 新建编码器实例
-        enc.set_bit_rate(128)                               # 128 kbps，语音足够
-        enc.set_in_sample_rate(int(rate))                   # 输入采样率
-        enc.set_channels(int(channels))                     # 声道数
-        enc.set_quality(2)                                  # 0 最高质量、9 最快
-        out = enc.encode(pcm)                               # 主体编码
-        out += enc.flush()                                  # 冲刷尾部数据
-        if not out:
-            return False, "MP3 编码结果为空"
-        with open(dst_mp3, "wb") as fh:                    # 落盘
-            fh.write(out)
+        # 第一步：读 WAV 并转成 MP3 可接受的 PCM 字节流
+        pcm, rate, channels = _load_pcm(sf, src_path)
+        # 第二步：编码为 MP3 并落盘
+        _encode_to_file(lameenc, pcm, rate, channels, dst_mp3)
         return True, ""
     except Exception as e:
         return False, "WAV 转 MP3 失败：%s" % e
+
+
+def _load_pcm(sf, src_path):
+    """读取 WAV 并转为 16 位整型 PCM 字节流，必要时重采样。
+
+    @param sf       已导入的 soundfile 模块
+    @param src_path 源音频路径
+    @returns (PCM 字节流, 采样率, 声道数)
+    """
+    # 统一读成 float64 波形与采样率；always_2d 保证二维形状
+    data, rate = sf.read(src_path, dtype="float64", always_2d=True)
+    channels = data.shape[1]                                # 声道数
+    if channels not in (1, 2):
+        # MP3 只支持单声道与立体声；多声道取前两路，其余丢弃
+        data = data[:, :2]
+        channels = data.shape[1]
+    # 量化：float64 波形按 16 位整型量程缩放并夹紧
+    pcm = (data * 32767.0).clip(-32768, 32767).astype("int16").tobytes()
+    if rate in MP3_RATES:
+        # 采样率已在白名单：无需重采样
+        return pcm, rate, channels
+    # 采样率不在白名单：选最接近的标准采样率并重采样
+    dst_rate = min(MP3_RATES, key=lambda r: abs(r - rate))
+    return _resample(pcm, rate, dst_rate, channels), dst_rate, channels
+
+
+def _encode_to_file(lameenc, pcm, rate, channels, dst_mp3):
+    """把 PCM 字节流编码为 MP3 并写入目标文件。
+
+    @param lameenc  已导入的 lameenc 模块
+    @param pcm      PCM 字节流
+    @param rate     采样率
+    @param channels 声道数
+    @param dst_mp3  目标 MP3 路径
+    @raises RuntimeError 编码结果为空时抛出，由调用方统一转为错误信息
+    """
+    enc = lameenc.Encoder()                             # 新建编码器实例
+    enc.set_bit_rate(128)                               # 128 kbps，语音足够
+    enc.set_in_sample_rate(int(rate))                   # 输入采样率
+    enc.set_channels(int(channels))                     # 声道数
+    enc.set_quality(2)                                  # 0 最高质量、9 最快
+    out = enc.encode(pcm)                               # 主体编码
+    out += enc.flush()                                  # 冲刷尾部数据
+    if not out:
+        raise RuntimeError("MP3 编码结果为空")
+    with open(dst_mp3, "wb") as fh:                    # 落盘
+        fh.write(out)

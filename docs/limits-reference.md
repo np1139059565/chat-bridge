@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `MAX_CARDS` | 200 | `core/card_bus.py` | 卡片总线最多保留的卡片数，超限优先裁剪已确认展示的最旧卡片 |
 | `MAX_MESSAGES` | 500 | `web_bridge/web_inbox.py` | 网页收件箱最多保留的消息条数，超限丢最旧 |
-| `MAX_AUDIO_FILES` | 100 | `web_bridge/web_mirror.py` | 网页音频目录最多保留的文件数，合成后按修改时间回收更旧的 |
+| `MAX_AUDIO_FILES` | 100 | `web_bridge/audio_prune.py` | 网页音频目录最多保留的文件数，合成后按修改时间回收更旧的 |
 | `DEFAULT_QUEUE_MAX` | 10000 | `core/log_sink.py` | 异步日志队列容量，满时丢最旧 |
 | `MAX_BATCH` | 100 | `web_bridge/web_clientlog.js` | 前端日志单批上限，超限立即冲刷 |
 | `MAX_DOC_CHARS` | 200000 | `custom_tools/skill_docs.py` | 技能文档读取字符上限 |
