@@ -7,12 +7,13 @@
 - message_router 承担上报入口、窗口状态、seq 分配等，职责已多；
 - 推送编排是纯流程控制，与状态管理分离后两边都更清晰。
 
-依赖说明（避免循环导入）：
+依赖说明：
 - 本模块顶层只依赖通用模块（bridge_store、bridge_log）；
-- 对 message_router 内的推送原语（_push_one / _push_images_block /
-  _push_card_result / _should_push / _synthesize_voice_text），一律在函数内
-  延迟导入，避免与 message_router 形成顶层循环；
-- 语音推送函数 push_voice 来自 message_voice，同样在函数内延迟导入；
+- 推送原语（发文本 / 发图片 / 是否该推 / 合成本条语音）统一由 message_push
+  提供，message_router 只做编排入口；
+- 卡片与图片推送的实现位于 message_images，本模块通过 message_router 的
+  同名转发调用，保持与既有代码一致；
+- 语音推送函数 push_voice 来自 message_voice，在函数内延迟导入；
 - remove_voice_file 由本模块自己实现，供 message_router 导入使用。
 """
 from collections import namedtuple

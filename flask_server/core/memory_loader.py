@@ -140,27 +140,49 @@ def keyword_prefilter(keywords, limit=None):
     kws = [str(k) for k in (keywords or []) if k]
     if not kws:
         return None
-    # 第一步：用查询词的全部片段去桶里取候选并集，快速缩小范围。
-    # 只对「与查询词共享片段」的节点做后续精判，避免全量遍历。
+    # 第一步：缩候选；第二步：精判打分并排序
+    candidates = _collect_candidates(gram_index, kws)
+    if not candidates:
+        return []
+    ordered = _score_candidates(node_kw, candidates, kws)
+    return ordered[:limit] if limit else ordered
+
+
+def _collect_candidates(gram_index, kws):
+    """用查询词的全部字片段去倒排桶取候选并集，快速缩小范围。
+
+    只返回「与查询词共享至少一个片段」的节点，避免后续精判全量遍历。
+    @param gram_index 倒排桶 {字片段: set(node_id)}
+    @param kws        查询关键词列表
+    @returns 候选 node_id 集合
+    """
     candidates = set()
     for kw in kws:
         for g in _grams(kw):
             ids = gram_index.get(g)
             if ids:
                 candidates |= ids
-    if not candidates:
-        return []
-    # 第二步：只对候选做包含式精判，累计命中关键词数。
+    return candidates
+
+
+def _score_candidates(node_kw, candidates, kws):
+    """对候选做包含式精判，累计命中关键词数并按降序返回。
+
+    判定规则是双向包含：查询词包含节点关键词、或节点关键词包含查询词，
+    只要一方含另一方即算命中。同一节点对同一查询词只计一次分。
+    @param node_kw    {node_id: [关键词]}
+    @param candidates 候选 node_id 集合
+    @param kws        查询关键词列表
+    @returns [(node_id, 命中数)]，按命中数降序
+    """
     scores = {}
     for nid in candidates:
         nkset = node_kw.get(nid) or []
         for kw in kws:
-            for nk in nkset:
-                if kw in nk or nk in kw:
-                    scores[nid] = scores.get(nid, 0) + 1
-                    break
-    ordered = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-    return ordered[:limit] if limit else ordered
+            # 该查询词只要命中任一节点关键词即计一分，随即处理下一个查询词
+            if any(kw in nk or nk in kw for nk in nkset):
+                scores[nid] = scores.get(nid, 0) + 1
+    return sorted(scores.items(), key=lambda x: x[1], reverse=True)
 
 
 def index_node(node_id, source, essence, keywords, tier, strength):

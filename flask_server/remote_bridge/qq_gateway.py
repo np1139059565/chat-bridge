@@ -58,27 +58,46 @@ class QqGateway:
             # 积压消息要等下一次网页上报才推得出去。
             message_router.note_incoming(openid, msg_id, self.qq_client)
 
-        # 语音消息：正文 content 通常为空，音频在 attachments 里。
-        # 先于「content 判空」处理，否则语音会被当成空消息丢掉。
-        voice_url = _extract_voice(data)
-        if voice_url:
-            self._handle_voice(openid, voice_url, msg_id)
-            return
-
-        # 图片消息：正文 content 通常为空，图片在 attachments 里。
-        # 同样先于「content 判空」处理，否则图片会被当成空消息丢掉。
-        # 同一条消息若既有图又有文字（图文消息），把 content 一并带上，
-        # 由图片卡片统一承载，避免文字被这个提前 return 丢掉。
-        image_url = _extract_image(data)
-        if image_url:
-            self._handle_image(openid, image_url, msg_id, content or "")
+        # 语音 / 图片等富媒体：正文通常为空，必须先于「content 判空」处理，
+        # 否则会被当成空消息丢掉。命中即已消费本条事件。
+        if self._handle_media(openid, data, msg_id, content):
             return
 
         if not content:
             log("事件缺少 content 且非语音/图片，忽略")
             return
         log("收到单聊消息", "openid=" + openid[:8], "长度=" + str(len(content)))
+        # 文本分两条路：以 / 开头走指令通道，其余投卡片总线
+        self._dispatch_text(openid, content, msg_id)
 
+    def _handle_media(self, openid, data, msg_id, content):
+        """处理语音 / 图片类富媒体消息。
+
+        语音优先于图片：两者都可能带 attachments，先判语音可避免误当图片。
+        @param openid  发消息的用户
+        @param data    原始事件数据
+        @param msg_id  消息 id
+        @param content 正文（图文消息时随图片一并承载）
+        @returns 已消费本条事件返回 True，否则 False
+        """
+        voice_url = _extract_voice(data)
+        if voice_url:
+            self._handle_voice(openid, voice_url, msg_id)
+            return True
+        image_url = _extract_image(data)
+        if image_url:
+            # 图文消息：把正文一并带上，由图片卡片统一承载，避免文字被丢掉
+            self._handle_image(openid, image_url, msg_id, content or "")
+            return True
+        return False
+
+    def _dispatch_text(self, openid, content, msg_id):
+        """分派一条纯文本消息：以 / 开头走指令，其余投卡片总线。
+
+        @param openid  发消息的用户
+        @param content 文本正文
+        @param msg_id  消息 id
+        """
         # 指令：以「/」开头，交给指令处理器
         if content.startswith("/"):
             handled = bool(self.on_command
@@ -88,7 +107,6 @@ class QqGateway:
                 # 只回机器人一句提示，绝不当作普通消息投给网页 AI。
                 self._reply_unknown(openid, content)
             return
-
         # 普通消息：包装成外部卡片，投给卡片总线
         self._deliver_as_card(openid, content, msg_id)
 
