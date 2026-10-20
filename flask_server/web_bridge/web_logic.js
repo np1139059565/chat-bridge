@@ -62,11 +62,54 @@
     return ms >= threshold;
   }
 
+  /**
+   * 判断本轮轮询是否应被跳过（上一轮尚未结束）。
+   *
+   * 轮询每 2.5 秒一次，单轮最长 6 秒：网络慢时必然出现「上一轮还没回来、
+   * 下一轮又到了」。此时跳过而非并发堆积，否则请求越积越多、界面越卡。
+   * @param {boolean} pollBusy 上一轮是否仍在进行
+   * @returns {boolean} 应跳过返回 true
+   */
+  function shouldSkipPoll(pollBusy) {
+    return pollBusy === true;
+  }
+
+  /**
+   * 判断一次轮询失败是否属于「主动中止」，不应计入断连。
+   *
+   * 切后台与回前台补拉前都会主动掐断在途请求，这是预期行为；
+   * 若把它算作失败，会误报「连接断开」，也会污染连续失败计数。
+   * @param {string} errName 错误的 name
+   * @returns {boolean} 属于主动中止返回 true
+   */
+  function isAbortError(errName) {
+    return errName === 'AbortError';
+  }
+
+  /**
+   * 判断页面从后台回到前台后是否需要整页重载。
+   *
+   * 手机浏览器在后台会冻结页面、按内存压力回收标签页；停留过久后
+   * 事件循环积压、DOM 陈旧，继续复用旧页面容易长时间无响应。
+   * 超过阈值就重载，换取一份干净状态。
+   * @param {number} awayMs   后台停留毫秒数
+   * @param {number} threshold 重载阈值（毫秒）
+   * @returns {boolean} 需要重载返回 true
+   */
+  function shouldReloadAfterHidden(awayMs, threshold) {
+    // 未记录过切后台时刻（awayMs 为 0 或非法）时不重载
+    if (!awayMs || awayMs < 0) return false;
+    return awayMs > threshold;
+  }
+
   var api = {
     classifyFailKind: classifyFailKind,
     offlineSuffix: offlineSuffix,
     shouldShowDisconnected: shouldShowDisconnected,
     isSlowPoll: isSlowPoll,
+    shouldSkipPoll: shouldSkipPoll,
+    isAbortError: isAbortError,
+    shouldReloadAfterHidden: shouldReloadAfterHidden,
   };
 
   // 浏览器：挂到 window；node：导出为模块

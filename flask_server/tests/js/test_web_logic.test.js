@@ -62,3 +62,48 @@ test('慢响应：低于阈值不算慢', () => {
 test('慢响应：达到阈值算慢', () => {
   assert.strictEqual(logic.isSlowPoll(1000, 1000), true);
 });
+
+test('跳过判定：上一轮仍在进行时跳过', () => {
+  assert.strictEqual(logic.shouldSkipPoll(true), true);
+});
+
+test('跳过判定：上一轮已结束时正常发起', () => {
+  assert.strictEqual(logic.shouldSkipPoll(false), false);
+});
+
+test('跳过判定：未初始化时视为空闲', () => {
+  // pollBusy 未赋值时为 undefined，不应被当成忙碌
+  assert.strictEqual(logic.shouldSkipPoll(undefined), false);
+});
+
+test('中止判定：AbortError 算主动中止', () => {
+  assert.strictEqual(logic.isAbortError('AbortError'), true);
+});
+
+test('中止判定：其它错误不算主动中止', () => {
+  assert.strictEqual(logic.isAbortError('TypeError'), false);
+});
+
+test('中止判定：未提供错误名时不算主动中止', () => {
+  assert.strictEqual(logic.isAbortError(undefined), false);
+});
+
+test('重载判定：停留超过阈值需重载', () => {
+  assert.strictEqual(logic.shouldReloadAfterHidden(31000, 30000), true);
+});
+
+test('重载判定：停留未超阈值不重载', () => {
+  assert.strictEqual(logic.shouldReloadAfterHidden(29000, 30000), false);
+});
+
+test('重载判定：恰好等于阈值不重载', () => {
+  assert.strictEqual(logic.shouldReloadAfterHidden(30000, 30000), false);
+});
+
+test('重载判定：未记录切后台时刻时不重载', () => {
+  assert.strictEqual(logic.shouldReloadAfterHidden(0, 30000), false);
+});
+
+test('重载判定：时间回拨导致的负值不重载', () => {
+  assert.strictEqual(logic.shouldReloadAfterHidden(-5000, 30000), false);
+});

@@ -150,7 +150,7 @@
   var FAIL_TOLERANCE = 4;
 
   function fetchMessages(history) {
-    if (pollBusy) {
+    if (WebLogic.shouldSkipPoll(pollBusy)) {
       // 上一轮未完成：跳过。记一条，便于看出「请求堆积」。
       if (!history) clientLog('poll', 'skip(busy)');
       return;   // 上一轮未完成：跳过本轮，避免并发堆积
@@ -203,7 +203,7 @@
         // 页面不再内联——同一逻辑在发送路径也复用，避免两处各写一份。
         // 主动中止（切后台 / 回前台补拉前掐断）不算断连：
         // 它是预期行为，若计入失败会误报「连接断开」，也会污染 failCount。
-        var isAbort = (err && err.name === 'AbortError');
+        var isAbort = WebLogic.isAbortError(err && err.name);
         if (isAbort) {
           if (!history) clientLog('poll', 'aborted（主动中止，不计失败）');
           return;
@@ -418,7 +418,7 @@
     }
     // 回前台：后台停留超过阈值则整页重载，避免复用陈旧页面
     var away = hiddenAt ? (Date.now() - hiddenAt) : 0;
-    if (away > RELOAD_AFTER_HIDDEN_MS) {
+    if (WebLogic.shouldReloadAfterHidden(away, RELOAD_AFTER_HIDDEN_MS)) {
       clientLog('page', 'reload（后台 ' + Math.round(away / 1000) + 's）');
       setTimeout(function () { location.reload(); }, 200);
       return;

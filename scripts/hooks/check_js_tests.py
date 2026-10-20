@@ -64,23 +64,101 @@ def main():
     if not test_files:
         print("跳过前端测试：%s 下无 *.test.js" % test_dir)
         return 0
-    # node --test 接收具体文件路径，逐个发现并运行
-    proc = subprocess.run([node, "--test"] + test_files, capture_output=True)
+    # node --test 接收具体文件路径，逐个发现并运行；
+    # 同时打开内置覆盖率，供下方阈值检查使用（无需任何第三方依赖）。
+    proc = subprocess.run(
+        [node, "--test", "--experimental-test-coverage"] + test_files,
+        capture_output=True)
     out = (proc.stdout or b"").decode("utf-8", "replace")
     err = (proc.stderr or b"").decode("utf-8", "replace")
-    if proc.returncode == 0:
-        # 只回显汇总行，避免刷屏。
-        # node 新版汇总行以「ℹ 」开头，旧版以「# 」开头，两种都识别。
-        for line in (out + err).splitlines():
-            stripped = line.strip()
-            if stripped.startswith(("# tests", "# pass", "# fail",
-                                    "ℹ tests", "ℹ pass", "ℹ fail")):
-                print(stripped)
+    if proc.returncode != 0:
+        # 失败：完整打印，便于定位
+        print(out)
+        print(err, file=sys.stderr)
+        return 1
+    # 只回显汇总行，避免刷屏。
+    # node 新版汇总行以「ℹ 」开头，旧版以「# 」开头，两种都识别。
+    for line in (out + err).splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("# tests", "# pass", "# fail",
+                                "ℹ tests", "ℹ pass", "ℹ fail")):
+            print(stripped)
+    # 覆盖率门禁：低于阈值即判失败，防止覆盖率悄悄退化
+    return _check_coverage(out + err)
+
+
+def _parse_coverage(report):
+    """从覆盖率报告里解析出各源文件的行覆盖率与分支覆盖率。
+
+    报告形如：
+        # ..\\extend\\lib\\dom-utils.js | 82.67 | 75.00 | 90.00 | 114-139
+    测试文件自身的行不计入（它们不是被测对象）。
+    @param report 完整的命令输出
+    @returns [(文件名, 行覆盖率, 分支覆盖率)]
+    """
+    rows = []
+    in_report = False
+    for line in report.splitlines():
+        stripped = line.strip()
+        # 只在报告区间内解析，避免误读测试输出里的其它表格
+        if "start of coverage report" in stripped:
+            in_report = True
+            continue
+        if "end of coverage report" in stripped:
+            break
+        if not in_report or not stripped.startswith("#"):
+            continue
+        parts = [p.strip() for p in stripped.lstrip("#").split("|")]
+        # 表头与分隔线、汇总行的格式都不符，按列数与首列内容排除
+        if len(parts) < 4:
+            continue
+        name = parts[0]
+        if not name.endswith(".js"):
+            continue
+        # 测试文件本身不是被测对象，不计入门禁
+        if "tests" + os.sep + "js" in name or "tests/js" in name:
+            continue
+        try:
+            line_pct = float(parts[1])
+            branch_pct = float(parts[2])
+        except ValueError:
+            continue
+        rows.append((name, line_pct, branch_pct))
+    return rows
+
+
+# 覆盖率阈值：按当前实测值留出余量，既能拦住退化、又不会因小幅波动误报。
+MIN_LINE_PCT = 90.0
+MIN_BRANCH_PCT = 70.0
+
+
+def _check_coverage(report):
+    """检查各被测源文件的行覆盖率与分支覆盖率是否达到阈值。
+
+    只约束「已被测试覆盖到的文件」：未被任何测试加载的文件不在报告里，
+    本门禁不对其做要求（那属于补测试的范围，不是防退化）。
+    @param report 完整的命令输出
+    @returns 0 达标；1 有文件低于阈值
+    """
+    rows = _parse_coverage(report)
+    if not rows:
+        # 拿不到覆盖率数据（版本不支持等）：跳过而非误判失败
+        print("跳过覆盖率门禁：未解析到覆盖率报告")
         return 0
-    # 失败：完整打印，便于定位
-    print(out)
-    print(err, file=sys.stderr)
-    return 1
+    failed = []
+    for name, line_pct, branch_pct in rows:
+        if line_pct < MIN_LINE_PCT:
+            failed.append("%s 行覆盖率 %.2f%% < %.0f%%" % (name, line_pct, MIN_LINE_PCT))
+        if branch_pct < MIN_BRANCH_PCT:
+            failed.append("%s 分支覆盖率 %.2f%% < %.0f%%" % (name, branch_pct, MIN_BRANCH_PCT))
+    if failed:
+        print("覆盖率未达标：")
+        for f in failed:
+            print("  " + f)
+        return 1
+    print("覆盖率达标：%d 个源文件（行 ≥%.0f%%、分支 ≥%.0f%%）"
+          % (len(rows), MIN_LINE_PCT, MIN_BRANCH_PCT))
+    return 0
 
 
 if __name__ == "__main__":
