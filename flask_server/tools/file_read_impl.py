@@ -180,7 +180,7 @@ def _read_batch_segment(paths_param, offset, limit):
         "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
     )
     return _as_file_payload(
-        joined, "%d_files.txt" % len(metas),
+        joined, "%d_files_%d-%d.txt" % (len(metas), offset, offset + total_lines_read - 1),
         {"count": len(metas), "files": metas, "total_lines": total_lines_read},
     )
 
@@ -217,7 +217,9 @@ def _read_single_segment(raw_path, offset, limit):
         "本次读取约 %d 行（文件共 %d 行），请改读更少的行。"
         % (it["read_lines"], it["total_lines"]),
     )
-    base_name = os.path.basename(it["path"]) or "file.txt"
+    # 分段读取：文件名带上行号范围，一眼可辨这不是整个文件
+    base_name = "%s_%d-%d.txt" % (
+        os.path.basename(it["path"]) or "file", it["lines"][0], it["lines"][1])
     return _as_file_payload(
         it["content"], base_name,
         {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]},
