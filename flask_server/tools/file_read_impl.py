@@ -1,9 +1,9 @@
 """AI 工具调用镜像插件 —— 文件读取类工具实现
 
-职责：read_file（分段 / 批量 / 文件引用）与 read_image（图片转 dataURL）的落地。
+职责：read_file（分段 / 批量）与 read_image（图片转 dataURL）的落地。
 
 为何独立成模块：
-- 文件读取涉及「内联正文」与「文件引用」两种返回形态及体积判定，逻辑自成一体；
+- 文件读取涉及分段、批量与体积判定，逻辑自成一体；
 - 主模块 tools_impl.py 需保持在仓库行数上限内，故按既有约定
   （run_command_impl / memory_search_impl / memory_quality_impl）拆出并重导出。
 
@@ -21,6 +21,9 @@ from tool_helpers import (
     enforce_size_limit,
 )
 
+# 单次批量读取的文件数上限：防止一次请求把海量文件拼成超大结果
+MAX_BATCH_FILES = 20
+
 
 def _read_text_segment(fp, offset, limit):
     """按行读取文件片段（fp 为绝对路径），返回内容与行数。"""
@@ -37,65 +40,25 @@ def _read_text_segment(fp, offset, limit):
     }
 
 
-# 正文内联阈值（字节）：小于此值仍直接放进结果。
-# 超过则改为「文件引用」：正文不随工具结果回传，由前端按路径取回后粘贴，
-# 避免大段文本被 JSON 转义后占用对话空间（引号密集的 JSON/YAML 尤为明显）。
-INLINE_TEXT_BYTES = 4096
-
-# 单次批量读取的文件数上限：防止一次请求把海量文件拼成超大结果
-MAX_BATCH_FILES = 20
-
-
-def _under_project_root(fp):
-    """判断路径是否位于工程根目录内。
-
-    取回接口只覆盖工程内文件（避免把服务器任意路径暴露成可下载接口）；
-    工程外文件一律内联返回，能力与改造前保持一致。
-    """
-    try:
-        import paths
-        root = os.path.abspath(str(paths.PROJECT_ROOT))
-        target = os.path.abspath(str(fp))
-        return os.path.commonpath([root, target]) == root
-    except Exception:
-        return False
-
-
-def _read_one_file(file_path, offset, limit):
-    """读取单个文件，按体积决定内联正文还是返回引用。
+def _load_one(file_path, offset, limit):
+    """读取单个文件片段，返回组装用的原始信息（不做体积判定）。
 
     @param file_path 文件路径（绝对路径原样，相对路径以工程根为基准）
     @param offset    起始行（从 1 开始）
     @param limit     读取行数
-    @returns 结果字典：内联时含 content；引用时含 file_ref 与 preview
+    @returns {path, lines, total_lines, content, read_lines}
     """
     fp = _abspath(file_path)
     res = _read_text_segment(fp, offset, limit)
     read_lines = res.pop("_read_lines")
-    total = res["total_lines"]
-    content = res["content"]
-    # 计算本次读取的实际行范围，供前端精确取回同一段正文
     start_line = max(1, int(offset or 1))
     end_line = (start_line + read_lines - 1) if read_lines else start_line
-    size = len(content.encode("utf-8"))
-    # 小片段、或工程外文件（取回接口不覆盖）：内联返回正文
-    if size <= INLINE_TEXT_BYTES or not _under_project_root(fp):
-        res["lines"] = [start_line, end_line]
-        return enforce_size_limit(
-            res,
-            "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
-            "本次读取约 %d 行（文件共 %d 行），请改读更少的行。" % (read_lines, total),
-        )
-    # 大片段且在工程内：正文移出结果，改为引用
     return {
         "path": res["path"],
-        "total_lines": total,
         "lines": [start_line, end_line],
-        "file_ref": True,
-        "size": size,
-        "preview": content[:160],
-        "note": "正文共 %d 行、%d 字节，已从结果中移出以免占用对话空间；"
-                "前端按 path 与 lines 取回正文后粘贴到对话中。" % (read_lines, size),
+        "total_lines": res["total_lines"],
+        "content": res["content"],
+        "read_lines": read_lines,
     }
 
 
@@ -103,10 +66,15 @@ def t_read_file(p):
     """读取文件内容，支持 offset / limit 分段，支持一次读取多个文件。
 
     路径口径与写文件类工具保持一致：绝对路径原样使用，相对路径以工程根为基准解析。
-    正文超过内联阈值时改为返回 file_ref 引用，正文由前端取回后粘贴进对话，
-    工具结果本身只保留路径、行范围与开头预览。
+
+    返回结构与截图工具对称：正文放在 data.text，由前端取出后粘贴进对话；
+    回传给 AI 的只有精简的 bridge-chat-res 标记。体积上限沿用统一的
+    limits.max_json_chars（界面可配），超限时提示缩小读取范围。
     """
     _normalize_aliases(p)
+    offset = p.get("offset", 1)
+    limit = p.get("limit")
+
     # 批量模式：file_paths 为数组，一次读取多个文件，减少往返次数
     paths_param = p.get("file_paths")
     if paths_param:
@@ -116,15 +84,39 @@ def t_read_file(p):
             raise ToolParamError(
                 "一次最多读取 %d 个文件，当前传入 %d 个" % (MAX_BATCH_FILES, len(paths_param))
             )
-        items = []
+        chunks = []
+        metas = []
+        total_lines_read = 0
+        max_total = 0
         for one in paths_param:
-            item = _read_one_file(one, p.get("offset", 1), p.get("limit"))
-            item["file_path"] = str(one)
-            items.append(item)
-        return {"count": len(items), "files": items}
+            it = _load_one(one, offset, limit)
+            total_lines_read += it["read_lines"]
+            max_total = max(max_total, it["total_lines"])
+            # 每段带「路径 行范围」头，便于在对话中区分来源
+            chunks.append("===== %s 行 %d-%d =====\n%s" % (
+                it["path"], it["lines"][0], it["lines"][1], it["content"]))
+            metas.append({"path": it["path"], "lines": it["lines"],
+                          "total_lines": it["total_lines"]})
+        return enforce_size_limit(
+            {"data": {"text": "\n\n".join(chunks)}, "count": len(metas), "files": metas},
+            "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
+            "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
+        )
+
     # 单文件模式
     _require(p, "file_path")
-    return _read_one_file(p.get("file_path"), p.get("offset", 1), p.get("limit"))
+    it = _load_one(p.get("file_path"), offset, limit)
+    return enforce_size_limit(
+        {
+            "data": {"text": it["content"]},
+            "path": it["path"],
+            "lines": it["lines"],
+            "total_lines": it["total_lines"],
+        },
+        "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
+        "本次读取约 %d 行（文件共 %d 行），请改读更少的行。"
+        % (it["read_lines"], it["total_lines"]),
+    )
 
 
 # 图片读取体积上限（字节）：超过则拒绝，避免超大文件撑爆 HTTP 响应与前端内存

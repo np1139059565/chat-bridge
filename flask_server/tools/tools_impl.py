@@ -226,7 +226,6 @@ def t_search_content(p):
 # 文件读取类工具（read_file / read_image）已拆到独立模块，重导出公开名，
 # 保持 DISPATCH 与 get_tool_params 的既有引用不变。
 from file_read_impl import (
-    INLINE_TEXT_BYTES,
     MAX_BATCH_FILES,
     MAX_IMAGE_BYTES,
     IMAGE_MIME,

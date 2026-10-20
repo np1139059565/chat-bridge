@@ -26,7 +26,6 @@ from routes.memory_graph import bp as memory_bp
 from routes.memory_graph_page import bp as memory_page_bp
 from routes.web import bp as web_bp
 from routes.web_clientlog import bp as web_clientlog_bp
-from routes.web_text import bp as web_text_bp
 
 
 def _register_blueprints(app):
@@ -43,7 +42,6 @@ def _register_blueprints(app):
     app.register_blueprint(memory_page_bp)
     app.register_blueprint(web_bp)
     app.register_blueprint(web_clientlog_bp)
-    app.register_blueprint(web_text_bp)
 
 
 def _register_options(app):

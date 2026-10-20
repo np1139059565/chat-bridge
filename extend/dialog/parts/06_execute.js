@@ -311,13 +311,13 @@
       D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: mark });
       return;
     }
-    // 引用型结果（file_ref）：正文已移出工具结果，需先取回正文再粘贴。
-    const refs = this._collectFileRefs(card.result);
-    if (refs.length) {
-      this._sendFileRefs(card, refs);
+    // 正文型结果（read_file 的 data.text）：正文粘贴进对话，回传只带精简标记。
+    const body = D.extractText(card.result);
+    if (body) {
+      this._emitText(card, body);
       return;
     }
-    // 文本结果同样经队列，保证一次只回传一条、与其它回传串行。
+    // 其余文本结果照常回传完整 JSON。
     D.enqueueSend({ type: 'auto_send', text: this.resultText(card) });
   };
 
