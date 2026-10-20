@@ -312,53 +312,15 @@
       return;
     }
     // 文件附件（read_file）：独立分支、独立消息类型，与截图互不共用。
-    const file = D.extractFile(card.result);
-    if (file) {
+    // 支持单个与批量：批量时并发取回全部文件，合并成一条消息发出。
+    const files = D.extractFile(card.result);
+    if (files.length) {
       const mark = this.screenshotMark(card);
-      if (file.source) {
-        // 整文件：按路径取原始字节后直接构造 File，不做 base64 往返。
-        this._enqueueSourceFile(file, mark);
-      } else {
-        // 分段：正文是该片段的 dataURL，直接交给底层构造 File。
-        D.enqueueSend({ type: 'auto_send_file', file: file, text: mark });
-      }
+      this._enqueueFiles(files, mark);
       return;
     }
     // 其余文本结果照常回传完整 JSON。
     D.enqueueSend({ type: 'auto_send', text: this.resultText(card) });
-  };
-
-  /**
-   * 整文件读取：按路径取原始字节，转成 dataURL 后交发送队列。
-   *
-   * 后端只给了源文件路径，正文不经工具结果传输，也不生成任何副本；
-   * 这里取回后仍以 dataURL 交给队列，使后续粘贴链路只处理一种输入形态。
-   * 取回失败时不中断流程，改为提示并跳过本次回传。
-   * @param {Object} file 文件引用 { path, name, mime }
-   * @param {string} mark 精简回传标记
-   */
-  M._enqueueSourceFile = function (file, mark) {
-    const self = this;
-    const base = this.config.flaskUrl || '';
-    const url = base + '/api/web/source-file?path=' + encodeURIComponent(file.path);
-    fetch(url)
-      .then(function (r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.blob();
-      })
-      .then(function (blob) {
-        // 直接用源文件的原始字节构造 File，不经 dataURL 编码，也不生成任何副本
-        const fileObj = new File([blob], file.name || 'file.txt', { type: file.mime || 'text/plain' });
-        D.enqueueSend({
-          type: 'auto_send_file',
-          file: { fileObj: fileObj, name: file.name, mime: file.mime },
-          text: mark
-        });
-      })
-      .catch(function (e) {
-        log('取源文件失败：' + (e && e.message ? e.message : e));
-        self.toast('读取文件失败，未回传');
-      });
   };
 
   /** 执行按钮文案：自动倒计时中显示剩余秒数，否则按是否执行过显示。 */

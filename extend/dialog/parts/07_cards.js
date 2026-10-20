@@ -44,20 +44,23 @@
    * @returns {{content:string,name:string,mime:string}|null} 附件信息；没有则返回 null
    */
   D.extractFile = function (result) {
-    if (!result || !result.data || typeof result.data !== 'object') return null;
-    const f = result.data.file;
-    if (!f) return null;
-    const name = String(f.name || '');
-    const mime = String(f.mime || 'text/plain');
-    // 整文件读取：只带路径（source=true），正文由前端按路径取原始字节，不编码不复制
-    if (f.source === true && typeof f.path === 'string') {
-      return { source: true, path: f.path, name: name, mime: mime };
-    }
-    // 分段读取：带的是该片段的 dataURL
-    if (typeof f.content === 'string' && f.content.indexOf('data:') === 0) {
-      return { source: false, content: f.content, name: name, mime: mime };
-    }
-    return null;
+    if (!result || !result.data || typeof result.data !== 'object') return [];
+    const out = [];
+    // 归一化单个文件项：整文件只带路径（source=true），分段带该片段 dataURL
+    const push = function (f) {
+      if (!f || typeof f !== 'object') return;
+      const name = String(f.name || '');
+      const mime = String(f.mime || 'text/plain');
+      if (f.source === true && typeof f.path === 'string') {
+        out.push({ source: true, path: f.path, name: name, mime: mime });
+      } else if (typeof f.content === 'string' && f.content.indexOf('data:') === 0) {
+        out.push({ source: false, content: f.content, name: name, mime: mime });
+      }
+    };
+    // 单文件用 data.file，批量用 data.files 数组；两者都必须认，否则批量结果会被漏掉。
+    push(result.data.file);
+    if (Array.isArray(result.data.files)) result.data.files.forEach(push);
+    return out;
   };
 
   /**
@@ -191,7 +194,7 @@
     if (card.status === 'done') {
       // 三种结果各自独立渲染：截图 → 图片；文件附件 → 文件名提示；其余 → JSON 文本。
       const shot = D.extractScreenshot(card.result);
-      const file = D.extractFile(card.result);
+      const files = D.extractFile(card.result);
       if (shot) {
         kids.push(h('img', {
           class: 'result-shot',
@@ -199,9 +202,10 @@
           alt: '页面截图',
           style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
         }));
-      } else if (file) {
-        // 文件附件：正文不展示，只标出文件名，避免把 base64 写进页面
-        kids.push(h('div', { class: 'result' }, '已作为附件粘贴：' + (file.name || '文件')));
+      } else if (files.length) {
+        // 文件附件：正文不展示，只列出文件名，避免把 base64 写进页面
+        const names = files.map(function (f) { return f.name || '文件'; }).join('、');
+        kids.push(h('div', { class: 'result' }, '已作为附件粘贴：' + names));
       } else {
         kids.push(h('pre', { class: 'result' }, ctx.fmt(card.result)));
       }

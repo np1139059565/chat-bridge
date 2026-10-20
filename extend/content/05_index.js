@@ -21,8 +21,8 @@
     // 图文合一：dataUrl 之外可带 text；贴图后把 text 写进同一输入框，只发一次
     // 多图兼容：优先用数组 dataUrls，回退单张 dataUrl
     else if (d.type === 'auto_send_image') A.pasteImageToWebpageAI(d.dataUrls || d.dataUrl || '', d.text || '');
-    // 文本文件附件：与图片消息分开，走独立入口，字段为 { content, name, mime }
-    else if (d.type === 'auto_send_file') A.pasteFileToWebpageAI(d.file || {}, d.text || '');
+    // 文本文件附件：与图片消息分开，走独立入口，字段为 files（File 数组）
+    else if (d.type === 'auto_send_file') A.pasteFileToWebpageAI(d.files || [], d.text || '');
     else if (d.type === 'request_theme') {
       // 对话框就绪后主动询问主题，避免 iframe 加载早于主题推送而错过首帧
       A.postTheme();

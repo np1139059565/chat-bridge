@@ -343,19 +343,13 @@
    * @param {Object} fileInfo { content, name, mime }
    * @param {string} text 随附件文字（可空）
    */
-  A.pasteFileToWebpageAI = function (fileInfo, text) {
-    const info = fileInfo || {};
-    // 现成的 File（整文件，直接来自源文件字节，未经编码）：直接粘贴
-    if (info.fileObj instanceof File) {
-      A._pasteFilesToWebpageAI([info.fileObj], text, '文件');
+  A.pasteFileToWebpageAI = function (files, text) {
+    // files 为现成的 File 数组：整文件来自源文件原始字节，分段来自片段解码，均未再编码
+    const list = Array.isArray(files) ? files.filter(function (f) { return f instanceof File; }) : [];
+    if (!list.length) {
+      A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的文件' });
       return;
     }
-    // 分段读取：给的是该片段的 dataURL，此处构造 File
-    if (info.content) {
-      const f = A._dataUrlToFile(info.content, 0, info.name || 'file.txt');
-      A._pasteFilesToWebpageAI([f], text, '文件');
-      return;
-    }
-    A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的文件' });
+    A._pasteFilesToWebpageAI(list, text, '文件');
   };
 })();
