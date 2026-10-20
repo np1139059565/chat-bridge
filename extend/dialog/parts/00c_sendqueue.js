@@ -79,14 +79,27 @@
         const src = item.dataUrls || (item.dataUrl ? [item.dataUrl] : []);
         const urls = [];
         for (let i = 0; i < src.length; i++) urls.push(String(src[i]));
-        // fileName：附件文件名（文本文件用原文件名，图片可空按类型兜底）
         window.parent.postMessage(plain({
           type: 'auto_send_image',
           dataUrls: urls,
           dataUrl: urls[0] || '',
-          text: String(item.text || ''),
-          fileName: String(item.fileName || '')
+          text: String(item.text || '')
         }), '*');
+        wait = Q.imageGap;
+      } else if (item.type === 'auto_send_file') {
+        // 文件附件：与图片分成两种消息类型，字段各自独立。
+        // file 为 { mime, name, content(dataURL) }，内容脚本据此构造 File 粘贴。
+        const f = item.file || {};
+        window.parent.postMessage(plain({
+          type: 'auto_send_file',
+          file: {
+            mime: String(f.mime || 'text/plain'),
+            name: String(f.name || ''),
+            content: String(f.content || '')
+          },
+          text: String(item.text || '')
+        }), '*');
+        // 文件上传同样需要等预览就绪，沿用图片的间隔
         wait = Q.imageGap;
       } else {
         window.parent.postMessage(plain({ type: 'auto_send', text: String(item.text || '') }), '*');

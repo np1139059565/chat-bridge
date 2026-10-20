@@ -260,43 +260,42 @@
   };
 
   /**
-   * 把一或多张图片贴进网页 AI 输入框并发送，可附一段文字。
-   * 多张图放在同一个 paste 事件里一次性贴入（站点会按多图处理），
-   * 随后写入文字、只回车一次，保证「图文合一、多图一条消息」。
-   * @param {string|string[]} dataUrlOrList 单张 dataURL 或 dataURL 数组
-   * @param {string} text 随附件文字（可空）
-   * @param {string} [fileName] 附件文件名（文本文件用原文件名；图片可空）
+   * 底层：把一组 File 逐个派发 paste 事件贴进输入框，随后写入文字并回车一次。
+   *
+   * 只做「贴文件 + 写文字 + 发送」这一件机械事，不含任何业务判断。
+   * 图片与文本文件各自的上层入口负责构造 File，互不感知对方语义。
+   * @param {File[]} files 待粘贴的文件列表
+   * @param {string} text 随附件写入输入框的文字（通常是精简标记，可空）
+   * @param {string} label 日志与提示用的名称（如「图片」「文件」）
    */
-  A.pasteImageToWebpageAI = function (dataUrlOrList, text, fileName) {
+  A._pasteFilesToWebpageAI = function (files, text, label) {
     const ta = A.findInputBox();
     if (!ta) {
-      A.warn('pasteImageToWebpageAI: 未找到网页 AI 输入框');
+      A.warn('_pasteFilesToWebpageAI: 未找到网页 AI 输入框');
       A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
       return;
     }
-    // 统一成数组：兼容单张字符串与多张数组两种入参
-    const list = Array.isArray(dataUrlOrList) ? dataUrlOrList : (dataUrlOrList ? [dataUrlOrList] : []);
+    const list = (files || []).filter(Boolean);
     if (!list.length) {
-      A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的图片' });
+      A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的' + label });
       return;
     }
     try {
-      // 逐张依次粘贴，而不是一次贴多张。
+      // 逐个粘贴，而不是一次全塞。
       // 原因：部分站点（如 DeepSeek）的粘贴处理只取剪贴板里的第一个文件，
-      // 一次塞多张最终只会成一张。改成逐张单独派发 paste 事件、留出间隔，
-      // 让每张都各自被接收一次，从而累积成多张。
-      const GAP = 800;      // 每张贴图之间的间隔（毫秒）
+      // 一次塞多个最终只会成一个。改成逐个单独派发 paste 事件、留出间隔，
+      // 让每个都各自被接收一次，从而累积成多个。
+      const GAP = 800;      // 每个文件之间的间隔（毫秒）
       const TAIL = 1500;    // 全部贴完后、写文字之前的等待（等预览/上传就绪）
       ta.focus();
       let idx = 0;
-      let added = 0;
       const step = function () {
         if (idx >= list.length) {
           // 全部贴完：等预览就绪后写文字，再等发送按钮就绪、回车发送一次
           setTimeout(function () {
-            // 贴图是异步过程（逐张间隔 + 收尾等待），期间站点可能重建输入框，
+            // 贴文件是异步过程（逐个间隔 + 收尾等待），期间站点可能重建输入框，
             // 函数开头取的 ta 会脱离 DOM，导致文字写进已不在页面的元素，
-            // 消息只剩图片而无 bridge-chat-res 标记，被镜像端误判为用户发言。
+            // 消息只剩附件而无 bridge-chat-res 标记，被镜像端误判为用户发言。
             // 故写文字与回车前，重新查找当前真实输入框（查不到再退回旧引用）。
             const taNow = A.findInputBox() || ta;
             if (text) A.writeInputValue(taNow, text);
@@ -306,22 +305,51 @@
           }, TAIL);
           return;
         }
-        // 传文件名：单张时用调用方给的名字；多张时只给第一张，其余按类型兜底
-        const file = A._dataUrlToFile(list[idx], idx, (idx === 0 ? fileName : ''));
+        const f = list[idx];
         idx++;
-        if (!file) { step(); return; }
         const dt = new DataTransfer();
-        dt.items.add(file);
+        dt.items.add(f);
         ta.focus();
         ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-        added++;
         setTimeout(step, GAP);
       };
       step();
-      A.post({ type: 'auto_send_result', ok: true, msg: text ? '已尝试粘贴图文并发送' : '已尝试粘贴图片并发送' });
+      A.post({ type: 'auto_send_result', ok: true, msg: text ? '已尝试粘贴图文并发送' : '已尝试粘贴' + label + '并发送' });
     } catch (e) {
-      A.warn('pasteImageToWebpageAI 失败', e && e.message);
-      A.post({ type: 'auto_send_result', ok: false, msg: '粘贴图片失败：' + (e && e.message) });
+      A.warn('_pasteFilesToWebpageAI 失败', e && e.message);
+      A.post({ type: 'auto_send_result', ok: false, msg: '粘贴' + label + '失败：' + (e && e.message) });
     }
+  };
+
+  /**
+   * 把一或多张图片贴进网页 AI 输入框并发送，可附一段文字。
+   * 只负责把图片 dataURL 转成图片 File，随后交给底层粘贴。
+   * @param {string|string[]} dataUrlOrList 单张 dataURL 或 dataURL 数组
+   * @param {string} text 随图文字（可空）
+   */
+  A.pasteImageToWebpageAI = function (dataUrlOrList, text) {
+    const list = Array.isArray(dataUrlOrList) ? dataUrlOrList : (dataUrlOrList ? [dataUrlOrList] : []);
+    const files = [];
+    for (let i = 0; i < list.length; i++) {
+      files.push(A._dataUrlToFile(list[i], i, ''));
+    }
+    A._pasteFilesToWebpageAI(files, text, '图片');
+  };
+
+  /**
+   * 把文本文件作为附件贴进网页 AI 输入框并发送，可附一段文字。
+   * 与图片各自独立：入参是文件信息（内容 dataURL、文件名、MIME），
+   * 只负责构造文件并交给底层粘贴，不关心图片来源与截图逻辑。
+   * @param {Object} fileInfo { content, name, mime }
+   * @param {string} text 随附件文字（可空）
+   */
+  A.pasteFileToWebpageAI = function (fileInfo, text) {
+    const info = fileInfo || {};
+    if (!info.content) {
+      A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的文件' });
+      return;
+    }
+    const f = A._dataUrlToFile(info.content, 0, info.name || 'file.txt');
+    A._pasteFilesToWebpageAI([f], text, '文件');
   };
 })();

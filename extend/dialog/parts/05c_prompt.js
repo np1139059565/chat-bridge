@@ -202,7 +202,21 @@
     const payload = { tool: card.tool, type: 'bridge-chat-res', nonce: nonce };
     if (card.status === 'done') {
       payload.success = true;
-      payload.result = card.result;
+      // 文件附件的结果里带正文的 base64，直接序列化会把整段正文写进消息。
+      // 此处换成只含元信息的摘要：正文已作为附件粘贴，标记只需交代身份与文件名。
+      const f = D.extractFile(card.result);
+      if (f) {
+        const r = card.result || {};
+        payload.result = {
+          file: { name: f.name, mime: f.mime },
+          path: r.path,
+          lines: r.lines,
+          total_lines: r.total_lines,
+          count: r.count,
+        };
+      } else {
+        payload.result = card.result;
+      }
     } else {
       payload.success = false;
       payload.origin = card.origin || 'unknown';

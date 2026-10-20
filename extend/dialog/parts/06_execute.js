@@ -308,11 +308,14 @@
           if (this._persist) this._persist();
         }
       } catch (e) { log('登记截图回挂失败：' + e); }
-      // fileName：附件文件名（read_file 用原文件名；截图无此字段，按类型兜底）
-      D.enqueueSend({
-        type: 'auto_send_image', dataUrl: shot, text: mark,
-        fileName: String(((card.result || {}).data || {}).file_name || '')
-      });
+      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: mark });
+      return;
+    }
+    // 文件附件（read_file 的正文）：独立分支、独立消息类型，与截图互不共用。
+    const file = D.extractFile(card.result);
+    if (file) {
+      const mark = this.screenshotMark(card);
+      D.enqueueSend({ type: 'auto_send_file', file: file, text: mark });
       return;
     }
     // 其余文本结果照常回传完整 JSON。

@@ -61,12 +61,15 @@ def _load_one(file_path, offset, limit):
     }
 
 
-def _as_paste_payload(text, file_name, meta):
-    """把正文包装成与截图一致的结果结构，供前端走粘贴链路。
+def _as_file_payload(text, file_name, meta):
+    """把正文包装成「文件附件」结果，供前端作为文件粘贴进输入框。
 
-    - data.screenshot 放 dataURL（此处为 text/plain），前端据此派发粘贴事件；
-    - data.saved 带文件名，前端按文件名登记回挂；
-    - 结果本身只带路径、行数与文件名，不含正文。
+    与截图各自独立：截图用 data.screenshot + data.saved（需落盘回挂），
+    文件附件用 data.file，字段与语义都不共用，避免两种功能互相污染。
+    - data.file.mime    附件 MIME（text/plain）
+    - data.file.name    附件文件名（原文件名，便于 AI 识别）
+    - data.file.content 正文的 dataURL
+    - 结果本身只带路径、行数与文件名，不含正文明文。
     @param text      正文（已按需拼接好）
     @param file_name 附件文件名
     @param meta      额外元信息（路径、行范围、总数等）
@@ -75,13 +78,14 @@ def _as_paste_payload(text, file_name, meta):
     raw = text.encode("utf-8")
     data_url = "data:text/plain;base64," + base64.b64encode(raw).decode("ascii")
     # 文本附件不落盘：dataURL 已在结果里，前端直接据此构造 File 粘贴。
-    # 落盘仅对截图有意义（镜像按文件名回挂图片），文本挂回去只会渲染出错误内容，
-    # 故 saved 保持为空，前端据此跳过回挂。
+    # 落盘只对截图有意义（镜像按文件名回挂图片），文本挂回去会渲染出错误内容。
     out = {
         "data": {
-            "screenshot": data_url,
-            "saved": None,
-            "file_name": file_name,
+            "file": {
+                "mime": "text/plain",
+                "name": file_name,
+                "content": data_url,
+            },
         },
     }
     out.update(meta or {})
@@ -126,7 +130,7 @@ def t_read_file(p):
             "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
             "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
         )
-        return _as_paste_payload(
+        return _as_file_payload(
             joined, "%d_files.txt" % len(metas),
             {"count": len(metas), "files": metas, "total_lines": total_lines_read},
         )
@@ -142,7 +146,7 @@ def t_read_file(p):
         % (it["read_lines"], it["total_lines"]),
     )
     base_name = os.path.basename(it["path"]) or "file.txt"
-    return _as_paste_payload(
+    return _as_file_payload(
         it["content"], base_name,
         {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]},
     )

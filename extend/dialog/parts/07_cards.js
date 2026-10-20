@@ -22,20 +22,32 @@
   };
 
   /**
-   * 从工具结果里提取待粘贴的 dataURL。
-   *
-   * 结果结构统一为 { data:{ screenshot:'data:<mime>;base64,...', saved:{...}, file_name } }：
-   *   - 截图工具：data:image/...
-   *   - read_file：data:text/plain...（正文作为文本附件贴入，不进工具结果）
-   * 两者共用同一条粘贴链路，故此处同时接受 image 与 text 两类前缀。
+   * 从工具结果里提取截图 dataURL。
+   * 截图工具（get_page_snapshot）的结果结构：
+   *   { success:true, data:{ screenshot:'data:image/...', saved:{...} } }
+   * 只认图片：文本附件走 D.extractFile，两者字段与语义互不共用。
    * @param {Object} result 工具结果
-   * @returns {string} dataURL；没有则返回空串
+   * @returns {string} 截图 dataURL；没有则返回空串
    */
   D.extractScreenshot = function (result) {
     if (!result || !result.data || typeof result.data !== 'object') return '';
     const shot = result.data.screenshot;
     if (typeof shot !== 'string') return '';
-    return (shot.indexOf('data:image/') === 0 || shot.indexOf('data:text/') === 0) ? shot : '';
+    return shot.indexOf('data:image/') === 0 ? shot : '';
+  };
+
+  /**
+   * 从工具结果里提取「文件附件」（read_file 的正文）。
+   * 结果结构：{ data:{ file:{ mime:'text/plain', name:'README.md', content:'data:...' } } }
+   * 与截图完全独立：字段不同、语义不同、后续分支不同。
+   * @param {Object} result 工具结果
+   * @returns {{content:string,name:string,mime:string}|null} 附件信息；没有则返回 null
+   */
+  D.extractFile = function (result) {
+    if (!result || !result.data || typeof result.data !== 'object') return null;
+    const f = result.data.file;
+    if (!f || typeof f.content !== 'string' || f.content.indexOf('data:') !== 0) return null;
+    return { content: f.content, name: String(f.name || ''), mime: String(f.mime || 'text/plain') };
   };
 
   /**
@@ -167,20 +179,19 @@
    */
   D._renderToolResult = function (ctx, card, readonly, kids) {
     if (card.status === 'done') {
-      // 只有图片 dataURL 才渲染成图片；文本附件（read_file 的正文）不能塞进 <img>，
-      // 否则会显示为破图，并把整段 base64 写进页面。
+      // 三种结果各自独立渲染：截图 → 图片；文件附件 → 文件名提示；其余 → JSON 文本。
       const shot = D.extractScreenshot(card.result);
-      if (shot.indexOf('data:image/') === 0) {
+      const file = D.extractFile(card.result);
+      if (shot) {
         kids.push(h('img', {
           class: 'result-shot',
           src: shot,
           alt: '页面截图',
           style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
         }));
-      } else if (shot) {
-        // 文本附件：结果里带的是正文的 dataURL，不展示其内容，只标出文件名
-        const nm = ((card.result || {}).data || {}).file_name || '文本文件';
-        kids.push(h('div', { class: 'result' }, '已作为附件粘贴：' + nm));
+      } else if (file) {
+        // 文件附件：正文不展示，只标出文件名，避免把 base64 写进页面
+        kids.push(h('div', { class: 'result' }, '已作为附件粘贴：' + (file.name || '文件')));
       } else {
         kids.push(h('pre', { class: 'result' }, ctx.fmt(card.result)));
       }
