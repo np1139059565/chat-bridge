@@ -88,17 +88,22 @@
         wait = Q.imageGap;
       } else if (item.type === 'auto_send_file') {
         // 文件附件：与图片分成两种消息类型，字段各自独立。
-        // file 为 { mime, name, content(dataURL) }，内容脚本据此构造 File 粘贴。
+        // 两种来源共用一条消息类型：
+        //   - 整文件：fileObj 已是现成的 File（由源文件原始字节构造，未编码）；
+        //   - 分段：content 为该片段的 dataURL，由内容脚本构造 File。
+        // File 属 Blob，可被 postMessage 的结构化克隆直接传递，无需转编码。
         const f = item.file || {};
-        window.parent.postMessage(plain({
-          type: 'auto_send_file',
-          file: {
+        const payload = { type: 'auto_send_file', text: String(item.text || '') };
+        if (f.fileObj) {
+          payload.file = { fileObj: f.fileObj, mime: String(f.mime || 'text/plain'), name: String(f.name || '') };
+        } else {
+          payload.file = {
             mime: String(f.mime || 'text/plain'),
             name: String(f.name || ''),
             content: String(f.content || '')
-          },
-          text: String(item.text || '')
-        }), '*');
+          };
+        }
+        window.parent.postMessage(payload, '*');
         // 文件上传同样需要等预览就绪，沿用图片的间隔
         wait = Q.imageGap;
       } else {

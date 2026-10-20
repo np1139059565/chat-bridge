@@ -61,6 +61,39 @@ def _load_one(file_path, offset, limit):
     }
 
 
+def _check_whole_size(fp):
+    """整文件读取的体积校验：沿用统一的 limits.max_json_chars 上限。
+
+    整文件不返回内容，但文件过大时一次取回也会撑爆前端内存，
+    故按同一配置在上限处拦截，提示改用分段读取。
+    @param fp 源文件绝对路径
+    """
+    from tool_helpers import max_json_chars
+    limit = max_json_chars()
+    size = os.path.getsize(fp)
+    if size > limit:
+        raise ToolParamError(
+            "文件约 %d 字节，超过单次读取上限 %d；请用 offset / limit 分段读取。"
+            % (size, limit)
+        )
+
+
+def _as_source_ref(fp):
+    """整文件读取：只返回源文件引用，不读内容、不编码、不生成任何副本。
+
+    前端按 path 经 /api/web/source-file 取原始字节，直接构造 File 粘贴，
+    省去 base64 往返与额外落盘。
+    @param fp 源文件绝对路径
+    @returns 文件引用信息 {mime, name, path, source}
+    """
+    return {
+        "mime": "text/plain",
+        "name": os.path.basename(fp) or "file.txt",
+        "path": str(fp),
+        "source": True,
+    }
+
+
 def _as_file_payload(text, file_name, meta):
     """把正文包装成「文件附件」结果，供前端作为文件粘贴进输入框。
 
@@ -112,6 +145,16 @@ def t_read_file(p):
             raise ToolParamError(
                 "一次最多读取 %d 个文件，当前传入 %d 个" % (MAX_BATCH_FILES, len(paths_param))
             )
+        # 整文件批量：全部给源文件引用，不读内容也不生成副本
+        if limit is None and int(offset or 1) <= 1:
+            refs = []
+            for one in paths_param:
+                fp = _abspath(one)
+                if not os.path.isfile(fp):
+                    raise ToolParamError("文件不存在：%s" % one)
+                _check_whole_size(fp)
+                refs.append(_as_source_ref(fp))
+            return {"data": {"files": refs}, "count": len(refs)}
         chunks = []
         metas = []
         total_lines_read = 0
@@ -137,6 +180,15 @@ def t_read_file(p):
 
     # 单文件模式
     _require(p, "file_path")
+    fp = _abspath(p.get("file_path"))
+    # 未指定 offset / limit：整文件读取，只给源文件引用，不读内容也不生成副本。
+    # 前端按路径取原始字节后直接构造 File 粘贴，省去 base64 往返与额外落盘。
+    if limit is None and int(offset or 1) <= 1:
+        if not os.path.isfile(fp):
+            raise ToolParamError("文件不存在：%s" % p.get("file_path"))
+        _check_whole_size(fp)
+        return {"data": {"file": _as_source_ref(fp)}}
+    # 分段读取：生成片段内容，作为文本附件交由前端粘贴
     it = _load_one(p.get("file_path"), offset, limit)
     # 体积校验：超限时报错并提示缩小范围
     enforce_size_limit(

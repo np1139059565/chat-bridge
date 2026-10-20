@@ -46,8 +46,18 @@
   D.extractFile = function (result) {
     if (!result || !result.data || typeof result.data !== 'object') return null;
     const f = result.data.file;
-    if (!f || typeof f.content !== 'string' || f.content.indexOf('data:') !== 0) return null;
-    return { content: f.content, name: String(f.name || ''), mime: String(f.mime || 'text/plain') };
+    if (!f) return null;
+    const name = String(f.name || '');
+    const mime = String(f.mime || 'text/plain');
+    // 整文件读取：只带路径（source=true），正文由前端按路径取原始字节，不编码不复制
+    if (f.source === true && typeof f.path === 'string') {
+      return { source: true, path: f.path, name: name, mime: mime };
+    }
+    // 分段读取：带的是该片段的 dataURL
+    if (typeof f.content === 'string' && f.content.indexOf('data:') === 0) {
+      return { source: false, content: f.content, name: name, mime: mime };
+    }
+    return null;
   };
 
   /**

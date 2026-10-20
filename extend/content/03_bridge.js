@@ -345,11 +345,17 @@
    */
   A.pasteFileToWebpageAI = function (fileInfo, text) {
     const info = fileInfo || {};
-    if (!info.content) {
-      A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的文件' });
+    // 现成的 File（整文件，直接来自源文件字节，未经编码）：直接粘贴
+    if (info.fileObj instanceof File) {
+      A._pasteFilesToWebpageAI([info.fileObj], text, '文件');
       return;
     }
-    const f = A._dataUrlToFile(info.content, 0, info.name || 'file.txt');
-    A._pasteFilesToWebpageAI([f], text, '文件');
+    // 分段读取：给的是该片段的 dataURL，此处构造 File
+    if (info.content) {
+      const f = A._dataUrlToFile(info.content, 0, info.name || 'file.txt');
+      A._pasteFilesToWebpageAI([f], text, '文件');
+      return;
+    }
+    A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的文件' });
   };
 })();

@@ -218,7 +218,7 @@ POST 请求体示例：
 | `list_dir` | `dir_path` | `ignore_globs` |
 | `search_file` | `dir_path`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
 | `search_content` | `pattern` | `dir_path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
-| `read_file` | `file_path` 或 `file_paths`（二选一；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；正文不放进结果，而是转成 `data:text/plain` 的 dataURL 放在 `data.screenshot`（与截图同构），由前端作为附件粘贴进输入框，回传 AI 的只有精简标记；文件名见 `data.file_name`，批量时已按「路径 行范围」拼好；`file_paths` 单次上限 20 个文件，正文总量受 `limits.max_json_chars` 约束 |
+| `read_file` | `file_path` 或 `file_paths`（二选一；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；不指定行范围时为整文件读取，结果只含 `data.file`（`mime`/`name`/`path`/`source`），正文由前端经 `GET /api/web/source-file` 取原始字节后作为附件粘贴；指定行范围时为分段读取，片段以 `data:text/plain` 的 dataURL 放在 `data.file.content`；回传 AI 的只有精简标记；`file_paths` 单次上限 20 个文件，体积受 `limits.max_json_chars` 约束 |
 | `read_image` | `file_path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
 | `list_skills` | — | — |
 | `read_skill` | `skill`, `file` | `offset`, `limit` |
@@ -457,6 +457,12 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 ### POST /api/web/image
 
 从网页发送一张图片。请求含图片数据（base64）；返回 `{ success, name }`。
+
+### GET /api/web/source-file
+
+按路径返回工程内源文件的原始字节，供前端直接构造 File 粘贴进网页 AI 输入框。查询参数：`path`（工程内路径，绝对或相对）。
+
+不复制、不编码，直接以二进制流返回。仅限工程根内文件，拒绝点文件；路径越界、点文件、不存在均返回 404。
 
 ### GET /api/web/image-file/<name>
 
