@@ -1,12 +1,12 @@
 """网页版 —— 源文件按路径取回接口
 
-职责：GET /api/web/source-file?path=...，把工程内的原始文件按二进制返回。
+职责：GET /api/web/source-file?path=...，按路径把原始文件以二进制返回。
 
 用途：read_file 做整文件读取时不读内容、不编码，只返回源文件路径；
 前端据路径取回原始字节，直接构造成 File 粘贴进输入框。
 这样整文件读取不产生任何副本，也不经历 base64 往返。
 
-安全约束：仅限工程根内文件；拒绝点文件（.git / .env 等不外泄）。
+访问范围由 core/path_policy 的权限策略判定，可在设置页调整。
 """
 import os
 
@@ -27,10 +27,9 @@ _MIME = {
 
 
 def _resolve(raw_path):
-    """把请求路径解析为工程根内的真实文件路径，越界或不存在返回 None。
+    """把请求路径解析为真实文件路径；不存在或不被权限允许时返回 None。
 
-    与按文件名的接口不同，本接口接受完整路径，故安全性靠
-    「必须落在工程根内」与「拒绝点文件」两道约束保证。
+    相对路径以工程根为基准解析。访问范围由 path_policy 判定。
     @param raw_path 请求里的原始路径（绝对或相对）
     @returns 合法文件路径字符串；非法返回 None
     """
@@ -39,10 +38,8 @@ def _resolve(raw_path):
     root = os.path.abspath(str(paths.PROJECT_ROOT))
     # 相对路径以工程根为基准解析（与 read_file 工具口径一致）
     target = os.path.abspath(raw_path if os.path.isabs(raw_path) else os.path.join(root, raw_path))
-    # 与 read_file 工具能力对齐：该工具能读任意路径的文件，
-    # 本接口若只放行工程根内，就会出现「读到了却贴不进去」的割裂
-    # （跨盘文件一律 404，前端最终报「读取文件失败」）。
-    # 故不再限制工程根，只要求目标确实是存在的文件——目录不可取。
+    # 目标必须是存在的文件；目录不可取。
+    # 访问范围由 path_policy 按当前权限档判定。
     if not os.path.isfile(target):
         return None
     try:

@@ -2,16 +2,15 @@
 
 职责：判定某个路径是否允许被工具访问，并按「读 / 写」区分严格程度。
 
-为什么集中在此：
+集中在此：
     文件类工具（read_file / write_to_file / replace_in_file / delete_file 等）
-    此前对路径完全不设限，权限一收紧就只能改多处代码。集中一处后，
-    策略调整只改本文件，各工具只需在解析路径时调用 check_path。
+    统一在解析路径时调用 check_path，策略调整只改本文件。
 
 四档策略（对应配置 permissions.file_access）：
-    project         仅工程目录；最严
-    project_whitelist 工程目录 + 用户指定的白名单目录（默认档）
-    all_readonly    全盘可读，写仍限工程目录
-    all             完全放开（历史行为）
+    project           仅工程目录；最严
+    project_whitelist 工程目录 + 白名单目录
+    all_readonly      全盘可读，写仍限工程目录
+    all               不做路径限制
 
 设计约束：
     本模块只做判定，不抛工具框架的异常——它不认识 ToolParamError，
@@ -28,7 +27,7 @@ class PathDenied(Exception):
 
 # 四档策略的合法取值
 MODES = ("project", "project_whitelist", "all_readonly", "all")
-# 默认档：完全放开。与历史行为一致，避免升级后功能突然不可用。
+# 默认档：完全放开，不做路径限制。
 DEFAULT_MODE = "all"
 
 

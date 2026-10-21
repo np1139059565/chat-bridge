@@ -128,9 +128,9 @@ def tools():
 def tools_all():
     """返回全部内置工具及其开关状态，供设置页管理。
 
-    与 /tools 的关键区别：本接口【不过滤已下线工具】。
-    /tools 是给 AI 看的目录，下线工具不该出现；而设置页需要看见全部工具，
-    否则工具一旦下线就从界面消失，再也没有入口重新上线（历史缺陷）。
+    与 /tools 的区别：本接口不过滤已下线工具。
+    /tools 是给 AI 看的目录，只含已上线工具；
+    设置页需要看见全部工具，才能把已下线的工具重新上线。
     """
     out = []
     for k, v in runtime.TOOLS.items():
@@ -202,7 +202,7 @@ def _call_builtin(name, params):
         return jsonify(success=True, tool=name, async_mode=True,
                        task_id=task_id, status="pending")
     # 工具执行耗时埋点：记录「哪个工具、耗时多久、是否超时」，
-    # 供排查「工具慢 / 界面被拖」——此前工具执行完全无日志，慢请求无从定位。
+    # 供排查「工具慢 / 界面被拖」这类问题。
     import time as _t
     import app_log
     _t0 = _t.perf_counter()
