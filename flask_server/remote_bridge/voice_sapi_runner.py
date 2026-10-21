@@ -48,7 +48,7 @@ _PS_SCRIPT = (
     "$ErrorActionPreference = 'Stop'\n"
     "Add-Type -AssemblyName System.Speech\n"
     "$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer\n"
-    "if ($Voice) { try { $synth.SelectVoice($Voice) } catch { } }\n"
+    "if ($Voice) { try { $synth.SelectVoice($Voice) } catch { [Console]::Error.WriteLine('VOICE_NOT_FOUND:' + $Voice) } }\n"
     "try { $synth.Rate = $Rate } catch { }\n"
     "$text = [System.IO.File]::ReadAllText($TextFile, [System.Text.Encoding]::UTF8)\n"
     "$synth.SetOutputToWaveFile($OutFile)\n"
@@ -70,6 +70,25 @@ def wpm_to_sapi_rate(wpm):
     # 与基准语速的差值换算成档位，四舍五入后夹紧
     steps = int(round((value - _RATE_BASE_WPM) / float(_RATE_STEP_WPM)))
     return max(_RATE_MIN, min(_RATE_MAX, steps))
+
+
+def parse_missing_voice(stderr_text):
+    """从子进程 stderr 中解析出「音色不存在」的那个音色名。
+
+    背景：PowerShell 侧 SelectVoice 失败时会回落到系统默认音色并继续合成。
+    结果可用，但若不记录就会造成「用户以为切换了音色、实际没生效」的误解。
+    脚本因此在失败时向 stderr 打印一行 VOICE_NOT_FOUND:<音色名>。
+
+    @param stderr_text 子进程 stderr 文本
+    @returns 缺失的音色名；无此标记时返回空串
+    """
+    marker = "VOICE_NOT_FOUND:"
+    text = str(stderr_text or "")
+    if marker not in text:
+        return ""
+    # 取标记之后到行尾的内容即音色名；音色名可能含空格，故只按行切分
+    tail = text.split(marker, 1)[1]
+    return tail.splitlines()[0].strip() if tail.splitlines() else ""
 
 
 def _safe_remove(path):
@@ -138,10 +157,15 @@ def _run_powershell(script, text_path, wav_path, voice, rate, timeout):
         return False, "SAPI 合成超时（%d 秒）" % timeout
     except Exception as e:
         return False, "SAPI 合成异常：%s" % e
+    detail = (proc.stderr or b"").decode("utf-8", "replace").strip()
     # 非零退出：把 stderr 前 200 字符带回，便于定位具体原因
     if proc.returncode != 0:
-        detail = (proc.stderr or b"").decode("utf-8", "replace").strip()[:200]
-        return False, "SAPI 退出码 %d：%s" % (proc.returncode, detail)
+        return False, "SAPI 退出码 %d：%s" % (proc.returncode, detail[:200])
+    # 音色名不存在时脚本会回落到系统默认音色并完成合成。
+    # 结果可用，但必须留下痕迹：否则用户以为切换了音色，实际并未生效。
+    missing = parse_missing_voice(detail)
+    if missing:
+        log("音色不存在，已回落到系统默认音色：%s" % missing)
     return True, ""
 
 

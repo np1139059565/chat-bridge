@@ -107,6 +107,44 @@ python server.py
 
 默认监听 `http://127.0.0.1:5000`。改端口需在 `config/runtime.yaml` 把 `flask.port` 改掉并重启服务。
 
+### 1.1 语音合成（可选）
+
+语音合成按「可 pip 安装」与「需单独下载」两部分准备，缺任何一部分时语音会自动降级，服务照常启动。
+
+**pip 可安装的部分**（已写入 `flask_server/requirements.txt`）：
+
+```bash
+cd flask_server
+pip install -r requirements.txt
+```
+
+包含 `pyttsx3`（系统语音）、`pywin32`（COM 初始化，仅 Windows）、`soundfile`（读 WAV）、`lameenc`（编码 MP3）。
+
+**Piper 本地引擎**（pip 装不了，需跑一次脚本）：
+
+```bash
+# 在仓库根目录执行
+python scripts/setup_piper.py           # 缺什么补什么，已存在的跳过
+python scripts/setup_piper.py --force   # 全部重新下载
+```
+
+该脚本把 `piper.exe` 及依赖 DLL（约 20MB）与中文模型 `zh_CN-huayan-medium.onnx` 及配置（约 63MB）下载到 `models/tts/piper/`。下载源优先国内镜像 `hf-mirror.com`，失败自动切官方 HuggingFace。退出码 `0` 表示就绪，`1` 表示有文件未下成（不影响服务启动，可稍后重跑补齐）。
+
+> `models/` 体积大且可重新下载，已被 `.gitignore` 排除；新克隆的仓库该目录为空属正常状态。
+
+**四类引擎与降级**：
+
+| 引擎 | 依赖 | 特点 |
+|---|---|---|
+| `piper` | 需跑 `setup_piper.py` | 本地神经网络，音质最好 |
+| `pyttsx3` | pip 包 + 系统语音包 | 系统语音，音质一般 |
+| `sapi` | 仅 Windows 自带 System.Speech | 零安装，离线可用，网络受限时的保底路径 |
+| `edge_tts` | 需联网 | 在线合成，接口当前已失效 |
+
+`voice_engine` 设为 `auto` 时按 `voice_fallback` 顺序逐个尝试，全部失败才算合成失败。默认顺序：`piper,pyttsx3,sapi,edge_tts`。
+
+WAV 转 MP3 默认用 `soundfile` + `lameenc`；两者都不可用时自动回落到 `ffmpeg`（需在 PATH 中，或用环境变量 `BRIDGE_FFMPEG` 指定完整路径）。
+
 ### 2. 加载 Chrome 扩展
 
 1. 打开 `chrome://extensions`，开启「开发者模式」。
