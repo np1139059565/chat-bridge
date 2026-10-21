@@ -418,6 +418,10 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 
 请求：`{ text: "/sd" }`。返回 `{ success, handled }`。
 
+### GET /tools/all
+
+返回全部内置工具及其开关状态，供设置页管理。与 `/tools` 的关键区别是**不过滤已下线工具**——`/tools` 是给 AI 看的目录，设置页若复用它，工具一旦下线就从界面消失、无法重新上线。返回 `{ tools: [{name, description, parameters, enabled}] }`。
+
 ### GET /api/bridge/commands
 
 列出可用桥接指令。返回 `{ success, commands: [...] }`。

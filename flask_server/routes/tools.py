@@ -124,6 +124,26 @@ def tools():
     return jsonify({"tools": builtin + custom + external})
 
 
+@bp.route("/tools/all", methods=["GET"])
+def tools_all():
+    """返回全部内置工具及其开关状态，供设置页管理。
+
+    与 /tools 的关键区别：本接口【不过滤已下线工具】。
+    /tools 是给 AI 看的目录，下线工具不该出现；而设置页需要看见全部工具，
+    否则工具一旦下线就从界面消失，再也没有入口重新上线（历史缺陷）。
+    """
+    out = []
+    for k, v in runtime.TOOLS.items():
+        out.append({
+            "name": k,
+            "description": v.get("description", ""),
+            "parameters": v.get("parameters") or [],
+            # enabled 由配置决定；未配置时视为启用（与运行时口径一致）
+            "enabled": runtime.is_tool_enabled(k),
+        })
+    return jsonify({"tools": out})
+
+
 @bp.route("/tool/command_task", methods=["GET"])
 def command_task():
     """查询 run_command 异步任务的状态与结果。

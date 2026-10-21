@@ -43,6 +43,28 @@
     }
     // 工具上下线会改变技能说明的生效集合，故一并刷新技能数据后再生 System Prompt
     await this.loadPromptSections();
+    // 另取一份「全部工具（含已下线）」供设置页管理。
+    // /tools 是给 AI 看的目录，会滤掉下线工具；设置页若也用它，
+    // 工具一旦下线就从界面消失、再也无法重新上线（历史缺陷）。
+    await this.fetchAllTools();
+  };
+
+  /**
+   * 拉取全部内置工具（含已下线），供设置页管理开关。
+   *
+   * 失败时保持上一次的结果，不清空——否则后端短暂不可达会让设置页的工具列表闪空。
+   */
+  M.fetchAllTools = async function () {
+    try {
+      const data = await D.apiFetch(this, '/tools/all', {
+        headers: { 'Accept': 'application/json' }
+      });
+      const list = (data && data.tools) || [];
+      if (list.length) this.allTools = list;
+      log('管理视图工具数：' + (this.allTools || []).length);
+    } catch (e) {
+      log('拉取全部工具失败（保持原值）：' + e);
+    }
   };
 
   /**

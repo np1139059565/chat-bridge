@@ -133,19 +133,34 @@
         h('button', { onClick: () => ctx.scanSkills() }, '扫描可安装'),
         h('button', { onClick: () => ctx.scanDefaults() }, '用默认目录扫描')
       ]),
+      // 扫描结果：可折叠 + 可清除。
+      // 折叠解决「扫完一次就一直占着抽屉高度」，清除解决「结果堆着不走」。
       ctx.scanResults.length
-        ? h('div', { class: 'scan-results' },
-          ctx.scanResults.map((skill) => h('div', { class: 'scan-skill' }, [
-            h('div', skill.skill_name + (skill.error ? '（解析失败：' + skill.error + '）' : '')),
-            ...(skill.tools || []).map((ts) => h('div', { class: 'scan-tool' }, [
-              h('span', ts.name + ' — ' + ts.description),
-              h('button', {
-                disabled: ts.installed,
-                onClick: () => ctx.installSkill(skill.skill_dir, ts.name)
-              }, ts.installed ? '已安装' : '安装')
+        ? h('div', { class: 'scan-results' }, [
+          h('div', { class: 'scan-head' }, [
+            h('span', {
+              class: 'scan-toggle',
+              onClick: () => { ctx.scanOpen = !ctx.scanOpen; }
+            }, (ctx.scanOpen ? '▾ ' : '▸ ') + '扫描结果（' + ctx.scanResults.length + ' 个 skill）'),
+            h('button', {
+              class: 'scan-clear',
+              title: '清空扫描结果，不影响已安装的工具',
+              onClick: () => { ctx.scanResults = []; ctx.scanOpen = false; }
+            }, '清除')
+          ]),
+          ctx.scanOpen
+            ? ctx.scanResults.map((skill) => h('div', { class: 'scan-skill' }, [
+              h('div', skill.skill_name + (skill.error ? '（解析失败：' + skill.error + '）' : '')),
+              ...(skill.tools || []).map((ts) => h('div', { class: 'scan-tool' }, [
+                h('span', ts.name + ' — ' + ts.description),
+                h('button', {
+                  disabled: ts.installed,
+                  onClick: () => ctx.installSkill(skill.skill_dir, ts.name)
+                }, ts.installed ? '已安装' : '安装')
+              ]))
             ]))
-          ]))
-        )
+            : null
+        ])
         : null
     ]);
   };

@@ -276,9 +276,11 @@
             h('button', { onClick: () => { ctx.toolsOpen = !ctx.toolsOpen; } }, ctx.toolsOpen ? '▾' : '▸')
           ]),
           ctx.toolsOpen ? h('div', { class: 'tool-list' }, [
-            ...ctx.tools.filter((t) => !customNames.has(t.name)).map((t) => D.renderUnifiedToolRow(ctx, t)),
+            // 用 allTools（含已下线）而非 tools（AI 目录，已滤掉下线工具）：
+            // 否则工具一旦下线就从设置页消失，再也无法重新上线。
+            ...(ctx.allTools || []).filter((t) => !customNames.has(t.name)).map((t) => D.renderUnifiedToolRow(ctx, t)),
             ...ctx.customTools.map((t) => D.renderCustomToolRow(ctx, t)),
-            (ctx.tools.length === 0 && ctx.customTools.length === 0)
+            ((ctx.allTools || []).length === 0 && ctx.customTools.length === 0)
               ? h('div', { class: 'hint' }, '（未读取到工具列表，请先连接后端）')
               : null
           ]) : null

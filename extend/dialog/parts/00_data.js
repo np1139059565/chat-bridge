@@ -159,6 +159,8 @@ window.AIMirrorDialog = (function () {
       portSwitching: false,
       portMismatch: false,
       configTools: {},
+      // 全部内置工具（含已下线）：设置页据此列出开关，下线工具不会从界面消失
+      allTools: [],
       maxJsonChars: 100000,
       systemPrompt: '',
       toolsOpen: false,
@@ -242,6 +244,8 @@ window.AIMirrorDialog = (function () {
       customEditing: Vue.reactive({}),
       skillScanDir: '',
       scanResults: [],
+      // 扫描结果默认折叠：扫完一次不该一直占着抽屉高度，需要时再展开
+      scanOpen: false,
       scanRoots: [],
       flaskOk: false,
       flaskError: '',
