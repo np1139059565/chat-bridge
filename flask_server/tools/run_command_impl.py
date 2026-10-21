@@ -71,7 +71,18 @@ def _read_langs_from_yaml():
 
 
 def _load_run_command_languages():
-    """读取配置中 tools.run_command.languages；失败或未配置时返回默认列表。"""
+    """取当前允许的语言列表。
+
+    优先读 tool_config 的声明值（设置页统一入口），
+    未配置时回退 tools.run_command.languages，最后回退内置默认列表。
+    """
+    try:
+        import tool_config
+        langs = tool_config.get_value("run_command", "languages")
+        if isinstance(langs, list) and langs:
+            return [str(x).strip().lower() for x in langs]
+    except Exception:
+        pass
     langs = _read_langs_from_yaml()
     if langs:
         return langs
@@ -113,14 +124,24 @@ def _build_run_command(lang, cmd_prefix, command):
     return list(cmd_prefix) + command_parts
 
 
+def _default_timeout():
+    """取当前生效的默认超时；配置不可用时回退常量。"""
+    try:
+        import tool_config
+        v = tool_config.get_value("run_command", "timeout")
+        return int(v) if v else RUN_COMMAND_TIMEOUT
+    except Exception:
+        return RUN_COMMAND_TIMEOUT
+
+
 def _resolve_timeout(raw):
     """解析命令超时（秒）：未传用默认值，非正整数抛参数错误。
 
-    显式区分「未传」与「传了非法值」：以前用 `or` 兜底会把 0 静默替换成默认值，
-    调用方以为已关闭或缩短超时，实际仍按默认值执行，行为与预期不符。
+    显式区分「未传」与「传了非法值」：未传才用默认值，
+    传了 0 或负数一律报参数错误，避免非法值被静默替换成默认值。
     """
     if raw is None or (isinstance(raw, str) and raw.strip() == ""):
-        return RUN_COMMAND_TIMEOUT
+        return _default_timeout()
     try:
         value = int(raw)
     except (TypeError, ValueError):

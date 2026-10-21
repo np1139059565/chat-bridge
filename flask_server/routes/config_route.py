@@ -13,6 +13,7 @@
 from flask import Blueprint, jsonify, request
 
 import runtime
+import tool_config
 from config_store import save_config_to_yaml
 from service_control import rolling_restart
 
@@ -103,6 +104,36 @@ def _apply_permissions_section(data, changed):
             changed.append("permissions.whitelist_dirs=" + str(len(clean)) + " 项")
 
 
+def _apply_tool_config_section(data, changed):
+    """应用 tool_config 区块：各工具的配置值。
+
+    只接受声明里存在的工具与键；值按声明类型转换并校验范围。
+    值统一存 runtime.CONFIG["tool_config"][工具][键]。
+    @returns 校验失败时返回错误响应，成功返回 None
+    """
+    block = data.get("tool_config")
+    if not isinstance(block, dict):
+        return None
+    for tool, items in block.items():
+        # 未声明的工具：忽略，避免写入无意义的键
+        specs = {s["key"]: s for s in tool_config.CONFIG_SCHEMA.get(tool, [])}
+        if not specs or not isinstance(items, dict):
+            continue
+        store = runtime.CONFIG.setdefault("tool_config", {}).setdefault(tool, {})
+        for key, raw in items.items():
+            spec = specs.get(key)
+            if not spec:
+                continue
+            try:
+                val = tool_config.coerce(spec, raw)
+            except ValueError as e:
+                return jsonify(success=False, error=str(e)), 400
+            if val != store.get(key):
+                store[key] = val
+                changed.append("tool_config.%s.%s" % (tool, key))
+    return None
+
+
 def _config_snapshot():
     """构造 GET /config 的完整配置快照。"""
     host = runtime.CONFIG["flask"]["host"]
@@ -115,6 +146,8 @@ def _config_snapshot():
         "tools": runtime.CONFIG.get("tools", {}),
         # 文件访问权限：设置页据此渲染档位与白名单
         "permissions": runtime.CONFIG.get("permissions", {}),
+        # 工具配置：声明 + 当前值，设置页按类型通用渲染
+        "tool_config": tool_config.all_specs(),
         "available_tools": sorted(list(runtime.TOOLS.keys())),
     }
 
@@ -132,6 +165,9 @@ def config():
         _apply_flask_section(data, changed)
         _apply_tools_section(data, changed)
         _apply_permissions_section(data, changed)
+        err = _apply_tool_config_section(data, changed)
+        if err is not None:
+            return err
         err = _apply_limits_section(data, changed)
         if err is not None:
             return err

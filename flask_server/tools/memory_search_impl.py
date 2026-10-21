@@ -26,10 +26,20 @@ KEYWORD_TOPK = 8
 _VALID_FOCUS = ("relevance", "time", "strength")
 
 
+def _default_top_k():
+    """取当前生效的默认返回条数；配置不可用时回退常量。"""
+    try:
+        import tool_config
+        v = tool_config.get_value("memory_search", "default_top_k")
+        return int(v) if v else DEFAULT_TOP_K
+    except Exception:
+        return DEFAULT_TOP_K
+
+
 def _resolve_top_k(raw):
     """解析返回条数：未传用默认；非法或越界抛参数错误。"""
     if raw is None or (isinstance(raw, str) and str(raw).strip() == ""):
-        return DEFAULT_TOP_K
+        return _default_top_k()
     try:
         value = int(raw)
     except (TypeError, ValueError):

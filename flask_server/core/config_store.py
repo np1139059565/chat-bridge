@@ -89,6 +89,8 @@ def save_config_to_yaml():
         # 文件访问权限：随本机状态变（不同机器可设不同范围），故写运行时文件。
         # 落盘是白名单式的，不在此列出就不会被保存。
         "permissions": CONFIG.get("permissions", {}),
+        # 工具配置：各工具的可调参数值，随本机状态变，写运行时文件。
+        "tool_config": CONFIG.get("tool_config", {}),
     }
     ok1 = config_file.update_definition_section("app", definition)
     ok2 = config_file.update_runtime_section("app", runtime_data)

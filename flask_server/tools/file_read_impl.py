@@ -26,8 +26,19 @@ from tool_helpers import (
     enforce_size_limit,
 )
 
-# 单次批量读取的文件数上限：防止一次请求把海量文件拼成超大结果
+# 单次批量读取的文件数上限默认值：防止一次请求把海量文件拼成超大结果。
+# 实际取值由 tool_config 的声明覆盖（设置页可调），此常量仅作兜底。
 MAX_BATCH_FILES = 20
+
+
+def _batch_limit():
+    """取当前生效的批量读取上限；配置不可用时回退常量。"""
+    try:
+        import tool_config
+        v = tool_config.get_value("read_file", "max_batch_files")
+        return int(v) if v else MAX_BATCH_FILES
+    except Exception:
+        return MAX_BATCH_FILES
 
 
 def _read_text_segment(fp, offset, limit):
@@ -279,9 +290,11 @@ def t_read_file(p):
         # 类型与数量校验
         if not isinstance(paths_param, list):
             raise ToolParamError("file_paths 必须是字符串数组")
-        if len(paths_param) > MAX_BATCH_FILES:
+        # 上限取当前配置值（设置页可调），而非写死的常量
+        limit_files = _batch_limit()
+        if len(paths_param) > limit_files:
             raise ToolParamError(
-                "一次最多读取 %d 个文件，当前传入 %d 个" % (MAX_BATCH_FILES, len(paths_param))
+                "一次最多读取 %d 个文件，当前传入 %d 个" % (limit_files, len(paths_param))
             )
         # 整文件批量与分段批量各自处理
         if _is_whole_file(offset, limit):
@@ -296,8 +309,19 @@ def t_read_file(p):
     return _read_single_segment(raw_path, offset, limit)
 
 
-# 图片读取体积上限（字节）：超过则拒绝，避免超大文件撑爆 HTTP 响应与前端内存
+# 图片读取体积上限默认值（字节）：超过则拒绝，避免超大文件撑爆 HTTP 响应与前端内存。
+# 实际取值由 tool_config 的声明覆盖（设置页可调），此常量仅作兜底。
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+def _image_limit():
+    """取当前生效的图片体积上限；配置不可用时回退常量。"""
+    try:
+        import tool_config
+        v = tool_config.get_value("read_image", "max_bytes")
+        return int(v) if v else MAX_IMAGE_BYTES
+    except Exception:
+        return MAX_IMAGE_BYTES
 
 # 允许读取的图片扩展名 → MIME 类型（与前端可粘贴的图片类型保持一致）
 IMAGE_MIME = {
@@ -334,12 +358,13 @@ def t_read_image(p):
         raise ToolParamError(
             "不支持的图片格式 %s；支持：%s" % (ext or "(无扩展名)", "、".join(sorted(IMAGE_MIME)))
         )
-    # 体积校验：超限直接报错，提示先压缩
+    # 体积校验：超限直接报错，提示先压缩。上限取当前配置值（设置页可调）。
+    limit_bytes = _image_limit()
     size = os.path.getsize(fp)
-    if size > MAX_IMAGE_BYTES:
+    if size > limit_bytes:
         raise ToolParamError(
             "图片体积 %.1fMB 超过上限 %dMB，请先压缩后再读取"
-            % (size / 1048576.0, MAX_IMAGE_BYTES // 1048576)
+            % (size / 1048576.0, limit_bytes // 1048576)
         )
     # 读原始字节并编码成 dataURL
     with open(fp, "rb") as fh:

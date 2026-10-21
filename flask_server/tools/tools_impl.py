@@ -213,10 +213,23 @@ def t_search_content(p):
     context = max(0, context)
     regex = re.compile(pattern, 0 if case else re.IGNORECASE)
     root = _abspath(path)
+    # 最大返回条数取当前配置值（设置页可调）：达到即停止遍历，
+    # 避免一次搜索把整个大目录走完、结果也撑爆上下文。
+    max_results = 200
+    try:
+        import tool_config
+        v = tool_config.get_value("search_content", "max_results")
+        if v:
+            max_results = int(v)
+    except Exception:
+        pass
     matches = []
     # 用 _iter_files 遍历：跳过 models/ .git/ 等大目录，避免递归卡死
     for f in _iter_files(root):
         matches += _collect_file_matches(f, regex, glob, context, len(matches))
+        if len(matches) >= max_results:
+            matches = matches[:max_results]
+            break
     return enforce_size_limit(
         {"count": len(matches), "matches": matches},
         "请缩小搜索范围后重试：用更精确的 pattern、加 glob 限定文件类型，或把 path 指向更具体的子目录。",
