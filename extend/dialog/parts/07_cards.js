@@ -80,7 +80,7 @@
     if (isTool) {
       // 质量问题不单独用警示横幅显示：它已作为正常结果返回（见 executeCard），
       // 由下方结果区统一呈现，避免同一内容重复两处。
-      kids.push(h('pre', { class: 'params-json' }, JSON.stringify(card.parameters, null, 2)));
+      kids.push(D.renderEditableParams(ctx, card, readonly));
       D._renderCardActions(ctx, card, readonly, sending, kids);
       // 执行完成时刻（毫秒级）：放在卡片内操作行之下、结果之上，便于分析时序。
       if (card.finishedAt) {

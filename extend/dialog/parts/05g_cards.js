@@ -232,6 +232,15 @@
       noReply: !!(call && call.parameters && call.parameters.no_reply === true),
       tool: call ? call.tool : '',
       parameters: call ? call.parameters : {},
+      // origParameters：AI 最初传的参数，副本单独保存。
+      // 用户可编辑 parameters（执行与重跑都用改后的值），
+      // 「一键还原」据此恢复，避免只能靠记忆手打回去。
+      origParameters: call ? JSON.parse(JSON.stringify(call.parameters || {})) : {},
+      // paramsText：参数编辑框的文本。与 parameters 分开存：
+      // 用户输入过程中可能是非法 JSON，不能直接污染真正用于执行的参数。
+      paramsText: call ? JSON.stringify(call.parameters || {}, null, 2) : '',
+      // paramsError：编辑框内容不是合法 JSON 时的提示，非空即不生效。
+      paramsError: '',
       status: 'pending',
       result: null,
       error: null,

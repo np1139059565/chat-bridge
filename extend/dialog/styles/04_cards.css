@@ -276,6 +276,66 @@
   font-family: ui-monospace, Consolas, monospace;
 }
 
+/* ---------- 可编辑参数区 ---------- */
+/* 视觉上与 .params-json 一致，区别只在可输入、高度随内容略高 */
+.params-edit {
+  margin-bottom: var(--cb-sp-2);
+}
+
+/* 标题行：左侧说明、右侧还原按钮 */
+.params-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cb-sp-2);
+  margin-bottom: var(--cb-sp-1);
+}
+
+/* 还原按钮：轻量样式，不与主要操作按钮争夺注意力 */
+.params-reset {
+  padding: 1px var(--cb-sp-2);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-muted);
+  cursor: pointer;
+  font-size: var(--cb-fs-micro);
+}
+
+.params-reset:hover {
+  border-color: var(--cb-primary);
+  color: var(--cb-primary);
+}
+
+/* 参数输入框：等宽字体、可纵向拉伸，便于改长参数 */
+.params-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 72px;
+  max-height: 240px;
+  resize: vertical;
+  white-space: pre;
+  background: var(--cb-bg-subtle);
+  color: var(--cb-text-body);
+  border: 1px solid var(--cb-border-soft);
+  border-radius: var(--cb-r-md);
+  padding: var(--cb-sp-2);
+  font-size: var(--cb-fs-xs);
+  font-family: ui-monospace, Consolas, monospace;
+  overscroll-behavior: contain;
+}
+
+/* 非法 JSON：红框提示，但不阻止继续输入 */
+.params-input.invalid {
+  border-color: var(--cb-danger-border);
+}
+
+.params-err {
+  margin-top: var(--cb-sp-1);
+  color: var(--cb-danger-text);
+  font-size: var(--cb-fs-micro);
+}
+
 .result {
   white-space: pre-wrap;
   background: var(--cb-ok-bg);
