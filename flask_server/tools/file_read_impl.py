@@ -117,7 +117,10 @@ def _as_file_payload(text, file_name, meta):
         "name": file_name,
     }
     if saved_name:
-        # 落盘成功：按「源文件」语义回路径，前端走 source 分支现取
+        # 落盘成功：按「源文件」语义回路径，前端走 source 分支现取。
+        # 此处须自行导入 paths：本函数不在 paths 的导入作用域内，
+        # 漏导入会直接抛 NameError，前端拿不到文件、表现为「读取文件失败」。
+        import paths
         file_obj["source"] = True
         file_obj["path"] = str(paths.WEB_SEGMENTS_DIR / saved_name)
     else:
