@@ -131,6 +131,8 @@
       if (cfg.permissions) this.permissions = cfg.permissions;
       // 工具配置：声明 + 当前值，供设置页按类型通用渲染
       if (cfg.tool_config) this.toolConfig = cfg.tool_config;
+      // 系统级配置：目录与队列上限，独立于工具
+      if (cfg.system_config) this.systemConfig = cfg.system_config;
       if (cfg.limits && cfg.limits.max_json_chars) this.maxJsonChars = cfg.limits.max_json_chars;
       if (cfg.default_profile) this.config.profile = cfg.default_profile;
       // 配置端口与实际连通端口不一致 = 端口已改但服务尚未重启（需重启才生效）

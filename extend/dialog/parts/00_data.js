@@ -248,7 +248,7 @@ window.AIMirrorDialog = (function () {
       // permissions 为文件访问权限配置（档位 + 白名单目录），permsOpen 控制该区块折叠。
       scanOpen: false, permissions: {}, permsOpen: false,
       // 工具配置：{工具名: [声明+当前值]}，toolConfOpen 控制该区块折叠
-      toolConfig: {}, toolConfOpen: false,
+      toolConfig: {}, toolConfOpen: false, systemConfig: [],
       scanRoots: [], flaskOk: false, flaskError: '',
       toastMsg: '',
       autoSendEnabled: false,

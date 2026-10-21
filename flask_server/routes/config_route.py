@@ -148,6 +148,8 @@ def _config_snapshot():
         "permissions": runtime.CONFIG.get("permissions", {}),
         # 工具配置：声明 + 当前值，设置页按类型通用渲染
         "tool_config": tool_config.all_specs(),
+        # 系统级配置：目录与队列上限，独立于工具
+        "system_config": tool_config.system_specs(),
         "available_tools": sorted(list(runtime.TOOLS.keys())),
     }
 

@@ -17,6 +17,30 @@
   function renderField(ctx, tool, spec) {
     const key = spec.key;
     const val = spec.value;
+    // 多选：独立成块，说明行 + 横排复选框（与工具原有配置同一外观）
+    if (spec.type === 'multiselect') {
+      const cur = Array.isArray(val) ? val : [];
+      const desc = spec.hint ? (spec.label + '（' + spec.hint + '）') : spec.label;
+      return h('div', { class: 'lang-checks', key: key }, [
+        h('div', { class: 'desc' }, desc),
+        h('div', { class: 'check-row' }, (spec.options || []).map((opt) =>
+          h('label', { class: 'check-item', key: opt }, [
+            h('input', {
+              type: 'checkbox',
+              checked: cur.indexOf(opt) >= 0,
+              onChange: (ev) => {
+                const next = cur.slice();
+                const i = next.indexOf(opt);
+                if (ev.target.checked && i < 0) next.push(opt);
+                if (!ev.target.checked && i >= 0) next.splice(i, 1);
+                ctx.setToolConfig(tool, key, next);
+              },
+            }),
+            h('span', {}, opt),
+          ])
+        )),
+      ]);
+    }
     let control;
     if (spec.type === 'integer') {
       control = h('input', {
@@ -33,25 +57,6 @@
         checked: !!val,
         onChange: (ev) => ctx.setToolConfig(tool, key, ev.target.checked),
       });
-    } else if (spec.type === 'multiselect') {
-      // 多选：每个选项一个复选框，勾选结果组成数组回写
-      const cur = Array.isArray(val) ? val : [];
-      control = h('div', { class: 'check-row' }, (spec.options || []).map((opt) =>
-        h('label', { class: 'check-item', key: opt }, [
-          h('input', {
-            type: 'checkbox',
-            checked: cur.indexOf(opt) >= 0,
-            onChange: (ev) => {
-              const next = cur.slice();
-              const i = next.indexOf(opt);
-              if (ev.target.checked && i < 0) next.push(opt);
-              if (!ev.target.checked && i >= 0) next.splice(i, 1);
-              ctx.setToolConfig(tool, key, next);
-            },
-          }),
-          h('span', {}, opt),
-        ])
-      ));
     } else {
       control = h('input', {
         type: 'text',
@@ -80,5 +85,18 @@
     const rows = (ctx.toolConfig || {})[tool] || [];
     if (!rows.length) return null;
     return h('div', { class: 'tc-body' }, rows.map((spec) => renderField(ctx, tool, spec)));
+  };
+
+  /**
+   * 渲染系统级配置（目录与队列上限），供通用配置区使用。
+   *
+   * 这些项描述服务自身资源上限，不属于任何工具，故集中在此渲染。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode|null} 配置节点；无声明时返回 null
+   */
+  D.renderSystemConfig = function (ctx) {
+    const rows = ctx.systemConfig || [];
+    if (!rows.length) return null;
+    return h('div', { class: 'tc-body' }, rows.map((spec) => renderField(ctx, 'system', spec)));
   };
 })();

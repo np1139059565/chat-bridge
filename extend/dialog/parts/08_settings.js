@@ -279,6 +279,10 @@
         h('span', { class: 'hint' }, 'search_content / read_file 等结果超过此字符数会报错，提示 AI 缩小范围')
       ]),
       h('br'),
+      // 系统资源上限：各目录与队列保留数，独立于工具
+      h('div', { class: 'hint' }, '资源保留上限'),
+      D.renderSystemConfig(ctx),
+      h('br'),
       // 质量检测：各类检测的独立开关。渲染定义在 08c_bridge.js（复用其开关行组件）。
       D.renderCheckBlock(ctx)
     ]);

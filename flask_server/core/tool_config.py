@@ -201,17 +201,36 @@ def coerce(item, raw):
     return str(raw)
 
 
-def all_specs():
-    """返回全部工具的配置声明与当前值，供设置页通用渲染。
+# 系统级分组的名字：它描述服务自身资源上限，不属于任何一个工具。
+SYSTEM_GROUP = "system"
 
-    @returns {工具名: [{key, label, type, value, hint, min, max, options, restart}]}
+
+def _specs_of(group):
+    """取某分组（工具名或 system）的声明与当前值。
+
+    @param group 分组名
+    @returns [{key, label, type, value, hint, min, max, options}] 列表
     """
-    out = {}
-    for tool, items in CONFIG_SCHEMA.items():
-        rows = []
-        for item in items:
-            row = dict(item)
-            row["value"] = get_value(tool, item["key"])
-            rows.append(row)
-        out[tool] = rows
-    return out
+    rows = []
+    for item in CONFIG_SCHEMA.get(group, []):
+        row = dict(item)
+        row["value"] = get_value(group, item["key"])
+        rows.append(row)
+    return rows
+
+
+def all_specs():
+    """返回各工具的配置声明与当前值，供设置页挂在工具行内渲染。
+
+    系统级分组不在此返回：它不是工具，单独由 system_specs 提供。
+    @returns {工具名: [{key, label, type, value, hint, min, max, options}]}
+    """
+    return {g: _specs_of(g) for g in CONFIG_SCHEMA if g != SYSTEM_GROUP}
+
+
+def system_specs():
+    """返回系统级配置（目录与队列上限）的声明与当前值。
+
+    @returns [{key, label, type, value, hint, min, max}] 列表
+    """
+    return _specs_of(SYSTEM_GROUP)
