@@ -117,13 +117,14 @@
   /**
    * 渲染「音色」选择行。
    *
-   * 三类引擎的音色来源完全不同，选项由后端 /api/bridge/voices 按引擎给出：
-   *   pyttsx3 —— Windows 系统语音（读注册表）
+   * 四类引擎的音色来源完全不同，选项由后端 /api/bridge/voices 按引擎给出：
+   *   pyttsx3 —— Windows 系统语音（读注册表，经 pyttsx3）
+   *   sapi    —— Windows 自带系统语音（读 System.Speech 清单）
    *   piper   —— 本地模型文件（每个 .onnx 一个音色）
    *   edge_tts—— 在线固定音色名
    * 因此切换引擎后必须重新拉取选项，否则下拉里还是上一个引擎的音色。
    *
-   * 保存时按引擎写入各自字段：pyttsx3_voice / piper_model / edge_tts_voice。
+   * 保存时按引擎写入各自字段：pyttsx3_voice / sapi_voice / piper_model / edge_tts_voice。
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 选择行
    */
@@ -132,8 +133,15 @@
     const list = ctx._voiceToneList || [];
     // 当前值按实际生效的引擎取对应配置字段
     const real = ctx._voiceToneEngine || engine;
-    const field = real === 'piper' ? 'piper_model'
-      : (real === 'edge_tts' ? 'edge_tts_voice' : 'pyttsx3_voice');
+    // 引擎 → 音色字段的映射：四类引擎各存各的，切换引擎不会互相覆盖。
+    // 用映射表而非三元表达式，新增引擎时只改这里一处。
+    const TONE_FIELD = {
+      piper: 'piper_model',
+      edge_tts: 'edge_tts_voice',
+      sapi: 'sapi_voice',
+      pyttsx3: 'pyttsx3_voice'
+    };
+    const field = TONE_FIELD[real] || 'pyttsx3_voice';
     const cur = ctx.bridgePush[field] || '';
     const opts = list.map((v) => h('option', {
       value: v.id, selected: v.id === cur
