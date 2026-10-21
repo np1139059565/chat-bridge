@@ -46,7 +46,16 @@ def _prune_screenshots():
     try:
         from file_prune import prune_dir
         from app_limits import MAX_SCREENSHOT_FILES
-        prune_dir(paths.SCREENSHOTS_DIR, MAX_SCREENSHOT_FILES)
+        # 上限取配置值，回退常量
+        limit = MAX_SCREENSHOT_FILES
+        try:
+            import tool_config
+            v = tool_config.get_value("system", "max_screenshot_files")
+            if v:
+                limit = int(v)
+        except Exception:
+            pass
+        prune_dir(paths.SCREENSHOTS_DIR, limit)
     except Exception as e:
         app_log.warn("[screenshot]", "回收失败（不影响落盘）：", e)
 
@@ -59,7 +68,16 @@ def _prune_web_images():
     try:
         from file_prune import prune_dir
         from app_limits import MAX_WEB_IMAGE_FILES
-        prune_dir(paths.WEB_IMAGES_DIR, MAX_WEB_IMAGE_FILES)
+        # 上限取配置值，回退常量
+        limit = MAX_WEB_IMAGE_FILES
+        try:
+            import tool_config
+            v = tool_config.get_value("system", "max_web_image_files")
+            if v:
+                limit = int(v)
+        except Exception:
+            pass
+        prune_dir(paths.WEB_IMAGES_DIR, limit)
     except Exception as e:
         app_log.warn("[screenshot]", "回收网页图片失败（不影响落盘）：", e)
 

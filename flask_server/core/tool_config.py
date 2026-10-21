@@ -84,6 +84,64 @@ CONFIG_SCHEMA = {
             "max": 100,
         },
     ],
+    # 系统级资源上限：不属于某个工具，归入统一分组便于集中调整。
+    # 均为「目录/队列保留多少个文件或条目」，超出按最旧优先回收。
+    "system": [
+        {
+            "key": "max_screenshot_files",
+            "label": "截图目录保留数",
+            "type": "integer",
+            "default": 200,
+            "min": 10,
+            "max": 5000,
+            "hint": "工具截图与指令截图共用此目录，超出后按修改时间回收最旧的。",
+        },
+        {
+            "key": "max_web_image_files",
+            "label": "网页图片保留数",
+            "type": "integer",
+            "default": 500,
+            "min": 10,
+            "max": 5000,
+            "hint": "用户在网页发送的图片，随消息长期展示。",
+        },
+        {
+            "key": "max_qq_image_files",
+            "label": "QQ 图片保留数",
+            "type": "integer",
+            "default": 200,
+            "min": 10,
+            "max": 5000,
+            "hint": "从 QQ 收到的图片，供镜像取用。",
+        },
+        {
+            "key": "max_voice_files",
+            "label": "语音临时文件保留数",
+            "type": "integer",
+            "default": 200,
+            "min": 10,
+            "max": 5000,
+            "hint": "语音合成与解码的中间产物，用后即删，此项为兜底回收上限。",
+        },
+        {
+            "key": "max_segment_files",
+            "label": "分段读取文件保留数",
+            "type": "integer",
+            "default": 500,
+            "min": 10,
+            "max": 5000,
+            "hint": "分段读取落盘的正文，供旧消息「重新粘贴」按路径取回。",
+        },
+        {
+            "key": "max_push_per_report",
+            "label": "单次推送消息数",
+            "type": "integer",
+            "default": 10,
+            "min": 1,
+            "max": 100,
+            "hint": "一次上报最多处理多少条，超出只取最新的。",
+        },
+    ],
 }
 
 

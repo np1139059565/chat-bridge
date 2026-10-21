@@ -289,7 +289,16 @@ def maybe_push_voice(qq_client, openid, m, text, push):
     try:
         from file_prune import prune_dir
         from app_limits import MAX_VOICE_FILES
-        prune_dir(paths.VOICE_DIR, MAX_VOICE_FILES)
+        # 上限取配置值，回退常量
+        limit = MAX_VOICE_FILES
+        try:
+            import tool_config
+            v = tool_config.get_value("system", "max_voice_files")
+            if v:
+                limit = int(v)
+        except Exception:
+            pass
+        prune_dir(paths.VOICE_DIR, limit)
     except Exception as e:
         log("回收语音临时文件失败（不影响主流程）：", e)
     return sent

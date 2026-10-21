@@ -393,8 +393,17 @@ def _prepare_batch(qq_client, conv_id, payload):
     # 条数上限：长时间不开 QQ 后重开，切片可能堆积几百条。只取最新的一批处理，
     # 更旧的直接丢弃——它们多半已被后续消息覆盖，用户要的也是「最后几条」。
     # 这一步在合成/推送之前，确保后续的网络调用次数被硬性封顶，接口不会被拖死。
-    if len(messages) > MAX_PUSH_PER_REPORT:
-        messages = messages[-MAX_PUSH_PER_REPORT:]
+    # 上限取配置值，回退常量
+    push_limit = MAX_PUSH_PER_REPORT
+    try:
+        import tool_config
+        v = tool_config.get_value("system", "max_push_per_report")
+        if v:
+            push_limit = int(v)
+    except Exception:
+        pass
+    if len(messages) > push_limit:
+        messages = messages[-push_limit:]
     return openid, messages
 
 

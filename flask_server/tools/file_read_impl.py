@@ -158,8 +158,16 @@ def _save_segment(text, file_name):
         import paths
         from file_prune import prune_dir
         from app_limits import MAX_SEGMENT_FILES
-        # 先回收，再写入：保证目录不会短暂超过上限太多
-        prune_dir(paths.WEB_SEGMENTS_DIR, MAX_SEGMENT_FILES)
+        # 上限取配置值，回退常量；先回收再写入，避免目录短暂超出上限太多
+        limit = MAX_SEGMENT_FILES
+        try:
+            import tool_config
+            v = tool_config.get_value("system", "max_segment_files")
+            if v:
+                limit = int(v)
+        except Exception:
+            pass
+        prune_dir(paths.WEB_SEGMENTS_DIR, limit)
         paths.WEB_SEGMENTS_DIR.mkdir(parents=True, exist_ok=True)
         # 原文件名可能含路径分隔符等非法字符，只保留安全部分
         safe = "".join(c for c in (file_name or "seg") if c.isalnum() or c in "._-") or "seg"

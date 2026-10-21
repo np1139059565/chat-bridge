@@ -229,7 +229,16 @@ class QqGateway:
         try:
             from file_prune import prune_dir
             from app_limits import MAX_QQ_IMAGE_FILES
-            prune_dir(paths.QQ_IMAGES_DIR, MAX_QQ_IMAGE_FILES)
+            # 上限取配置值，回退常量
+            limit = MAX_QQ_IMAGE_FILES
+            try:
+                import tool_config
+                v = tool_config.get_value("system", "max_qq_image_files")
+                if v:
+                    limit = int(v)
+            except Exception:
+                pass
+            prune_dir(paths.QQ_IMAGES_DIR, limit)
         except Exception as e:
             log("回收 QQ 图片失败（不影响主流程）：", e)
         return img_path, ext
