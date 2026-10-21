@@ -24,19 +24,15 @@
   D.renderPermissionsBlock = function (ctx) {
     const perms = ctx.permissions || {};
     const cur = perms.file_access || 'all';
-    const open = !!ctx.permsOpen;
-    return h('div', { class: 'sp-block' }, [
-      h('div', { class: 'card-head' }, [
-        h('span', {
-          title: '控制文件类工具能访问哪些路径。改动立即生效，无需重启。'
-        }, '文件访问权限'),
-        h('button', { onClick: () => { ctx.permsOpen = !ctx.permsOpen; } }, open ? '▾' : '▸')
-      ]),
-      open ? h('div', { class: 'perms-body' }, [
-        // 四档单选：每档都写明代价，避免用户只看名字就选了最宽的
-        ...MODES.map((m) => h('label', {
-          class: 'perms-mode' + (cur === m.key ? ' active' : ''),
+    const isWhitelist = cur === 'project_whitelist';
+    // 紧凑布局：档位横排一行，描述收进悬停提示；白名单仅在对应档展开
+    return h('div', { class: 'perms-body' }, [
+      h('div', { class: 'perms-line' }, [
+        h('span', { class: 'perms-title' }, '文件访问权限'),
+        h('div', { class: 'perms-modes' }, MODES.map((m) => h('label', {
+          class: 'perms-opt' + (cur === m.key ? ' active' : ''),
           key: m.key,
+          title: m.desc,
         }, [
           h('input', {
             type: 'radio',
@@ -44,23 +40,18 @@
             checked: cur === m.key,
             onChange: () => ctx.setFileAccess(m.key),
           }),
-          h('div', { class: 'perms-text' }, [
-            h('b', {}, m.label),
-            h('div', { class: 'perms-desc' }, m.desc),
-          ]),
-        ])),
-        // 白名单目录：仅在该档下有意义，其它档位置灰提示
-        h('div', { class: 'perms-whitelist' + (cur === 'project_whitelist' ? '' : ' dim') }, [
-          h('div', { class: 'hint' }, '白名单目录（每行一个，仅「工程 + 白名单」档生效）：'),
-          h('textarea', {
-            class: 'perms-dirs',
-            spellcheck: false,
-            disabled: cur !== 'project_whitelist',
-            value: (perms.whitelist_dirs || []).join('\n'),
-            onChange: (ev) => ctx.setWhitelistDirs(ev.target.value),
-          }),
-        ]),
-      ]) : null
+          h('span', {}, m.label),
+        ]))),
+      ]),
+      isWhitelist ? h('div', { class: 'perms-whitelist' }, [
+        h('div', { class: 'hint' }, '白名单目录（每行一个）：'),
+        h('textarea', {
+          class: 'perms-dirs',
+          spellcheck: false,
+          value: (perms.whitelist_dirs || []).join('\n'),
+          onChange: (ev) => ctx.setWhitelistDirs(ev.target.value),
+        }),
+      ]) : null,
     ]);
   };
 })();

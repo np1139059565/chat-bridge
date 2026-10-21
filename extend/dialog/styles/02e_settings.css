@@ -287,38 +287,37 @@
   padding: var(--cb-sp-1) 0;
 }
 
-/* 每个档位一行：单选按钮 + 名称 + 代价说明 */
-.perms-mode {
+/* 档位横排一行：标题 + 四档单选，描述收进悬停提示 */
+.perms-line {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  flex-wrap: wrap;
   gap: var(--cb-sp-2);
-  padding: var(--cb-sp-2);
-  border: 1px solid var(--cb-border-soft);
-  border-radius: var(--cb-r-md);
-  margin-bottom: var(--cb-sp-1);
+}
+
+.perms-title {
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted);
+}
+
+.perms-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cb-sp-3);
+}
+
+/* 单个档位：复选框 + 短名称，整体可点 */
+.perms-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--cb-fs-xs);
   cursor: pointer;
 }
 
-/* 当前选中档：用主色描边，一眼看出选的是哪个 */
-.perms-mode.active {
-  border-color: var(--cb-primary);
-  background: var(--cb-bg-fill);
-}
-
-.perms-mode input {
-  margin-top: 2px;
-}
-
-.perms-text {
-  flex: 1;
-  min-width: 0;
-}
-
-/* 代价说明：比名称弱一档，但仍可读 */
-.perms-desc {
-  font-size: var(--cb-fs-micro);
-  color: var(--cb-text-muted);
-  margin-top: 2px;
+/* 当前选中档：用主色标出 */
+.perms-opt.active {
+  color: var(--cb-primary);
 }
 
 /* 白名单区：非当前档位时整块置灰，避免误以为在生效 */

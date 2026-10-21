@@ -279,6 +279,9 @@
         h('span', { class: 'hint' }, 'search_content / read_file 等结果超过此字符数会报错，提示 AI 缩小范围')
       ]),
       h('br'),
+      // 文件访问权限：控制文件类工具可访问的路径范围
+      D.renderPermissionsBlock(ctx),
+      h('br'),
       // 系统资源上限：各目录与队列保留数，独立于工具
       h('div', { class: 'hint' }, '资源保留上限'),
       D.renderSystemConfig(ctx),
