@@ -144,6 +144,59 @@
     return classifyFailKind(errName, errMsg);
   }
 
+  /**
+   * 判断一次自动播放失败是否属于「被浏览器策略拦截」。
+   *
+   * 浏览器要求用户先与页面交互才允许自动播放；这类失败重试多少次都没用，
+   * 必须提示用户手动点一下播放键。NotAllowedError 是标准错误名，
+   * 11 是部分浏览器给出的等价错误码。
+   * @param {string} name 错误的 name 或 code
+   * @returns {boolean} 被拦截返回 true
+   */
+  function isAutoPlayBlocked(name) {
+    return name === 'NotAllowedError' || name === 11 || name === '11';
+  }
+
+  /**
+   * 判断自动播放失败后是否值得再重试一次。
+   *
+   * 被策略拦截的重试无效；其它原因（音频尚未加载好、解码未完成）
+   * 多半是时序问题，等一会儿再试往往就成功了。重试次数设上限，避免死循环。
+   * @param {string} name      错误的 name 或 code
+   * @param {number} tries     已重试次数
+   * @param {number} maxTries  最大重试次数
+   * @returns {boolean} 应重试返回 true
+   */
+  function shouldRetryVoice(name, tries, maxTries) {
+    // 被浏览器拦截：重试无效，直接放弃
+    if (isAutoPlayBlocked(name)) return false;
+    // 已达上限：不再重试
+    return (parseInt(tries, 10) || 0) < (parseInt(maxTries, 10) || 0);
+  }
+
+  /**
+   * 生成语音播放失败时的提示文案。
+   *
+   * 两种原因给两种指引：被拦截时用户点一下就能播；其它原因需要重试。
+   * @param {string} name 错误的 name 或 code
+   * @returns {string} 提示文案
+   */
+  function voiceFailText(name) {
+    return isAutoPlayBlocked(name) ? '请点播放键开始' : '播放失败，请点播放键重试';
+  }
+
+  /**
+   * 判断语音轮询的响应是否表示「已就绪」。
+   *
+   * 服务端返回 status='ready' 且带文件名才算就绪；缺文件名时无法构造
+   * 播放地址，按未就绪处理，继续轮询。
+   * @param {Object} data 响应体
+   * @returns {boolean} 就绪返回 true
+   */
+  function isVoiceReady(data) {
+    return !!(data && data.status === 'ready' && data.name);
+  }
+
   var api = {
     classifyFailKind: classifyFailKind,
     offlineSuffix: offlineSuffix,
@@ -155,6 +208,10 @@
     canSend: canSend,
     isSendOk: isSendOk,
     sendFailKind: sendFailKind,
+    isAutoPlayBlocked: isAutoPlayBlocked,
+    shouldRetryVoice: shouldRetryVoice,
+    voiceFailText: voiceFailText,
+    isVoiceReady: isVoiceReady,
   };
 
   // 浏览器：挂到 window；node：导出为模块

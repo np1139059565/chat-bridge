@@ -114,8 +114,9 @@
       //  - NotAllowedError：浏览器自动播放策略拦截，须用户交互，无法自动重试；
       //  - 其它（网络/解码/文件未就绪）：多半是音频还没加载好，稍后重试一次。
       var name = (err && (err.name || err.code)) || '';
-      var blocked = (name === 'NotAllowedError' || name === 11);
-      if (!blocked && au._tries < 2) {
+      // 是否被浏览器策略拦截、是否值得重试：判定口径统一放在 WebLogic
+      var blocked = WebLogic.isAutoPlayBlocked(name);
+      if (WebLogic.shouldRetryVoice(name, au._tries, 2)) {
         // 音频源可能尚未就绪：等一小会儿让浏览器加载，再自动重试一次。
         au._tries += 1;
         if (flag) flag.textContent = '加载中，自动重试…';
@@ -129,7 +130,7 @@
       }
       // 仍失败：给出可操作的提示，并恢复手动播放能力。
       // 用户点原生播放键即可再试——bind 里的 play 事件会照常触发。
-      if (flag) flag.textContent = blocked ? '请点播放键开始' : '播放失败，请点播放键重试';
+      if (flag) flag.textContent = WebLogic.voiceFailText(name);
     });
   }
 
@@ -203,7 +204,8 @@
       fetch('/api/web/voice-status?seq=' + seq)
         .then(function (r) { return r.json(); })
         .then(function (d) {
-          if (d && d.status === 'ready') { fillReady(wrap, seq, d.name, true); finish(); }
+          // 就绪判定要求带回文件名：缺文件名时构造不出有效地址，继续轮询
+          if (WebLogic.isVoiceReady(d)) { fillReady(wrap, seq, d.name, true); finish(); }
           else { pollVoice(seq, wrap, tries - 1, done); }
         })
         .catch(function () { pollVoice(seq, wrap, tries - 1, done); });

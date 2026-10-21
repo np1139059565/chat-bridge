@@ -166,3 +166,70 @@ test('发送失败分类：无响应时按异常类型', () => {
 test('发送失败分类：无响应且无异常名时回退 unknown', () => {
   assert.strictEqual(logic.sendFailKind(null, '', ''), 'unknown');
 });
+
+test('自动播放拦截：NotAllowedError 算被拦截', () => {
+  assert.strictEqual(logic.isAutoPlayBlocked('NotAllowedError'), true);
+});
+
+test('自动播放拦截：数字错误码 11 算被拦截', () => {
+  assert.strictEqual(logic.isAutoPlayBlocked(11), true);
+  // 部分浏览器把 code 序列化成字符串
+  assert.strictEqual(logic.isAutoPlayBlocked('11'), true);
+});
+
+test('自动播放拦截：其它错误不算被拦截', () => {
+  assert.strictEqual(logic.isAutoPlayBlocked('NotSupportedError'), false);
+  assert.strictEqual(logic.isAutoPlayBlocked(''), false);
+  assert.strictEqual(logic.isAutoPlayBlocked(undefined), false);
+});
+
+test('语音重试判定：未达上限且非拦截时应重试', () => {
+  assert.strictEqual(logic.shouldRetryVoice('NotSupportedError', 0, 2), true);
+  assert.strictEqual(logic.shouldRetryVoice('NotSupportedError', 1, 2), true);
+});
+
+test('语音重试判定：达到上限不再重试', () => {
+  assert.strictEqual(logic.shouldRetryVoice('NotSupportedError', 2, 2), false);
+  assert.strictEqual(logic.shouldRetryVoice('NotSupportedError', 5, 2), false);
+});
+
+test('语音重试判定：被浏览器拦截时绝不重试', () => {
+  // 即使还有重试次数，策略拦截也无法通过重试解决
+  assert.strictEqual(logic.shouldRetryVoice('NotAllowedError', 0, 2), false);
+  assert.strictEqual(logic.shouldRetryVoice(11, 0, 2), false);
+});
+
+test('语音重试判定：重试次数非法按 0 处理', () => {
+  assert.strictEqual(logic.shouldRetryVoice('Error', undefined, 2), true);
+  assert.strictEqual(logic.shouldRetryVoice('Error', null, 2), true);
+});
+
+test('语音失败提示：被拦截时提示手动点播放', () => {
+  assert.strictEqual(logic.voiceFailText('NotAllowedError'), '请点播放键开始');
+  assert.strictEqual(logic.voiceFailText(11), '请点播放键开始');
+});
+
+test('语音失败提示：其它原因提示重试', () => {
+  assert.strictEqual(logic.voiceFailText('NotSupportedError'), '播放失败，请点播放键重试');
+  assert.strictEqual(logic.voiceFailText(''), '播放失败，请点播放键重试');
+});
+
+test('语音就绪判定：status 为 ready 且带文件名才算就绪', () => {
+  assert.strictEqual(logic.isVoiceReady({ status: 'ready', name: 'a.mp3' }), true);
+});
+
+test('语音就绪判定：缺文件名不算就绪', () => {
+  // 没有文件名就构造不出有效播放地址，应继续轮询
+  assert.strictEqual(logic.isVoiceReady({ status: 'ready' }), false);
+  assert.strictEqual(logic.isVoiceReady({ status: 'ready', name: '' }), false);
+});
+
+test('语音就绪判定：状态不是 ready 不算就绪', () => {
+  assert.strictEqual(logic.isVoiceReady({ status: 'processing', name: 'a.mp3' }), false);
+});
+
+test('语音就绪判定：响应体为空不算就绪', () => {
+  assert.strictEqual(logic.isVoiceReady(null), false);
+  assert.strictEqual(logic.isVoiceReady(undefined), false);
+  assert.strictEqual(logic.isVoiceReady({}), false);
+});
