@@ -299,6 +299,32 @@ def _dedup_sort(items):
     return sorted(uniq, key=lambda s: s.lstrip("/").lower())
 
 
+def builtin_groups():
+    """返回内置指令的结构化分组，供前端渲染成可点击按钮。
+
+    与 shortcut_groups 的区别：后者只给快捷键字符串（供网页指令面板）；
+    本函数额外带描述与分组名，前端据此刻出「点一下就执行」的按钮，
+    用户无需手打指令即可测试各条功能。
+    @returns [{group, items: [{key, desc}]}]，按 BUILTIN 中首次出现的组序排列
+    """
+    order = []          # 分组顺序：保持与 BUILTIN 定义一致
+    buckets = {}
+    for name, meta in BUILTIN.items():
+        group = meta.get("group") or "其它"
+        if group not in buckets:
+            buckets[group] = []
+            order.append(group)
+        # key 取快捷键（更短，便于点击）；无别名时用主命令名
+        aliases = meta.get("aliases") or []
+        key = aliases[0] if aliases else name
+        buckets[group].append({
+            "key": key,
+            "name": name,
+            "desc": meta.get("desc") or "",
+        })
+    return [{"group": g, "items": buckets[g]} for g in order]
+
+
 def shortcut_groups():
     """返回分组的快捷键列表：内置区 / 自定义区，各按首字母排序。
 

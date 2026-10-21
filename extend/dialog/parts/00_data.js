@@ -181,6 +181,8 @@ window.AIMirrorDialog = (function () {
       settingsOpen: false,
       // 指令说明文本：从后端 /api/bridge/help 拉取，与 /h 同源
       bridgeHelpText: '',
+      // 内置指令的结构化分组：[{group, items:[{key, name, desc}]}]，供渲染可点击按钮
+      bridgeHelpGroups: [],
       panelSide: 'right',
       theme: 'light',
       _extTimer: null,

@@ -192,3 +192,56 @@
 .bridge-cmd-item button.danger:hover {
   background: var(--cb-danger-bg);
 }
+
+/* ---------- 内置指令按钮：点一下即执行 ---------- */
+.bridge-help-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cb-sp-3);
+}
+
+.bridge-help-title {
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-muted);
+  margin-bottom: var(--cb-sp-1);
+}
+
+/* 每组内的按钮自动换行，窄屏下也不会溢出 */
+.bridge-help-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cb-sp-2);
+}
+
+/* 单条指令按钮：左侧快捷键、右侧描述，整体可点 */
+.bridge-cmd-btn {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--cb-sp-2);
+  padding: 3px var(--cb-sp-3);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-fill);
+  cursor: pointer;
+  font-size: var(--cb-fs-xs);
+  max-width: 100%;
+}
+
+.bridge-cmd-btn:hover {
+  border-color: var(--cb-primary);
+  color: var(--cb-primary);
+}
+
+/* 快捷键用等宽字体，和正文区分开 */
+.bridge-cmd-btn .k {
+  font-family: monospace;
+  white-space: nowrap;
+}
+
+/* 描述过长时省略，不撑破布局 */
+.bridge-cmd-btn .d {
+  color: var(--cb-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

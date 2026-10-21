@@ -88,10 +88,21 @@
    * @param {boolean} isAuto 是否自动流程（自动时才调度回传）
    */
   M._applyPreIssue = function (card, isAuto) {
-    card.status = 'done';
-    card.result = { issue: card.preIssue.error, message: card.preIssue.message };
-    card.error = null;
-    card.errorType = '';
+    // 关键：走到这里说明工具【没有被执行】——preIssue 接管了本次调用。
+    // 必须如实告知 AI「未执行」，否则它会以为工具成功、跳过后续补救，
+    // 典型后果：一次返回多个调用块被拦下，AI 以为文件都改好了，实际一个没改。
+    // 故状态记为 error，并在结果里明确写明未执行与原因。
+    card.status = 'error';
+    card.error = card.preIssue.error || 'not_executed';
+    card.errorType = 'not_executed';
+    card.result = {
+      success: false,
+      executed: false,
+      error: card.preIssue.error,
+      errorType: 'not_executed',
+      message: '本次工具【未执行】：' + (card.preIssue.message || '')
+        + '\n请按上述要求调整后重新发起调用。',
+    };
     card.executed = true;
     card.finishedAt = Date.now();
     if (this._persist) this._persist();

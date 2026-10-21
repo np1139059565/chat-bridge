@@ -412,6 +412,12 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 
 查询某桥接指令的参数说明。查询参数 `name`。返回 `{ success, params }`。
 
+### POST /api/bridge/run-command
+
+由抽屉直接执行一条指令（供设置页的指令按钮调用）。与 QQ 里敲指令走完全相同的处理链路，区别只在于回执落网页收件箱、不发 QQ。
+
+请求：`{ text: "/sd" }`。返回 `{ success, handled }`。
+
 ### GET /api/bridge/commands
 
 列出可用桥接指令。返回 `{ success, commands: [...] }`。

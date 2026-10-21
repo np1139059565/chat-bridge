@@ -116,6 +116,8 @@
         headers: { 'Accept': 'application/json' }
       });
       this.bridgeHelpText = (hd && hd.help) || '';
+      // 结构化分组：供设置页渲染成可点击的指令按钮（点一下就执行）
+      this.bridgeHelpGroups = (hd && hd.groups) || [];
     } catch (e) {
       this.bridgeHelpText = '';
     }
@@ -315,6 +317,32 @@
    */
   M._bridgeClearAllSessions = function () {
     this.clearAllConversations(true);
+  };
+
+  /**
+   * 由设置页的指令按钮触发：执行一条指令。
+   *
+   * 走后端 /api/bridge/run-command，与 QQ 里敲指令完全同一条链路；
+   * 回执落网页收件箱，用户能在网页版看到执行结果，便于逐条测试。
+   * @param {string} text 指令原文（含斜杠）
+   */
+  M.runBridgeCommand = async function (text) {
+    const cmd = String(text || '').trim();
+    if (!cmd) return;
+    try {
+      const r = await D.apiFetch(this, '/api/bridge/run-command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: cmd }),
+      });
+      if (r && r.success) {
+        this.toast('已执行 ' + cmd);
+      } else {
+        this.toast('执行失败：' + ((r && r.error) || '未知错误'));
+      }
+    } catch (e) {
+      this.toast('执行失败：' + (e && e.message ? e.message : e));
+    }
   };
 
   /** 清空当前会话的消息列表（保留外部卡片，供远程指令使用）。

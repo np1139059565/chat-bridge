@@ -284,8 +284,41 @@ def _cmd_remove(data):
 
 @bp.route("/api/bridge/help", methods=["GET", "OPTIONS"])
 def bridge_help():
-    """返回指令说明文本（与 /h 同源），供设置页展示，避免两处手写漂移。"""
-    return jsonify(success=True, help=command_panel.help_text())
+    """返回指令说明，供设置页展示。
+
+    同时返回两份数据：
+      help   —— 纯文本（与 /h 同源），保留给既有的文本展示场景；
+      groups —— 结构化分组（组名 + 每条指令的快捷键/描述），
+                供前端渲染成可点击的按钮，用户点一下就执行，便于测试。
+    """
+    from remote_bridge import command_registry
+    return jsonify(success=True,
+                   help=command_panel.help_text(),
+                   groups=command_registry.builtin_groups())
+
+
+@bp.route("/api/bridge/run-command", methods=["POST", "OPTIONS"])
+def bridge_run_command():
+    """由抽屉直接执行一条指令（供设置页的指令按钮调用）。
+
+    与 QQ 里敲指令走完全相同的处理链路（handle_command），
+    区别只在于 openid 用网页标识：回执落网页收件箱，不发 QQ。
+    这样按钮点下去的行为与真实指令一致，便于用户逐条测试。
+    请求体：{ text: "/sd" }
+    """
+    from remote_bridge import command_panel
+    data = request.get_json(force=True, silent=True) or {}
+    text = str(data.get("text") or "").strip()
+    # 空指令或不是以 / 开头：不当作指令处理
+    if not text or not text.startswith("/"):
+        return jsonify(success=False, error="not_a_command")
+    try:
+        # qq_client 传 None：网页标识的回执走网页出口，不会用到它
+        handled = command_panel.handle_command(None, "web-user", "", text)
+    except Exception as e:
+        app_log.warn("[bridge]", "执行指令失败：", e)
+        return jsonify(success=False, error=str(e))
+    return jsonify(success=True, handled=bool(handled))
 
 
 @bp.route("/api/bridge/command_params", methods=["GET", "OPTIONS"])

@@ -215,10 +215,42 @@
       renderCmdList(ctx),
       // 内置指令参数：通用渲染，声明来自后端，前端不写死任何指令名。
       renderBuiltinParams(ctx),
-      // 指令说明从后端拉取（与 /h 同源），不再手写，避免与指令表漂移
-      h('div', { class: 'hint' }, '可用指令（与 /h 同源）：'),
-      h('pre', { class: 'bridge-help' }, ctx.bridgeHelpText || '（未加载，检查后端连接）')
+      // 内置指令：渲染成可点击按钮，点一下即执行，便于用户逐条测试。
+      // 分组与条目均来自后端结构化数据，前端不写死任何指令名。
+      h('div', { class: 'hint' }, '可用指令（点击即执行）：'),
+      renderHelpGroups(ctx)
     ]);
+  }
+
+  /**
+   * 渲染内置指令按钮：按后端返回的分组铺开，每条形如「快捷键 描述」。
+   *
+   * 点击即调 runBridgeCommand，与 QQ 里敲指令走同一条链路，
+   * 回执落网页收件箱，用户能直接看到执行结果。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 分组容器
+   */
+  function renderHelpGroups(ctx) {
+    const groups = ctx.bridgeHelpGroups || [];
+    if (!groups.length) {
+      return h('div', { class: 'hint' }, '（未加载，检查后端连接）');
+    }
+    return h('div', { class: 'bridge-help-groups' }, groups.map((g) =>
+      h('div', { class: 'bridge-help-group', key: 'g-' + g.group }, [
+        h('div', { class: 'bridge-help-title' }, g.group),
+        h('div', { class: 'bridge-help-items' }, (g.items || []).map((it) =>
+          h('button', {
+            class: 'bridge-cmd-btn',
+            key: 'c-' + it.key,
+            title: it.name + ' — ' + (it.desc || ''),
+            onClick: () => ctx.runBridgeCommand(it.key),
+          }, [
+            h('span', { class: 'k' }, it.key),
+            h('span', { class: 'd' }, it.desc || ''),
+          ])
+        )),
+      ])
+    ));
   }
 
   /**
