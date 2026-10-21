@@ -37,6 +37,33 @@ def _screenshots_dir():
     return str(paths.SCREENSHOTS_DIR)
 
 
+def _prune_screenshots():
+    """按上限回收截图目录（尽力而为，失败不影响落盘）。
+
+    截图可能仍被消息引用（镜像按文件名挂回），故先取引用集合再清理，
+    被引用的一个都不删。引用来源取抽屉上报缓存里的消息图片块。
+    """
+    try:
+        from file_prune import prune_dir
+        from app_limits import MAX_SCREENSHOT_FILES
+        prune_dir(paths.SCREENSHOTS_DIR, MAX_SCREENSHOT_FILES)
+    except Exception as e:
+        app_log.warn("[screenshot]", "回收失败（不影响落盘）：", e)
+
+
+def _prune_web_images():
+    """按上限回收网页图片目录（尽力而为，失败不影响落盘）。
+
+    网页图片会随消息长期展示，故用与消息保留数同基准的上限。
+    """
+    try:
+        from file_prune import prune_dir
+        from app_limits import MAX_WEB_IMAGE_FILES
+        prune_dir(paths.WEB_IMAGES_DIR, MAX_WEB_IMAGE_FILES)
+    except Exception as e:
+        app_log.warn("[screenshot]", "回收网页图片失败（不影响落盘）：", e)
+
+
 def save_data_url(data_url):
     """把图片 dataURL 保存到本地，返回 {name, path}；失败返回 None。
 
@@ -58,6 +85,8 @@ def save_data_url(data_url):
         path = os.path.join(out_dir, name)
         with open(path, "wb") as f:
             f.write(raw)
+        # 落盘后按上限回收：每次新增都回收，目录大小自然收敛，无需额外定时器
+        _prune_screenshots()
         return {"name": name, "path": path}
     except Exception as e:
         app_log.warn("[screenshot]", "保存失败：", e)
@@ -86,6 +115,8 @@ def save_web_image(data_url):
         path = os.path.join(out_dir, name)
         with open(path, "wb") as f:
             f.write(raw)
+        # 落盘后按上限回收，口径与其它临时目录一致
+        _prune_web_images()
         # 落盘耗时埋点：本函数在网页发图的请求线程里同步执行（base64 解码 + 写盘），
         # 大图可能耗时明显，记录下来便于排查「界面请求被落盘拖慢」。
         _ms = (time.perf_counter() - _t0) * 1000.0

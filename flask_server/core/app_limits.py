@@ -29,6 +29,22 @@ MAX_MESSAGES = WEB_RETENTION
 # 仍被消息引用的音频即使很旧也不会被删。
 MAX_AUDIO_FILES = WEB_RETENTION
 
+# ========== 一·B、临时文件目录（各目录独立回收）==========
+# 这些目录都是「用后即可重造」的产物，但同一条消息可能引用其中一个，
+# 故统一采用「数量上限 + 引用保护」两条规则（实现见 core/file_prune.py）。
+#
+# 截图目录：工具截图与指令截图，单张可达数百 KB，体积占用最重。
+MAX_SCREENSHOT_FILES = 200
+# 网页图片目录：用户在网页发的图，会随消息长期展示。
+MAX_WEB_IMAGE_FILES = WEB_RETENTION
+# QQ 图片目录：从 QQ 收到的图，供镜像取用后即可回收。
+MAX_QQ_IMAGE_FILES = 200
+# 语音临时目录：解码 PCM / 合成中间产物，用后即删，只需兜底回收。
+MAX_VOICE_FILES = 200
+# 分段读取落盘目录：read_file 的分段内容，供「重新粘贴」按路径取回。
+# 与消息保留同基准：一条消息可能引用一个分段文件。
+MAX_SEGMENT_FILES = WEB_RETENTION
+
 # ========== 二、卡片总线 ==========
 # 卡片是「待投递」的临时队列，被取走并确认后即不再需要，与消息保留量无关。
 # 内存敏感：图片卡片含完整 base64，单张可达 1MB+，故不随 WEB_RETENTION 放大。

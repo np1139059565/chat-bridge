@@ -283,4 +283,13 @@ def maybe_push_voice(qq_client, openid, m, text, push):
         os.remove(out_path)
     except OSError:
         pass
+    # 兜底回收：上面的「用完即删」在正常路径已生效，但进程中断、异常退出时
+    # 会留下孤儿文件。这里按上限扫一次，只处理一级文件，cache 子目录（合成
+    # 成品，需长期复用）不受影响。
+    try:
+        from file_prune import prune_dir
+        from app_limits import MAX_VOICE_FILES
+        prune_dir(paths.VOICE_DIR, MAX_VOICE_FILES)
+    except Exception as e:
+        log("回收语音临时文件失败（不影响主流程）：", e)
     return sent

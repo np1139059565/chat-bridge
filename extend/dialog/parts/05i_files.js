@@ -56,6 +56,34 @@
   };
 
   /**
+   * 从工具结果里提取文件项（整文件按路径、分段按 dataURL）。
+   *
+   * 只认文件：图片走 D.extractScreenshot，两者字段与语义互不共用。
+   * 供 06_execute 与 07_cards 调用，是文件附件的唯一解析入口。
+   * @param {Object} result 工具结果
+   * @returns {Array} 文件项数组 [{ source, path|content, name, mime }]
+   */
+  D.extractFile = function (result) {
+    if (!result || !result.data || typeof result.data !== 'object') return [];
+    const out = [];
+    // 归一化单个文件项：整文件只带路径（source=true），分段带该片段 dataURL
+    const push = function (f) {
+      if (!f || typeof f !== 'object') return;
+      const name = String(f.name || '');
+      const mime = String(f.mime || 'text/plain');
+      if (f.source === true && typeof f.path === 'string') {
+        out.push({ source: true, path: f.path, name: name, mime: mime });
+      } else if (typeof f.content === 'string' && f.content.indexOf('data:') === 0) {
+        out.push({ source: false, content: f.content, name: name, mime: mime });
+      }
+    };
+    // 单文件用 data.file，批量用 data.files 数组；两者都必须认，否则批量结果会被漏掉。
+    push(result.data.file);
+    if (Array.isArray(result.data.files)) result.data.files.forEach(push);
+    return out;
+  };
+
+  /**
    * 渲染「重新粘贴」按钮；消息没有附带文件时返回 null（不占位）。
    *
    * 文件只存描述不存内容：整文件按路径现取，分段按已存 dataURL 解码。

@@ -108,21 +108,53 @@ def _as_file_payload(text, file_name, meta):
     @param meta      额外元信息（路径、行范围、总数等）
     @returns 工具结果字典
     """
-    raw = text.encode("utf-8")
-    data_url = "data:text/plain;base64," + base64.b64encode(raw).decode("ascii")
-    # 文本附件不落盘：dataURL 已在结果里，前端直接据此构造 File 粘贴。
-    # 落盘只对截图有意义（镜像按文件名回挂图片），文本挂回去会渲染出错误内容。
-    out = {
-        "data": {
-            "file": {
-                "mime": "text/plain",
-                "name": file_name,
-                "content": data_url,
-            },
-        },
+    # 正文落盘而非内联：dataURL 若进结果，会随消息树一起被持久化，
+    # 让会话对象与每次保存的请求体膨胀。改为写成一个片段文件，只回路径；
+    # 前端按路径经 /api/web/segment-file 取回，重新粘贴时再还原成 File。
+    saved_name = _save_segment(text, file_name)
+    file_obj = {
+        "mime": "text/plain",
+        "name": file_name,
     }
+    if saved_name:
+        # 落盘成功：按「源文件」语义回路径，前端走 source 分支现取
+        file_obj["source"] = True
+        file_obj["path"] = str(paths.WEB_SEGMENTS_DIR / saved_name)
+    else:
+        # 落盘失败（磁盘异常等）：退回内联 dataURL，保证功能不中断
+        raw = text.encode("utf-8")
+        file_obj["content"] = "data:text/plain;base64," + base64.b64encode(raw).decode("ascii")
+    out = {"data": {"file": file_obj}}
     out.update(meta or {})
     return out
+
+
+def _save_segment(text, file_name):
+    """把分段正文写成片段文件，返回文件名；失败返回空串。
+
+    文件名用「时间戳 + 原文件名」保证唯一，避免不同分段互相覆盖。
+    写入前先按上限回收一次：每次新增都回收，目录大小自然收敛，
+    无需额外定时器。
+    @param text      片段正文
+    @param file_name 原文件名（用于命名，便于辨认来源）
+    @returns 落盘后的文件名；失败返回空串
+    """
+    try:
+        import time
+        import paths
+        from file_prune import prune_dir
+        from app_limits import MAX_SEGMENT_FILES
+        # 先回收，再写入：保证目录不会短暂超过上限太多
+        prune_dir(paths.WEB_SEGMENTS_DIR, MAX_SEGMENT_FILES)
+        paths.WEB_SEGMENTS_DIR.mkdir(parents=True, exist_ok=True)
+        # 原文件名可能含路径分隔符等非法字符，只保留安全部分
+        safe = "".join(c for c in (file_name or "seg") if c.isalnum() or c in "._-") or "seg"
+        name = "seg_" + str(int(time.time() * 1000)) + "_" + safe
+        (paths.WEB_SEGMENTS_DIR / name).write_text(text, encoding="utf-8")
+        return name
+    except Exception as e:
+        print("[read_file] 分段落盘失败：%s" % e)
+        return ""
 
 
 def _is_whole_file(offset, limit):

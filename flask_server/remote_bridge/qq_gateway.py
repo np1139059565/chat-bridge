@@ -225,6 +225,13 @@ class QqGateway:
         if not _download_file(image_url, img_path):
             self._reply_voice(openid, "图片下载失败")
             return None, ""
+        # 落盘后按上限回收：图片已被取出投成卡片，旧文件可安全清理
+        try:
+            from file_prune import prune_dir
+            from app_limits import MAX_QQ_IMAGE_FILES
+            prune_dir(paths.QQ_IMAGES_DIR, MAX_QQ_IMAGE_FILES)
+        except Exception as e:
+            log("回收 QQ 图片失败（不影响主流程）：", e)
         return img_path, ext
 
     def _deliver_image_card(self, openid, img_path, data_url, text):

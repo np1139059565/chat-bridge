@@ -11,6 +11,11 @@
 | `MAX_CARDS` | 200 | `core/card_bus.py` | 卡片总线最多保留的卡片数，超限优先裁剪已确认展示的最旧卡片 |
 | `MAX_MESSAGES` | 500 | `web_bridge/web_inbox.py` | 网页收件箱最多保留的消息条数，超限丢最旧 |
 | `MAX_AUDIO_FILES` | 100 | `web_bridge/audio_prune.py` | 网页音频目录最多保留的文件数，合成后按修改时间回收更旧的 |
+| `MAX_SCREENSHOT_FILES` | 200 | `core/app_limits.py` | 截图目录上限，落盘后按修改时间回收（实现见 `core/file_prune.py`） |
+| `MAX_WEB_IMAGE_FILES` | 500 | `core/app_limits.py` | 网页图片目录上限，与消息保留同基准 |
+| `MAX_QQ_IMAGE_FILES` | 200 | `core/app_limits.py` | QQ 图片目录上限，下载后回收 |
+| `MAX_VOICE_FILES` | 200 | `core/app_limits.py` | 语音临时目录上限，兜底回收异常退出留下的孤儿文件 |
+| `MAX_SEGMENT_FILES` | 500 | `core/app_limits.py` | 分段读取落盘目录上限，与消息保留同基准 |
 | `DEFAULT_QUEUE_MAX` | 10000 | `core/log_sink.py` | 异步日志队列容量，满时丢最旧 |
 | `MAX_BATCH` | 100 | `web_bridge/web_clientlog.js` | 前端日志单批上限，超限立即冲刷 |
 | `MAX_DOC_CHARS` | 200000 | `custom_tools/skill_docs.py` | 技能文档读取字符上限 |

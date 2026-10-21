@@ -55,6 +55,9 @@ WEB_INBOX_PATH = WEB_DIR / "inbox.json"
 WEB_AUDIO_DIR = WEB_DIR / "audio"
 # 网页图片目录：指令结果的截图等存这里，供网页经接口读取展示。
 WEB_IMAGES_DIR = WEB_DIR / "images"
+# 分段读取目录：read_file 分段读取的正文落这里，供「重新粘贴」按路径取回。
+# 只存片段文本，按数量上限回收（见 core/file_prune.py）。
+WEB_SEGMENTS_DIR = WEB_DIR / "segments"
 # 记忆系统目录：结构化记忆数据库（消息树 + 蒸馏 + 事件层）落这里。
 # 单一 SQLite 文件承载全部记忆，启动时加载进内存，供接口读写。
 MEMORY_DB_DIR = DATA_DIR / "memory"

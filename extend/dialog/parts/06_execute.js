@@ -34,15 +34,13 @@
    * 执行一张工具卡片：调用后端 /tool，记录结果或失败诊断信息。
    * 失败时保留完整堆栈与错误分类，供 AI 区分参数问题与工具代码缺陷。
    */
-  M.executeCard = async function (card, isAuto, fromCommand, allowReply) {
+  M.executeCard = async function (card, isAuto, fromCommand) {
     const cid = card.id || '(无 id)';
-    // 【隔离铁律】标记本次执行是否由指令触发：指令触发的执行结果默认不回传 AI。
-    // 非指令触发（用户手动点击、卡片自然到达）显式清除标记，避免旧标记残留误拦。
+    // 【隔离铁律】标记本次执行是否由指令触发。用途只有一个：
+    // 执行失败时的报错不回传 AI（报错会暴露指令存在，可能被滥用）。
+    // 正常结果不受此标记影响，照常回传给 AI。
+    // 非指令触发显式清除标记，避免旧标记残留导致误拦。
     card._cmdTriggered = !!fromCommand;
-    // 【重跑例外】/rr 的语义是「重新执行并回传」：用户明确希望看到新结果。
-    // 这属正常操作，不应被指令隔离误拦。用独立标记放行，不影响其它指令。
-    // 非重跑路径一律清除，避免旧标记残留导致隔离失效。
-    card._cmdAllowReply = !!(fromCommand && allowReply);
     log('卡片执行开始：id=' + cid + ' 工具=' + (card.tool || '(非工具)')
       + ' 方式=' + (isAuto ? '自动' : '手动') + (fromCommand ? '（指令触发）' : ''));
     // 建卡阶段已检测出致命告警：直接作为结果，不调用本地工具
@@ -289,10 +287,11 @@
     // 触发源是用户指令（/sa on 带起、/cp、/rr 等），指令的产物不得流向 AI。
     // 只回传 AI 主动调用工具产生的结果；指令来源一律跳过（结果仍留在卡片上）。
     // 详见 docs/command-tool-isolation.md。
-    // 【重跑例外】/rr 属用户明确要求的重跑，结果需回传 AI（指令描述即「并回传」）。
-    // 其它指令触发一律拦截：指令回执与报错只能给用户看，避免 AI 发现并滥用指令。
-    if (card && card._cmdTriggered && !card._cmdAllowReply) {
-      log('指令触发的执行：结果不回传 AI', card.tool || card.id || '');
+    // 【隔离铁律】只拦异常：指令触发的执行若失败，报错会暴露指令存在，不得流向 AI。
+    // 正常结果一律放行——它属工具产物（/rr 重跑、/sa on 带起的卡片），本就该给 AI 看。
+    // 真正的指令回执走 /api/bridge/result，根本不进本函数，无需在此设防。
+    if (card && card._cmdTriggered && card.status === 'error') {
+      log('指令触发且执行失败：错误不回传 AI', card.tool || card.id || '');
       return;
     }
     const shot = D.extractScreenshot(card.result);
@@ -331,14 +330,16 @@
         conv.pendingFiles.push({
           text: mark,
           files: files.map(function (f) {
+            // 只存「怎么取回」，不存内容本身：
+            //   整文件与分段片段都已落盘，重新粘贴时按 path 现取；
+            //   内联 dataURL（分段落盘失败时的兜底）才保留 content。
+            // 这样消息树不会因附件而膨胀，会话保持精简。
             return {
               name: f.name || 'file.txt',
               mime: f.mime || 'text/plain',
               source: !!f.source,
               path: f.path || '',
-              // 分段文件的内容是 dataURL，必须一并存下：它不在磁盘上，
-              // 丢了就无法重新粘贴。整文件则按 path 现取，不必存内容。
-              content: f.content || '',
+              content: f.source ? '' : (f.content || ''),
             };
           }),
         });
