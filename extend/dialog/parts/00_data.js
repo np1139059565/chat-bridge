@@ -247,9 +247,9 @@ window.AIMirrorDialog = (function () {
       // 扫描结果默认折叠：扫完一次不该一直占着抽屉高度，需要时再展开。
       // permissions 为文件访问权限配置（档位 + 白名单目录），permsOpen 控制该区块折叠。
       scanOpen: false, permissions: {}, permsOpen: false,
-      scanRoots: [],
-      flaskOk: false,
-      flaskError: '',
+      // 工具配置：{工具名: [声明+当前值]}，toolConfOpen 控制该区块折叠
+      toolConfig: {}, toolConfOpen: false,
+      scanRoots: [], flaskOk: false, flaskError: '',
       toastMsg: '',
       autoSendEnabled: false,
       autoSendDelay: 3000,

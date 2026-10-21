@@ -129,6 +129,8 @@
       if (cfg.tools) this.configTools = cfg.tools;
       // 文件访问权限：供设置页渲染当前档位与白名单
       if (cfg.permissions) this.permissions = cfg.permissions;
+      // 工具配置：声明 + 当前值，供设置页按类型通用渲染
+      if (cfg.tool_config) this.toolConfig = cfg.tool_config;
       if (cfg.limits && cfg.limits.max_json_chars) this.maxJsonChars = cfg.limits.max_json_chars;
       if (cfg.default_profile) this.config.profile = cfg.default_profile;
       // 配置端口与实际连通端口不一致 = 端口已改但服务尚未重启（需重启才生效）
@@ -198,6 +200,31 @@
       });
       this.toast('白名单已保存（' + dirs.length + ' 项）');
     } catch (e) {
+      this.toast('保存失败：' + e);
+    }
+  };
+
+  /**
+   * 设置某个工具的某项配置，并立即写回后端。
+   *
+   * 本地先更新（界面立即反映），再提交后端；失败回滚，避免显示已生效但实际未存。
+   * @param {string} tool 工具名
+   * @param {string} key  配置键
+   * @param {*} value     新值
+   */
+  M.setToolConfig = async function (tool, key, value) {
+    const block = this.toolConfig || (this.toolConfig = {});
+    const rows = block[tool] || [];
+    const spec = rows.find((r) => r.key === key);
+    const before = spec ? spec.value : undefined;
+    if (spec) spec.value = value;
+    try {
+      await D.apiFetch(this, '/config', {
+        method: 'POST',
+        body: { tool_config: { [tool]: { [key]: value } } }
+      });
+    } catch (e) {
+      if (spec) spec.value = before;
       this.toast('保存失败：' + e);
     }
   };

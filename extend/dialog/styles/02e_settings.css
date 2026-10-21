@@ -344,3 +344,75 @@
   border-radius: var(--cb-r-md);
   padding: var(--cb-sp-2);
 }
+
+/* ---------- 工具配置 ---------- */
+.tc-body {
+  padding: var(--cb-sp-1) 0;
+}
+
+/* 每个工具一组，组间留白分隔 */
+.tc-group {
+  margin-bottom: var(--cb-sp-2);
+}
+
+.tc-group-name {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-xs);
+  color: var(--cb-text-muted);
+  margin-bottom: var(--cb-sp-1);
+}
+
+/* 一行配置：左侧标签与说明，右侧控件 */
+.tc-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--cb-sp-3);
+  padding: var(--cb-sp-1) 0;
+  border-bottom: 1px solid var(--cb-border-soft);
+}
+
+.tc-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--cb-fs-xs);
+}
+
+/* 补充说明比标签弱一档 */
+.tc-hint {
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-muted);
+  margin-top: 2px;
+}
+
+.tc-control {
+  flex: 0 0 auto;
+}
+
+/* 数字输入：窄一些，避免占满整行 */
+.tc-num {
+  width: 100px;
+  padding: 2px var(--cb-sp-2);
+  border: 1px solid var(--cb-border);
+  border-radius: var(--cb-r-md);
+  background: var(--cb-bg-fill);
+  color: var(--cb-text-body);
+  font-size: var(--cb-fs-xs);
+  font-family: ui-monospace, Consolas, monospace;
+}
+
+/* 多选项：横向排列，窄屏自动换行 */
+.tc-multi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cb-sp-2);
+  justify-content: flex-end;
+}
+
+.tc-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--cb-fs-xs);
+  cursor: pointer;
+}
