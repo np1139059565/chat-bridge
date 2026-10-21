@@ -334,8 +334,10 @@
     if (!card) { this.toast('没有可执行的卡片'); return; }
     // 清掉旧状态，让它重新进入执行流程
     card.skipped = false;
-    // 第 3 个参数 fromCommand=true：指令触发，执行结果禁止回传 AI
-    this.executeCard(card, true, true);
+    // 参数说明：fromCommand=true（指令触发）、allowReply=true（重跑允许回传）。
+    // /rr 的语义就是「重新执行并回传」，属正常操作；若沿用默认拦截，
+    // 结果（含文件附件重新粘贴）将全部丢失。
+    this.executeCard(card, true, true, true);
     this.toast('已开始重新执行…');
   };
 

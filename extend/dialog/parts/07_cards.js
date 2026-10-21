@@ -43,25 +43,6 @@
    * @param {Object} result 工具结果
    * @returns {{content:string,name:string,mime:string}|null} 附件信息；没有则返回 null
    */
-  D.extractFile = function (result) {
-    if (!result || !result.data || typeof result.data !== 'object') return [];
-    const out = [];
-    // 归一化单个文件项：整文件只带路径（source=true），分段带该片段 dataURL
-    const push = function (f) {
-      if (!f || typeof f !== 'object') return;
-      const name = String(f.name || '');
-      const mime = String(f.mime || 'text/plain');
-      if (f.source === true && typeof f.path === 'string') {
-        out.push({ source: true, path: f.path, name: name, mime: mime });
-      } else if (typeof f.content === 'string' && f.content.indexOf('data:') === 0) {
-        out.push({ source: false, content: f.content, name: name, mime: mime });
-      }
-    };
-    // 单文件用 data.file，批量用 data.files 数组；两者都必须认，否则批量结果会被漏掉。
-    push(result.data.file);
-    if (Array.isArray(result.data.files)) result.data.files.forEach(push);
-    return out;
-  };
 
   /**
    * 渲染「自动」开关：工具卡片与外部卡片共用同一视觉与行为。
@@ -289,6 +270,8 @@
         }, [
           h('span', { class: 'caret' }, open ? '▾' : '▸'),
           h('span', {}, '工具'),
+          // 文件附件：给出「重新粘贴」入口（实现见 05i_files.js）
+          D.renderRepasteButton(ctx, m),
           open ? null : h('span', { class: 'user-preview' }, '（' + blocks.length + ' 块，点击展开）')
         ]),
         open ? h('div', { class: 'blocks' }, blocks.map((b, j) => D.renderBlock(ctx, b, j, mKey))) : null

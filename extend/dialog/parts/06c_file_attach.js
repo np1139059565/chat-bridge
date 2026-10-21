@@ -52,6 +52,22 @@
    * @param {Array} files 文件项数组
    * @param {string} mark 精简回传标记
    */
+  /**
+   * 重新粘贴一批文件到网页 AI 输入框（供消息上的「重新粘贴」按钮调用）。
+   *
+   * 与首次回传走同一条链路（_toFileObject → 发送队列），区别只在于：
+   * 这里不追加正文标记，避免把同一个 bridge-chat-res 重复发一遍给 AI。
+   * 整文件按路径重新取字节，分段按已存的 dataURL 重新解码。
+   * @param {Array} descs 文件描述数组 [{ name, mime, source, path, content }]
+   */
+  M.repasteFiles = function (descs) {
+    const list = Array.isArray(descs) ? descs : [];
+    if (!list.length) { this.toast('没有可重新粘贴的文件'); return; }
+    this.toast('正在重新粘贴 ' + list.length + ' 个文件…');
+    // 复用同一套转换与入队逻辑；正文传空串，只贴文件不重复发标记
+    this._enqueueFiles(list, '');
+  };
+
   M._enqueueFiles = function (files, mark) {
     const self = this;
     Promise.all(files.map(function (f) { return self._toFileObject(f); }))

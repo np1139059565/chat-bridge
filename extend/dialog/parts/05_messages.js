@@ -109,7 +109,11 @@
       // 之后所有判定读它，不再各自扫字符串反推（见 05f_parse.js 的 msgSource）。
       source: this.msgSource(msg),
       deleted: false,
-      cards: {}
+      cards: {},
+      // files：本条消息附带的文件描述（read_file 的产物）。
+      // 块类型里没有「文件」这一种，故单列字段承载；渲染时据此给出「重新粘贴」按钮。
+      // 只存文件名 / 路径 / 来源类型，不含文件内容，体积可忽略。
+      files: Array.isArray(msg.files) ? msg.files : [],
     };
   };
 
@@ -261,6 +265,8 @@
     // 方案 2：把服务端图片按「文字关联」挂到对应用户消息的块上，
     // 必须放在入树之前——入树后消息块已被引用，再改可能来不及参与本轮渲染。
     try { this._attachPendingImages(conv, incoming); } catch (e) { log('挂载图片失败：' + e); }
+    // 同理挂回文件描述：块类型无「文件」，故写入消息的 files 字段，供渲染时出「重新粘贴」按钮。
+    try { this._attachPendingFiles(conv, incoming); } catch (e) { log('挂载文件失败：' + e); }
     const beforeNodes = Object.keys(conv.msgTree).length;
     const up = this.upsertTree(conv, incoming, reason, atBottom);
     const addedNodes = Object.keys(conv.msgTree).length > beforeNodes;
