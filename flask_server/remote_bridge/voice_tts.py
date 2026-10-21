@@ -4,7 +4,9 @@
 
 引擎：
   piper    本地神经网络合成，输出 WAV，再编码为 MP3；离线、延迟低。
-  pyttsx3  调用系统 SAPI5 语音，输出 WAV，再编码为 MP3；离线、零安装。
+  pyttsx3  调用系统 SAPI5 语音，输出 WAV，再编码为 MP3；离线，需 pip 安装。
+  sapi     调 Windows 自带 System.Speech 合成，输出 WAV 再转 MP3；离线、零安装。
+           与 pyttsx3 同为系统语音，但不依赖任何第三方包，网络受限时的保底路径。
   edge_tts 微软在线合成，直接输出 MP3；需联网，非官方接口。
 
 安装分工（重要）：
@@ -41,6 +43,7 @@ import threading
 from . import bridge_log
 from . import voice_mp3
 from . import voice_pyttsx3_runner
+from . import voice_sapi_runner
 
 
 def log(*args):
@@ -364,6 +367,14 @@ def _dispatch(engine, text, out_path, voice, cfg):
         return _synth_piper(text, out_path, cfg)
     if engine == "pyttsx3":
         return _synth_pyttsx3(text, out_path, cfg)
+    if engine == "sapi":
+        # 零依赖系统引擎：PowerShell 调 Windows 自带 System.Speech 合成 WAV 再转 MP3。
+        # 与 pyttsx3 的区别是无需 pip 安装任何包，网络受限时仍可用。
+        # 音色与语速沿用 pyttsx3 的配置项（sapi_voice 优先），便于统一调整。
+        try:
+            return voice_sapi_runner.synthesize(text, out_path, cfg, SYNTH_TIMEOUT)
+        except Exception as e:
+            return False, "SAPI 合成异常：%s" % e
     return False, "未知语音引擎：%s" % engine
 
 
@@ -377,7 +388,7 @@ def _engine_order(cfg):
     engine = (cfg.get("voice_engine") or "auto").strip().lower()
     if engine != "auto":
         return [engine]                            # 固定引擎：只试这一个
-    raw = (cfg.get("voice_fallback") or "piper,pyttsx3,edge_tts")
+    raw = (cfg.get("voice_fallback") or "piper,pyttsx3,sapi,edge_tts")
     order = [e.strip().lower() for e in str(raw).split(",") if e.strip()]
     return order or ["edge_tts"]                   # 兜底：至少保留在线引擎
 

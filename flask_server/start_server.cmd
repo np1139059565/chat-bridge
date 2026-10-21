@@ -67,6 +67,29 @@ if errorlevel 1 (
 )
 
 rem ------------------------------------------------------------
+rem 第二步半：探测语音合成能力（只提示，不阻断启动）
+rem 语音是补充能力：缺失时服务照常启动，只是合成不出语音。
+rem 此处显式报告可用引擎，避免「服务正常但语音全哑」被静默忽略。
+rem ------------------------------------------------------------
+set "TTS_ENGINES="
+!PY_CMD! -c "import pyttsx3, pythoncom" >nul 2>nul
+if not errorlevel 1 set "TTS_ENGINES=!TTS_ENGINES! pyttsx3"
+if exist "%~dp0..\models\tts\piper\piper.exe" set "TTS_ENGINES=!TTS_ENGINES! piper"
+where ffmpeg >nul 2>nul
+if not errorlevel 1 set "TTS_ENGINES=!TTS_ENGINES! ffmpeg(WAV转MP3)"
+
+rem Windows 自带 System.Speech 恒定可用，故 sapi 始终列为可用引擎
+set "TTS_ENGINES=!TTS_ENGINES! sapi"
+
+echo [信息] 语音合成可用引擎：!TTS_ENGINES!
+rem 若三个依赖引擎全缺，只剩 sapi 与 ffmpeg，提示补装以获得更好音质
+!PY_CMD! -c "import pyttsx3, lameenc, soundfile" >nul 2>nul
+if errorlevel 1 (
+  echo [提示] pyttsx3 / lameenc / soundfile 未装齐：语音将由系统自带引擎合成。
+  echo        如需更好音质，联网后执行：!PY_CMD! -m pip install -r requirements.txt
+)
+
+rem ------------------------------------------------------------
 rem 第三步：确定要使用的端口
 rem 优先级与 server.py 保持一致：命令行 --port > runtime.yaml > 5000
 rem ------------------------------------------------------------

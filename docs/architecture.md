@@ -102,7 +102,7 @@ chat-bridge/
 | QQ 协议 | `qq_gateway.py` / `qq_client.py` / `qq_event_parse.py` / `qq_media.py` | 事件分发、机器人协议层、事件解析与下载、富媒体发送 |
 | 消息 | `message_router.py` / `message_flow.py` / `message_parse.py` / `outbound.py` | 分流与推送、上报推送流程、解析与块文本组装、出站正文组装 |
 | 语音 | `voice_tts.py` / `voice_voices.py` / `voice_cache.py` / `voice_mp3.py` | 多引擎合成、音色清单、成品缓存、WAV 转 MP3 |
-| 语音（其他） | `pyttsx3_worker.py` / `voice_asr.py` / `voice_pending.py` / `message_voice.py` | 合成子进程、语音识别、待确认文字暂存、出向语音提取与推送 |
+| 语音（其他） | `pyttsx3_worker.py` / `voice_sapi_runner.py` / `voice_asr.py` / `voice_pending.py` / `message_voice.py` | 合成子进程与父进程调度、语音识别、待确认文字暂存、出向语音提取与推送 |
 | 指令 | `command_registry.py` / `command_dispatch.py` / `command_external.py` / `command_panel.py` | 指令表与校验、抽屉命令下发、外部指令、QQ 指令执行 |
 | 存储与日志 | `bridge_store.py` / `bridge_log.py` / `json_scan.py` | 配置与去重记账、异步日志、文本内 JSON 扫描 |
 | 图片 | `message_images.py` | 网页消息内图片的推送 |
@@ -212,8 +212,9 @@ content/04_observer.js 触发抓取、content/03_bridge.js sendPage() → postMe
 
 | 环节 | 模块 | 说明 |
 |---|---|---|
-| 引擎选择与调度 | `voice_tts.py` | 按配置的 fallback 顺序选引擎；`pyttsx3` / `piper` / `edge_tts` 三选一，统一输出 MP3 |
+| 引擎选择与调度 | `voice_tts.py` | 按配置的 fallback 顺序选引擎；`pyttsx3` / `piper` / `sapi` / `edge_tts` 四选一，统一输出 MP3 |
 | pyttsx3 隔离 | `pyttsx3_worker.py` | 独立子进程运行，不随主进程生命周期退出。Windows 的 SAPI 是单例资源，放主进程会占死，故隔离 |
+| sapi 引擎 | `voice_sapi_runner.py` | 用 PowerShell 调 Windows 自带 System.Speech 合成 WAV，再转 MP3。不依赖任何第三方包，网络受限时仍是可用引擎 |
 | 音色清单 | `voice_voices.py` | 三类引擎音色来源不同：pyttsx3 读系统语音、piper 读本地模型文件、edge_tts 取内置清单 |
 | 编码 | `voice_mp3.py` | WAV 转 MP3 |
 | 成品缓存 | `voice_cache.py` | 按文本哈希复用，避免同一句话重复合成 |

@@ -11,10 +11,18 @@
 - MP3 只支持固定的若干采样率（见 MP3_RATES）。
 - 输入采样率不在其中时，用线性插值重采样到最接近的标准采样率。
 
-依赖：os、shutil、numpy（重采样）、soundfile（读 WAV）、lameenc（编码）
+编码路径（两条，自动选择）：
+1) 纯 Python 链：soundfile 读 WAV + numpy 重采样 + lameenc 编码；
+2) ffmpeg 兜底：环境变量 BRIDGE_FFMPEG 或 PATH 中的 ffmpeg 直接转码。
+   第 1 条不可用（依赖缺失或编码异常）时自动落到第 2 条，
+   使语音链路不再因单个 Python 包缺失而整体失效。
+
+依赖：os、shutil、subprocess、numpy（重采样）、
+      soundfile（读 WAV）、lameenc（编码）；兜底路径依赖 ffmpeg 可执行文件
 """
 import os
 import shutil
+import subprocess
 
 
 # MP3 编码器支持的采样率白名单；不在其中的输入需先重采样。
@@ -68,7 +76,8 @@ def ensure_mp3(src_path, dst_mp3):
         import lameenc          # MP3 编码器（PyPI 有 Windows 预编译包）
         import soundfile as sf  # WAV 读取，兼容多种位深与声道布局
     except Exception as e:
-        return False, "缺少音频编码依赖：%s" % e
+        # 纯 Python 编码链不可用时，回落到 ffmpeg；两者都没有才算失败
+        return _ensure_mp3_by_ffmpeg(src_path, dst_mp3, e)
 
     try:
         # 第一步：读 WAV 并转成 MP3 可接受的 PCM 字节流
@@ -77,7 +86,57 @@ def ensure_mp3(src_path, dst_mp3):
         _encode_to_file(lameenc, pcm, rate, channels, dst_mp3)
         return True, ""
     except Exception as e:
-        return False, "WAV 转 MP3 失败：%s" % e
+        # 编码过程出错同样尝试 ffmpeg，避免单个依赖异常拖垮整条语音链路
+        return _ensure_mp3_by_ffmpeg(src_path, dst_mp3, e)
+
+
+def _find_ffmpeg():
+    """定位 ffmpeg 可执行文件。
+
+    查找顺序：环境变量 BRIDGE_FFMPEG > PATH 中的 ffmpeg。
+    环境变量用于 ffmpeg 未加入 PATH 但装在自定义目录的情况。
+
+    @returns 可执行文件路径；未找到时返回空串
+    """
+    env = (os.environ.get("BRIDGE_FFMPEG") or "").strip()
+    if env and os.path.exists(env):
+        return env
+    return shutil.which("ffmpeg") or ""
+
+
+def _ensure_mp3_by_ffmpeg(src_path, dst_mp3, cause):
+    """用 ffmpeg 把音频转成 MP3（纯 Python 编码链不可用时的兜底）。
+
+    与纯 Python 链的取舍：ffmpeg 是外部可执行文件，但在多数开发机上已存在，
+    且能一次性处理任意采样率与声道布局，无需重采样代码。
+
+    @param src_path 源音频路径
+    @param dst_mp3  目标 MP3 路径
+    @param cause    触发兜底的原始异常，用于拼装最终错误信息
+    @returns (ok, error)
+    """
+    exe = _find_ffmpeg()
+    if not exe:
+        return False, "缺少音频编码依赖：%s；且未找到 ffmpeg" % cause
+    try:
+        proc = subprocess.run(
+            # -id3v2_version 0：不写 ID3v2 标签头，使产物以 MPEG 帧同步头开头，
+            # 与纯 Python 链（lameenc）的输出保持一致，下游按裸帧解析也成立。
+            [exe, "-y", "-loglevel", "error", "-i", str(src_path),
+             "-codec:a", "libmp3lame", "-b:a", "128k",
+             "-id3v2_version", "0", "-write_xing", "0", str(dst_mp3)],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "ffmpeg 转码超时（60 秒）"
+    except Exception as e:
+        return False, "ffmpeg 转码异常：%s" % e
+    if proc.returncode != 0:
+        detail = (proc.stderr or b"").decode("utf-8", "replace").strip()[:200]
+        return False, "ffmpeg 转码失败：%s" % (detail or ("退出码 %d" % proc.returncode))
+    if not os.path.exists(dst_mp3) or os.path.getsize(dst_mp3) == 0:
+        return False, "ffmpeg 未产出有效 MP3"
+    return True, ""
 
 
 def _load_pcm(sf, src_path):

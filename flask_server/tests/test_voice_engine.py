@@ -70,12 +70,12 @@ class VoiceEngineTestCase(unittest.TestCase):
     def test_auto_engine_blank_fallback_uses_default(self):
         """auto 模式未配 fallback 时用内置默认顺序。"""
         order = voice_tts._engine_order({"voice_engine": "auto"})
-        self.assertEqual(order, ["piper", "pyttsx3", "edge_tts"])
+        self.assertEqual(order, ["piper", "pyttsx3", "sapi", "edge_tts"])
 
     def test_missing_engine_key_defaults_to_auto(self):
         """配置缺 voice_engine 时按 auto 处理。"""
         order = voice_tts._engine_order({})
-        self.assertEqual(order, ["piper", "pyttsx3", "edge_tts"])
+        self.assertEqual(order, ["piper", "pyttsx3", "sapi", "edge_tts"])
 
     # ---------- 引擎分发 ----------
 

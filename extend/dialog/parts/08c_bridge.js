@@ -158,7 +158,8 @@
    * 引擎说明（与后端 voice_tts.py 一致）：
    *   auto    按下方顺序逐个尝试，前一个失败自动降级到下一个（推荐）
    *   piper   本地神经网络，离线、音质较好，需先跑 scripts/setup_piper.py
-   *   pyttsx3 系统自带语音，离线、零安装，音质一般
+   *   pyttsx3 系统语音，离线，需 pip 安装 pyttsx3 + pywin32
+   *   sapi    Windows 自带语音，离线、零安装，不依赖任何第三方包
    *   edge_tts 微软在线合成，目前接口已失效，仅作历史保留
    *
    * 选择后立即保存（与开关行为一致），保存后后端重启桥接生效。
@@ -170,7 +171,8 @@
     const opts = [
       ['auto', '自动（按顺序降级）'],
       ['piper', 'Piper（本地，需安装）'],
-      ['pyttsx3', '系统语音（离线）'],
+      ['pyttsx3', '系统语音（需装包）'],
+      ['sapi', '系统语音（零安装）'],
       ['edge_tts', 'edge-tts（在线，当前失效）']
     ];
     return h('div', { class: 'bridge-push-row', key: 'voice_engine' }, [

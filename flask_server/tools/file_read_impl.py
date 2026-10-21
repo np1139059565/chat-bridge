@@ -105,6 +105,30 @@ def _as_source_ref(fp):
     }
 
 
+def _as_empty_payload(file_name, meta):
+    """正文为空时的工具结果：只给文字说明，不产生任何附件。
+
+    与 _as_file_payload 的区别：不落盘、不返回 data.file / data.files。
+    前端只认 data.file / data.files 才会触发粘贴（见 extractFile），
+    因此这里不给附件字段，粘贴链路自然不会被触发。
+
+    为什么不干脆不落盘：空内容仍按既有归档策略写一份空文件，
+    保持「每次读取都留痕」的行为一致；但归档结果不回传，不参与粘贴。
+
+    @param file_name 原文件名（用于归档命名）
+    @param meta      额外元信息（路径、行范围、总数等）
+    @returns 工具结果字典，只含文字说明与元信息
+    """
+    # 按既有策略归档空文件：仅留痕，不进入粘贴链路
+    _save_segment("", file_name)
+    out = {
+        "empty": True,
+        "message": "文件内容为空（或所读行范围没有内容），未生成可粘贴附件。",
+    }
+    out.update(meta or {})
+    return out
+
+
 def _as_file_payload(text, file_name, meta):
     """把正文包装成「文件附件」结果，供前端作为文件粘贴进输入框。
 
@@ -119,6 +143,11 @@ def _as_file_payload(text, file_name, meta):
     @param meta      额外元信息（路径、行范围、总数等）
     @returns 工具结果字典
     """
+    # 正文为空（空文件，或 offset 已越过文件末尾）：
+    # 前端拿到空附件会去粘贴，而粘贴链路取不到任何文字，直接报「未提取到文字」，
+    # 导致 AI 无法继续执行。故此处只做归档、不返回附件字段，改在结果里给出文字说明。
+    if not str(text or "").strip():
+        return _as_empty_payload(file_name, meta)
     # 正文落盘而非内联：dataURL 若进结果，会随消息树一起被持久化，
     # 让会话对象与每次保存的请求体膨胀。改为写成一个片段文件，只回路径；
     # 前端按路径经 /api/web/segment-file 取回，重新粘贴时再还原成 File。
@@ -196,6 +225,7 @@ def _read_batch_whole(paths_param):
     @returns 工具结果字典
     """
     refs = []
+    empties = []   # 空文件：只记录，不放进附件列表（放进去会触发空内容粘贴）
     for one in paths_param:
         fp = _abspath(one)
         # 路径校验：必须是已存在的普通文件
@@ -203,8 +233,18 @@ def _read_batch_whole(paths_param):
             raise ToolParamError("文件不存在：%s" % one)
         # 体积校验：整文件虽不回传内容，但过大也会撑爆前端内存
         _check_whole_size(fp)
+        if os.path.getsize(fp) == 0:
+            # 空文件按归档策略留痕，但不作为附件返回
+            _save_segment("", os.path.basename(fp))
+            empties.append(str(fp))
+            continue
         refs.append(_as_source_ref(fp))
-    return {"data": {"files": refs}, "count": len(refs)}
+    out = {"data": {"files": refs}, "count": len(refs)}
+    if empties:
+        # 明确告知哪些文件为空，供调用方据此判断，无需再去粘贴确认
+        out["empty_files"] = empties
+        out["message"] = "其中 %d 个文件内容为空，未生成可粘贴附件。" % len(empties)
+    return out
 
 
 def _read_batch_segment(paths_param, offset, limit):
@@ -218,15 +258,26 @@ def _read_batch_segment(paths_param, offset, limit):
     chunks = []      # 各文件正文片段，带「路径 行范围」头
     metas = []       # 各文件的行范围与总行数元信息
     total_lines_read = 0
+    has_body = False  # 是否真的读到非空正文（read_lines 按请求行数算，不能作判据）
     for one in paths_param:
         it = _load_one(one, offset, limit)
         total_lines_read += it["read_lines"]
+        if str(it["content"] or "").strip():
+            has_body = True
         # 每段带「路径 行范围」头，便于在附件中区分来源
         chunks.append("===== %s 行 %d-%d =====\n%s" % (
             it["path"], it["lines"][0], it["lines"][1], it["content"]))
         metas.append({"path": it["path"], "lines": it["lines"],
                       "total_lines": it["total_lines"]})
     joined = "\n\n".join(chunks)
+    # 没读到任何非空正文（全是空文件，或 offset 越过末尾）：
+    # 此时附件里只有各段的「路径 行范围」头，粘贴出去也取不到文字，
+    # 故不进附件链路，直接返回文字说明。
+    if not has_body:
+        return _as_empty_payload(
+            "%d_files_empty.txt" % len(metas),
+            {"count": len(metas), "files": metas, "total_lines": 0},
+        )
     # 体积校验：超限时报错并提示缩小范围
     enforce_size_limit(
         {"data": {"text": joined}},
@@ -252,6 +303,11 @@ def _read_single_whole(raw_path):
         raise ToolParamError("文件不存在：%s" % raw_path)
     # 体积校验：过大时提示改用分段读取
     _check_whole_size(fp)
+    # 空文件：不返回附件引用。否则前端会按路径取回空内容再粘贴，
+    # 粘贴链路取不到文字即报「未提取到文字」，使 AI 无法继续执行。
+    if os.path.getsize(fp) == 0:
+        return _as_empty_payload(os.path.basename(fp),
+                                 {"path": str(fp), "lines": [1, 1], "total_lines": 0})
     return {"data": {"file": _as_source_ref(fp)}}
 
 

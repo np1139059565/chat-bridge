@@ -48,6 +48,9 @@ def list_voices(engine=None):
     elif engine == "piper":
         voices = _list_piper_voices()
         current = (cfg.get("piper_model") or "").strip()
+    elif engine == "sapi":
+        voices = _list_sapi_voices()
+        current = (cfg.get("sapi_voice") or "").strip()
     elif engine == "edge_tts":
         voices = _list_edge_voices()
         current = DEFAULT_VOICE
@@ -97,6 +100,50 @@ def _list_piper_voices():
     except Exception as e:
         log("列举 Piper 模型失败：", e)
     return out
+
+
+def _list_sapi_voices():
+    """列举系统语音音色：起短命 PowerShell 子进程查询，不在主进程加载 SAPI。
+
+    与 pyttsx3 分支同一思路：SAPI 是进程级单例资源，放在主进程里会占死，
+    故每次列举都开一个短命子进程，查完即退。
+
+    @returns [{"id","name"}]；失败时为空列表
+    """
+    import json
+    import shutil
+    import subprocess
+    # 脚本保持纯 ASCII：PowerShell 5.1 按本地 ANSI 解析脚本文件
+    code = (
+        "Add-Type -AssemblyName System.Speech\n"
+        "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer\n"
+        "$out = @()\n"
+        "foreach ($v in $s.GetInstalledVoices()) {\n"
+        "  $out += [pscustomobject]@{ id = $v.VoiceInfo.Name; name = $v.VoiceInfo.Name + ' | ' + $v.VoiceInfo.Culture }\n"
+        "}\n"
+        "$s.Dispose()\n"
+        "ConvertTo-Json -InputObject $out -Compress\n"
+    )
+    exe = shutil.which("powershell")
+    if not exe:
+        log("列举系统音色失败：未找到 powershell")
+        return []
+    try:
+        r = subprocess.run(
+            [exe, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", code],
+            capture_output=True, timeout=SYNTH_TIMEOUT)
+        raw = (r.stdout or b"").decode("utf-8", "replace").strip()
+        if not raw:
+            return []
+        data = json.loads(raw)
+        # 只有一个音色时 ConvertTo-Json 返回对象而非数组，统一成列表
+        if isinstance(data, dict):
+            data = [data]
+        return [{"id": str(d.get("id") or ""), "name": str(d.get("name") or "")}
+                for d in data if isinstance(d, dict)]
+    except Exception as e:
+        log("列举系统音色失败：", e)
+        return []
 
 
 def _list_edge_voices():

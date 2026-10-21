@@ -61,19 +61,22 @@ def _default_config():
             # 语音识别开关：关时收到语音文件直接丢弃，不进 ASR；
             # 开时语音经识别转文字、回发等 /vo 确认后才投给 AI。默认关。
             "voice": False,
-            # 语音合成引擎：piper / pyttsx3 / edge_tts / auto。
+            # 语音合成引擎：piper / pyttsx3 / sapi / edge_tts / auto。
             # auto 时按 voice_fallback 的顺序逐个尝试，全部失败才算合成失败。
-            # 默认 auto：新环境未装 Piper 时自动落到 pyttsx3 或 edge_tts，
-            # 行为与只配 edge_tts 一致，不会因缺少本地模型而失效。
+            # 默认 auto：新环境未装 Piper 时自动落到系统语音或在线引擎，
+            # 不会因缺少本地模型而失效。
             "voice_engine": "auto",
-            # auto 模式的引擎优先级，逗号分隔。末尾保留 edge_tts 作为在线兜底。
-            "voice_fallback": "piper,pyttsx3,edge_tts",
+            # auto 模式的引擎优先级，逗号分隔。
+            # sapi 排在线引擎之前：它离线、零安装，比依赖外网的在线接口更可靠。
+            "voice_fallback": "piper,pyttsx3,sapi,edge_tts",
             # Piper 可执行文件与模型路径；留空表示用工程内默认位置。
             "piper_exe": "",
             "piper_model": "",
             # pyttsx3 音色名（Windows SAPI5）与语速；留空表示用系统默认音色。
             "pyttsx3_voice": "Microsoft Huihui Desktop - Chinese (Simplified)",
             "pyttsx3_rate": 150,
+            # sapi 引擎音色名（Windows 自带语音）；留空时用系统默认音色。
+            "sapi_voice": "Microsoft Huihui Desktop",
             # edge_tts 音色名（在线引擎）；留空时用内置默认中文音色。
             "edge_tts_voice": "zh-CN-XiaoxiaoNeural",
             # 质量检测开关：与推送开关同区存放，供前端设置页读写。

@@ -390,7 +390,8 @@ QQ ↔ 网页 AI 的双向桥接接口。抽屉插件与后端交互，把网页
 
 列出某引擎可选音色，供设置页音色下拉使用。
 查询参数 `engine`（可选，缺省取当前配置实际生效的引擎；auto 取 fallback 首个）。
-三类引擎音色来源不同：pyttsx3 读 Windows 系统语音（子进程列举，避免占用 SAPI）、
+四类引擎音色来源不同：pyttsx3 读 Windows 系统语音（子进程列举，避免占用 SAPI）、
+sapi 读 Windows 自带 System.Speech 语音清单（同样子进程列举）、
 piper 读本地模型文件、edge_tts 取内置音色清单。
 返回 `{ success, engine, voices: [{id, name}], current }`。
 
