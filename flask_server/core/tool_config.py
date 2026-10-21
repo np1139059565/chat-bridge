@@ -155,8 +155,16 @@ def get_value(tool, key):
     for item in CONFIG_SCHEMA.get(tool, []):
         if item.get("key") != key:
             continue
+        # 优先读新配置；没有则回退工具列表里的同名键，最后用声明默认值。
+        # 回退是为了兼容工具原本就有的配置（如 run_command 的语言列表），
+        # 避免同一项在两处各存一份、显示与实际生效不一致。
         stored = ((runtime.CONFIG.get("tool_config") or {}).get(tool) or {}).get(key)
-        return stored if stored is not None else item.get("default")
+        if stored is not None:
+            return stored
+        legacy = ((runtime.CONFIG.get("tools") or {}).get(tool) or {}).get(key)
+        if legacy is not None:
+            return legacy
+        return item.get("default")
     return None
 
 

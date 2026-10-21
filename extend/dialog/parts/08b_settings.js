@@ -291,8 +291,6 @@
         D.renderGeneralSettings(ctx),
         // 4.6) 文件访问权限：控制文件类工具能访问哪些路径
         D.renderPermissionsBlock(ctx),
-        // 4.7) 工具配置：各工具的可调参数，按声明通用渲染
-        D.renderToolConfigBlock(ctx),
         // 5) 历史会话：列出全部会话，勾选后复制 JSON（对话记录 + 全部卡片）
         D.renderSessionBlock(ctx)
       ])

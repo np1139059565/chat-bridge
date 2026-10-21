@@ -36,8 +36,8 @@
     } else if (spec.type === 'multiselect') {
       // 多选：每个选项一个复选框，勾选结果组成数组回写
       const cur = Array.isArray(val) ? val : [];
-      control = h('div', { class: 'tc-multi' }, (spec.options || []).map((opt) =>
-        h('label', { class: 'tc-opt', key: opt }, [
+      control = h('div', { class: 'check-row' }, (spec.options || []).map((opt) =>
+        h('label', { class: 'check-item', key: opt }, [
           h('input', {
             type: 'checkbox',
             checked: cur.indexOf(opt) >= 0,
@@ -69,28 +69,16 @@
   }
 
   /**
-   * 渲染「工具配置」区块：遍历全部已声明配置的工具。
-   * @param {Object} ctx Vue 实例
-   * @returns {VNode|null} 区块节点；无任何配置声明时返回 null
+   * 渲染某个工具自己的配置项，挂在该工具展开区内。
+   *
+   * 配置跟随工具：每个工具只渲染自己声明的配置，不集中到独立区块。
+   * @param {Object} ctx  Vue 实例
+   * @param {string} tool 工具名
+   * @returns {VNode|null} 配置节点；该工具无配置声明时返回 null
    */
-  D.renderToolConfigBlock = function (ctx) {
-    const all = ctx.toolConfig || {};
-    const tools = Object.keys(all);
-    if (!tools.length) return null;
-    const open = !!ctx.toolConfOpen;
-    return h('div', { class: 'sp-block' }, [
-      h('div', { class: 'card-head' }, [
-        h('span', {
-          title: '工具的可调参数，改动立即写回后端并生效'
-        }, '工具配置'),
-        h('button', { onClick: () => { ctx.toolConfOpen = !ctx.toolConfOpen; } }, open ? '▾' : '▸')
-      ]),
-      open ? h('div', { class: 'tc-body' }, tools.map((tool) =>
-        h('div', { class: 'tc-group', key: tool }, [
-          h('div', { class: 'tc-group-name' }, tool),
-          ...(all[tool] || []).map((spec) => renderField(ctx, tool, spec)),
-        ])
-      )) : null
-    ]);
+  D.renderToolConfig = function (ctx, tool) {
+    const rows = (ctx.toolConfig || {})[tool] || [];
+    if (!rows.length) return null;
+    return h('div', { class: 'tc-body' }, rows.map((spec) => renderField(ctx, tool, spec)));
   };
 })();

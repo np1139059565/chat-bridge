@@ -56,7 +56,8 @@
             h('td', p.description)
           ])))
         ]),
-        name === 'run_command' ? ctx.renderRunCommandLanguages(tool) : null,
+        // 该工具自己的可调配置，跟随工具渲染；无配置声明时不占位
+        D.renderToolConfig(ctx, name),
         h('pre', { class: 'usage' }, ctx.usageOf(tool))
       ]) : null
     ]);
