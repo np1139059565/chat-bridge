@@ -37,19 +37,12 @@ def _resolve(raw_path):
     if not raw_path:
         return None
     root = os.path.abspath(str(paths.PROJECT_ROOT))
+    # 相对路径以工程根为基准解析（与 read_file 工具口径一致）
     target = os.path.abspath(raw_path if os.path.isabs(raw_path) else os.path.join(root, raw_path))
-    try:
-        # 必须确实位于工程根之内
-        if os.path.commonpath([root, target]) != root:
-            return None
-    except ValueError:
-        # 跨盘符等情况一律视为非法
-        return None
-    # 拒绝点文件与目录：工程根内的 .git / .env 等不应经此接口外泄
-    rel = os.path.relpath(target, root)
-    for part in rel.split(os.sep):
-        if part.startswith("."):
-            return None
+    # 与 read_file 工具能力对齐：该工具能读任意路径的文件，
+    # 本接口若只放行工程根内，就会出现「读到了却贴不进去」的割裂
+    # （跨盘文件一律 404，前端最终报「读取文件失败」）。
+    # 故不再限制工程根，只要求目标确实是存在的文件——目录不可取。
     return target if os.path.isfile(target) else None
 
 
