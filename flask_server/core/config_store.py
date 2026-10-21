@@ -86,6 +86,9 @@ def save_config_to_yaml():
     runtime_data = {
         "flask": {"port": flask.get("port", 5000)},
         "tools": runtime_tools,
+        # 文件访问权限：随本机状态变（不同机器可设不同范围），故写运行时文件。
+        # 落盘是白名单式的，不在此列出就不会被保存。
+        "permissions": CONFIG.get("permissions", {}),
     }
     ok1 = config_file.update_definition_section("app", definition)
     ok2 = config_file.update_runtime_section("app", runtime_data)

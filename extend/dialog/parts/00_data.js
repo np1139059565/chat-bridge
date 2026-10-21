@@ -244,8 +244,9 @@ window.AIMirrorDialog = (function () {
       customEditing: Vue.reactive({}),
       skillScanDir: '',
       scanResults: [],
-      // 扫描结果默认折叠：扫完一次不该一直占着抽屉高度，需要时再展开
-      scanOpen: false,
+      // 扫描结果默认折叠：扫完一次不该一直占着抽屉高度，需要时再展开。
+      // permissions 为文件访问权限配置（档位 + 白名单目录），permsOpen 控制该区块折叠。
+      scanOpen: false, permissions: {}, permsOpen: false,
       scanRoots: [],
       flaskOk: false,
       flaskError: '',

@@ -43,7 +43,14 @@ def _resolve(raw_path):
     # 本接口若只放行工程根内，就会出现「读到了却贴不进去」的割裂
     # （跨盘文件一律 404，前端最终报「读取文件失败」）。
     # 故不再限制工程根，只要求目标确实是存在的文件——目录不可取。
-    return target if os.path.isfile(target) else None
+    if not os.path.isfile(target):
+        return None
+    try:
+        import path_policy
+        path_policy.check_path(target, write=False)
+    except Exception:
+        return None
+    return target
 
 
 @bp.route("/api/web/source-file", methods=["GET", "OPTIONS"])

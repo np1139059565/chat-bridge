@@ -41,7 +41,10 @@ impl = None
 # 具体读写与路径见 core/config_file.py。
 CONFIG = {"flask": {"host": "127.0.0.1", "port": 5000},
           "limits": {"max_json_chars": 100000},
-          "default_profile": "glm", "site_profiles": {}, "tools": {}}
+          "default_profile": "glm", "site_profiles": {}, "tools": {},
+          # 文件访问权限：file_access 取四档之一，whitelist_dirs 为白名单目录。
+          # 默认 all（完全放开），与历史行为一致，避免升级后功能突然不可用。
+          "permissions": {"file_access": "all", "whitelist_dirs": []}}
 
 # 工具表：初始化阶段由 app.py 的 _init_runtime() 用 tools_impl 填充
 TOOLS = {}

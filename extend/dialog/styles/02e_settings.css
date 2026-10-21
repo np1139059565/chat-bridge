@@ -281,3 +281,66 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ---------- 文件访问权限 ---------- */
+.perms-body {
+  padding: var(--cb-sp-1) 0;
+}
+
+/* 每个档位一行：单选按钮 + 名称 + 代价说明 */
+.perms-mode {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--cb-sp-2);
+  padding: var(--cb-sp-2);
+  border: 1px solid var(--cb-border-soft);
+  border-radius: var(--cb-r-md);
+  margin-bottom: var(--cb-sp-1);
+  cursor: pointer;
+}
+
+/* 当前选中档：用主色描边，一眼看出选的是哪个 */
+.perms-mode.active {
+  border-color: var(--cb-primary);
+  background: var(--cb-bg-fill);
+}
+
+.perms-mode input {
+  margin-top: 2px;
+}
+
+.perms-text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 代价说明：比名称弱一档，但仍可读 */
+.perms-desc {
+  font-size: var(--cb-fs-micro);
+  color: var(--cb-text-muted);
+  margin-top: 2px;
+}
+
+/* 白名单区：非当前档位时整块置灰，避免误以为在生效 */
+.perms-whitelist {
+  margin-top: var(--cb-sp-2);
+}
+
+.perms-whitelist.dim {
+  opacity: .5;
+}
+
+/* 目录输入框：等宽字体，每行一个路径 */
+.perms-dirs {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 64px;
+  resize: vertical;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: var(--cb-fs-xs);
+  background: var(--cb-bg-subtle);
+  color: var(--cb-text-body);
+  border: 1px solid var(--cb-border-soft);
+  border-radius: var(--cb-r-md);
+  padding: var(--cb-sp-2);
+}
