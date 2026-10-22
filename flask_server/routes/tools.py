@@ -1,8 +1,14 @@
 """
 路由：工具目录与工具调用
 
-- GET  /tools   返回已上线工具清单（内置 + 自定义 + 外部提供方）
-- POST /tool    调用工具（内置 / 自定义脚本 / 外部提供方）
+- GET  /tools              返回已上线工具清单（内置 + 自定义 + 外部提供方），供 AI 选取
+- GET  /tools/all          返回全部内置工具及开关状态（含已下线），供设置页管理
+- GET  /tool/command_task  查询 run_command 异步任务的执行状态与结果
+- POST /tool               调用工具（内置 / 自定义脚本 / 外部提供方）
+
+统一约定：工具执行失败不在 HTTP 状态码上区分，一律 200 并在响应体里
+给出 success=false 与错误分类（origin / errorType / hint），便于调用方
+按「参数问题」或「环境问题」分别处置。
 """
 import concurrent.futures as _futures
 import threading
@@ -85,6 +91,12 @@ def _run_with_timeout(fn, params, timeout):
     try:
         return future.result(timeout=timeout)
     except _futures.TimeoutError:
+        # 先确认确实是「等不到结果」而非「工具自己抛了超时类异常」：
+        # future 已完成说明工具已跑完（只是抛了异常），此时不该重建线程池。
+        # Python 3.11 起 concurrent.futures.TimeoutError 与内置 TimeoutError
+        # 合并为同一类，仅靠异常类型无法区分这两种情况，故以 done() 判定。
+        if future.done():
+            raise
         # 该 worker 已被不可终止的慢任务占用，重建池以换用全新 worker
         _rebuild_tool_pool()
         raise TimeoutError("工具执行超过 %d 秒未返回" % timeout)

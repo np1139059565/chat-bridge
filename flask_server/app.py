@@ -12,6 +12,8 @@ AI 工具调用镜像插件 —— Flask 应用装配
 """
 import runtime
 import tools_impl
+# 模块级导入日志：create_app() 的启动容错分支与各钩子函数都会用到
+import app_log
 
 # 各功能域蓝图
 from routes.tools import bp as tools_bp
@@ -157,7 +159,7 @@ def _register_request_logging(app):
     app.after_request(_req_end_hook)
 
 
-def _register_liveness(app, interval_seconds=10):
+def _register_liveness(_app, interval_seconds=10):
     """存活心跳：独立线程每 interval_seconds 打一条日志，作为「进程还活着」的基线。
 
     为什么需要它：请求日志只能证明「请求进来了」，看门狗也只能在

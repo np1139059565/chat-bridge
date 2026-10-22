@@ -151,8 +151,6 @@ def resolve_skill_file(skill, rel):
     return target
 
 
-# 参数别名：调用方可能用 path / file 等写法指代 filePath，统一归一到规范名，
-# 避免因别名导致「缺参」报错。
 # 参数别名：调用方可能用 camelCase / 旧名指代规范参数，统一归一到规范名，
 # 避免因别名导致「缺参」报错。规范名口径：文件路径=file_path，目录路径=dir_path。
 _PARAM_ALIASES = {

@@ -76,10 +76,16 @@ class TestClassifyError(_Base):
         """其它异常归为工具内部缺陷。"""
         self.assertEqual(error_utils.classify_error(RuntimeError("x")), "tool_internal")
 
-    def test_param_cls_empty_when_impl_none(self):
-        """runtime.impl 为 None 时，param_error_cls 返回空元组，isinstance 不报错。"""
+    def test_param_cls_none_when_impl_none(self):
+        """runtime.impl 为 None 时，param_error_cls 返回 None，classify_error 据此跳过该档判断。
+
+        None 是显式兜底信号：classify_error 用 `is not None` 判断，
+        比空元组更能表达「这一档不可用」，也避免调用方误以为拿到的是类型元组。
+        """
         runtime.impl = None
-        self.assertEqual(error_utils.param_error_cls(), ())
+        self.assertIsNone(error_utils.param_error_cls())
+        # 兜底信号生效：即使取不到参数异常类，ValueError 仍应归为参数类
+        self.assertEqual(error_utils.classify_error(ValueError("x")), "parameter")
 
 
 class TestErrorLocation(_Base):
