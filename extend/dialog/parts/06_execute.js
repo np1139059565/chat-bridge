@@ -275,8 +275,12 @@
     }
     // 结果是图片时复制图片；文本附件与普通结果照常复制结果文本。
     const shot = D.extractScreenshot(card.result);
-    if (shot.indexOf('data:image/') === 0) {
-      this.copyImage(shot);
+    if (shot) {
+      this._getImageDataUrl(shot).then((dataUrl) => {
+        this.copyImage(dataUrl);
+      }).catch((e) => {
+        this.toast('获取图片失败：' + e.message);
+      });
       return;
     }
     this.copy(this.resultText(card));
@@ -309,11 +313,6 @@
     if (shot) {
       // 工具截图：与「网页版用户发图」同一形态——图片贴入输入框，正文只带一段
       // 精简的 bridge-chat-res 标记（含 tool/nonce/文件名，不含图片数据）。
-      // 再登记「标记文本 → 截图文件名」关联，待消息入树时按文本把图片以文件名
-      // 挂回（见 05_messages._attachPendingImages）。如此：
-      //   1) 正文含 bridge-chat-res → 镜像端判为「工具结果」，不误触记忆窗口；
-      //   2) 正文不含 base64 → 不会膨胀；
-      //   3) 图片按文件名引用，与网页版用户发图一致，不依赖网页 DOM。
       const mark = this.screenshotMark(card);
       const saved = ((card.result || {}).data || {}).saved || null;
       try {
@@ -324,7 +323,14 @@
           if (this._persist) this._persist();
         }
       } catch (e) { log('登记截图回挂失败：' + e); }
-      D.enqueueSend({ type: 'auto_send_image', dataUrl: shot, text: mark });
+      
+      // 如果拿到的是链接，先用 fetch 拉取并转成 dataURL，再发给内容脚本
+      this._getImageDataUrl(shot).then((dataUrl) => {
+        D.enqueueSend({ type: 'auto_send_image', dataUrl: dataUrl, text: mark });
+      }).catch((e) => {
+        log('拉取截图失败：' + e.message);
+        this.toast('拉取截图失败');
+      });
       return;
     }
     // 文件附件（read_file）：独立分支、独立消息类型，与截图互不共用。

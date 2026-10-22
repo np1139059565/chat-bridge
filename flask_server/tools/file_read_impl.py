@@ -430,7 +430,7 @@ def t_read_image(p):
             "图片体积 %.1fMB 超过上限 %dMB，请先压缩后再读取"
             % (size / 1048576.0, limit_bytes // 1048576)
         )
-    # 读原始字节并编码成 dataURL
+    # 读原始字节并编码成 dataURL（仅用于落盘，不再返回给前端）
     with open(fp, "rb") as fh:
         raw = fh.read()
     data_url = "data:%s;base64,%s" % (mime, base64.b64encode(raw).decode("ascii"))
@@ -438,7 +438,8 @@ def t_read_image(p):
     saved = screenshot_store.save_data_url(data_url)
     return {
         "data": {
-            "screenshot": data_url,
+            # 不再返回巨大的 base64 长串，只返回文件的相对路径供前端拉取
+            "screenshot_url": "/api/web/screenshot-file/%s" % saved["name"] if saved else "",
             "saved": ({"name": saved["name"], "path": saved["path"]} if saved else None),
             "file_name": os.path.basename(fp),
         },

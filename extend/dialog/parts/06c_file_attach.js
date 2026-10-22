@@ -12,6 +12,32 @@
   const log = D.log;
 
   /**
+   * 获取图片的 dataURL。
+   * 如果传入的是本地链接（如 /api/web/screenshot-file/xxx.png），则通过 fetch 拉取并转成 base64；
+   * 如果本身就是 dataURL，直接返回。
+   * @param {string} shot 链接或 dataURL
+   * @returns {Promise<string>} 图片 dataURL
+   */
+  M._getImageDataUrl = function (shot) {
+    if (shot.indexOf('data:image/') === 0) return Promise.resolve(shot);
+    let url = shot;
+    if (url.charAt(0) === '/') {
+      const base = (this.config.flaskUrl || '').replace(/\/+$/, '');
+      url = base + url;
+    }
+    return fetch(url).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.blob();
+    }).then(function (blob) {
+      return new Promise(function (resolve) {
+        const reader = new FileReader();
+        reader.onloadend = function () { resolve(reader.result); };
+        reader.readAsDataURL(blob);
+      });
+    });
+  };
+
+  /**
    * 把一个文件项转成可直接交给队列的 File 对象。
    * @param {Object} file 文件项 { source, path, content, name, mime }
    * @returns {Promise<File|null>} 构造好的 File；失败返回 null

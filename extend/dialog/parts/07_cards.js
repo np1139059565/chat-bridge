@@ -31,6 +31,9 @@
    */
   D.extractScreenshot = function (result) {
     if (!result || !result.data || typeof result.data !== 'object') return '';
+    // 优先使用新版接口返回的轻量化链接（screenshot_url）
+    if (result.data.screenshot_url) return result.data.screenshot_url;
+    // 兼容旧版：直接从 data.screenshot 提取 dataURL
     const shot = result.data.screenshot;
     if (typeof shot !== 'string') return '';
     return shot.indexOf('data:image/') === 0 ? shot : '';
@@ -177,9 +180,15 @@
       const shot = D.extractScreenshot(card.result);
       const files = D.extractFile(card.result);
       if (shot) {
+        let imgSrc = shot;
+        // 如果是相对路径，补全后端地址，否则在扩展 iframe 中会指向扩展自身导致加载失败
+        if (imgSrc.charAt(0) === '/') {
+          const base = (ctx.config && ctx.config.flaskUrl) || '';
+          imgSrc = base.replace(/\/+$/, '') + imgSrc;
+        }
         kids.push(h('img', {
           class: 'result-shot',
-          src: shot,
+          src: imgSrc,
           alt: '页面截图',
           style: 'max-width:100%; height:auto; display:block; margin-top:6px; border:1px solid #ddd; border-radius:4px;'
         }));
