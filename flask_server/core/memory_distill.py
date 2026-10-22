@@ -341,12 +341,13 @@ def distill_node(node_id, use_llm=False):
             node.get("tier"), node.get("strength"))
     except Exception as e:
         app_log.warn("[memory]", "索引增量更新失败 node=%s: %s" % (node_id, e))
-    # 第二步·事务外：接入事件层（建突触、给用户发言挂影子）。
+    # 第二步·事务外：接入事件层（建突触）。
     # 这些是只读扫描 + 内存计算 + 逐条短事务写边，不再长时间持有写锁。
     try:
         memory_events.build_synapses(node_id)
-        if source == "user":
-            memory_events.set_shadow(node_id, essence)
+        # 注：此处原有一处写入“影子摘要”的调用，但全系统并没有任何读取它的逻辑。
+        # 影子原意是供检索优先返回，现在检索直接返回了原话（memory_search 的 raw_text），
+        # 该逻辑已成死代码，为了消除假护栏与无谓写库，予以移除。
     except Exception as e:
         # 事件层失败不影响蒸馏本身（蒸馏结果已落库）
         app_log.warn("[memory]", "事件层触发失败 node=%s: %s" % (node_id, e))

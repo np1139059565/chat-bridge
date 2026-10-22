@@ -219,10 +219,18 @@ def _rank(scores, valid_keywords, focus, top_k):
     hit_ids = []
     for node, final, jac in enriched[:top_k]:
         hit_ids.append(node["id"])
+        # 提取原始文本块作为原话正文，供 AI 精准引用，防止仅凭精华产生幻觉。
+        # 截断到 500 字符，避免单条结果体积过大。
+        raw_text = ""
+        for b in (node.get("blocks") or []):
+            if isinstance(b, dict) and b.get("text"):
+                raw_text += str(b["text"]) + "\n"
+        raw_text = raw_text.strip()[:500]
         out.append({
             "node_id": node["id"],
             "source": node.get("source"),
             "essence": node.get("essence"),
+            "raw_text": raw_text,
             "keywords": node.get("keywords"),
             "score": round(final, 4),
             "jaccard": round(jac, 4),

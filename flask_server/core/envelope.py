@@ -76,13 +76,11 @@ def unwrap_user_text(text):
             return current                         # 解析失败：按普通文本返回
         if not isinstance(obj, dict):              # 非对象，停止
             return current
-        # 非信封 JSON：若是工具结果等其它结构化数据，也取出可读字段兜底
+        # 必须是信封类型才继续剥离。
+        # 此前非信封 JSON 只要带 request 字段也会被强行取出来，导致用户自己发的
+        # 正常 JSON（带 request 字段）原话被替换，AI 看到的从一开始就不是原话。
         if obj.get("type") != envelope_type():
-            inner_req = obj.get("request")
-            if isinstance(inner_req, str) and inner_req.strip():
-                current = inner_req.strip()        # 有 request 就继续往下剥
-                continue
-            return current                         # 无 request：保留原文本
+            return current                         # 非信封：保留原文，绝不剥皮
         # 是信封：穿透嵌套，取真正的 request
         merged = merge_nested_envelope(obj)
         inner_req = merged.get("request")

@@ -50,7 +50,10 @@ def upsert_node(identity, fields, created_at=None):
     cur = conn.execute(
         "INSERT INTO nodes (msg_id, conv_id, site_key, parent_id, source, role, name, blocks, tier, created_at)"
         " VALUES (?,?,?,?,?,?,?,?,?,?)"
-        " ON CONFLICT(msg_id) DO UPDATE SET blocks=excluded.blocks, parent_id=excluded.parent_id",
+        # 冲突时连 source / role / name 一起更新：此前只更新 blocks 与 parent_id，
+        # 导致消息指纹重复时，助手内容被错误挂载后来源永远改不回来，进而被当成用户发言。
+        " ON CONFLICT(msg_id) DO UPDATE SET blocks=excluded.blocks, parent_id=excluded.parent_id,"
+        " source=excluded.source, role=excluded.role, name=excluded.name",
         (msg_id, conv_id, site_key, parent_id, fields.get("source"),
          fields.get("role", ""), fields.get("name", ""), blocks_json, tier, ts),
     )

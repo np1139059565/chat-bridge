@@ -428,13 +428,20 @@ def delete_conversation(conv_id, site_key):
 
 
 def _infer_source(node):
-    """从节点推断来源（user / assistant / tool）。"""
-    role = (node or {}).get("role", "")
-    if role == "user":
+    """从节点推断来源（user / assistant / tool）。
+
+    角色认不出时兜底返回 unknown，绝不强行当成 assistant。
+    此前兜底偏斜到 assistant，导致角色缺失的用户消息被凭空归为 AI 回复，
+    进而引发严重的语义与逻辑错乱。
+    """
+    role = str((node or {}).get("role", "")).lower()
+    if role in ("user", "human"):
         return "user"
-    if role == "assistant":
+    if role in ("assistant", "ai", "bot"):
         return "assistant"
-    return "tool" if role == "tool" else "assistant"
+    if role in ("tool", "system", "function"):
+        return "tool"
+    return "unknown"
 
 
 def _loads(text, default):
