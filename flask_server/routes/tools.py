@@ -213,10 +213,19 @@ def _call_builtin(name, params):
         # （如命令输出、整目录内容）直接回传前端导致浏览器卡死。
         # 放在统一出口，不依赖每个工具自行调用 enforce_size_limit。
         from tool_helpers import enforce_size_limit
-        enforce_size_limit(
-            result,
-            "请缩小范围后重试：如限制读取行数、缩小搜索范围、加文件类型过滤、"
-            "或对命令输出做 head/tail 截断。")
+        # 图片/截图类结果（data.screenshot）由前端按粘贴链路处理，体积天然较大。
+        # 其体积已由 read_image / get_page_snapshot 内部按专属上限单独控制，
+        # 若在此处再套用文本工具的全局字符限制，会导致正常图片被误杀。
+        _is_image_payload = (
+            isinstance(result, dict)
+            and isinstance(result.get("data"), dict)
+            and "screenshot" in result["data"]
+        )
+        if not _is_image_payload:
+            enforce_size_limit(
+                result,
+                "请缩小范围后重试：如限制读取行数、缩小搜索范围、加文件类型过滤、"
+                "或对命令输出做 head/tail 截断。")
         # 工具正常返回：耗时超 1 秒记 WARN，便于捞出慢工具；否则记 DEBUG。
         _ms = (_t.perf_counter() - _t0) * 1000.0
         if _ms >= 1000:
