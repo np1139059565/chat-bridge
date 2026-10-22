@@ -1,11 +1,11 @@
 """网页版机器人路由：网页聊天页 + 主动拉取接口 + 指令识别。
 
-- GET  /web                    网页聊天页（手机浏览器打开）
-- POST /api/web/send           网页发消息：指令走指令通道，普通文本投卡片
-- POST /api/web/image          网页发图片（dataURL），贴进网页 AI 输入框
-- POST /api/web/voice          网页发语音，落盘并提示 AI
-- GET  /api/web/messages       主动拉取新消息（带游标增量）
-- GET  /api/web/audio/<name>   取语音音频文件（浏览器直接播放）
+接口一览（参数与返回值见各视图函数）：
+- 页面：GET /web-bot、GET /web-bot/<name>
+- 发送：POST /api/web/send、/api/web/image、/api/web/voice
+- 拉取：GET /api/web/messages（cursor 增量 / before 翻历史）、/api/web/commands
+- 取文件：GET /api/web/image-file/<name>、/api/web/screenshot-file/<name>、/api/web/audio/<name>
+- 语音合成：POST /api/web/voice-ensure、GET /api/web/voice-status
 
 设计说明：
 - 拉取式：网页打开后才开始轮询，关闭即停，不占后台资源。
@@ -83,6 +83,25 @@ def _safe_under(name, base_dir):
 def _safe_audio_path(name):
     """把音频文件名解析为绝对路径（走通用防护）。"""
     return _safe_under(name, paths.WEB_AUDIO_DIR)
+
+
+def _send_image_under(name, base_dir):
+    """按基准目录安全地发送一张图片：目录穿越校验 + MIME 判定 + 强缓存。
+
+    图片文件名唯一（时间戳 + 序号）、内容不变，故设一周强缓存，
+    浏览器对同一张图复用已下载副本，点开看大图不再重新请求。
+    网页图片与工具截图两张表共用本函数，只是基准目录不同。
+    @param name     请求里的文件名
+    @param base_dir 允许的基准目录（Path）
+    @returns Flask 响应：命中图片返回文件，否则 404
+    """
+    path = _safe_under(name, base_dir)
+    if not path:
+        return jsonify(success=False, error="not_found"), 404
+    # 只按扩展名区分 jpeg 与 png，其余一律按 png 发送
+    ext = path.rsplit(".", 1)[-1].lower()
+    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
+    return send_file(path, mimetype=mime, conditional=True, max_age=604800)
 
 
 @bp.route("/web-bot", methods=["GET"])
@@ -214,11 +233,7 @@ def web_image():
 
 
 def _image_urls(data):
-    """从请求体取图片 dataURL 列表：优先 dataUrls 数组，兼容单个 dataUrl。
-
-    @param data 请求体字典
-    @returns 非空字符串列表（去空、转字符串）
-    """
+    """从请求体取图片 dataURL 列表：优先 dataUrls 数组，兼容单个 dataUrl；返回去空后的字符串列表。"""
     urls = data.get("dataUrls")
     if not isinstance(urls, list):
         one = str(data.get("dataUrl") or "")
@@ -311,35 +326,17 @@ def web_messages():
 
 @bp.route("/api/web/image-file/<name>", methods=["GET", "OPTIONS"])
 def web_image_file(name):
-    """取网页图片文件（指令结果截图等），供前端渲染 <img>。
-
-    与音频接口同一套目录穿越防护：只允许纯文件名，且必须落在网页图片目录内。
-    """
-    path = _safe_under(name, paths.WEB_IMAGES_DIR)
-    if not path:
-        return jsonify(success=False, error="not_found"), 404
-    ext = path.rsplit(".", 1)[-1].lower()
-    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-    # max_age：图片文件名唯一（时间戳+序号）、内容不变，故设强缓存，
-    # 让浏览器对同一图片复用已下载的副本，点开看大图时不再重新请求。
-    return send_file(path, mimetype=mime, conditional=True, max_age=604800)
+    """取网页图片文件（指令结果截图等），供前端渲染 <img>。"""
+    return _send_image_under(name, paths.WEB_IMAGES_DIR)
 
 
 @bp.route("/api/web/screenshot-file/<name>", methods=["GET", "OPTIONS"])
 def web_screenshot_file(name):
     """取工具截图文件（debug_chrome 的 get_page_snapshot 结果），供前端渲染 <img>。
 
-    工具截图存于 screenshots 目录，与网页图片目录分开；本路由与 image-file
-    同一套目录穿越防护，只允许纯文件名且必须落在 screenshots 目录内。
     前端据此把工具截图按文件名挂到对应消息上，无需把 base64 塞进正文。
     """
-    path = _safe_under(name, paths.SCREENSHOTS_DIR)
-    if not path:
-        return jsonify(success=False, error="not_found"), 404
-    ext = path.rsplit(".", 1)[-1].lower()
-    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-    # max_age：截图文件名唯一（时间戳+序号）、内容不变，故设强缓存。
-    return send_file(path, mimetype=mime, conditional=True, max_age=604800)
+    return _send_image_under(name, paths.SCREENSHOTS_DIR)
 
 
 @bp.route("/api/web/audio/<name>", methods=["GET", "OPTIONS"])
