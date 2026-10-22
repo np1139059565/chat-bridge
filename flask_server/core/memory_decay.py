@@ -89,9 +89,12 @@ def recompute_all():
                 _commit_batch(conn, pending)
                 pending = []
     finally:
-        # 收尾：写入剩余不足一批的改动，再结束批量模式
+        # 收尾：写入剩余不足一批的改动，再结束批量模式。
+        # 写完必须清空列表——若 _commit_batch 中途抛异常，pending 里仍是上一批内容，
+        # 不清空会被再写一遍，既是重复劳动，也会掩盖原始异常。
         if pending:
             memory_nodes.bulk_set_strength_tier(pending)
+            pending = []
         end_batch(conn)
     # 边衰减单独做（其内部逐边短事务更新）
     memory_edges.decay_edges()

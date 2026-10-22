@@ -51,8 +51,18 @@ def current_mode():
 
 
 def _norm(p):
-    """规范化为可比较的绝对路径（统一大小写，Windows 盘符不敏感）。"""
-    return os.path.normcase(os.path.abspath(str(p)))
+    """规范化为可比较的绝对路径（统一大小写，Windows 盘符不敏感）。
+
+    相对路径一律以工程根为基准解析，而非进程当前工作目录。
+    否则同一路径在不同工作目录下会被判成不同归属（工程内文件被判成工程外，或反之），
+    权限判定随之出错。
+    @param p 待规范化路径（相对或绝对）
+    @returns 规范化的绝对路径
+    """
+    s = str(p)
+    if not os.path.isabs(s):                 # 相对路径：以工程根为基准拼接
+        s = os.path.join(str(paths.PROJECT_ROOT), s)
+    return os.path.normcase(os.path.abspath(s))
 
 
 def _under(target, base):

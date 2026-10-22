@@ -19,6 +19,22 @@ def log(*args):
     app_log.warn("[prune]", *args)
 
 
+def _safe_mtime(f):
+    """取文件修改时间；取不到时返回 0（当作最旧，优先清理）。
+
+    扫描目录与排序之间，文件可能已被其它路径删掉，此时 stat 会抛
+    FileNotFoundError / OSError。若让异常冒出去，整次清理会被外层捕获后放弃，
+    一个文件都不删；故此处就地兜底，让排序继续完成。
+    @param f 文件路径对象
+    @returns 修改时间戳；读取失败返回 0.0
+    """
+    try:
+        return f.stat().st_mtime
+    except OSError:
+        # 文件已消失或不可访问：按最旧处理，若被选中会走删除失败分支静默跳过
+        return 0.0
+
+
 def prune_dir(dir_path, max_keep, keep_names=None):
     """按数量上限清理一个目录，保护 keep_names 中的文件。
 
@@ -46,7 +62,8 @@ def prune_dir(dir_path, max_keep, keep_names=None):
         need = len(files) - max_keep
         # 可删候选：未被引用的文件，按修改时间升序（最旧在前）
         removable = [f for f in files if f.name not in keep]
-        removable.sort(key=lambda f: f.stat().st_mtime)
+        # 排序键用容错取值：取不到修改时间的排最前，避免单个文件被删导致整次清理放弃
+        removable.sort(key=_safe_mtime)
         removed = 0
         # 从最旧的可删文件开始删，最多删 need 个；被引用的一个都不动
         for f in removable[:need]:

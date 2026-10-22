@@ -20,6 +20,11 @@ import collections
 import threading
 
 
+# 取元素时用于区分「键不存在」与「值本身就是空」的哨兵对象。
+# 不能用 None 作默认值：任务本身可能就是 None，会被误判为不存在而静默丢弃。
+_MISSING = object()
+
+
 class SerialWorker:
     """单后台线程的串行工作队列。
 
@@ -78,8 +83,9 @@ class SerialWorker:
                     self._running = False       # 复位标志，允许下次重新拉起
                     return                      # 退出线程，不空转占资源
                 key = self._order.popleft()     # 取队首 key
-                item = self._items.pop(key, None)  # 取出并移除元素
-            if item is None:                    # 边界：元素已被覆盖取走等
+                # 取出并移除元素；用哨兵作默认值，才能区分「键不存在」与「值就是空」
+                item = self._items.pop(key, _MISSING)
+            if item is _MISSING:                # 边界：元素已被覆盖取走等
                 continue                        # 跳过，继续下一项
             try:
                 self._handler(item)             # 锁外执行处理函数

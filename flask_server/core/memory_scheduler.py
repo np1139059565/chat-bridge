@@ -82,6 +82,14 @@ def start_background_tasks(interval=DEFAULT_INTERVAL):
         if _started:
             return False
         _started = True
-    t = threading.Thread(target=_loop, args=(interval,), daemon=True)
-    t.start()
+    try:
+        t = threading.Thread(target=_loop, args=(interval,), daemon=True)
+        t.start()
+    except Exception as e:
+        # 线程创建/启动失败时必须把标志复位：否则 _started 永远为真，
+        # 后续调用全部直接返回 False，衰减与聚类将永久停摆且无任何提示。
+        with _lock:
+            _started = False
+        app_log.error("[memory]", "后台调度线程启动失败：%s" % e)
+        return False
     return True

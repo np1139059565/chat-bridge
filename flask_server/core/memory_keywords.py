@@ -15,7 +15,11 @@
 依赖：re、collections
 """
 import re
+import zlib
 from collections import Counter
+
+import numpy as np
+
 import memory_text
 
 # 英文/数字/下划线标识符：代码术语、工具名、变量名多为此类
@@ -212,8 +216,17 @@ def _split_phrases(seg):
 
 
 def _all_stop(g):
-    """判断词组是否全由停用词单字组成。"""
-    return all(ch in _STOPWORDS for ch in g)
+    """判断词组是否全由停用词组成。
+
+    停用词表里既有单字（如「的」「了」）也有多字词（如「一个」「自己」「什么」）。
+    只逐字判断的话，多字词永远匹配不上，短语过滤会偏弱。
+    故先整词查一次，再回退到逐字判断。
+    @param g 待判断的词组
+    @returns 是否全由停用词构成
+    """
+    if g in _STOPWORDS:                 # 整词命中（覆盖多字停用词）
+        return True
+    return all(ch in _STOPWORDS for ch in g)  # 逐字命中（覆盖单字停用词）
 
 
 def extract_from_blocks(blocks):
@@ -264,8 +277,6 @@ def text_to_vector(text, dim=256):
     保证跨进程、跨重启的桶索引一致。
     @return numpy float32 向量（dim 维）
     """
-    import zlib
-    import numpy as np
     vec = np.zeros(dim, dtype=np.float32)
     if not text:
         return vec

@@ -62,6 +62,9 @@ class Card:
             "content": self.content,
             "payload": self.payload,
             "status": self.status,
+            # delivered：是否已被客户端确认展示。外部据此区分「待投递」与「已送达」，
+            # 缺此字段时前端只能靠状态字段猜测，无法准确判断是否需要继续渲染。
+            "delivered": bool(self.delivered),
             "created_at": self.created_at,
         }
 

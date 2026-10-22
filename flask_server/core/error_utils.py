@@ -22,12 +22,17 @@ def param_error_cls():
     通过 runtime.impl 现取类对象，避免导入期绑定旧引用导致 isinstance 失配，
     把参数错误误判成工具代码缺陷。
     """
-    return getattr(runtime.impl, "ToolParamError", ())
+    # 兜底返回 None 而非空元组：isinstance(e, ()) 恒为 False，会让参数错误
+    # 一路落到 tool_internal，把 AI 引向「改工具代码」的错误方向。
+    # 取不到类时显式返回 None，由 classify_error 跳过这一档判断。
+    return getattr(runtime.impl, "ToolParamError", None)
 
 
 def classify_error(e):
     """把异常归类，决定 AI 该「改参数重试」还是「改工具代码」。"""
-    if isinstance(e, param_error_cls()):
+    # 参数异常类可能取不到（impl 未注入或未定义该类），此时跳过这一档判断
+    _pec = param_error_cls()
+    if _pec is not None and isinstance(e, _pec):
         return "parameter"
     if isinstance(e, (KeyError, TypeError, ValueError)):
         return "parameter"
