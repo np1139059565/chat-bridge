@@ -116,7 +116,13 @@
     try {
       _seq += 1;
       _buf.push({ tag: tag, msg: msg, t: nowStr(), seq: _seq });
-      if (_buf.length >= MAX_BATCH) { flush(); return; }
+      if (_buf.length >= MAX_BATCH) {
+        // 已有重试在排队时不抢先同步冲刷：失败后缓冲不缩短，若此处每次都 flush，
+        // 网络恢复前每来一条日志就发一次请求，正是本模块要避免的请求风暴。
+        // 节奏交给失败后安排的重试定时器，它按 FLUSH_MS*2 的间隔退避重试。
+        if (_timer === null) flush();
+        return;
+      }
       if (_timer === null) {
         _timer = setTimeout(flush, FLUSH_MS);
       }
