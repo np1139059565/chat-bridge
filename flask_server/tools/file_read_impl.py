@@ -42,17 +42,35 @@ def _batch_limit():
 
 
 def _read_text_segment(fp, offset, limit):
-    """按行读取文件片段（fp 为绝对路径），返回内容与行数。"""
+    """按行流式读取文件片段（fp 为绝对路径），返回内容与行数。
+
+    逐行迭代而非一次 readlines()：大文件只取一小段时，内存占用只与
+    实际读取行数相关，不会因为文件有几万行就整份载入。
+    total_lines 仍为全文件行数，需完整遍历一遍才准确，故与读取同步统计。
+    @param fp     源文件绝对路径
+    @param offset 起始行（从 1 开始）
+    @param limit  读取行数；None 表示读到末尾
+    @returns dict：path / content / total_lines / _read_lines
+    """
     offset = int(offset or 1)
+    start = max(0, offset - 1)                 # 转为 0 基下标
+    want = None if limit is None else int(limit)
+    picked = []                                 # 命中的行
+    total = 0                                   # 全文件行数
     with open(fp, "r", encoding="utf-8", errors="replace") as fh:
-        lines = fh.readlines()
-    start = max(0, offset - 1)
-    end = len(lines) if limit is None else start + int(limit)
+        for i, line in enumerate(fh):
+            total += 1
+            # 到达起始行之前：只计数，不保留内容
+            if i < start:
+                continue
+            # 已取够 limit 行：仍需继续计数 total_lines，故不 break
+            if want is None or len(picked) < want:
+                picked.append(line)
     return {
         "path": str(fp),
-        "content": "".join(lines[start:end]),
-        "total_lines": len(lines),
-        "_read_lines": max(0, end - start),
+        "content": "".join(picked),
+        "total_lines": total,
+        "_read_lines": len(picked),
     }
 
 
@@ -204,7 +222,9 @@ def _save_segment(text, file_name):
         (paths.WEB_SEGMENTS_DIR / name).write_text(text, encoding="utf-8")
         return name
     except Exception as e:
-        print("[read_file] 分段落盘失败：%s" % e)
+        # 统一走 app_log：落盘失败要能在服务端日志里查到，print 只进控制台
+        import app_log
+        app_log.warn("[read_file]", "分段落盘失败：%s" % e)
         return ""
 
 
@@ -339,9 +359,9 @@ def _read_single_segment(raw_path, offset, limit):
 def t_read_file(p):
     """读取文件内容，支持 offset / limit 分段，支持一次读取多个文件。
 
-    正文不随工具结果回传：转成 dataURL 放在 data.screenshot，由前端按与截图
-    相同的粘贴链路贴进输入框。体积上限沿用统一的 limits.max_json_chars
-    （界面可配），超限时提示缩小读取范围。
+    正文不随工具结果回传：整文件给源文件引用（data.file.source + path），
+    分段给片段文件引用，二者都由前端按路径取回后作为文件附件贴进输入框。
+    体积上限沿用统一的 limits.max_json_chars（界面可配），超限时提示缩小范围。
 
     按「批量 / 单个」与「整文件 / 分段」两个维度共四种组合分发到对应实现。
     """
@@ -373,77 +393,11 @@ def t_read_file(p):
     return _read_single_segment(raw_path, offset, limit)
 
 
-# 图片读取体积上限默认值（字节）：超过则拒绝，避免超大文件撑爆 HTTP 响应与前端内存。
-# 实际取值由 tool_config 的声明覆盖（设置页可调），此常量仅作兜底。
-MAX_IMAGE_BYTES = 10 * 1024 * 1024
+# 图片读取已按职责拆到独立模块 file_image_impl，此处重导出公开名，
+# 使 tools_impl 与测试里的既有引用（IMAGE_MIME / MAX_IMAGE_BYTES / t_read_image）保持不变。
+from file_image_impl import (  # noqa: E402  放在此处以保持文本读取代码在前
+    MAX_IMAGE_BYTES,
+    IMAGE_MIME,
+    t_read_image,
+)
 
-
-def _image_limit():
-    """取当前生效的图片体积上限；配置不可用时回退常量。"""
-    try:
-        import tool_config
-        v = tool_config.get_value("read_image", "max_bytes")
-        return int(v) if v else MAX_IMAGE_BYTES
-    except Exception:
-        return MAX_IMAGE_BYTES
-
-# 允许读取的图片扩展名 → MIME 类型（与前端可粘贴的图片类型保持一致）
-IMAGE_MIME = {
-    ".png": "image/png",
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".gif": "image/gif",
-    ".webp": "image/webp",
-    ".bmp": "image/bmp",
-}
-
-
-def t_read_image(p):
-    """读取本地图片，转 dataURL 后走截图粘贴链路送进网页 AI。
-
-    结果结构与 get_page_snapshot 对齐（data.screenshot + data.saved）：
-    前端沿用既有截图分支，把图片贴入输入框、正文只带极短的 bridge-chat-res
-    标记，图片二进制不进入对话正文。
-
-    不调用 enforce_size_limit：dataURL 必然超过通用 JSON 上限，但它只在
-    「后端 → 前端」这一跳传输，前端只回传精简标记，不会膨胀对话上下文。
-    体积控制改由 MAX_IMAGE_BYTES 在读取前拦截。
-    """
-    _normalize_aliases(p)
-    _require(p, "file_path")
-    fp = _abspath(p.get("file_path"))
-    # 路径校验：必须是已存在的普通文件
-    if not os.path.isfile(fp):
-        raise ToolParamError("文件不存在：%s" % p.get("file_path"))
-    # 格式校验：只接受白名单内的图片类型
-    ext = os.path.splitext(fp)[1].lower()
-    mime = IMAGE_MIME.get(ext)
-    if not mime:
-        raise ToolParamError(
-            "不支持的图片格式 %s；支持：%s" % (ext or "(无扩展名)", "、".join(sorted(IMAGE_MIME)))
-        )
-    # 体积校验：超限直接报错，提示先压缩。上限取当前配置值（设置页可调）。
-    limit_bytes = _image_limit()
-    size = os.path.getsize(fp)
-    if size > limit_bytes:
-        raise ToolParamError(
-            "图片体积 %.1fMB 超过上限 %dMB，请先压缩后再读取"
-            % (size / 1048576.0, limit_bytes // 1048576)
-        )
-    # 读原始字节并编码成 dataURL（仅用于落盘，不再返回给前端）
-    with open(fp, "rb") as fh:
-        raw = fh.read()
-    data_url = "data:%s;base64,%s" % (mime, base64.b64encode(raw).decode("ascii"))
-    # 落盘：前端按文件名把图片挂回消息（pendingImages），与截图链路同一目录口径
-    saved = screenshot_store.save_data_url(data_url)
-    return {
-        "data": {
-            # 不再返回巨大的 base64 长串，只返回文件的相对路径供前端拉取
-            "screenshot_url": "/api/web/screenshot-file/%s" % saved["name"] if saved else "",
-            "saved": ({"name": saved["name"], "path": saved["path"]} if saved else None),
-            "file_name": os.path.basename(fp),
-        },
-        "path": str(fp),
-        "size": size,
-        "mime": mime,
-    }
