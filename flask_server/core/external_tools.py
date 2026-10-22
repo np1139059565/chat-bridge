@@ -88,12 +88,10 @@ class ProviderHub:
         target = normalize_url(page_url)
         if not target:
             return
+        # 逻辑统一收敛到 _set_page_open：公开接口只负责取锁与取当前时刻，
+        # 内部持有锁的调用方（poll）则直接调用内部版，避免两份等价实现日后走样。
         with self._lock:
-            pages = self._open_pages.setdefault(provider, {})
-            if is_open:
-                pages[target] = time.time()
-            else:
-                pages.pop(target, None)
+            self._set_page_open(provider, target, is_open, time.time())
 
     def is_page_open(self, provider, page_url):
         """判断某页面的工具当前是否打开。
@@ -108,15 +106,8 @@ class ProviderHub:
         if not target:
             return False
         with self._lock:
-            pages = self._open_pages.get(provider, {})
-            ts = pages.get(target)
-            if ts is None:
-                return False
-            if (time.time() - ts) > OPEN_WINDOW:
-                # 超期未续报：判定为僵尸登记，顺手清掉
-                pages.pop(target, None)
-                return False
-            return True
+            # 与轮询路径共用同一份判定与僵尸清理逻辑，避免两处规则漂移
+            return self._page_open_locked(provider, target, time.time())
 
     # ---------- 提供方与工具定义 ----------
     def register_provider(self, provider, tools):
