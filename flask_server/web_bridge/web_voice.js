@@ -199,7 +199,14 @@
    */
   function pollVoice(seq, wrap, tries, done) {
     function finish() { if (done) done(); }
-    if (tries <= 0) { setFlag(wrap, '生成失败'); finish(); return; }
+    if (tries <= 0) {
+      setFlag(wrap, '生成失败');
+      // 清除轮询标记：否则后续扫描会永远跳过这个区域，失败的语音再无重试路径，
+      // 用户只能刷新页面。清掉后，下一次有新消息到达触发的扫描会重新尝试。
+      wrap._polling = false;
+      finish();
+      return;
+    }
     setTimeout(function () {
       fetch('/api/web/voice-status?seq=' + seq)
         .then(function (r) { return r.json(); })
