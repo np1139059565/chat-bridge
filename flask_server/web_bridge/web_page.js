@@ -247,6 +247,9 @@
       inputEl.value = snapshotText;
       pendingImages = snapshotImgs;
       renderPreview();
+      // 恢复内容后重算高度：发送前已把输入框清空并压回单行，
+      // 不重算的话多行原文会被挤在单行高度里、看不全。
+      autoGrow();
       setStatus(false);
       alert('发送失败，内容已保留在输入框，请检查网络后重试');
     };
