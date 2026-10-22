@@ -148,8 +148,7 @@ def get_conn():
         return conn
     # 建连耗时埋点：首次建连含 WAL 设置、建表检查等，可能明显耗时；
     # 记录实际耗时，便于判断「界面请求慢」是否耗在建立数据库连接上。
-    import time as _t
-    _t0 = _t.perf_counter()
+    _t0 = time.perf_counter()
     # 确保目录存在：记忆库目录可能首次创建
     paths.MEMORY_DB_DIR.mkdir(parents=True, exist_ok=True)
     # timeout=15：连接级等待锁的秒数（默认仅 5 秒）。
@@ -171,7 +170,7 @@ def get_conn():
     _local.conn = conn
     # 只在建连异常慢时记 WARN；正常建连（毫秒级）不记日志，
     # 否则每个请求线程首次连库都打一条，日志会被建连记录淹没。
-    _ms = (_t.perf_counter() - _t0) * 1000.0
+    _ms = (time.perf_counter() - _t0) * 1000.0
     record_conn_cost(_ms)  # 累计统计建连耗时，便于回答「一天慢了多少次」
     return conn
 
@@ -266,7 +265,7 @@ def _migrate_columns(conn):
 
 
 def _ensure_schema(conn):
-    """建表、建索引、建 FTS5 全文索引（全部幂等）。"""
+    """建表、建索引、补历史迁移列，并清理遗留的 FTS5 虚表（全部幂等）。"""
     for sql in _SCHEMA:
         conn.execute(sql)
     for sql in _INDEXES:
