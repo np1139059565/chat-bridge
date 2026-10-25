@@ -27,8 +27,9 @@ class PathDenied(Exception):
 
 # 四档策略的合法取值
 MODES = ("project", "project_whitelist", "all_readonly", "all")
-# 默认档：完全放开，不做路径限制。
-DEFAULT_MODE = "all"
+# 默认档与兜底档：仅工程目录。配置缺失或取值非法时都落到这一档，
+# 使权限在异常情形下向「收紧」而非「放开」倾斜。
+DEFAULT_MODE = "project"
 
 
 def _cfg():

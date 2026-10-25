@@ -74,11 +74,15 @@ ORIGIN_LABEL = {
 
 
 def is_tool_enabled(name):
-    """判断工具当前是否上线；未配置的工具默认在线。"""
+    """判断工具当前是否上线；缺配置项的工具按下线处理。
+
+    配置齐全才算在线：工具定义缺失、定义中缺少 enabled 键，一律视为下线。
+    这样配置文件残缺或工具名写错时，工具不会被意外暴露给调用方。
+    """
     entry = CONFIG.get("tools", {}).get(name)
     if not entry:
-        return True
-    return bool(entry.get("enabled", True))
+        return False
+    return bool(entry.get("enabled", False))
 
 
 def refresh_external_providers():

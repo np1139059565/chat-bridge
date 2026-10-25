@@ -17,6 +17,8 @@ from pathlib import Path
 
 import config_file
 import paths
+# 技能文档摘要与工具层共用同一套「跳过 front matter」逻辑，避免两处各写一遍
+from tool_helpers import skip_front_matter
 
 from .paths import resolve_to_abs
 
@@ -97,13 +99,7 @@ def online_skill_names():
 def _first_paragraph(text):
     """取正文首个段落：跳过 YAML front matter 与 Markdown 标题行，遇空行收束。"""
     lines = text.splitlines()
-    i = 0
-    # 跳过以 --- 包裹的 YAML front matter，避免把元数据当成正文
-    if lines and lines[0].strip() == "---":
-        i = 1
-        while i < len(lines) and lines[i].strip() != "---":
-            i += 1
-        i += 1
+    i = skip_front_matter(lines)
     buf = []
     for line in lines[i:]:
         s = line.strip()

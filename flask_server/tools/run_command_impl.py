@@ -102,13 +102,15 @@ def _resolve_run_lang(raw_lang):
 
 
 def _resolve_run_cwd(cwd):
-    """解析工作目录：未指定时用当前进程目录；指定时必须存在。"""
-    if not cwd:
-        return Path.cwd()
-    cwd_path = _abspath(cwd)
-    if not cwd_path.is_dir():
-        raise ToolParamError("工作目录不存在：%s" % cwd_path)
-    return cwd_path
+    """解析工作目录：未指定时用当前进程目录；两种情况都必须存在且通过权限校验。
+
+    未指定时同样经 _abspath 解析，使文件访问权限策略对「默认工作目录」与
+    「显式指定目录」一视同仁，不留下绕过校验的旁路。
+    """
+    target = _abspath(cwd) if cwd else _abspath(Path.cwd())
+    if not target.is_dir():
+        raise ToolParamError("工作目录不存在：%s" % target)
+    return target
 
 
 def _build_run_command(lang, cmd_prefix, command):

@@ -80,6 +80,12 @@ class _RouteBase(unittest.TestCase):
         runtime.impl = tools_impl
         runtime.TOOLS = dict(tools_impl.TOOLS)
         runtime.DISPATCH = dict(tools_impl.DISPATCH)
+        # 工具开关取自配置，缺配置项的工具按下线处理；测试需显式声明全部工具在线，
+        # 否则工具目录为空、调用一律返回已下线。
+        self._orig_config = runtime.CONFIG
+        cfg = dict(self._orig_config or {})
+        cfg["tools"] = {k: {"enabled": True} for k in runtime.TOOLS}
+        runtime.CONFIG = cfg
         self.app = _build_app()
         self.client = self.app.test_client()
 
@@ -90,6 +96,7 @@ class _RouteBase(unittest.TestCase):
         runtime.impl = self._orig_impl
         runtime.TOOLS = self._orig_tools
         runtime.DISPATCH = self._orig_dispatch
+        runtime.CONFIG = self._orig_config
         shutil.rmtree(self.tmp, ignore_errors=True)
 
 

@@ -47,6 +47,14 @@ _TOOL_POOL_MAX_WORKERS = 64
 _pool_generation = 0
 _pool_lock = threading.Lock()
 
+# 连续超时达到该次数才重建线程池。
+# 单次超时不足以说明 worker 被长期占用（可能只是一次偶发的慢调用，
+# 被卡住的线程随后就会自然结束）；连续多次超时才表明池内确有空位被
+# 不可终止的线程长期占据，此时整池换新才有意义。
+_POOL_REBUILD_STREAK = 3
+# 当前连续超时计数：任一次调用正常返回即清零。
+_timeout_streak = 0
+
 
 def _make_tool_pool():
     """创建一个新的工具线程池。"""
@@ -76,6 +84,23 @@ def _rebuild_tool_pool():
         return _TOOL_POOL
 
 
+def _note_timeout_and_maybe_rebuild():
+    """登记一次超时；连续超时达到阈值时整池换新并把计数归零。
+
+    单次超时不动线程池：被卡住的线程多半随后自然结束，无谓重建只是浪费。
+    连续多次超时才表明池内确有坑位被长期占用，此时换新才能让后续调用不再排队。
+    """
+    global _timeout_streak
+    with _pool_lock:
+        _timeout_streak += 1
+        need_rebuild = _timeout_streak >= _POOL_REBUILD_STREAK
+    if not need_rebuild:
+        return
+    _rebuild_tool_pool()
+    with _pool_lock:
+        _timeout_streak = 0
+
+
 def _run_with_timeout(fn, params, timeout):
     """在独立线程里执行工具函数，超时抛 TimeoutError。
 
@@ -86,10 +111,11 @@ def _run_with_timeout(fn, params, timeout):
     @returns 工具函数的返回值
     @raises TimeoutError 超时未返回
     """
+    global _timeout_streak
     pool = _TOOL_POOL
     future = pool.submit(fn, params)
     try:
-        return future.result(timeout=timeout)
+        result = future.result(timeout=timeout)
     except _futures.TimeoutError:
         # 先确认确实是「等不到结果」而非「工具自己抛了超时类异常」：
         # future 已完成说明工具已跑完（只是抛了异常），此时不该重建线程池。
@@ -97,9 +123,12 @@ def _run_with_timeout(fn, params, timeout):
         # 合并为同一类，仅靠异常类型无法区分这两种情况，故以 done() 判定。
         if future.done():
             raise
-        # 该 worker 已被不可终止的慢任务占用，重建池以换用全新 worker
-        _rebuild_tool_pool()
+        _note_timeout_and_maybe_rebuild()
         raise TimeoutError("工具执行超过 %d 秒未返回" % timeout)
+    # 正常返回：说明池内仍有可用 worker，连续超时计数归零
+    with _pool_lock:
+        _timeout_streak = 0
+    return result
 
 
 def _save_screenshot_data_url(data_url):

@@ -71,6 +71,23 @@ def _list_available_skills():
     return sorted([d.name for d in SKILLS_ROOT.iterdir() if d.is_dir()])
 
 
+def skip_front_matter(lines):
+    """返回正文起始行号：跳过以 --- 包裹的 YAML front matter。
+
+    front matter 是技能文档的元数据区，取摘要时必须略过，否则会把
+    键值对当成正文。文件不以 --- 开头时正文从第 0 行开始；
+    front matter 未闭合时视为整段都是元数据，返回行数。
+    @param lines 已按行切分的文本
+    @returns 正文起始下标
+    """
+    if not lines or lines[0].strip() != "---":
+        return 0
+    i = 1
+    while i < len(lines) and lines[i].strip() != "---":
+        i += 1
+    return i + 1
+
+
 def _first_content_line(text):
     """取正文首个说明句：跳过 YAML front matter 与 Markdown 标题行，截断 120 字。
 
@@ -78,13 +95,7 @@ def _first_content_line(text):
     若全文只有标题，则回退为标题文本。
     """
     lines = text.splitlines()
-    i = 0
-    # 跳过以 --- 包裹的 YAML front matter，避免把元数据当成正文摘要
-    if lines and lines[0].strip() == "---":
-        i = 1
-        while i < len(lines) and lines[i].strip() != "---":
-            i += 1
-        i += 1
+    i = skip_front_matter(lines)
     fallback = ""
     for line in lines[i:]:
         s = line.strip()

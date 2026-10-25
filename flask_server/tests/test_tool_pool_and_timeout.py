@@ -51,25 +51,56 @@ class TestToolPoolDefense(unittest.TestCase):
         """线程池容量应为 64（原 16），为卡住的线程留足余量。"""
         self.assertEqual(tools_route._TOOL_POOL._max_workers, 64)
 
-    def test_timeout_triggers_pool_rebuild(self):
-        """工具超时后应触发线程池重建：旧 worker 随旧池抛弃，新池用新 worker。
+    def test_single_timeout_keeps_pool(self):
+        """单次超时不足以重建线程池：代次计数保持不变。
 
-        做法：用一个必然超时的慢函数（睡 1 秒）配 0.1 秒超时，
-        断言超时被抛出，且池的「代次」计数增加（说明发生了重建）。
+        一次偶发慢调用不足以说明池内空位被长期占用，被卡住的线程
+        通常随后就会自然结束，此时整池换新只是徒增开销。
         """
+        tools_route._timeout_streak = 0
         gen_before = tools_route._pool_generation
 
         def _slow(params):
-            time.sleep(1.0)
+            time.sleep(0.6)
             return "done"
 
         with self.assertRaises(TimeoutError):
             tools_route._run_with_timeout(_slow, {}, 0.1)
 
+        self.assertEqual(
+            tools_route._pool_generation, gen_before,
+            "单次超时不应重建线程池",
+        )
+        self.assertEqual(tools_route._timeout_streak, 1)
+
+    def test_consecutive_timeouts_trigger_rebuild(self):
+        """连续超时达到阈值后重建线程池，且计数归零。
+
+        连续多次超时表明池内确有空位被不可终止的线程长期占据，
+        此时整池换新才能把被拖住的调用解套。
+        """
+        tools_route._timeout_streak = 0
+        gen_before = tools_route._pool_generation
+
+        def _slow(params):
+            time.sleep(0.6)
+            return "done"
+
+        for _ in range(tools_route._POOL_REBUILD_STREAK):
+            with self.assertRaises(TimeoutError):
+                tools_route._run_with_timeout(_slow, {}, 0.1)
+
         self.assertGreater(
             tools_route._pool_generation, gen_before,
-            "超时后应重建线程池，代次计数未增加",
+            "连续超时后应重建线程池，代次计数未增加",
         )
+        self.assertEqual(tools_route._timeout_streak, 0)
+
+    def test_success_resets_timeout_streak(self):
+        """正常返回后连续超时计数归零。"""
+        tools_route._timeout_streak = 2
+        self.assertEqual(tools_route._run_with_timeout(lambda p: 7, {}, 5), 7)
+        self.assertEqual(tools_route._timeout_streak, 0)
 
     def test_rebuild_returns_usable_pool(self):
         """重建后的线程池仍可正常执行任务。"""
