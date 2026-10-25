@@ -2,11 +2,14 @@
 
 职责：决定 read_file 的正文以何种形式回到调用方。
 
-两种投递方式，由设置页开关 paste_delivery 控制：
+两种投递方式：
     附件粘贴（默认）——正文落盘或给源文件引用，前端按路径取回后
                         作为文件附件贴进网页 AI 输入框；
-    结果直返       ——正文直接随工具结果返回，适用于浏览器无法作为
-                        文本附件粘贴的自定义格式文件。
+    结果直返       ——正文直接随工具结果返回。
+
+走哪一条由两个条件共同决定：设置页开关 paste_delivery 开启，
+且文件扩展名属于 file_types 的可粘贴清单。开关关闭或类型不在清单内，
+都走结果直返。
 
 拆出本模块的原因：投递方式是一套独立的关注点，与「怎么读文件」正交；
 放进 file_read_impl 会让该文件超出仓库的行数上限。
@@ -32,6 +35,21 @@ def paste_enabled():
         return True if v is None else bool(v)
     except Exception:
         return True
+
+
+def should_paste(file_path):
+    """判断某文件本次是否以附件粘贴方式投递。
+
+    两个条件同时成立才走粘贴：全局开关开启，且扩展名属于可粘贴清单。
+    类型不在清单内时改走结果直返——浏览器构造这类附件容易失败，
+    退回结构体返回更稳妥。
+    @param file_path 文件路径
+    @returns 走附件粘贴返回 True
+    """
+    if not paste_enabled():
+        return False
+    from file_types import is_pasteable
+    return is_pasteable(file_path)
 
 
 def as_inline_payload(text, file_name, meta):
@@ -77,6 +95,7 @@ WHOLE_FILE_GUIDANCE = "请用 offset / limit 分段读取后重试；本次为�
 __all__ = [
     "PASTE_KEY",
     "paste_enabled",
+    "should_paste",
     "as_inline_payload",
     "read_whole_text",
     "whole_file_inline",

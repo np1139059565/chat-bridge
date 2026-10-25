@@ -28,6 +28,7 @@ from tool_helpers import (
 # 正文投递方式（附件粘贴 / 结果直返）集中在该模块，与读取逻辑解耦
 from file_delivery import (
     paste_enabled as _paste_enabled,
+    should_paste as _should_paste,
     as_inline_payload as _as_inline_payload,
     read_whole_text as _read_whole_text,
     whole_file_inline as _whole_file_inline,
@@ -266,10 +267,10 @@ def _read_batch_whole(paths_param):
             _save_segment("", os.path.basename(fp))
             empties.append(str(fp))
             continue
-        if _paste_enabled():
+        if _should_paste(fp):
             refs.append(_as_source_ref(fp))
         else:
-            # 关闭粘贴投递：逐个文件直返正文，不产生附件引用
+            # 不满足粘贴条件：逐个文件直返正文，不产生附件引用
             refs.append(_as_inline_payload(_read_whole_text(fp), os.path.basename(fp),
                                            {"path": str(fp)}))
     out = {"data": {"files": refs}, "count": len(refs)}
@@ -319,8 +320,9 @@ def _read_batch_segment(paths_param, offset, limit):
     )
     batch_name = "%d_files_%d-%d.txt" % (len(metas), offset, offset + total_lines_read - 1)
     batch_meta = {"count": len(metas), "files": metas, "total_lines": total_lines_read}
-    # 关闭粘贴投递：合并后的正文直接随结果返回
-    if not _paste_enabled():
+    # 批内任一文件不满足粘贴条件，合并后的正文整体直返：
+    # 整批会被拼成同一份附件，类型混杂时粘贴可靠性由最弱的那个决定。
+    if not all(_should_paste(m["path"]) for m in metas):
         return _as_inline_payload(joined, batch_name, batch_meta)
     return _as_file_payload(joined, batch_name, batch_meta)
 
@@ -343,8 +345,8 @@ def _read_single_whole(raw_path):
     if os.path.getsize(fp) == 0:
         return _as_empty_payload(os.path.basename(fp),
                                  {"path": str(fp), "lines": [1, 1], "total_lines": 0})
-    # 关闭粘贴投递：直接返回正文，绕过附件链路
-    if not _paste_enabled():
+    # 不满足粘贴条件（开关关闭，或扩展名不在可粘贴清单）：直接返回正文
+    if not _should_paste(fp):
         return _whole_file_inline(fp, WHOLE_FILE_GUIDANCE)
     return {"data": {"file": _as_source_ref(fp)}}
 
@@ -369,8 +371,8 @@ def _read_single_segment(raw_path, offset, limit):
     base_name = "%s_%d-%d.txt" % (
         os.path.basename(it["path"]) or "file", it["lines"][0], it["lines"][1])
     meta = {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]}
-    # 关闭粘贴投递：分段正文直接随结果返回
-    if not _paste_enabled():
+    # 不满足粘贴条件：分段正文直接随结果返回
+    if not _should_paste(it["path"]):
         return _as_inline_payload(it["content"], base_name, meta)
     return _as_file_payload(
         it["content"], base_name,
