@@ -25,6 +25,14 @@ from tool_helpers import (
     require as _require,
     enforce_size_limit,
 )
+# 正文投递方式（附件粘贴 / 结果直返）集中在该模块，与读取逻辑解耦
+from file_delivery import (
+    paste_enabled as _paste_enabled,
+    as_inline_payload as _as_inline_payload,
+    read_whole_text as _read_whole_text,
+    whole_file_inline as _whole_file_inline,
+    WHOLE_FILE_GUIDANCE,
+)
 
 # 单次批量读取的文件数上限默认值：防止一次请求把海量文件拼成超大结果。
 # 实际取值由 tool_config 的声明覆盖（设置页可调），此常量仅作兜底。
@@ -258,7 +266,12 @@ def _read_batch_whole(paths_param):
             _save_segment("", os.path.basename(fp))
             empties.append(str(fp))
             continue
-        refs.append(_as_source_ref(fp))
+        if _paste_enabled():
+            refs.append(_as_source_ref(fp))
+        else:
+            # 关闭粘贴投递：逐个文件直返正文，不产生附件引用
+            refs.append(_as_inline_payload(_read_whole_text(fp), os.path.basename(fp),
+                                           {"path": str(fp)}))
     out = {"data": {"files": refs}, "count": len(refs)}
     if empties:
         # 明确告知哪些文件为空，供调用方据此判断，无需再去粘贴确认
@@ -304,10 +317,12 @@ def _read_batch_segment(paths_param, offset, limit):
         "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
         "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
     )
-    return _as_file_payload(
-        joined, "%d_files_%d-%d.txt" % (len(metas), offset, offset + total_lines_read - 1),
-        {"count": len(metas), "files": metas, "total_lines": total_lines_read},
-    )
+    batch_name = "%d_files_%d-%d.txt" % (len(metas), offset, offset + total_lines_read - 1)
+    batch_meta = {"count": len(metas), "files": metas, "total_lines": total_lines_read}
+    # 关闭粘贴投递：合并后的正文直接随结果返回
+    if not _paste_enabled():
+        return _as_inline_payload(joined, batch_name, batch_meta)
+    return _as_file_payload(joined, batch_name, batch_meta)
 
 
 def _read_single_whole(raw_path):
@@ -328,6 +343,9 @@ def _read_single_whole(raw_path):
     if os.path.getsize(fp) == 0:
         return _as_empty_payload(os.path.basename(fp),
                                  {"path": str(fp), "lines": [1, 1], "total_lines": 0})
+    # 关闭粘贴投递：直接返回正文，绕过附件链路
+    if not _paste_enabled():
+        return _whole_file_inline(fp, WHOLE_FILE_GUIDANCE)
     return {"data": {"file": _as_source_ref(fp)}}
 
 
@@ -350,6 +368,10 @@ def _read_single_segment(raw_path, offset, limit):
     # 分段读取：文件名带上行号范围，一眼可辨这不是整个文件
     base_name = "%s_%d-%d.txt" % (
         os.path.basename(it["path"]) or "file", it["lines"][0], it["lines"][1])
+    meta = {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]}
+    # 关闭粘贴投递：分段正文直接随结果返回
+    if not _paste_enabled():
+        return _as_inline_payload(it["content"], base_name, meta)
     return _as_file_payload(
         it["content"], base_name,
         {"path": it["path"], "lines": it["lines"], "total_lines": it["total_lines"]},

@@ -32,6 +32,14 @@ CONFIG_SCHEMA = {
             "max": 200,
             "hint": "一次 file_paths 最多读多少个文件，超出会拒绝。",
         },
+        {
+            "key": "paste_delivery",
+            "label": "以附件粘贴方式投递正文",
+            "type": "boolean",
+            "default": True,
+            "hint": "开启时正文按附件贴进输入框；关闭时正文直接随工具结果返回。"
+                    "遇到浏览器无法作为文本附件粘贴的自定义格式文件时，可关闭此项改走结果直返。",
+        },
     ],
     "read_image": [
         {
