@@ -8,7 +8,7 @@
 
 | 文档 | 性质 | 什么时候读 |
 |---|---|---|
-| `architecture.md` | 架构总览 | 第一次接触工程、想搞清整体结构时 |
+| `architecture.md` | 架构总览 | 第一次接触工程、想搞清整体结构时；其第二节说明定位与安全边界，做走查或评审前先读 |
 | `development-guide.md` | 开发指南 | 上手开发、运行调试、提交前 |
 | `api-reference.md` | 接口清单 | 调用或新增 HTTP 接口时 |
 | `limits-reference.md` | 常量一览 | 调整上限、超时、阈值时 |
