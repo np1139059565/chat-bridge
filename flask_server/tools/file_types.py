@@ -6,8 +6,10 @@
       正文改走结果直返（JSON 结构体），避免浏览器构造附件失败。
 
 清单形态：逗号分隔的扩展名，统一转小写后按「带前导点的后缀」匹配。
-无扩展名但以点开头的文件（如 .gitignore）按整名匹配。
+以点开头且整名只有一个点的文件（如 .gitignore、.env）没有主名，
+网页 AI 无法将其识别为附件，故一律不参与附件粘贴，正文改走结果直返。
 """
+import os
 
 
 # 可粘贴的扩展名清单。逗号分隔，每行若干项，便于阅读与维护。
@@ -194,7 +196,14 @@ def suffix_of(file_path):
 def is_pasteable(file_path):
     """判断某文件是否属于可作为附件粘贴的类型。
 
+    以点开头且整名只有一个点的文件（.gitignore、.env 这类）没有主名，
+    网页 AI 无法把它们识别为附件，故无论是否在清单内都判定为不可粘贴。
     @param file_path 文件路径
-    @returns 在清单内返回 True
+    @returns 可作为附件粘贴返回 True
     """
+    # 无主名的点文件：整个文件名以点开头且只含一个点（如 .gitignore、.env），
+    # 没有主名可供网页识别，无论后缀是否在清单内都不走附件粘贴。
+    name = os.path.basename(str(file_path or "")).lower()
+    if name.startswith(".") and name.count(".") == 1:
+        return False
     return suffix_of(file_path) in PASTEABLE_EXTS

@@ -51,9 +51,14 @@ class TestPasteable(unittest.TestCase):
         for name in ("a.py", "a.md", "a.json", "a.yaml", "a.js", "a.txt"):
             self.assertTrue(is_pasteable(name), name)
 
-    def test_dotfile_in_list(self):
-        """.gitignore 在清单内。"""
-        self.assertTrue(is_pasteable(".gitignore"))
+    def test_dotfile_not_pasteable(self):
+        """无主名的点文件不参与附件粘贴，即使后缀在清单内。"""
+        for name in (".gitignore", ".gitkeep", ".gitmodules", ".env", ".example", "a/.gitignore"):
+            self.assertFalse(is_pasteable(name), name)
+
+    def test_dotted_name_still_pasteable(self):
+        """带主名的点文件按正常后缀判定。"""
+        self.assertTrue(is_pasteable("a/.b.txt"))
 
     def test_unknown_type_not_in_list(self):
         """清单外的自定义后缀判定为不可粘贴。"""
