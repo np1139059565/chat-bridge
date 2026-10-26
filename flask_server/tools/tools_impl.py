@@ -285,8 +285,7 @@ def t_replace_in_file(p):
     """在文件中做精确字符串替换，要求 old_str 唯一。"""
     _normalize_aliases(p)
     _require(p, "file_path", "old_string")
-    # write=True：写操作受更严格的权限档限制（全盘只读档下会拒绝）
-    fp = _abspath(p.get("file_path"), write=True)
+    fp = _abspath(p.get("file_path"))
     old = p.get("old_string")
     new = p.get("new_string", "")
     if old == "":
@@ -306,8 +305,7 @@ def t_write_to_file(p):
     """创建或覆盖写入完整文件内容（父目录不存在时自动创建）。"""
     _normalize_aliases(p)
     _require(p, "file_path", "content")
-    # write=True：写操作受更严格的权限档限制
-    fp = _abspath(p.get("file_path"), write=True)
+    fp = _abspath(p.get("file_path"))
     content = p.get("content", "")
     fp.parent.mkdir(parents=True, exist_ok=True)
     fp.write_text(content, encoding="utf-8")
@@ -318,8 +316,7 @@ def t_delete_file(p):
     """删除指定文件。"""
     _normalize_aliases(p)
     _require(p, "file_path")
-    # write=True：删除是破坏性写操作，受最严格的权限限制
-    fp = _abspath(p.get("file_path"), write=True)
+    fp = _abspath(p.get("file_path"))
     os.remove(fp)
     return {"deleted": True, "file": str(fp)}
 

@@ -32,28 +32,17 @@ SKILLS_ROOT = paths.SKILLS_ROOT
 
 
 def abspath(p, write=False):
-    """把入参解析为绝对路径，并按文件访问权限策略校验。
+    """把入参解析为绝对路径。
 
-    绝对路径原样，相对路径以工程根为基准。解析后调用权限策略判定：
-    当前档位不允许访问该路径时，抛出 ToolParamError——归为「参数问题」，
-    让 AI 知道改参数（换个路径）或在设置页调整权限，而不是去改工具代码。
+    绝对路径原样，相对路径以工程根为基准。
     @param p     路径（相对或绝对）
-    @param write 是否为写操作：写操作受更严格的权限限制
+    @param write 保留参数以兼容既有调用点，解析行为与读操作一致
     @returns 解析后的绝对路径
-    @raises ToolParamError 路径被权限策略拒绝
     """
     p = Path(p)
     if p.is_absolute():
-        target = p.resolve()
-    else:
-        target = (PROJECT_ROOT / p).resolve()
-    # 延迟导入：path_policy 自身也依赖 paths，放在函数内可避免导入期相互影响
-    import path_policy
-    try:
-        path_policy.check_path(target, write=write)
-    except path_policy.PathDenied as e:
-        raise ToolParamError(str(e))
-    return target
+        return p.resolve()
+    return (PROJECT_ROOT / p).resolve()
 
 
 def _require_single_dir_name(skill):

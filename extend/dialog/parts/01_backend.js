@@ -127,8 +127,6 @@
       // 但服务还没重启时会连到空端口，导致连接断开。
       if (cfg.flask && cfg.flask.port) this.config.flaskPort = cfg.flask.port;
       if (cfg.tools) this.configTools = cfg.tools;
-      // 文件访问权限：供设置页渲染当前档位与白名单
-      if (cfg.permissions) this.permissions = cfg.permissions;
       // 工具配置：声明 + 当前值，供设置页按类型通用渲染
       if (cfg.tool_config) this.toolConfig = cfg.tool_config;
       // 系统级配置：目录与队列上限，独立于工具
@@ -161,47 +159,6 @@
       this.toast(enabled ? ('已上线：' + name) : ('已下线：' + name));
     } catch (e) {
       this.configTools[name].enabled = !enabled;   // 回滚
-      this.toast('保存失败：' + e);
-    }
-  };
-
-  /**
-   * 设置文件访问权限档位，并立即写回后端。
-   *
-   * 改动立即生效，无需重启：后端每次解析路径都会实时读取当前档位。
-   * @param {string} mode 四档之一：project / project_whitelist / all_readonly / all
-   */
-  M.setFileAccess = async function (mode) {
-    const before = (this.permissions || {}).file_access;
-    if (!this.permissions) this.permissions = {};
-    this.permissions.file_access = mode;   // 乐观更新
-    try {
-      await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { permissions: { file_access: mode } }
-      });
-      this.toast('文件访问权限已切换');
-    } catch (e) {
-      this.permissions.file_access = before;   // 回滚
-      this.toast('保存失败：' + e);
-    }
-  };
-
-  /**
-   * 设置白名单目录（每行一个），并立即写回后端。
-   * @param {string} text 多行文本，一行一个目录
-   */
-  M.setWhitelistDirs = async function (text) {
-    const dirs = String(text || '').split('\n').map((s) => s.trim()).filter(Boolean);
-    if (!this.permissions) this.permissions = {};
-    this.permissions.whitelist_dirs = dirs;
-    try {
-      await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { permissions: { whitelist_dirs: dirs } }
-      });
-      this.toast('白名单已保存（' + dirs.length + ' 项）');
-    } catch (e) {
       this.toast('保存失败：' + e);
     }
   };

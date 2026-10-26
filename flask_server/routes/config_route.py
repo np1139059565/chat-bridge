@@ -76,34 +76,6 @@ def _apply_limits_section(data, changed):
     return None
 
 
-def _apply_permissions_section(data, changed):
-    """应用 permissions 区块：文件访问档位与白名单目录。
-
-    file_access 必须是四档之一；非法值直接忽略（保留原值），
-    避免前端传错把权限改成意外的档位。
-    whitelist_dirs 只接受字符串数组，逐项去空白、去空项。
-    """
-    perms = data.get("permissions")
-    if not isinstance(perms, dict):
-        return
-    cur = runtime.CONFIG.setdefault("permissions", {})
-    # 档位：白名单校验，非法值不采纳
-    mode = perms.get("file_access")
-    if isinstance(mode, str):
-        mode = mode.strip()
-        if mode in ("project", "project_whitelist", "all_readonly", "all"):
-            if mode != cur.get("file_access"):
-                cur["file_access"] = mode
-                changed.append("permissions.file_access=" + mode)
-    # 白名单目录：清洗后覆盖
-    dirs = perms.get("whitelist_dirs")
-    if isinstance(dirs, list):
-        clean = [str(d).strip() for d in dirs if str(d).strip()]
-        if clean != (cur.get("whitelist_dirs") or []):
-            cur["whitelist_dirs"] = clean
-            changed.append("permissions.whitelist_dirs=" + str(len(clean)) + " 项")
-
-
 def _apply_tool_config_section(data, changed):
     """应用 tool_config 区块：各工具的配置值。
 
@@ -144,8 +116,6 @@ def _config_snapshot():
         "default_profile": runtime.CONFIG.get("default_profile", "glm"),
         "site_profiles": runtime.CONFIG.get("site_profiles", {}),
         "tools": runtime.CONFIG.get("tools", {}),
-        # 文件访问权限：设置页据此渲染档位与白名单
-        "permissions": runtime.CONFIG.get("permissions", {}),
         # 工具配置：声明 + 当前值，设置页按类型通用渲染
         "tool_config": tool_config.all_specs(),
         # 系统级配置：目录与队列上限，独立于工具
@@ -166,7 +136,6 @@ def config():
         changed = []
         _apply_flask_section(data, changed)
         _apply_tools_section(data, changed)
-        _apply_permissions_section(data, changed)
         err = _apply_tool_config_section(data, changed)
         if err is not None:
             return err

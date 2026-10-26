@@ -102,10 +102,10 @@ def _resolve_run_lang(raw_lang):
 
 
 def _resolve_run_cwd(cwd):
-    """解析工作目录：未指定时用当前进程目录；两种情况都必须存在且通过权限校验。
+    """解析工作目录：未指定时用当前进程目录；两种情况都必须存在。
 
-    未指定时同样经 _abspath 解析，使文件访问权限策略对「默认工作目录」与
-    「显式指定目录」一视同仁，不留下绕过校验的旁路。
+    未指定时同样经 _abspath 解析，使「默认工作目录」与「显式指定目录」
+    走同一套解析口径。
     """
     target = _abspath(cwd) if cwd else _abspath(Path.cwd())
     if not target.is_dir():

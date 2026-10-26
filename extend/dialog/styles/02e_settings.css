@@ -282,68 +282,6 @@
   white-space: nowrap;
 }
 
-/* ---------- 文件访问权限 ---------- */
-.perms-body {
-  padding: var(--cb-sp-1) 0;
-}
-
-/* 档位横排一行：标题 + 四档单选，描述收进悬停提示 */
-.perms-line {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--cb-sp-2);
-}
-
-.perms-title {
-  font-size: var(--cb-fs-xs);
-  color: var(--cb-text-muted);
-}
-
-.perms-modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--cb-sp-3);
-}
-
-/* 单个档位：复选框 + 短名称，整体可点 */
-.perms-opt {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--cb-fs-xs);
-  cursor: pointer;
-}
-
-/* 当前选中档：用主色标出 */
-.perms-opt.active {
-  color: var(--cb-primary);
-}
-
-/* 白名单区：非当前档位时整块置灰，避免误以为在生效 */
-.perms-whitelist {
-  margin-top: var(--cb-sp-2);
-}
-
-.perms-whitelist.dim {
-  opacity: .5;
-}
-
-/* 目录输入框：等宽字体，每行一个路径 */
-.perms-dirs {
-  width: 100%;
-  box-sizing: border-box;
-  min-height: 64px;
-  resize: vertical;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: var(--cb-fs-xs);
-  background: var(--cb-bg-subtle);
-  color: var(--cb-text-body);
-  border: 1px solid var(--cb-border-soft);
-  border-radius: var(--cb-r-md);
-  padding: var(--cb-sp-2);
-}
-
 /* ---------- 工具配置 ---------- */
 .tc-body {
   padding: var(--cb-sp-1) 0;

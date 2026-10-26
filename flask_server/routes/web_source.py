@@ -6,7 +6,7 @@
 前端据路径取回原始字节，直接构造成 File 粘贴进输入框。
 这样整文件读取不产生任何副本，也不经历 base64 往返。
 
-访问范围由 core/path_policy 的权限策略判定，可在设置页调整。
+按传入路径直接取回源文件内容。
 """
 import os
 
@@ -27,9 +27,9 @@ _MIME = {
 
 
 def _resolve(raw_path):
-    """把请求路径解析为真实文件路径；不存在或不被权限允许时返回 None。
+    """把请求路径解析为真实文件路径；不存在时返回 None。
 
-    相对路径以工程根为基准解析。访问范围由 path_policy 判定。
+    相对路径以工程根为基准解析。
     @param raw_path 请求里的原始路径（绝对或相对）
     @returns 合法文件路径字符串；非法返回 None
     """
@@ -39,13 +39,7 @@ def _resolve(raw_path):
     # 相对路径以工程根为基准解析（与 read_file 工具口径一致）
     target = os.path.abspath(raw_path if os.path.isabs(raw_path) else os.path.join(root, raw_path))
     # 目标必须是存在的文件；目录不可取。
-    # 访问范围由 path_policy 按当前权限档判定。
     if not os.path.isfile(target):
-        return None
-    try:
-        import path_policy
-        path_policy.check_path(target, write=False)
-    except Exception:
         return None
     return target
 
