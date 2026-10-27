@@ -6,7 +6,7 @@
 - PROJECT_ROOT / SKILLS_ROOT  路径基准
 - abspath                    路径解析（相对路径以工程根为基准）
 - resolve_skill_file          skill 内相对路径解析与越界校验
-- normalize_aliases / require 参数别名归一与必填校验
+- require 必填参数校验
 - max_json_chars / dump_len / enforce_size_limit  结果 JSON 体积上限控制
 
 拆出本模块的目的：把不随调用变化的通用辅助与工具实现分离，
@@ -139,7 +139,7 @@ def resolve_skill_file(skill, rel):
     skill = _require_single_dir_name(skill)
     rel = str(rel or "").strip()
     if not rel:
-        raise ToolParamError("缺少必填参数 file（skill 目录内的相对路径，如 SKILL.md）")
+        raise ToolParamError("缺少必填参数 path（skill 目录内的相对路径，如 SKILL.md）")
     base = (SKILLS_ROOT / skill).resolve()
     if not base.is_dir():
         available = _list_available_skills()
@@ -149,38 +149,6 @@ def resolve_skill_file(skill, rel):
     if base != target and base not in target.parents:
         raise ToolParamError("file 越出 skill 目录：%s" % rel)
     return target
-
-
-# 参数别名：调用方可能用 camelCase / 旧名指代规范参数，统一归一到规范名，
-# 避免因别名导致「缺参」报错。规范名口径：文件路径=file_path，目录路径=dir_path。
-_PARAM_ALIASES = {
-    # 文件路径 → file_path
-    "path": "file_path",
-    "file": "file_path",
-    "filePath": "file_path",
-    "filepath": "file_path",
-    "target_file": "file_path",
-    # 目录路径 → dir_path
-    "target_directory": "dir_path",
-    "dirPath": "dir_path",
-    "directory": "dir_path",
-    # 替换文本 → old_string / new_string
-    "old_str": "old_string",
-    "new_str": "new_string",
-    # 其它 camelCase → snake_case
-    "contextAround": "context_around",
-    "caseSensitive": "case_sensitive",
-}
-
-
-def normalize_aliases(p):
-    """把别名参数归一到规范参数名（仅补缺失项，不覆盖已有值）。"""
-    if not isinstance(p, dict):
-        return p
-    for alias, real in _PARAM_ALIASES.items():
-        if alias in p and real not in p:
-            p[real] = p.get(alias)
-    return p
 
 
 def require(p, *names):

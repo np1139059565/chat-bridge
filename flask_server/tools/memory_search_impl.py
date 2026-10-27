@@ -43,9 +43,9 @@ def _resolve_top_k(raw):
     try:
         value = int(raw)
     except (TypeError, ValueError):
-        raise ToolParamError("top_k 必须是正整数，收到：%r" % (raw,))
+        raise ToolParamError("limit 必须是正整数，收到：%r" % (raw,))
     if value <= 0:
-        raise ToolParamError("top_k 必须大于 0，收到：%d" % value)
+        raise ToolParamError("limit 必须大于 0，收到：%d" % value)
     # 上限保护：一次最多 50 条，防上下文被塞爆
     return min(value, 50)
 
@@ -81,7 +81,7 @@ def t_memory_search(p):
     典型用法：AI 需要回忆「用户之前说过什么」「这个问题以前怎么解决的」时，
     把当前任务或问题原文传给 query，即可拿到相关历史节点。
 
-    @param p 工具参数 { query, keywords?, focus?, top_k? }
+    @param p 工具参数 { query, keywords?, focus?, limit? }
     @return { ok, query, keywords, focus, hits:[...], rejected, plan_found }
     """
     query, focus, top_k, keywords = _search_params(p)
@@ -106,7 +106,7 @@ def _search_params(p):
     if not query:
         raise ToolParamError("query 不能为空")
     focus = _resolve_focus(p.get("focus"))
-    top_k = _resolve_top_k(p.get("top_k"))
+    top_k = _resolve_top_k(p.get("limit"))
     keywords = _resolve_keywords(p, query)
     return query, focus, top_k, keywords
 

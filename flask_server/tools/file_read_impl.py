@@ -21,7 +21,6 @@ import screenshot_store
 from tool_helpers import (
     ToolParamError,
     abspath as _abspath,
-    normalize_aliases as _normalize_aliases,
     require as _require,
     enforce_size_limit,
 )
@@ -315,7 +314,7 @@ def _read_batch_segment(paths_param, offset, limit):
     # 体积校验：超限时报错并提示缩小范围
     enforce_size_limit(
         {"data": {"text": joined}},
-        "请减少读取范围后重试：减少 file_paths 个数，或用 offset / limit 分段读取；"
+        "请减少读取范围后重试：减少 path 数组元素个数，或用 offset / limit 分段读取；"
         "本次读取 %d 个文件、共约 %d 行。" % (len(metas), total_lines_read),
     )
     batch_name = "%d_files_%d-%d.txt" % (len(metas), offset, offset + total_lines_read - 1)
@@ -389,15 +388,15 @@ def t_read_file(p):
 
     按「批量 / 单个」与「整文件 / 分段」两个维度共四种组合分发到对应实现。
     """
-    _normalize_aliases(p)
     offset = p.get("offset", 1)
     limit = p.get("limit")
-    # 批量模式：file_paths 为数组，一次读取多个文件，减少往返次数
-    paths_param = p.get("file_paths")
-    if paths_param:
+    # 路径参数统一为 path：传数组即批量模式，一次读取多个文件，减少往返次数
+    _require(p, "path")
+    paths_param = p.get("path")
+    if isinstance(paths_param, list):
         # 类型与数量校验
-        if not isinstance(paths_param, list):
-            raise ToolParamError("file_paths 必须是字符串数组")
+        if not paths_param:
+            raise ToolParamError("path 数组不能为空")
         # 上限取当前配置值（设置页可调），而非写死的常量
         limit_files = _batch_limit()
         if len(paths_param) > limit_files:
@@ -409,8 +408,7 @@ def t_read_file(p):
             return _read_batch_whole(paths_param)
         return _read_batch_segment(paths_param, offset, limit)
     # 单文件模式
-    _require(p, "file_path")
-    raw_path = p.get("file_path")
+    raw_path = paths_param
     # 整文件与分段各自处理
     if _is_whole_file(offset, limit):
         return _read_single_whole(raw_path)

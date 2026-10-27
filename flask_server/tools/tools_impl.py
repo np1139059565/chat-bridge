@@ -22,7 +22,6 @@ from tool_helpers import (
     abspath as _abspath,
     resolve_skill_file as _resolve_skill_file,
     list_skills,
-    normalize_aliases as _normalize_aliases,
     require as _require,
     enforce_size_limit,
 )
@@ -101,8 +100,8 @@ def _iter_files(root, recursive=True):
 # ---------- 各工具实现 ----------
 def t_list_dir(p):
     """列出目录下的文件与子目录，跳过点文件与忽略模式。"""
-    _require(p, "dir_path")
-    d = _abspath(p.get("dir_path"))
+    _require(p, "path")
+    d = _abspath(p.get("path"))
     ig = p.get("ignore_globs") or []
     items = []
     for name in sorted(os.listdir(d)):
@@ -126,9 +125,9 @@ def t_search_file(p):
     先列出目录下的文件、再自行比对通配符，而不是把 pattern 交给 rglob/glob：
     后者的大小写敏感行为随操作系统而异，自行比对可保证各平台一致。
     """
-    _require(p, "dir_path", "pattern")
-    root = _abspath(p.get("dir_path"))
-    pattern = p.get("pattern", "*")
+    _require(p, "path", "glob")
+    root = _abspath(p.get("path"))
+    pattern = p.get("glob", "*")
     recursive = p.get("recursive", True)
     ig = p.get("ignore_globs") or []
     matches = []
@@ -202,7 +201,7 @@ def t_search_content(p):
     """按正则搜索文件内容，返回匹配行；结果超限时改为报错并提示缩小范围。"""
     _require(p, "pattern")
     pattern = p.get("pattern", "")
-    path = p.get("dir_path", ".")
+    path = p.get("path", ".")
     glob = p.get("glob")
     case = p.get("case_sensitive", False)
     # 上下文行数：非法或负数一律按 0 处理（只返回匹配行本身）
@@ -257,15 +256,15 @@ def t_read_skill(p):
     这是「按名字读取 skill 文档」的专用通道，替代以往用 read_file 传
     「skills/xxx/SKILL.md」相对路径的耦合做法。
     """
-    _require(p, "skill", "file")
-    fp = _resolve_skill_file(p.get("skill"), p.get("file"))
+    _require(p, "skill", "path")
+    fp = _resolve_skill_file(p.get("skill"), p.get("path"))
     if not fp.is_file():
-        raise ToolParamError("文件不存在：%s（skill=%s）" % (p.get("file"), p.get("skill")))
+        raise ToolParamError("文件不存在：%s（skill=%s）" % (p.get("path"), p.get("skill")))
     res = _read_text_segment(fp, p.get("offset", 1), p.get("limit"))
     read_lines = res.pop("_read_lines")
     total = res["total_lines"]
     res["skill"] = str(p.get("skill")).strip()
-    res["file"] = str(p.get("file")).strip()
+    res["file"] = str(p.get("path")).strip()
     return enforce_size_limit(
         res,
         "请减少读取行数后重试：用 offset 指定起始行、limit 指定读取行数，分段读取；"
@@ -283,9 +282,8 @@ def t_read_lints(p):
 
 def t_replace_in_file(p):
     """在文件中做精确字符串替换，要求 old_str 唯一。"""
-    _normalize_aliases(p)
-    _require(p, "file_path", "old_string")
-    fp = _abspath(p.get("file_path"))
+    _require(p, "path", "old_string")
+    fp = _abspath(p.get("path"))
     old = p.get("old_string")
     new = p.get("new_string", "")
     if old == "":
@@ -303,9 +301,8 @@ def t_replace_in_file(p):
 
 def t_write_to_file(p):
     """创建或覆盖写入完整文件内容（父目录不存在时自动创建）。"""
-    _normalize_aliases(p)
-    _require(p, "file_path", "content")
-    fp = _abspath(p.get("file_path"))
+    _require(p, "path", "content")
+    fp = _abspath(p.get("path"))
     content = p.get("content", "")
     fp.parent.mkdir(parents=True, exist_ok=True)
     fp.write_text(content, encoding="utf-8")
@@ -314,9 +311,8 @@ def t_write_to_file(p):
 
 def t_delete_file(p):
     """删除指定文件。"""
-    _normalize_aliases(p)
-    _require(p, "file_path")
-    fp = _abspath(p.get("file_path"))
+    _require(p, "path")
+    fp = _abspath(p.get("path"))
     os.remove(fp)
     return {"deleted": True, "file": str(fp)}
 
@@ -330,8 +326,8 @@ def t_list_rules(p):
 def t_read_rule(p):
     """按规则名读取规则全文。"""
     import rules
-    _require(p, "name")
-    name = str(p.get("name")).strip()
+    _require(p, "rule")
+    name = str(p.get("rule")).strip()
     if not rules.valid_name(name):
         raise ToolParamError("规则名非法：%s（仅允许字母、数字、下划线、连字符）" % name)
     try:

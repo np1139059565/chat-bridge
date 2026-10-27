@@ -26,7 +26,7 @@
 
 请求：
 ```json
-{ "tool": "read_file", "parameters": { "file_path": "E:/projects/demo/README.md" } }
+{ "tool": "read_file", "parameters": { "path": "E:/projects/demo/README.md" } }
 ```
 
 成功：
@@ -215,27 +215,27 @@ POST 请求体示例：
 
 | 工具 | 必填参数 | 可选参数 |
 |---|---|---|
-| `list_dir` | `dir_path` | `ignore_globs` |
-| `search_file` | `dir_path`, `pattern` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
-| `search_content` | `pattern` | `dir_path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
-| `read_file` | `file_path` 或 `file_paths`（二选一；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；不指定行范围时为整文件读取，结果只含 `data.file`（`mime`/`name`/`path`/`source`），正文由前端经 `GET /api/web/source-file` 取原始字节后作为附件粘贴；指定行范围时为分段读取，片段以 `data:text/plain` 的 dataURL 放在 `data.file.content`；回传 AI 的只有精简标记；`file_paths` 单次上限 20 个文件，体积受 `limits.max_json_chars` 约束 |
-| `read_image` | `file_path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
+| `list_dir` | `path` | `ignore_globs` |
+| `search_file` | `path`, `glob` | `recursive`, `ignore_globs`（匹配均不区分大小写） |
+| `search_content` | `pattern` | `path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
+| `read_file` | `path`（字符串读单个文件，数组一次读多个；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；不指定行范围时为整文件读取，结果只含 `data.file`（`mime`/`name`/`path`/`source`），正文由前端经 `GET /api/web/source-file` 取原始字节后作为附件粘贴；指定行范围时为分段读取，片段以 `data:text/plain` 的 dataURL 放在 `data.file.content`；回传 AI 的只有精简标记；数组单次上限 20 个文件，体积受 `limits.max_json_chars` 约束 |
+| `read_image` | `path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
 | `list_skills` | — | — |
-| `read_skill` | `skill`, `file` | `offset`, `limit` |
+| `read_skill` | `skill`, `path` | `offset`, `limit` |
 | `read_lints` | — | `paths`, `severity` |
-| `replace_in_file` | `file_path`, `old_string` | `new_string` |
-| `write_to_file` | `file_path`, `content` | — |
-| `delete_file` | `file_path` | — |
+| `replace_in_file` | `path`, `old_string` | `new_string` |
+| `write_to_file` | `path`, `content` | — |
+| `delete_file` | `path` | — |
 | `get_tool_params` | `tool_id` | — |
 | `list_rules` | — | — |
-| `read_rule` | `name` | — |
+| `read_rule` | `rule` | — |
 | `run_command` | `language`, `command` | `cwd`, `timeout`, `async`（true 时后台执行，返回 task_id） |
 | `command_task` | `task_id` | — |
 | `memory_search` | `query` | `limit` |
 | `memory_inspect` | — | `node_ids`, `conv_id`, `limit`（默认 5，上限 20） |
 | `memory_refine` | `node_id` | `essence`, `keywords`（两者至少提供一个） |
 
-> 参数命名口径：文件路径统一 `file_path`，目录路径统一 `dir_path`。调用前请先 `get_tool_params` 核对。
+> 参数命名口径：路径统一 `path`（多路径传数组），文件名过滤统一 `glob`，内容匹配统一 `pattern`，返回条数统一 `limit`。
 > `command_task` 用于查询 `run_command` 异步调用的状态与结果；`memory_*` 三个工具服务于记忆系统的检索、抽检与修正。
 
 ---

@@ -47,26 +47,26 @@ class ReadFileEmptyTestCase(unittest.TestCase):
 
     def test_empty_segment_has_no_attachment(self):
         """空文件分段读取：不产出附件，并标记为空。"""
-        r = fr.t_read_file({"file_path": self.empty, "offset": 1, "limit": 10})
+        r = fr.t_read_file({"path": self.empty, "offset": 1, "limit": 10})
         self.assertFalse(self._has_attachment(r))
         self.assertTrue(r.get("empty"))
         self.assertIn("为空", r.get("message") or "")
 
     def test_empty_whole_has_no_attachment(self):
         """空文件整文件读取：不产出附件，并标记为空。"""
-        r = fr.t_read_file({"file_path": self.empty})
+        r = fr.t_read_file({"path": self.empty})
         self.assertFalse(self._has_attachment(r))
         self.assertTrue(r.get("empty"))
 
     def test_offset_past_end_has_no_attachment(self):
         """起始行越过文件末尾：不产出附件。"""
-        r = fr.t_read_file({"file_path": self.normal, "offset": 9999, "limit": 5})
+        r = fr.t_read_file({"path": self.normal, "offset": 9999, "limit": 5})
         self.assertFalse(self._has_attachment(r))
         self.assertTrue(r.get("empty"))
 
     def test_batch_whole_skips_empty_file(self):
         """批量整读：空文件被跳过，正常文件仍给附件。"""
-        r = fr.t_read_file({"file_paths": [self.empty, self.normal]})
+        r = fr.t_read_file({"path": [self.empty, self.normal]})
         data = r.get("data") or {}
         files = data.get("files") or []
         self.assertEqual(len(files), 1)
@@ -82,19 +82,19 @@ class ReadFileEmptyTestCase(unittest.TestCase):
         回归点：read_lines 按「请求行数」计算，空文件也会被算成读了 N 行，
         故不能用行数判空，必须看是否真的读到正文。
         """
-        r = fr.t_read_file({"file_paths": [self.empty], "offset": 1, "limit": 5})
+        r = fr.t_read_file({"path": [self.empty], "offset": 1, "limit": 5})
         self.assertFalse(self._has_attachment(r))
         self.assertTrue(r.get("empty"))
 
     def test_normal_segment_still_has_attachment(self):
         """正常文件分段读取：照常产出附件，不被空内容逻辑误伤。"""
-        r = fr.t_read_file({"file_path": self.normal, "offset": 1, "limit": 2})
+        r = fr.t_read_file({"path": self.normal, "offset": 1, "limit": 2})
         self.assertTrue(self._has_attachment(r))
         self.assertFalse(r.get("empty"))
 
     def test_normal_whole_still_has_attachment(self):
         """正常文件整读：照常产出源文件引用。"""
-        r = fr.t_read_file({"file_path": self.normal})
+        r = fr.t_read_file({"path": self.normal})
         data = r.get("data") or {}
         self.assertTrue(data.get("file"))
         self.assertTrue(data["file"].get("source"))

@@ -18,7 +18,6 @@ import screenshot_store
 from tool_helpers import (
     ToolParamError,
     abspath as _abspath,
-    normalize_aliases as _normalize_aliases,
     require as _require,
 )
 
@@ -58,12 +57,11 @@ def t_read_image(p):
     「后端 → 前端」这一跳传输，前端只回传精简标记，不会膨胀对话上下文。
     体积控制改由 MAX_IMAGE_BYTES 在读取前拦截。
     """
-    _normalize_aliases(p)
-    _require(p, "file_path")
-    fp = _abspath(p.get("file_path"))
+    _require(p, "path")
+    fp = _abspath(p.get("path"))
     # 路径校验：必须是已存在的普通文件
     if not os.path.isfile(fp):
-        raise ToolParamError("文件不存在：%s" % p.get("file_path"))
+        raise ToolParamError("文件不存在：%s" % p.get("path"))
     # 格式校验：只接受白名单内的图片类型
     ext = os.path.splitext(fp)[1].lower()
     mime = IMAGE_MIME.get(ext)

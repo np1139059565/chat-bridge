@@ -186,7 +186,7 @@ class TestToolRoutes(_RouteBase):
     def test_builtin_tool_call(self):
         """调用内置 list_dir 应成功并返回结果。"""
         r = self.client.post("/tool", json={"tool": "list_dir",
-                                             "parameters": {"dir_path": "."}})
+                                             "parameters": {"path": "."}})
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.get_json()["success"])
 

@@ -45,7 +45,7 @@ class TestReadFileDelivery(unittest.TestCase):
     def test_whole_file_paste_on_returns_attachment(self):
         """开启粘贴时，整文件读取返回附件引用而非正文。"""
         self._set_paste(True)
-        r = file_read_impl.t_read_file({"file_path": self.sample})
+        r = file_read_impl.t_read_file({"path": self.sample})
         self.assertIn("data", r)
         self.assertIn("file", r["data"])
         self.assertNotIn("content", r)
@@ -53,7 +53,7 @@ class TestReadFileDelivery(unittest.TestCase):
     def test_whole_file_paste_off_returns_content(self):
         """关闭粘贴时，整文件读取直接返回正文。"""
         self._set_paste(False)
-        r = file_read_impl.t_read_file({"file_path": self.sample})
+        r = file_read_impl.t_read_file({"path": self.sample})
         self.assertIn("content", r)
         self.assertIn("第二行", r["content"])
         self.assertNotIn("data", r)
@@ -62,7 +62,7 @@ class TestReadFileDelivery(unittest.TestCase):
         """关闭粘贴时，分段读取返回所读行范围的内容。"""
         self._set_paste(False)
         r = file_read_impl.t_read_file(
-            {"file_path": self.sample, "offset": 2, "limit": 1})
+            {"path": self.sample, "offset": 2, "limit": 1})
         self.assertIn("content", r)
         self.assertEqual(r["content"].strip(), "第二行")
         self.assertEqual(r["lines"], [2, 2])
@@ -70,7 +70,7 @@ class TestReadFileDelivery(unittest.TestCase):
     def test_batch_paste_off_returns_contents(self):
         """关闭粘贴时，批量读取的每个文件条目都带正文。"""
         self._set_paste(False)
-        r = file_read_impl.t_read_file({"file_paths": [self.sample]})
+        r = file_read_impl.t_read_file({"path": [self.sample]})
         files = r["data"]["files"]
         self.assertEqual(len(files), 1)
         self.assertIn("content", files[0])

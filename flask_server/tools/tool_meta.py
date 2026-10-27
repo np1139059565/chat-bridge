@@ -32,15 +32,15 @@ TOOLS = {
     "list_dir": {
         "description": "列出指定目录下的文件和子目录（不含点文件）",
         "parameters": [
-            {"name": "dir_path", "type": "string", "required": True, "description": "要列出的目录路径（相对或绝对）"},
+            {"name": "path", "type": "string", "required": True, "description": "要列出的目录路径（相对或绝对）"},
             {"name": "ignore_globs", "type": "array", "required": False, "description": "要忽略的通配符模式列表"},
         ],
     },
     "search_file": {
         "description": "按文件名通配符模式递归搜索文件，支持忽略特定模式",
         "parameters": [
-            {"name": "dir_path", "type": "string", "required": True, "description": "搜索根目录"},
-            {"name": "pattern", "type": "string", "required": True, "description": "文件名通配符，如 *.js；匹配不区分大小写"},
+            {"name": "path", "type": "string", "required": True, "description": "搜索根目录"},
+            {"name": "glob", "type": "string", "required": True, "description": "文件名通配符，如 *.js；匹配不区分大小写"},
             {"name": "recursive", "type": "boolean", "required": False, "description": "是否递归子目录，默认 true"},
             {"name": "ignore_globs", "type": "array", "required": False, "description": "忽略模式列表，同样不区分大小写"},
         ],
@@ -48,8 +48,8 @@ TOOLS = {
     "search_content": {
         "description": "基于正则在文件内容中搜索匹配（支持上下文、类型过滤）",
         "parameters": [
-            {"name": "pattern", "type": "string", "required": True, "description": "正则表达式"},
-            {"name": "dir_path", "type": "string", "required": False, "description": "搜索路径，默认当前目录"},
+            {"name": "pattern", "type": "string", "required": True, "description": "正则表达式（内容匹配）"},
+            {"name": "path", "type": "string", "required": False, "description": "搜索路径，默认当前目录"},
             {"name": "glob", "type": "string", "required": False, "description": "文件名过滤，如 *.py"},
             {"name": "context_around", "type": "integer", "required": False, "description": "上下文字节数/行数"},
             {"name": "case_sensitive", "type": "boolean", "required": False, "description": "是否区分大小写"},
@@ -60,8 +60,7 @@ TOOLS = {
         # 正文超过内联阈值时结果改为 file_ref 引用，正文由前端取回后粘贴进对话。
         "description": "读取本地文件内容（绝对路径原样，相对路径以工程根为基准），支持指定偏移与行数，支持一次读取多个文件",
         "parameters": [
-            {"name": "file_path", "type": "string", "required": False, "description": "单个文件路径（与 file_paths 二选一）"},
-            {"name": "file_paths", "type": "array", "required": False, "description": "多个文件路径数组，一次读取多个文件（最多 20 个，与 file_path 二选一）"},
+            {"name": "path", "type": "string | array", "required": True, "description": "文件路径；传字符串读一个文件，传数组一次读多个（最多 20 个）"},
             {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
             {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
         ],
@@ -71,7 +70,7 @@ TOOLS = {
         # 正文只带精简标记，不把图片二进制写进对话
         "description": "读取本地图片文件并贴入网页 AI 输入框（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB）",
         "parameters": [
-            {"name": "file_path", "type": "string", "required": True, "description": "图片路径（绝对路径原样，相对路径以工程根为基准）"},
+            {"name": "path", "type": "string", "required": True, "description": "图片路径（绝对路径原样，相对路径以工程根为基准）"},
         ],
     },
     "list_skills": {
@@ -83,7 +82,7 @@ TOOLS = {
         "description": "读取某个 skill 目录下的文档（相对该 skill 目录的路径，如 SKILL.md）",
         "parameters": [
             {"name": "skill", "type": "string", "required": True, "description": "skill 名称（skills/ 下的目录名，如 debug_chrome）"},
-            {"name": "file", "type": "string", "required": True, "description": "skill 目录内的相对路径，如 SKILL.md"},
+            {"name": "path", "type": "string", "required": True, "description": "skill 目录内的相对路径，如 SKILL.md"},
             {"name": "offset", "type": "integer", "required": False, "description": "起始行（从 1 开始）"},
             {"name": "limit", "type": "integer", "required": False, "description": "读取行数"},
         ],
@@ -100,7 +99,7 @@ TOOLS = {
         # 要求 old_string 在文件中唯一，避免误改多处；适合最小化改动
         "description": "在已有文件中进行精确字符串替换（用于最小化改动）",
         "parameters": [
-            {"name": "file_path", "type": "string", "required": True, "description": "文件路径"},
+            {"name": "path", "type": "string", "required": True, "description": "文件路径"},
             {"name": "old_string", "type": "string", "required": True, "description": "待替换原文（须唯一）"},
             {"name": "new_string", "type": "string", "required": True, "description": "替换后的文本"},
         ],
@@ -109,14 +108,14 @@ TOOLS = {
         # 覆盖写入：父目录不存在时自动创建，便于生成新文件
         "description": "创建或覆盖写入完整文件内容",
         "parameters": [
-            {"name": "file_path", "type": "string", "required": True, "description": "文件路径"},
+            {"name": "path", "type": "string", "required": True, "description": "文件路径"},
             {"name": "content", "type": "string", "required": True, "description": "完整文件内容"},
         ],
     },
     "delete_file": {
         "description": "删除指定路径的文件",
         "parameters": [
-            {"name": "file_path", "type": "string", "required": True, "description": "要删除的文件路径"},
+            {"name": "path", "type": "string", "required": True, "description": "要删除的文件路径"},
         ],
     },
 
@@ -128,7 +127,7 @@ TOOLS = {
     "read_rule": {
         "description": "按规则名读取某条规则的完整内容",
         "parameters": [
-            {"name": "name", "type": "string", "required": True, "description": "规则名（不含扩展名），先用 list_rules 获取"},
+            {"name": "rule", "type": "string", "required": True, "description": "规则名（不含扩展名），先用 list_rules 获取"},
         ],
     },
 
@@ -167,7 +166,7 @@ TOOLS = {
             {"name": "query", "type": "string", "required": True, "description": "查询原文（当前任务/问题），同时作为关键词锚定基准"},
             {"name": "keywords", "type": "array", "required": False, "description": "检索关键词；不传则自动从 query 提取"},
             {"name": "focus", "type": "string", "required": False, "description": "排序焦点：relevance（相关度，默认）/ time（时间新）/ strength（强度高）"},
-            {"name": "top_k", "type": "integer", "required": False, "description": "返回条数，默认 10，上限 50"},
+            {"name": "limit", "type": "integer", "required": False, "description": "返回条数，默认 10，上限 50"},
         ],
     },
     "memory_inspect": {
