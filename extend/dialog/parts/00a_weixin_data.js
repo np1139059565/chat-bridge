@@ -7,7 +7,11 @@
 // 也避免主数据文件因持续叠加而超出长度上限。
 (function () {
   'use strict';
-  const D = window.AIMirrorDialog;
+  // 兜底创建命名空间：本文件必须能独立于 00_data.js 工作。
+  // 若直接取 window.AIMirrorDialog 而不创建，一旦加载顺序变化
+  // （本文件排在 00_data.js 之前）就会拿到 undefined，
+  // 随后给 undefined 挂属性会抛 TypeError，导致整个抽屉脚本链中断。
+  const D = window.AIMirrorDialog = window.AIMirrorDialog || {};
 
   /**
    * 微信通道的初始状态。
