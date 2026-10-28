@@ -73,6 +73,10 @@ def note_incoming(user_id):
     if not user_id:
         return
     _last_user = user_id
+    # 关键：用户发来新消息即重置回复池。
+    # 微信的额度是「每条用户消息发放一个约 10 条的池子」，
+    # 不重置的话，持续对话会在第 10 轮被自己拦住，与平台实际行为不符。
+    _quota_reset(user_id)
     try:
         bridge_store.save_last_weixin_user(user_id)
     except Exception as e:
@@ -97,40 +101,78 @@ def last_user():
     return _last_user
 
 
-def _quota_used(user_id, now=None):
-    """统计某用户在 24 小时窗口内已发送的条数。
+def _quota_slot(user_id):
+    """取某用户当前的回复池；不存在或已过期则返回 None。
+
+    回复池的真实机制：用户每发一条消息，服务端就发放一个「约 10 条」的回复池，
+    有效期到该消息后 24 小时。用户再发消息会刷新并重置这个池子。
+    因此计数必须「按用户消息重置」，而不是「按时间窗口累计」——
+    后者会让持续对话在第 10 轮被自己拦住，而微信实际允许每轮回 10 条。
 
     @param user_id 用户标识
-    @param now     当前时间戳；缺省取系统时间
-    @returns 已用条数
+    @returns {used, started} 或 None
     """
-    now = now or time.time()
+    now = time.time()
     with _lock:
-        items = _quota.get(user_id) or []
-        # 顺手清掉窗口外的旧记录，避免列表无限增长
-        kept = [(t, n) for (t, n) in items if now - t < QUOTA_WINDOW]
-        _quota[user_id] = kept
-        return sum(n for (_t, n) in kept)
+        slot = _quota.get(user_id)
+        if not slot:
+            return None
+        # 超过 24 小时未再收到该用户消息：池子失效，清理掉
+        if now - slot.get("started", 0) >= QUOTA_WINDOW:
+            _quota.pop(user_id, None)
+            return None
+        return dict(slot)
+
+
+def _quota_reset(user_id):
+    """用户发来新消息：重置其回复池。
+
+    这是与真实机制对齐的关键一步：每收到一条用户消息，
+    回复额度就重新计算，而不是在旧计数上继续累加。
+    @param user_id 用户标识
+    """
+    with _lock:
+        _quota[user_id] = {"used": 0, "started": time.time()}
+
+
+def _quota_used(user_id):
+    """统计某用户当前回复池已用条数。
+
+    @param user_id 用户标识
+    @returns 已用条数；无有效池子返回 0
+    """
+    slot = _quota_slot(user_id)
+    return slot.get("used", 0) if slot else 0
 
 
 def _quota_add(user_id, count=1):
-    """记一次发送，累加配额使用量。
+    """记一次发送，累加当前回复池的使用量。
 
+    池子不存在时先建一个：单用户场景下，用户发消息与推送之间可能存在
+    极短的时间差，此时以「此刻」为起点建池，避免发送被误拦。
     @param user_id 用户标识
     @param count   本次占用的条数
     """
     with _lock:
-        _quota.setdefault(user_id, []).append((time.time(), count))
+        slot = _quota.get(user_id)
+        if not slot or time.time() - slot.get("started", 0) >= QUOTA_WINDOW:
+            slot = {"used": 0, "started": time.time()}
+            _quota[user_id] = slot
+        slot["used"] = slot.get("used", 0) + count
 
 
 def quota_status(user_id):
-    """返回某用户的配额状态，供设置页展示。
+    """返回某用户的回复池状态，供设置页展示。
 
     @param user_id 用户标识
-    @returns {used, limit, remaining}
+    @returns {used, limit, remaining, active}
+        active 表示当前是否有有效回复池（无池子意味着用户还没发过消息）
     """
-    used = _quota_used(user_id)
-    return {"used": used, "limit": QUOTA_LIMIT, "remaining": max(0, QUOTA_LIMIT - used)}
+    slot = _quota_slot(user_id)
+    used = slot.get("used", 0) if slot else 0
+    return {"used": used, "limit": QUOTA_LIMIT,
+            "remaining": max(0, QUOTA_LIMIT - used),
+            "active": bool(slot)}
 
 
 def _should_push(m, push):
@@ -244,7 +286,10 @@ def handle_report(client, payload):
             bridge_store.mark_pushed(conv_id, [m.get("id") for m in fresh])
             return 0
         if _quota_used(user_id) >= QUOTA_LIMIT:
-            log("配额已用尽，本轮不发送 user=" + user_id[:8])
+            # 回复池已满：说明本轮已回够 10 条，等用户下一条消息重置。
+            # 这是平台侧的硬限制，无法绕过；记日志便于排查「为什么不回了」。
+            log("本轮回复池已满（%d 条），等用户新消息重置 user=%s"
+                % (QUOTA_LIMIT, user_id[:8]))
             return 0
         text = _truncate(SEP.join(bodies))
         ok, data = client.send_text(user_id, text)

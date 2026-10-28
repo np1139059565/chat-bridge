@@ -99,12 +99,13 @@
   }
 
   /**
-   * 渲染配额提示行。
+   * 渲染回复池提示行。
    *
-   * 微信限制 24 小时内最多 10 条消息，配额用尽后消息发不出去。
-   * 把剩余条数摆出来，用户能提前知道「为什么对方收不到」。
+   * 真实机制：用户每发一条消息，就获得一个约 10 条的回复池，24 小时内有效；
+   * 再发消息会重置。因此这里展示的是「本轮还剩几条」，不是「今天还剩几条」。
+   * 把余量摆出来，用户能提前知道「为什么对方暂时收不到」。
    * @param {Object} ctx Vue 实例
-   * @returns {VNode} 配额行
+   * @returns {VNode} 回复池行
    */
   function renderQuota(ctx) {
     const q = ctx.wxQuota || {};
@@ -112,8 +113,10 @@
     const used = q.used || 0;
     const limit = q.limit || 10;
     const warn = remaining <= 2;
+    // 无有效回复池：用户还没发过消息，此时机器人无法主动发送
+    const label = q.active === false ? '本轮回复池（待用户发消息）' : '本轮剩余条数';
     return h('div', { class: 'bridge-push-row' }, [
-      h('span', { class: 'bridge-push-label' }, '今日剩余条数'),
+      h('span', { class: 'bridge-push-label' }, label),
       h('span', { style: warn ? 'color:#e57373;font-weight:600;' : '' },
         String(remaining) + ' / ' + String(limit) + '（已用 ' + String(used) + '）')
     ]);
