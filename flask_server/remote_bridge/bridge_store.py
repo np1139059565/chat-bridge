@@ -38,7 +38,7 @@ SECRET_KEYS = ("app_id", "app_secret")
 #   md_selector 为旧字段，保留在兼容列表里，读取时归并进 command_params。
 SETTING_KEYS = ("intents", "md_selector", "command_params", "commands")
 # 运行时字段：写 runtime.yaml 的 bridge 分区（不入库，随本机状态变）
-RUNTIME_KEYS = ("enabled", "push")
+RUNTIME_KEYS = ("enabled", "push", "weixin")
 
 # 用可重入锁：save_config 持锁期间会调用 get_config()，
 # 后者在未初始化时会进入 load_config() 再取同一把锁。
@@ -96,6 +96,12 @@ def _default_config():
         },
         # 指令列表：{name, label, selector, page_url} 或组合指令 {name, label, steps, interval}
         "commands": [],
+        # 微信通道（ClawBot / iLink）配置。
+        # 与 QQ 并列的第二条通道，独立开关、独立推送；
+        # 凭证不在此处，扫码成功后写独立的凭证文件（含 bot_token，权限 600）。
+        "weixin": {
+            "enabled": False,       # 默认关闭：需扫码登录后才启用
+        },
     }
 
 
@@ -175,6 +181,8 @@ def load_config():
         _merge_command_params(cfg, raw)
         if isinstance(raw.get("push"), dict):
             cfg["push"].update(raw["push"])
+        if isinstance(raw.get("weixin"), dict):
+            cfg["weixin"].update(raw["weixin"])
         if isinstance(raw.get("commands"), list):
             _merge_commands(cfg, raw)
         _CONFIG = cfg
@@ -206,6 +214,8 @@ def save_config(patch):
             cfg["command_params"].setdefault("md", {})["selector"] = patch["md_selector"]
         if isinstance(patch.get("push"), dict):
             cfg["push"].update(patch["push"])
+        if isinstance(patch.get("weixin"), dict):
+            cfg["weixin"].update(patch["weixin"])
         if isinstance(patch.get("commands"), list):
             cfg["commands"] = patch["commands"]
         # 分写：密钥进密钥文件（不入库），其余进设置文件（入库）
@@ -341,6 +351,25 @@ def mark_pushed(conv_id, msg_ids):
 # 仅存内存：进程重启即清空，可接受——重启后抽屉会重新上报全量切片，
 #          且窗口正常时消息本就会推成功。
 _pending_msgs = {}
+
+
+def save_last_weixin_user(user_id):
+    """持久化「最近发来微信消息的用户」，供服务重启后恢复推送目标。
+
+    与 QQ 的 openid 不同，微信用户标识可以安全落盘：它只是推送目标，
+    不含带时效的 msg_id 与序号，重启后继续使用不会引发判重问题。
+    @param user_id 用户标识
+    """
+    if user_id:
+        _write_state({"last_weixin_user": user_id})
+
+
+def load_last_weixin_user():
+    """读取持久化的微信推送目标。
+
+    @returns 用户标识；未记录时返回空串
+    """
+    return (_read_state() or {}).get("last_weixin_user") or ""
 
 
 def merge_pending(conv_id, messages):

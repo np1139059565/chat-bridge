@@ -207,12 +207,9 @@ window.AIMirrorDialog = (function () {
       bridgeEnabled: true,   // 默认开启：远程功能开箱即用
       bridgeConnected: false,
       bridgeAppId: '', bridgeAppSecret: '',
-      // voice：语音识别开关，默认关；关时收到语音文件直接丢弃。
-      // 打开后，每一轮 AI 回复都会被强制要求带 voice 代码块（见 05e_quality.js）。
-      // push.*：推送到 QQ 的消息类型开关；
-      // check.*：质量检测开关（各自独立，用户可关）；voice 兼作语音检测开关。
-      // 引用唯一默认值来源（见文件头部 D.DEFAULT_BRIDGE_PUSH 注释）。
-      // 浅拷贝一份，避免多实例共享同一对象导致互相污染。
+      // voice：语音识别开关（默认关，关时丢弃语音文件；开后每轮 AI 回复须带 voice 块，见 05e_quality.js）。
+      // push.*：推送到 QQ 的消息类型开关；check.*：质量检测开关。默认值来源见文件头部 D.DEFAULT_BRIDGE_PUSH，
+      // 此处浅拷贝一份，避免多实例共享同一对象导致互相污染。
       bridgePush: Object.assign({}, D.DEFAULT_BRIDGE_PUSH),
       // 音色下拉的数据与状态：清单由 loadVoiceTones 拉取，渲染只读这些字段。
       // _voiceToneFor 记录清单对应的引擎，切换引擎时据此判断是否需重新拉取。
@@ -227,6 +224,10 @@ window.AIMirrorDialog = (function () {
       bridgeCmdParams: {}, bridgeCmdParamDefs: [],
       _mdCaptureTarget: '', _mdCaptureTimer: null, _afterMd: null, _mdReportTimer: null,  // Markdown
       _bridgeStatusTimer: null, bridgeLastEvent: '', bridgeIntents: 0,  // 轮询/诊断
+      // 远程桥接（微信 ↔ 网页 AI）：与 QQ 并列但完全独立的一条通道。
+      // 字段定义集中在 00a_weixin_data.js，此处展开合并——
+      // 微信状态字段较多，集中一处便于新增，也避免本文件超出长度上限。
+      ...D.weixinInitialState(),
       rules: [],
       rulesDir: '',
       rulesOpen: false,

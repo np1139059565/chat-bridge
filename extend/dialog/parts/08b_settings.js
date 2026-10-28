@@ -287,6 +287,8 @@
         ]),
         // 4) 远程桥接：QQ 凭证、推送开关、指令列表
         D.renderBridgeBlock(ctx),
+        // 4.2) 远程桥接：微信通道（扫码登录 + 配额约束），与 QQ 并列独立
+        D.renderWeixinBlock(ctx),
         // 4.5) 通用配置：连接地址 / 端口 / 自动回传延迟 / 文件访问权限 / 资源上限
         D.renderGeneralSettings(ctx),
         // 5) 历史会话：列出全部会话，勾选后复制 JSON（对话记录 + 全部卡片）

@@ -447,6 +447,37 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 
 重启桥接。返回 `{ success }`。
 
+### 微信通道（/api/bridge/weixin）
+
+微信 ClawBot（iLink）通道的配置与扫码登录接口。与 QQ 通道并列独立：
+微信没有 AppID / AppSecret，凭证由扫码登录获得，保存在本机数据目录，不入库。
+
+#### GET /api/bridge/weixin/status
+
+查询微信通道状态与登录进度。
+返回 `{ success, channel: {enabled, connected, hasCred, botId, lastEvent}, login: {state, qrcode_url, message, need_verify} | null, quota: {used, limit, remaining} }`。
+`login.state` 取值：`idle` / `waiting` / `scanned` / `need_verify` / `confirmed` / `failed`。
+`quota` 为当前用户的发送配额余量：微信限制 24 小时内最多 10 条消息。
+
+#### POST /api/bridge/weixin/config
+
+保存微信通道开关。请求：`{ enabled: true|false }`。保存后自动重启桥接。
+返回 `{ success, weixin, ...status }`。
+
+#### POST /api/bridge/weixin/login
+
+发起扫码登录，立即返回二维码内容（不等用户扫完）。
+返回 `{ success, login, ...status }`；`login.qrcode_url` 是二维码内容，前端渲染成图即可。
+
+#### POST /api/bridge/weixin/verify
+
+提交手机微信上显示的验证码。请求：`{ code: "123" }`。
+仅在 `login.state` 为 `need_verify` 时有效。返回 `{ success, ...status }`。
+
+#### POST /api/bridge/weixin/logout
+
+退出登录：清除本机凭证并停止长轮询。返回 `{ success, ...status }`。
+
 ---
 
 ## 九、网页版机器人（/api/web 与 /web-bot）

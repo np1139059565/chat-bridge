@@ -42,7 +42,7 @@
     const was = this.panelVisible;
     this.panelVisible = !!visible;
     // 可见才轮询、关闭即停：外部卡片与桥接状态共用同一生命周期
-    if (visible) { this.startExternalPoll(); this.startBridgeStatusPoll(); }
+    if (visible) { this.startExternalPoll(); this.startBridgeStatusPoll(); this.startWxStatusPoll(); }
     else { this.stopExternalPoll(); this.stopBridgeStatusPoll(); }
     // 仅在可见性真的变化时打印：避免重复消息刷屏。
     if (was !== this.panelVisible) {

@@ -30,6 +30,7 @@
     await this.loadCustomTools();
     // 桥接配置要先读：语音开关决定 prompt 是否注入朗读约定，须在生成前就位。
     await this.loadBridge();   // 远程桥接配置与状态（失败不阻断其余功能）
+    await this.loadWeixin();   // 微信通道配置与登录状态（失败不阻断其余功能）
     await this.fetchTools();   // 内部会刷新技能说明段落并生成 System Prompt
     await this.loadRules();
     // 外部卡片轮询不在此启动，改由面板可见性驱动（见 setPanelVisible）。

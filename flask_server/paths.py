@@ -65,6 +65,13 @@ WEB_SEGMENTS_DIR = WEB_DIR / "segments"
 # 单一 SQLite 文件承载全部记忆，启动时加载进内存，供接口读写。
 MEMORY_DB_DIR = DATA_DIR / "memory"
 MEMORY_DB_PATH = MEMORY_DB_DIR / "memory.db"
+# 微信 ClawBot（iLink）目录：扫码登录得到的凭证与长轮询游标都落这里。
+# 凭证含 bot_token，属敏感运行时数据，文件权限 600、不入库；
+# 游标（updates_buf）必须落盘，否则进程重启会从头拉、重复处理历史消息。
+WEIXIN_DIR = DATA_DIR / "weixin"
+WEIXIN_CRED_PATH = WEIXIN_DIR / "credentials.json"
+WEIXIN_BUF_PATH = WEIXIN_DIR / "updates_buf.txt"
+
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
 LOGS_DIR = DATA_DIR / "logs"
