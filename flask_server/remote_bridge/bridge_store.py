@@ -225,12 +225,26 @@ def save_config(patch):
 
 
 # ---------- 已推送消息 id 集合 ----------
+def _state_path():
+    """取当前状态文件路径（每次调用时解析，便于测试重定向）。
+
+    为什么不在函数里直接用模块常量 BRIDGE_STATE_PATH：
+    测试需要把状态文件指向临时目录，否则测试会写进生产状态文件——
+    曾因此把测试用的假用户 id 写进生产文件，导致线上一直拿不存在的
+    用户去发送、每次都被服务端拒绝。
+
+    @returns Path 对象
+    """
+    return BRIDGE_STATE_PATH
+
+
 def _read_state():
     """读取去重状态文件；不存在或损坏返回空结构。"""
-    if not BRIDGE_STATE_PATH.exists():
+    p = _state_path()
+    if not p.exists():
         return {}
     try:
-        return json.loads(BRIDGE_STATE_PATH.read_text(encoding="utf-8")) or {}
+        return json.loads(p.read_text(encoding="utf-8")) or {}
     except Exception as e:
         app_log.warn("[bridge]", "读取去重状态失败：", e)
         return {}
@@ -250,7 +264,7 @@ def _write_state(state):
         with _lock:
             old = _read_state()      # 先取现有内容
             old.update(state)        # 用本次字段覆盖同名键
-            BRIDGE_STATE_PATH.write_text(
+            _state_path().write_text(
                 json.dumps(old, ensure_ascii=False), encoding="utf-8")
     except Exception as e:
         app_log.warn("[bridge]", "写回去重状态失败：", e)

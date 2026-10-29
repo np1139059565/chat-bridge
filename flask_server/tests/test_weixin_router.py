@@ -36,7 +36,7 @@ class TestRouterMerge:
     def test_merges_multiple_messages_into_one(self):
         """一轮里的多条消息必须合并成一条发送，否则配额很快耗尽。"""
         c = FakeWeixinClient()
-        router.note_incoming("u1")
+        router.note_incoming("u1@im.wechat")
         payload = {"conversationId": "conv-merge", "messages": [
             make_msg("m1", "user", "问题"),
             make_msg("m2", "assistant", "回答"),
@@ -50,7 +50,7 @@ class TestRouterMerge:
     def test_second_report_does_not_resend(self):
         """同一批消息重复上报不应重复发送（抽屉会上报全量切片）。"""
         c = FakeWeixinClient()
-        router.note_incoming("u1")
+        router.note_incoming("u1@im.wechat")
         payload = {"conversationId": "conv-dedupe", "messages": [make_msg("d1")]}
         assert router.handle_report(c, payload) == 1
         assert router.handle_report(c, payload) == 0
@@ -66,7 +66,7 @@ class TestRouterMerge:
     def test_send_failure_not_marked_pushed(self):
         """发送失败不记账：下轮上报要能重试，否则消息永久丢失。"""
         c = FakeWeixinClient()
-        router.note_incoming("u1")
+        router.note_incoming("u1@im.wechat")
         payload = {"conversationId": "conv-fail", "messages": [make_msg("f1")]}
         c.fail_next = True
         assert router.handle_report(c, payload) == 0
@@ -78,7 +78,7 @@ class TestRouterMerge:
         m = {"id": "w1", "role": "user", "source": "user",
              "blocks": [{"type": "code", "code": json.dumps(envelope)}]}
         c = FakeWeixinClient()
-        router.note_incoming("u1")
+        router.note_incoming("u1@im.wechat")
         assert router.handle_report(c, {"conversationId": "conv-src", "messages": [m]}) == 0
         assert c.sent == []
 
@@ -134,18 +134,18 @@ class TestQuota:
 
     def test_reset_on_new_incoming(self):
         """用户发新消息应重置回复池，而不是在旧计数上累加。"""
-        router.note_incoming("u1")
+        router.note_incoming("u1@im.wechat")
         for _ in range(5):
-            router._quota_add("u1", 1)
-        assert router.quota_status("u1")["used"] == 5
-        router.note_incoming("u1")
-        assert router.quota_status("u1")["used"] == 0, "新消息应把回复池清零"
+            router._quota_add("u1@im.wechat", 1)
+        assert router.quota_status("u1@im.wechat")["used"] == 5
+        router.note_incoming("u1@im.wechat")
+        assert router.quota_status("u1@im.wechat")["used"] == 0, "新消息应把回复池清零"
 
     def test_status_reports_remaining(self):
         """剩余条数 = 上限 - 已用。"""
-        router.note_incoming("u2")
-        router._quota_add("u2", 3)
-        st = router.quota_status("u2")
+        router.note_incoming("u2@im.wechat")
+        router._quota_add("u2@im.wechat", 3)
+        st = router.quota_status("u2@im.wechat")
         assert st["limit"] == 10
         assert st["used"] == 3
         assert st["remaining"] == 7
@@ -159,17 +159,17 @@ class TestQuota:
 
     def test_pool_expires_after_window(self):
         """超过 24 小时未刷新，回复池失效。"""
-        router.note_incoming("u3")
-        router._quota_add("u3", 2)
-        router._quota["u3"]["started"] = time.time() - router.QUOTA_WINDOW - 10
-        st = router.quota_status("u3")
+        router.note_incoming("u3@im.wechat")
+        router._quota_add("u3@im.wechat", 2)
+        router._quota["u3@im.wechat"]["started"] = time.time() - router.QUOTA_WINDOW - 10
+        st = router.quota_status("u3@im.wechat")
         assert st["active"] is False, "过期后应视为无有效回复池"
 
     def test_quota_exhausted_blocks_send(self):
         """回复池用满后不再发送，避免被服务端拒绝。"""
         c = FakeWeixinClient()
-        router.note_incoming("u4")
-        router._quota_add("u4", router.QUOTA_LIMIT)
+        router.note_incoming("u4@im.wechat")
+        router._quota_add("u4@im.wechat", router.QUOTA_LIMIT)
         m = make_msg("q1")
         assert router.handle_report(c, {"conversationId": "conv-quota", "messages": [m]}) == 0
         assert c.sent == []
@@ -219,7 +219,7 @@ class TestGatewayExtract:
     def test_sender_extracted(self):
         """发送者标识能取到；缺失时返回空串。"""
         from remote_bridge.weixin_gateway import sender_of
-        assert sender_of({"from_user_id": "u1"}) == "u1"
+        assert sender_of({"from_user_id": "u1@im.wechat"}) == "u1@im.wechat"
         assert sender_of({}) == ""
 
 
@@ -231,7 +231,7 @@ class TestCommandCompat:
         """微信上执行 /help 必须能拿到回执，不能因窗口检查而静默失败。"""
         from remote_bridge import command_panel
         c = FakeWeixinClient()
-        handled = command_panel.handle_command(c, "u1", "", "/help")
+        handled = command_panel.handle_command(c, "u1@im.wechat", "", "/help")
         assert handled is True
         assert c.sent, "/help 应当产生回执"
         assert "指令" in c.sent[0][1] or "/" in c.sent[0][1]
@@ -240,14 +240,14 @@ class TestCommandCompat:
         """普通抽屉指令也要能回执。"""
         from remote_bridge import command_panel
         c = FakeWeixinClient()
-        assert command_panel.handle_command(c, "u1", "", "/sd") is True
+        assert command_panel.handle_command(c, "u1@im.wechat", "", "/sd") is True
         assert c.sent and "切换" in c.sent[0][1]
 
     def test_voice_confirm_degrades_gracefully(self):
         """/vo 在微信上无待确认语音，应给友好提示而非抛异常。"""
         from remote_bridge import command_panel
         c = FakeWeixinClient()
-        assert command_panel.handle_command(c, "u1", "", "/vo") is True
+        assert command_panel.handle_command(c, "u1@im.wechat", "", "/vo") is True
         assert c.sent, "应当给出「没有待确认语音」之类的提示"
 
     def test_tool_call_code_stripped_from_body(self):

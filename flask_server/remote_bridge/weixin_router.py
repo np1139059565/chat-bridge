@@ -312,16 +312,36 @@ def _truncate(text):
     return text[:head] + "\n\n…（中间省略）…\n\n" + text[-tail:]
 
 
+def _is_weixin_id(uid):
+    """判断标识是否属于微信用户（iLink 下发的形如 xxx@im.wechat）。
+
+    @param uid 用户标识
+    @returns 属于微信返回 True
+    """
+    return bool(uid) and str(uid).endswith("@im.wechat")
+
+
 def _resolve_user(payload):
-    """确定推送目标：优先上报值，回退到最近发消息的人。
+    """确定推送目标：只接受微信标识，否则回退到最近发来消息的微信用户。
+
+    为什么不能照单全收 payload.openid：抽屉上报时该字段装的是 QQ 桥接
+    写入的 QQ openid（或网页固定标识）。拿 QQ 的 id 去调微信发送接口，
+    服务端会直接返回 -3 invalid arguments，消息一条也发不出去。
+
+    优先级：上报体显式带的微信标识 > 上报体里恰好是微信格式的 openid
+            > 最近一个真正发来微信消息的用户。
 
     @param payload 上报体
-    @returns 用户标识；无从确定时为空串
+    @returns 微信用户标识；无从确定时为空串
     """
-    uid = payload.get("weixin_user") or payload.get("openid") or ""
-    if uid and uid != "web-user":
-        return uid
-    return _last_user
+    explicit = payload.get("weixin_user") or ""
+    if _is_weixin_id(explicit):
+        return explicit
+    raw = payload.get("openid") or ""
+    if _is_weixin_id(raw):
+        return raw
+    # payload 里的 QQ / 网页标识一律丢弃，回退到微信自己的记账
+    return last_user()
 
 
 def _collect_fresh(conv_id, messages):
