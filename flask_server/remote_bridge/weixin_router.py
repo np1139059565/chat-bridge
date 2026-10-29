@@ -258,8 +258,66 @@ def _resolve_user(payload):
     return _last_user
 
 
+def _collect_fresh(conv_id, messages):
+    """从上报切片里筛出「尚未推送过」的消息。
+
+    抽屉每次上报全量可见切片，故必须与已推集合取差集；
+    无 id 的消息无法记账，一律跳过。
+    @param conv_id  会话键（已含微信后缀）
+    @param messages 上报的消息列表
+    @returns 新消息列表
+    """
+    pushed = bridge_store.get_pushed_set(conv_id)
+    return [m for m in messages if (m.get("id") or "") and m.get("id") not in pushed]
+
+
+def _collect_bodies(fresh, push):
+    """把新消息逐条转成待发正文，过滤掉不该推的。
+
+    @param fresh 新消息列表
+    @param push  推送开关
+    @returns 正文列表（可能为空）
+    """
+    return [b for b in (_body_of(m, push) for m in fresh) if b]
+
+
+def _mark_all(conv_id, fresh):
+    """把一批消息记为已推送。
+
+    @param conv_id 会话键
+    @param fresh   消息列表
+    """
+    bridge_store.mark_pushed(conv_id, [m.get("id") for m in fresh])
+
+
+def _send_merged(client, user_id, conv_id, fresh, bodies):
+    """把合并后的正文发出去，并按结果记账。
+
+    成功才记入已推集合并累加配额；失败不记账，留给下轮上报重试，
+    否则消息会被永久漏掉。
+    @param client  WeixinClient 实例
+    @param user_id 接收方
+    @param conv_id 会话键
+    @param fresh   本轮新消息（用于记账）
+    @param bodies  正文列表
+    @returns 发送成功返回 1，失败返回 0
+    """
+    text = _truncate(SEP.join(bodies))
+    ok, data = client.send_text(user_id, text)
+    if not ok:
+        log("发送失败（下轮重试）：", str(data)[:200])
+        return 0
+    _quota_add(user_id, 1)
+    _mark_all(conv_id, fresh)
+    log("已合并发送 %d 条消息，长度 %d" % (len(bodies), len(text)))
+    return 1
+
+
 def handle_report(client, payload):
     """处理抽屉上报：差集出新消息，合并成一条发回微信。
+
+    合并而非逐条，是配额约束下的硬要求：微信每条用户消息只发一个
+    约 10 条的回复池，逐条推会迅速耗尽。
 
     @param client  WeixinClient 实例
     @param payload 上报体 {conversationId, messages:[{id, role, blocks}], weixin_user}
@@ -273,31 +331,20 @@ def handle_report(client, payload):
     if not user_id or not messages:
         return 0
     push = bridge_store.get_config().get("push") or {}
-    # 串行：同一会话的读集合、发送、写回必须整体原子，避免重复发送
+    # 串行：同一会话的「读集合 → 发送 → 写回」必须整体原子，避免重复发送
     with _lock:
-        pushed = bridge_store.get_pushed_set(conv_id)
-        fresh = [m for m in messages if (m.get("id") or "") and m.get("id") not in pushed]
+        fresh = _collect_fresh(conv_id, messages)
         if not fresh:
             return 0
-        bodies = [b for b in (_body_of(m, push) for m in fresh) if b]
-        # 全部消息都不需要推送（如只开了 AI 开关、本轮只有用户消息）：
-        # 仍要把它们记入已推集合，避免下次上报反复评估同一批消息。
+        bodies = _collect_bodies(fresh, push)
+        # 全部消息都不该推（如只开了 AI 开关、本轮只有用户消息）：
+        # 仍要记账，避免下次上报反复评估同一批消息。
         if not bodies:
-            bridge_store.mark_pushed(conv_id, [m.get("id") for m in fresh])
+            _mark_all(conv_id, fresh)
             return 0
         if _quota_used(user_id) >= QUOTA_LIMIT:
-            # 回复池已满：说明本轮已回够 10 条，等用户下一条消息重置。
-            # 这是平台侧的硬限制，无法绕过；记日志便于排查「为什么不回了」。
+            # 回复池已满：平台硬限制，等用户下一条消息重置
             log("本轮回复池已满（%d 条），等用户新消息重置 user=%s"
                 % (QUOTA_LIMIT, user_id[:8]))
             return 0
-        text = _truncate(SEP.join(bodies))
-        ok, data = client.send_text(user_id, text)
-        if ok:
-            _quota_add(user_id, 1)
-            bridge_store.mark_pushed(conv_id, [m.get("id") for m in fresh])
-            log("已合并发送 %d 条消息，长度 %d" % (len(bodies), len(text)))
-            return 1
-        # 失败不记账：下轮上报会重试，避免消息被永久漏掉
-        log("发送失败（下轮重试）：", str(data)[:200])
-        return 0
+        return _send_merged(client, user_id, conv_id, fresh, bodies)

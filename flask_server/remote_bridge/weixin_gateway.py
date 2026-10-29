@@ -34,18 +34,24 @@ ITEM_VOICE = 3
 def extract_text(msg):
     """从一条微信消息里抽出正文。
 
-    优先级：文本项 > 语音项的转写文字。语音消息的 item 自带 text 字段，
-    是服务端已做好的识别结果，可直接使用。
+    优先级：文本项 > 语音项的转写文字。
+    必须分两轮扫描：单轮「先命中先返回」会让排在文本项之前的语音项抢先，
+    导致图文/语音混合消息丢掉真正的文本正文。
+    语音项的 text 是服务端已做好的识别结果，可直接使用，无需本地 ASR。
+
     @param msg 消息对象
     @returns 正文；无可用正文返回空串
     """
-    for item in (msg.get("item_list") or []):
-        t = item.get("type")
-        if t == ITEM_TEXT:
+    items = [it for it in (msg.get("item_list") or []) if isinstance(it, dict)]
+    # 第一轮：文本项优先（不论它在列表中的位置）
+    for item in items:
+        if item.get("type") == ITEM_TEXT:
             txt = (item.get("text_item") or {}).get("text") or ""
             if txt:
                 return str(txt)
-        if t == ITEM_VOICE:
+    # 第二轮：退回语音项的转写文字
+    for item in items:
+        if item.get("type") == ITEM_VOICE:
             txt = (item.get("voice_item") or {}).get("text") or ""
             if txt:
                 return str(txt)
