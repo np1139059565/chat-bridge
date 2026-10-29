@@ -239,6 +239,48 @@ def _is_from_weixin(m):
     return bool(obj and obj.get("source") == "weixin")
 
 
+def _extract_weixin_text(m, push):
+    """提取给微信看的正文：只保留自然语言，剔除工具调用代码。
+
+    为什么不能复用 QQ 的 build_body：
+      QQ 把工具调用渲染成「[工具调用] run_command 参数={...}」，
+      参数里的代码会整段进入正文。这对 QQ 是「看得见 AI 在干活」，
+      对微信却是灾难：手机上一屏全是 JSON，且挤占本就紧张的配额。
+
+    微信的取舍是「只推结果，不推过程」：
+      保留 —— 段落、标题、列表、表格、引用（用户要读的内容）
+      剔除 —— 工具调用块、工具结果块、语音块（AI 的内部工作痕迹）
+      保留普通代码块（用户可能确实需要看代码）
+
+    @param m    消息对象
+    @param push 推送开关字典
+    @returns 正文文本；无可用内容返回空串
+    """
+    from .message_parse import _BLOCK_HANDLERS, _load_json_block
+    parts = []
+    for b in (m.get("blocks") or []):
+        if not b:
+            continue
+        btype = b.get("type")
+        # 代码块需辨认：是工具调用/结果就丢，是真正的代码就留
+        if btype == "code":
+            obj = _load_json_block(b)
+            if obj and obj.get("type") in ("bridge-chat-call", "bridge-chat-res", "bridge-voice"):
+                continue
+            code = str(b.get("code") or "").strip()
+            if code:
+                parts.append("```\n" + code + "\n```")
+            continue
+        # 其余块按既有处理器转文本（思考受开关控制）
+        fn = _BLOCK_HANDLERS.get(btype)
+        if not fn:
+            continue
+        text = fn(b, bool(push.get("thinking")))
+        if text:
+            parts.append(text)
+    return "\n".join(parts).strip()
+
+
 def _body_of(m, push):
     """取一条消息要推送的正文，带类型前缀。
 
@@ -248,21 +290,10 @@ def _body_of(m, push):
     """
     if not _should_push(m, push):
         return ""
-    try:
-        from .outbound import build_body
-        built = build_body(m, push)
-    except Exception as e:
-        log("组装正文失败，回退块拼接：", e)
-        built = {}
-    if built.get("skip"):
-        return ""
-    kind = built.get("kind") or _classify(m)
-    text = built.get("text")
-    if text is None:
-        text = _blocks_to_text(m, bool(push.get("thinking")))
-    text = (text or "").strip()
+    text = _extract_weixin_text(m, push)
     if not text:
         return ""
+    kind = _classify(m)
     return "%s\n%s" % (PREFIX.get(kind, kind), text)
 
 
