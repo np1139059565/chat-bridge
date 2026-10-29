@@ -167,6 +167,23 @@ def _send_text(client, openid, text):
 
 # 网页版在指令体系里的固定标识（与 command_dispatch.WEB_OPENID 保持一致）
 _WEB_OPENID = "web-user"
+# 微信用户标识的后缀。iLink 下发的用户 id 形如 xxx@im.wechat，
+# 据此把微信回传与 QQ 回传区分开——两者的投递通道完全不同。
+_WEIXIN_SUFFIX = "@im.wechat"
+
+
+def _is_weixin_openid(openid):
+    """判断某个 openid 是否属于微信用户。
+
+    为什么要判：回传接口原先是按 QQ 写的，微信用户的 id 不等于 web-user，
+    于是被当成 QQ 用户走了 QQ 的被动回复窗口检查。而微信 openid 在 QQ 的
+    窗口表里根本不存在，next_seq 返回空、发送被静默跳过——
+    表现为「截图执行了、抽屉回传了、手机上却什么也没收到」。
+
+    @param openid 用户标识
+    @returns 属于微信返回 True
+    """
+    return bool(openid) and str(openid).endswith(_WEIXIN_SUFFIX)
 
 
 def _take_result_context(data):
@@ -174,6 +191,7 @@ def _take_result_context(data):
 
     返回 (client, openid, err_resp)：出错时 err_resp 为响应，成功时为 None。
     - 网页版（openid == web-user）：不依赖 QQ 连接，client 返回 None，走收件箱；
+    - 微信版：client 返回微信客户端，由调用方走微信投递路径；
     - QQ 版：client 为 bridge.client，必须在线，否则报 bridge_offline。
     请求不存在或已过期属正常情况，返回提示而非报错（可能用户已离开或重复回传）。
     """
@@ -185,6 +203,11 @@ def _take_result_context(data):
     # 网页版：没有 QQ 客户端，也不该要求它在线，直接放行
     if openid == _WEB_OPENID:
         return None, openid, None
+    # 微信版：用自己的客户端投递，绝不能走 QQ 的窗口检查（见 _is_weixin_openid）
+    if _is_weixin_openid(openid):
+        if not bridge.wx_client:
+            return None, "", jsonify(success=False, error="weixin_offline")
+        return bridge.wx_client, openid, None
     client = bridge.client
     if not client:
         return None, "", jsonify(success=False, error="bridge_offline")
@@ -234,12 +257,41 @@ def _deliver_result_qq_sync(client, openid, data):
         _send_text(client, openid, text)
 
 
+def _deliver_result_weixin(client, openid, data):
+    """把微信版回传结果投递出去（在后台线程执行）。
+
+    与 QQ 版的差别：微信暂不支持发送图片，故截图类结果转成文字说明，
+    并给出本地保存路径，让用户至少知道图存在哪、能自己去取。
+    这是诚实降级：与其静默丢弃，不如说清「图已存，路径在此」。
+
+    @param client  微信客户端
+    @param openid  接收方
+    @param data    回传体 {text, image}
+    """
+    text = data.get("text") or ""
+    image = data.get("image") or ""
+    if image:
+        saved = _save_data_url(image)
+        path = (saved or {}).get("path") or ""
+        if path:
+            note = "截图已保存：%s" % path
+        else:
+            note = "截图已收到，但保存失败"
+        # 有文字就一并带上，否则只发截图说明
+        text = (text + "\n" + note) if text else note
+    if not text:
+        return
+    ok, err = client.send_text(openid, text)
+    if not ok:
+        app_log.warn("[bridge]", "微信回传结果发送失败：", err)
+
+
 @bp.route("/api/bridge/result", methods=["POST", "OPTIONS"])
 def bridge_result():
-    """接收抽屉回传的指令执行结果，转发到 QQ。
+    """接收抽屉回传的指令执行结果，按来源转发到 QQ / 微信 / 网页收件箱。
 
     用于 /sessions、/screenshot 这类「浏览器执行后要回传结果」的指令。
-    请求体：{ request_id, text }（text 为已格式化好的文本，或图片附件另行处理）
+    请求体：{ request_id, text, image }
     """
     data = request.get_json(force=True, silent=True) or {}
     client, openid, err = _take_result_context(data)
@@ -248,6 +300,12 @@ def bridge_result():
     # 网页版：结果落本地收件箱，快且不涉网络，同步完成即可。
     if openid == _WEB_OPENID:
         return _deliver_result_web(data.get("text") or "", data.get("image") or "")
+    # 微信版：投递同样可能走网络，放后台线程；截图转文字说明。
+    if _is_weixin_openid(openid):
+        threading.Thread(
+            target=_deliver_result_weixin, args=(client, openid, data), daemon=True
+        ).start()
+        return jsonify(success=True)
     # QQ 版：投递要发图片 / 文本（网络调用），放后台线程执行，
     # 请求立即返回，避免慢网络把 /api/bridge/result 卡住。
     threading.Thread(

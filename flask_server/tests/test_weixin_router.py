@@ -250,6 +250,19 @@ class TestCommandCompat:
         assert command_panel.handle_command(c, "u1", "", "/vo") is True
         assert c.sent, "应当给出「没有待确认语音」之类的提示"
 
+    def test_result_routing_recognizes_weixin_openid(self):
+        """回传路由必须认出微信用户，不能把它当 QQ 用户走窗口检查。
+
+        真实故障：微信用户标识不等于 web-user，被当成 QQ 用户后走了
+        被动回复窗口检查；该窗口在 QQ 表里不存在，发送被静默跳过，
+        表现为「截图执行了、抽屉回传了、手机上什么也没收到」。
+        """
+        from routes.bridge import _is_weixin_openid
+        assert _is_weixin_openid("o9cq809WNQ8z4cLmY0aXB6Fve9zE@im.wechat") is True
+        assert _is_weixin_openid("19501CD1ABCDEF") is False
+        assert _is_weixin_openid("web-user") is False
+        assert _is_weixin_openid("") is False
+
     def test_qq_client_still_requires_window(self):
         """QQ 客户端未声明 needs_window，指令层必须仍走窗口检查（行为不变）。"""
         class FakeQQ:
