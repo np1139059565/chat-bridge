@@ -16,6 +16,7 @@
 import base64
 import os
 import sys
+import tempfile
 
 # 把 tests 目录加进导入路径，供导入同目录的公共替身模块。
 # 仓库里其它测试只加服务端目录，本文件还要用同目录的 helper，故一并加。
@@ -159,3 +160,35 @@ class TestClientContract:
             os.remove(c.buf_path)
         except OSError:
             pass
+
+    def test_context_token_persisted_across_instances(self):
+        """上下文令牌必须落盘：否则服务重启后发送全被拒。
+
+        真实故障：令牌只存内存，重启即丢，而推送目标仍持久化着，
+        于是「知道发给谁、却没带凭证」，每次发送都被服务端以
+        prepare failed 拒绝，且重试永远无效。
+        """
+        tmp = tempfile.gettempdir()
+        ctxp = os.path.join(tmp, 'wx_ctx_test.json')
+        try:
+            os.remove(ctxp)
+        except OSError:
+            pass
+        a = WeixinClient(os.path.join(tmp, 'k1.json'), os.path.join(tmp, 'k2.txt'),
+                         None, ctx_path=ctxp)
+        a.set_context("u1", "token-abc")
+        assert os.path.exists(ctxp), "设置令牌后应写盘"
+        # 新实例模拟重启：内存为空，必须从磁盘恢复
+        b = WeixinClient(os.path.join(tmp, 'k1.json'), os.path.join(tmp, 'k2.txt'),
+                         None, ctx_path=ctxp)
+        assert b.get_context("u1") == "token-abc", "重启后应能取回令牌"
+        try:
+            os.remove(ctxp)
+        except OSError:
+            pass
+
+    def test_context_persistence_optional(self):
+        """未给 ctx_path 时只存内存，不报错（测试与临时实例依赖此行为）。"""
+        c = FakeWeixinClient()
+        c.set_context("u1", "tok")
+        assert c.get_context("u1") == "tok"

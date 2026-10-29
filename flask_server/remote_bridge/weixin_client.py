@@ -43,14 +43,16 @@ class WeixinClient:
     # 「窗口已关闭」而静默失败（指令层看到 next_seq 返回空就提前返回）。
     needs_window = False
 
-    def __init__(self, cred_path, buf_path, on_message):
+    def __init__(self, cred_path, buf_path, on_message, ctx_path=""):
         """
         @param cred_path 凭证文件路径（含 bot_token，权限 600）
         @param buf_path  长轮询游标文件路径（防重启重放）
         @param on_message 收到消息时的回调，入参 (client, msg)
+        @param ctx_path  上下文令牌文件路径；为空则只存内存（测试用）
         """
         self.cred_path = str(cred_path)
         self.buf_path = str(buf_path)
+        self.ctx_path = str(ctx_path) if ctx_path else ""
         self.on_message = on_message
         self._cred = None            # 凭证：{token, base_url, bot_id, user_id}
         self._running = False
@@ -207,11 +209,55 @@ class WeixinClient:
         if user_id and context_token:
             with self._lock:
                 self._context[user_id] = context_token
+            # 落盘：服务重启后仍能取回，否则重启即失联（见 get_context 说明）
+            self._save_context()
 
     def get_context(self, user_id):
-        """取某用户的上下文令牌。"""
+        """取某用户的上下文令牌；内存没有时尝试从磁盘恢复。
+
+        为什么必须落盘：context_token 由微信随每条入向消息下发，发送时
+        必须原样回传。只存内存的话，服务一重启令牌就没了，而推送目标
+        仍持久化着——于是「知道该发给谁、却没带凭证」，每次发送都被
+        服务端以 prepare failed 拒绝，且重试永远不会成功。
+
+        @param user_id 用户标识
+        @returns 令牌；无则空串
+        """
+        with self._lock:
+            tok = self._context.get(user_id)
+            if tok:
+                return tok
+        # 内存没有：从磁盘补一次（惰性恢复，避免启动期读盘依赖）
+        self._load_context()
         with self._lock:
             return self._context.get(user_id) or ""
+
+    def _load_context(self):
+        """从磁盘把上下文令牌读进内存；无文件或损坏时静默跳过。"""
+        if not self.ctx_path or not os.path.exists(self.ctx_path):
+            return
+        try:
+            with open(self.ctx_path, "r", encoding="utf-8") as f:
+                data = json.load(f) or {}
+            with self._lock:
+                for uid, tok in data.items():
+                    if uid and tok:
+                        self._context[uid] = tok
+        except Exception as e:
+            log("读取上下文令牌失败（忽略）：", e)
+
+    def _save_context(self):
+        """把上下文令牌写盘；失败只记日志，不影响发送主流程。"""
+        if not self.ctx_path:
+            return
+        try:
+            os.makedirs(os.path.dirname(self.ctx_path), mode=0o700, exist_ok=True)
+            with self._lock:
+                data = dict(self._context)
+            with open(self.ctx_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False)
+        except Exception as e:
+            log("写入上下文令牌失败（忽略）：", e)
 
     # ---------- 发送 ----------
     def _send_items(self, to_user, items, context_token=""):

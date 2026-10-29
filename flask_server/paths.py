@@ -71,6 +71,10 @@ MEMORY_DB_PATH = MEMORY_DB_DIR / "memory.db"
 WEIXIN_DIR = DATA_DIR / "weixin"
 WEIXIN_CRED_PATH = WEIXIN_DIR / "credentials.json"
 WEIXIN_BUF_PATH = WEIXIN_DIR / "updates_buf.txt"
+# 上下文令牌：每条入向消息由微信下发，发送时必须原样回传。
+# 必须落盘——只存内存的话，服务重启后令牌丢失，而推送目标仍在，
+# 于是每次发送都被服务端以 prepare failed 拒绝，且重试永远无效。
+WEIXIN_CTX_PATH = WEIXIN_DIR / "context_tokens.json"
 
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
