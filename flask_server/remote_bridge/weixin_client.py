@@ -36,6 +36,13 @@ def log(*args):
 class WeixinClient:
     """微信 ClawBot 客户端：扫码登录 + 长轮询 + 发送消息。"""
 
+    # 是否需要「被动回复窗口」：
+    # QQ 依赖用户消息带来的 msg_id 与自增序号才能发送，窗口关闭就发不出去；
+    # 微信靠 context_token 直接投递，没有窗口概念。
+    # 指令层据此决定是否走窗口检查——否则微信的每条指令都会因
+    # 「窗口已关闭」而静默失败（指令层看到 next_seq 返回空就提前返回）。
+    needs_window = False
+
     def __init__(self, cred_path, buf_path, on_message):
         """
         @param cred_path 凭证文件路径（含 bot_token，权限 600）
@@ -260,6 +267,23 @@ class WeixinClient:
         ctx = context_token or self.get_context(to_user)
         return self._send_items(to_user,
                                 [{"type": proto.ITEM_TEXT, "text_item": {"text": text}}], ctx)
+
+    def send_c2c(self, openid, content, msg_id="", msg_seq=1, markdown=False):
+        """兼容 QQ 客户端签名的发送入口。
+
+        指令层（command_dispatch._reply）统一按 QQ 的签名调用 send_c2c，
+        补这个方法后，微信无需改动指令层的任何调用点即可收发指令回执。
+        微信侧不存在被动回复窗口与序号概念，msg_id / msg_seq / markdown
+        一律忽略：微信以纯文本投递，富文本由服务端自行处理。
+
+        @param openid   接收方用户标识
+        @param content  正文
+        @param msg_id   忽略（QQ 的被动回复引用 id）
+        @param msg_seq  忽略（QQ 的同 id 内去重序号）
+        @param markdown 忽略（微信侧统一按文本发送）
+        @returns (ok, data_or_error)，与 QQ 客户端语义一致
+        """
+        return self.send_text(openid, content)
 
     def send_image(self, to_user, data_url, context_token=""):
         """发送一张图片。

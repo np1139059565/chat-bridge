@@ -74,11 +74,18 @@ def _reply(qq_client, openid, text, markdown=False):
             except Exception as e:
                 log("网页回执失败：", e)
         return True
-    msg_id, seq = message_router.next_seq(openid)
-    if not msg_id:
-        log("窗口已关闭，无法回复")
-        return False
-    ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq, markdown=markdown)
+    # 按客户端能力分流：
+    # QQ 必须持有「被动回复窗口」才能发送（窗口由用户消息打开，带 msg_id 与序号）；
+    # 微信凭 context_token 直接投递，没有窗口概念。
+    # 无脑走窗口检查会让微信的每条指令都因「窗口已关闭」而静默失败。
+    if getattr(qq_client, "needs_window", True):
+        msg_id, seq = message_router.next_seq(openid)
+        if not msg_id:
+            log("窗口已关闭，无法回复")
+            return False
+        ok, data = qq_client.send_c2c(openid, text, msg_id=msg_id, msg_seq=seq, markdown=markdown)
+    else:
+        ok, data = qq_client.send_c2c(openid, text)
     if not ok:
         log("回复失败：", data)
     return ok
