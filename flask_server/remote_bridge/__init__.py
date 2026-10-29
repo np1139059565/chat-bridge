@@ -105,8 +105,11 @@ class RemoteBridge:
             return False
         import paths
         from .weixin_client import WeixinClient
+        # ctx_path 必须传：上下文令牌随每条入向消息下发，发送时要原样回传；
+        # 只存内存的话重启即失联，每次发送都会被服务端以参数错误拒绝。
         self.wx_client = WeixinClient(
-            paths.WEIXIN_CRED_PATH, paths.WEIXIN_BUF_PATH, self.wx_gateway.handle_message)
+            paths.WEIXIN_CRED_PATH, paths.WEIXIN_BUF_PATH, self.wx_gateway.handle_message,
+            ctx_path=paths.WEIXIN_CTX_PATH)
         self.wx_gateway.client = self.wx_client
         # 登录管理器与客户端绑定：扫码成功后凭证直接写进客户端
         self.wx_login = weixin_login.WeixinLogin(self.wx_client)
@@ -136,7 +139,8 @@ class RemoteBridge:
         from .weixin_client import WeixinClient
         if not self.wx_client:
             self.wx_client = WeixinClient(
-                paths.WEIXIN_CRED_PATH, paths.WEIXIN_BUF_PATH, self.wx_gateway.handle_message)
+                paths.WEIXIN_CRED_PATH, paths.WEIXIN_BUF_PATH, self.wx_gateway.handle_message,
+                ctx_path=paths.WEIXIN_CTX_PATH)
             self.wx_gateway.client = self.wx_client
         self.wx_login = weixin_login.WeixinLogin(self.wx_client)
         return self.wx_login

@@ -192,3 +192,21 @@ class TestClientContract:
         c = FakeWeixinClient()
         c.set_context("u1", "tok")
         assert c.get_context("u1") == "tok"
+
+    def test_production_client_gets_ctx_path(self):
+        """生产路径创建的客户端必须带令牌落盘路径。
+
+        真实故障：加了持久化能力，但创建客户端时漏传 ctx_path，
+        于是 ctx_path 为空、令牌从不落盘，重启即失联，发送全被拒。
+        这类「能力写了却没接上」的缺陷只有验证真实创建路径才能抓到。
+        """
+        from remote_bridge import bridge as rb
+        old = rb.wx_client
+        rb.wx_client = None
+        try:
+            rb.ensure_wx_login()
+            assert rb.wx_client is not None, "应创建客户端"
+            assert rb.wx_client.ctx_path, "生产创建的客户端必须带 ctx_path"
+            assert rb.wx_client.ctx_path.endswith("context_tokens.json")
+        finally:
+            rb.wx_client = old
