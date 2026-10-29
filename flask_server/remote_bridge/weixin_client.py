@@ -255,15 +255,28 @@ class WeixinClient:
                 last = str(e)
         return ok, last
 
+    # 单条文本的最大字符数。微信服务端对单条消息有长度上限，超长会直接拒收；
+    # 而调用方（如 /help 回执）拿不到拒收原因，表现为「发了但对方什么也没收到」。
+    # 在出口统一截断，保证任何情况下至少有回复。
+    MAX_TEXT_CHARS = 1800
+
     def send_text(self, to_user, text, context_token=""):
         """发送一条文本消息。
 
         上层必须保证「一条用户消息只回一条」，这是配额约束下的硬要求。
+        超长文本在此截断：这是全通道统一的出口，指令回执与推送都会经过它，
+        放在这里才能覆盖全部发送路径。
         @param to_user       接收方
         @param text          正文
         @param context_token 上下文令牌
         @returns (ok, data_or_error)
         """
+        text = str(text or "")
+        if not text:
+            return False, "empty_text"
+        if len(text) > self.MAX_TEXT_CHARS:
+            head = self.MAX_TEXT_CHARS - 20
+            text = text[:head] + "\n…（内容过长已截断）"
         ctx = context_token or self.get_context(to_user)
         return self._send_items(to_user,
                                 [{"type": proto.ITEM_TEXT, "text_item": {"text": text}}], ctx)

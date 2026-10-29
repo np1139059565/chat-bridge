@@ -94,6 +94,39 @@ class TestRouterMerge:
         """短文本不做任何改动。"""
         assert router._truncate("短文本") == "短文本"
 
+    def test_pure_tool_call_filtered(self):
+        """纯工具调用的消息不该推给微信。
+
+        AI 干活的中间过程（调工具、贴参数）对用户是噪音；
+        微信配额本就紧张，更不该被 JSON 占满。
+        """
+        call = {"type": "bridge-chat-call", "tool": "read_file", "parameters": {"path": "x"}}
+        m = {"id": "tc1", "role": "assistant", "source": "assistant",
+             "blocks": [{"type": "code", "code": json.dumps(call)}]}
+        assert router._should_push(m, {}) is False
+
+    def test_tool_call_with_text_still_pushed(self):
+        """带正文的工具调用消息要推：正文不能因附带工具调用而丢失。"""
+        call = {"type": "bridge-chat-call", "tool": "read_file", "parameters": {}}
+        m = {"id": "tc2", "role": "assistant", "source": "assistant",
+             "blocks": [{"type": "paragraph", "text": "我查一下"},
+                        {"type": "code", "code": json.dumps(call)}]}
+        assert router._should_push(m, {}) is True
+
+    def test_thinking_does_not_count_as_body(self):
+        """只有思考块 + 工具调用时，仍算纯工具调用（思考不是给用户看的内容）。"""
+        call = {"type": "bridge-chat-call", "tool": "x", "parameters": {}}
+        m = {"id": "tc3", "role": "assistant", "source": "assistant",
+             "blocks": [{"type": "thinking", "text": "内部推理"},
+                        {"type": "code", "code": json.dumps(call)}]}
+        assert router._should_push(m, {}) is False
+
+    def test_normal_reply_not_filtered(self):
+        """普通回复不含工具调用，必须照常推送。"""
+        m = {"id": "tc4", "role": "assistant", "source": "assistant",
+             "blocks": [{"type": "paragraph", "text": "这是回答"}]}
+        assert router._should_push(m, {}) is True
+
 
 # ============ 配额机制 ============
 class TestQuota:

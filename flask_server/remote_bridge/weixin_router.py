@@ -175,10 +175,41 @@ def quota_status(user_id):
             "active": bool(slot)}
 
 
+def _is_pure_tool_call(m):
+    """判断一条消息是否只含工具调用、没有可读正文。
+
+    为什么需要：AI 干活的中间过程（调用工具、贴代码参数）对用户是噪音，
+    在微信上尤其糟——配额本就紧张，还被 JSON 占满。
+    但只跳过「纯工具调用」的消息：若同一消息里还有正文（如「我查一下」），
+    正文仍要推给用户，不能整条丢弃。
+
+    @param m 消息对象
+    @returns 纯工具调用返回 True
+    """
+    from .message_parse import _block_text_of, _load_json_block
+    has_tool = False
+    for b in (m.get("blocks") or []):
+        if not b:
+            continue
+        btype = b.get("type")
+        # 思考块不算正文：AI 的内部推理不该让它「看起来有内容」
+        if btype == "thinking":
+            continue
+        if btype == "code":
+            obj = _load_json_block(b)
+            if obj and obj.get("type") == "bridge-chat-call":
+                has_tool = True
+                continue
+        # 任何带文字的其它块都说明有真实内容
+        if _block_text_of(b).strip():
+            return False
+    return has_tool
+
+
 def _should_push(m, push):
     """判断一条消息是否应当推送到微信。
 
-    规则：类型开关打开、且不是微信自己发来的。
+    规则：类型开关打开、不是微信自己发来的、且不是纯工具调用。
     @param m    消息对象
     @param push 推送开关字典
     @returns 需要推送返回 True
@@ -188,6 +219,10 @@ def _should_push(m, push):
         return False
     # 来源过滤：微信自己投出去的卡片不回推，否则会把用户刚说的话复读一遍
     if _is_from_weixin(m):
+        return False
+    # 纯工具调用不推：内部工作过程对用户是噪音，且会挤占微信紧张的配额。
+    # 带正文的消息不受影响，正文照常推送。
+    if _is_pure_tool_call(m):
         return False
     return True
 
