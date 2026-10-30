@@ -129,6 +129,40 @@ class WecomMediaMixin:
         """兼容 QQ 客户端签名的发图入口。"""
         return self.send_image(chatid, image_path)
 
+    def _to_amr(self, file_path):
+        """把音频转成 AMR 格式；已是 AMR 或转码失败时原样返回。
+
+        为什么要转：平台对语音消息的格式有要求（AMR），而本地 TTS
+        合成的是 MP3。不转码直接发，平台会拒收。
+        转码用 ffmpeg（工程已依赖它做 WAV→MP3）。
+
+        @param file_path 源音频路径
+        @returns (可用路径, 是否临时文件)；转码不可用时原样返回源路径
+        """
+        if str(file_path).lower().endswith(".amr"):
+            return file_path, False
+        import subprocess
+        import uuid
+        out = os.path.join(os.path.dirname(file_path) or ".",
+                           "voice_" + uuid.uuid4().hex[:10] + ".amr")
+        try:
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-i", file_path, "-ar", "8000", "-ac", "1",
+                 "-c:a", "libopencore_amrnb", "-b:a", "12.2k", out],
+                capture_output=True, timeout=60)
+            if r.returncode == 0 and os.path.isfile(out) and os.path.getsize(out) > 0:
+                return out, True
+            log("语音转 AMR 失败，按原格式发送：", str(r.stderr)[-200:])
+        except Exception as e:
+            log("语音转 AMR 异常，按原格式发送：", e)
+        # 清理可能的半成品
+        try:
+            if os.path.isfile(out):
+                os.remove(out)
+        except OSError:
+            pass
+        return file_path, False
+
     def respond_voice(self, req_id, chatid, file_path, chat_type=proto.CHAT_SINGLE,
                       caption=""):
         """回复一条语音（走 msg_item 直传 base64，与图片同构）。
@@ -145,20 +179,30 @@ class WecomMediaMixin:
         """
         if not req_id or not chatid:
             return False, "missing_req_id_or_chatid"
+        # 平台要求 AMR：先转码，发完再清理临时文件
+        use_path, is_tmp = self._to_amr(file_path)
         try:
-            with open(file_path, "rb") as f:
-                raw = f.read()
-        except Exception as e:
-            return False, "read_failed: %s" % e
-        if not raw:
-            return False, "empty_file"
-        b64 = proto.b64(raw)
-        md5 = hashlib.md5(raw).hexdigest()
-        frame_text = proto.respond_media_frame(
-            req_id, chatid, proto.voice_item(b64, md5),
-            chat_type=chat_type, caption=caption)
-        ok = self._send_nowait(frame_text)
-        return ok, ({} if ok else "send_failed")
+            try:
+                with open(use_path, "rb") as f:
+                    raw = f.read()
+            except Exception as e:
+                return False, "read_failed: %s" % e
+            if not raw:
+                return False, "empty_file"
+            b64 = proto.b64(raw)
+            md5 = hashlib.md5(raw).hexdigest()
+            frame_text = proto.respond_media_frame(
+                req_id, chatid, proto.voice_item(b64, md5),
+                chat_type=chat_type, caption=caption)
+            ok = self._send_nowait(frame_text)
+            return ok, ({} if ok else "send_failed")
+        finally:
+            # 转码产物是用完即弃的临时文件，无论成败都删掉
+            if is_tmp:
+                try:
+                    os.remove(use_path)
+                except OSError:
+                    pass
 
     def _upload_media(self, file_path, media_type="file"):
         """三步上传取 media_id：初始化 → 逐片上传 → 完成。
