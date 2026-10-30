@@ -68,8 +68,10 @@ def _lock_for(conv_id):
 # 更旧的直接跳过——符合「堆积很多时只补最后几条即可」。
 from app_limits import MAX_PUSH_PER_REPORT
 
-# 当前活跃的被动回复窗口：{ openid: {"msg_id": ..., "expire": 时间戳} }
-_windows = {}
+# 被动回复窗口：{ openid: {"msg_id", "seq", "expire"} }，启动时从磁盘恢复。
+# 序号必须随窗口一起恢复：从头重数会与已用序号相撞被 QQ 静默丢弃。
+from . import window_store
+_windows = window_store.load()
 
 # 最近一次上报切片缓存：{ conv_id: payload }。
 # 用途：把「窗口更新」与「消息推送」连起来——用户发消息续期后重放一次，
@@ -83,8 +85,6 @@ _last_client = None
 # 抽屉上报时并不知道 openid（那是 QQ 侧的概念），因此回退用它——
 # 单用户场景下，「最近跟我说话的人」就是推送目标。
 _last_openid = ""
-
-
 
 
 def _remember_window(openid, msg_id):
@@ -107,6 +107,8 @@ def _remember_window(openid, msg_id):
             "seq": seq,
         }
         _windows[openid] = win
+    # 立即落盘（锁外）：窗口与序号一起持久化，重启后可直接续用
+    window_store.save_windows(_windows)
     log("窗口已更新 openid=%s msg_id=%s 有效期至=%s"
         % (openid[:8], str(msg_id)[:8],
            time.strftime("%H:%M:%S", time.localtime(win["expire"]))))
@@ -145,10 +147,11 @@ def next_seq(openid):
         if not w or time.time() >= w["expire"]:
             return None, 0
         w["seq"] = w.get("seq", 0) + 1
-        # 序号只活在内存：QQ 按 (msg_id, msg_seq) 去重，重复即丢弃（40054005）。
-        # 窗口与序号都随进程存亡，不跨重启复用，故不存在「恢复出旧 msg_id
-        # 却从 1 重数、与已用序号相撞」的问题。
-        return w["msg_id"], w["seq"]
+        # 序号必须随窗口落盘：QQ 按 (msg_id, msg_seq) 去重，重数会撞号被静默丢弃
+        result = (w["msg_id"], w["seq"])
+    # 写盘放锁外：磁盘慢时不能占住 _lock，否则所有会话的推送都被拖住
+    window_store.save_windows(_windows)
+    return result
 
 
 def note_incoming(openid, msg_id, qq_client=None):
@@ -219,7 +222,6 @@ def push_text(qq_client, openid, text, markdown=False):
         % (ok, openid[:8], str(msg_id)[:8], seq, len(text or ""),
            "" if ok else (" 错误=" + str(data)[:200])))
     return ok
-
 
 
 # 出向语音（提取语音文本 / 合成 / 推送）已抽到 message_voice.py，

@@ -54,6 +54,7 @@
 |---|---|---|---|
 | `_TOOL_POOL_MAX_WORKERS` | 64 | `routes/tools.py` | 执行内置工具的线程池容量 |
 | `MAX_CONCURRENT_SYNTH` | 3 | `remote_bridge/voice_tts.py` | 语音合成最大并发数 |
+| `WINDOW_SECONDS` | 3600 秒 | `remote_bridge/message_router.py` | QQ 被动回复窗口有效期；窗口与序号持久化到 `data/remote_bridge_windows.json`，重启后可续用，过期即丢弃 |
 | `DEFAULT_INTERVAL` | 1800 秒 | `core/memory_scheduler.py` | 后台维护（衰减/聚类/检查点）运行间隔 |
 | `_COMMIT_BATCH` | 200 | `core/memory_decay.py` | 全量重算的分批提交粒度 |
 | `maintenance_yield` | step=0.05 / max_wait=0.5 秒 | `core/ui_priority.py` | 后台维护给界面让路的等待步长与上限 |

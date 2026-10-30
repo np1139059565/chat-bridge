@@ -43,6 +43,9 @@ RUNTIME_PATH = CONFIG_DIR / "runtime.yaml"
 # ---------- 运行时数据 ----------
 SCREENSHOTS_DIR = DATA_DIR / "screenshots"
 BRIDGE_STATE_PATH = DATA_DIR / "remote_bridge_state.json"
+# 被动回复窗口持久化文件：跨进程重启保留「谁在跟我说话 + 该消息的序号进度」，
+# 使重启后无需用户重新发消息也能继续推送。窗口本身有过期时间，过期即视为失效。
+BRIDGE_WINDOWS_PATH = DATA_DIR / "remote_bridge_windows.json"
 # 语音临时目录：QQ 语音解码后的 PCM/WAV、TTS 合成的音频文件都落这里；
 # 属运行时产物，用后即删，不长期留存。
 VOICE_DIR = DATA_DIR / "voice"

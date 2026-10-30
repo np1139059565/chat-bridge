@@ -133,7 +133,7 @@ chat-bridge/
 | 语音 | `voice_tts.py` / `voice_voices.py` / `voice_cache.py` / `voice_mp3.py` | 多引擎合成、音色清单、成品缓存、WAV 转 MP3 |
 | 语音（其他） | `pyttsx3_worker.py` / `voice_sapi_runner.py` / `voice_asr.py` / `voice_pending.py` / `message_voice.py` | 合成子进程与父进程调度、语音识别、待确认文字暂存、出向语音提取与推送 |
 | 指令 | `command_registry.py` / `command_dispatch.py` / `command_external.py` / `command_panel.py` | 指令表与校验、抽屉命令下发、外部指令、QQ 指令执行 |
-| 存储与日志 | `bridge_store.py` / `bridge_log.py` / `json_scan.py` | 配置与去重记账、异步日志、文本内 JSON 扫描 |
+| 存储与日志 | `bridge_store.py` / `bridge_log.py` / `json_scan.py` / `window_store.py` | 配置与去重记账、异步日志、文本内 JSON 扫描、被动回复窗口持久化 |
 | 图片 | `message_images.py` | 网页消息内图片的推送 |
 | 文件 | `message_files.py` | 本地文件推送与最近客户端取用（供 `push_file` 工具） |
 
