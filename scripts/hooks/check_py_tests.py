@@ -15,6 +15,9 @@
       缺失任一个不影响提交。
     - 两个都缺失时「跳过」而非报错：与 check_js_tests.py 口径一致，
       不把环境缺失误判为代码错误。
+    - pytest 分支同时校验覆盖率下限（fail_under 写在 flask_server/.coveragerc）。
+      只跑测试不看覆盖率，会出现「全绿但大段代码从未执行」的情况；
+      装了 pytest-cov 才校验，没装则只跑测试。
     - 只跑 flask_server/tests 下的用例，不递归进 js 子目录
       （前端测试由 check_js_tests.py 负责）。
     - 超时保护：整套测试预计 1-2 分钟，超过 300 秒视为异常并中止，
@@ -52,14 +55,22 @@ def _has_module(name):
 
 
 def _run_pytest(server_dir):
-    """用 pytest 运行后端测试。
+    """用 pytest 运行后端测试，并在可用时校验覆盖率下限。
+
+    覆盖率下限写在 flask_server/.coveragerc 的 fail_under，
+    由 --cov 读取，低于下限时 pytest 返回非零，提交被拦住。
+    没有装 pytest-cov 时只跑测试、不校验覆盖率，
+    避免把「本机没装插件」误判成「代码不达标」。
 
     @param server_dir flask_server 目录
     @returns (returncode, 输出文本)
     """
+    args = [sys.executable, "-m", "pytest", "tests", "-q", "--ignore=tests/js"]
+    if _has_module("pytest_cov"):
+        # --cov 不传路径即按 .coveragerc 的 source 统计，口径集中在一处维护
+        args += ["--cov", "--cov-report=term"]
     proc = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests", "-q", "--ignore=tests/js"],
-        cwd=server_dir, capture_output=True, timeout=TEST_TIMEOUT,
+        args, cwd=server_dir, capture_output=True, timeout=TEST_TIMEOUT,
     )
     out = (proc.stdout or b"").decode("utf-8", "replace")
     err = (proc.stderr or b"").decode("utf-8", "replace")

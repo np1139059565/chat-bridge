@@ -1,0 +1,32 @@
+; 覆盖率统计配置（pytest-cov / coverage.py 共用）
+;
+; 口径说明：只统计业务源码。tests/ 自身、脚本目录与技能目录下的扩展代码
+; 不计入分母——测试文件覆盖率天然接近 100%，把它们算进来会把整体数字抬高，
+; 掩盖真正的覆盖短板。
+
+[run]
+; 分支覆盖：只看执行过哪些行，会漏掉「条件只走过一侧」的半覆盖分支
+branch = True
+
+; 统计起点：服务端目录，相对路径按本文件位置解析
+source = .
+
+; 排除项：测试自身、运行时产物、依赖与技能扩展
+omit =
+    tests/*
+    tests/**
+    */tests/*
+    data/*
+    screenshots/*
+    */__pycache__/*
+
+[report]
+; 终端报告只列出没跑满的文件，已满 100% 的不刷屏
+skip_covered = True
+show_missing = True
+
+; 覆盖率下限：低于此值测试钩子判失败
+fail_under = 43
+
+[html]
+directory = htmlcov

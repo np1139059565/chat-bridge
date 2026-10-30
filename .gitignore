@@ -6,6 +6,13 @@ __pycache__/
 venv/
 env/
 
+# 覆盖率产物：.coverage 是每次运行的缓存，htmlcov 是可重新生成报告
+# .coveragerc 是配置，需要入库，故不在此列
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
 # ===== 生成产物（graphify 知识图谱，可重新生成） =====
 graphify-out/
 
