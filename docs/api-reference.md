@@ -374,6 +374,13 @@ POST 请求体示例：
 QQ ↔ 网页 AI 的双向桥接接口。抽屉插件与后端交互，把网页对话切片推给 QQ，
 并把 QQ 侧的指令回传到抽屉执行。
 
+桥接层运行时数据文件（均落在 `data/` 下，不入库）：
+
+| 文件 | 内容 |
+|---|---|
+| `data/remote_bridge_state.json` | 已推送消息 id 的去重记账，防止重启后复推刷屏 |
+| `data/remote_bridge_windows.json` | 被动回复窗口（`msg_id` / 序号 / 过期时间）；重启后未过期窗口可直接续用，序号一起恢复以免撞号被 QQ 丢弃 |
+
 ### GET /api/bridge/status
 
 返回桥接运行状态（供设置页指示灯与窗口信息展示）。返回 `{ success, connected, ... }`。

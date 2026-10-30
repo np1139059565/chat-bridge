@@ -71,6 +71,9 @@ class _Base(unittest.TestCase):
             mock.patch.object(mr, "_last_report", {}),
             mock.patch.object(mr, "_last_openid", ""),
             mock.patch.object(mr, "_last_client", None),
+            # 存盘路径也要隔离：窗口变更会写盘，不隔离会污染真实数据文件
+            mock.patch.object(mr.window_store, "save_windows", lambda *a, **k: True),
+            mock.patch.object(mr.window_store, "save", lambda *a, **k: True),
         ]
         for p in self._patches:
             p.start()
