@@ -156,6 +156,75 @@ def respond_image_frame(req_id, chatid, image_b64, image_md5, chat_type=CHAT_SIN
     return frame(CMD_RESPOND_MSG, body, req_id=req_id)
 
 
+def respond_media_frame(req_id, chatid, msg_item, chat_type=CHAT_SINGLE, caption=""):
+    """构造「回复一条媒体消息」的帧（图片 / 文件 / 语音通用）。
+
+    与 respond_image_frame 同一套结构，差别只在 msg_item 的内容：
+    msg_item 由调用方按消息类型拼好，本函数只负责套进 stream。
+    caption 非空时作为 stream.content 一并发出，实现「图文合一」。
+
+    @param req_id     回调带来的请求 id（必须透传）
+    @param chatid     会话 id
+    @param msg_item   消息项字典，如 {"msgtype":"file","file":{...}}
+    @param chat_type  会话类型
+    @param caption    附带文字（可为空）
+    @returns JSON 字符串
+    """
+    body = {
+        "msgtype": "stream",
+        "chatid": chatid,
+        "chat_type": chat_type,
+        "stream": {
+            "id": new_req_id(),
+            "finish": True,
+            "content": str(caption or ""),
+            "msg_item": [msg_item],
+        },
+    }
+    return frame(CMD_RESPOND_MSG, body, req_id=req_id)
+
+
+def image_item(image_b64, image_md5):
+    """构造图片消息项。
+
+    @param image_b64 原始图片字节的 base64（不带 data: 前缀）
+    @param image_md5 原始字节的 md5 十六进制串
+    @returns 消息项字典
+    """
+    return {"msgtype": "image",
+            "image": {"base64": image_b64, "md5": image_md5}}
+
+
+def voice_item(voice_b64, voice_md5):
+    """构造语音消息项。
+
+    与图片同构：base64 + md5。语音格式受平台限制（通常要求 AMR / SILK），
+    调用方须先把音频转成平台可接受的格式再传入。
+
+    @param voice_b64 原始音频字节的 base64
+    @param voice_md5 原始字节的 md5 十六进制串
+    @returns 消息项字典
+    """
+    return {"msgtype": "voice",
+            "voice": {"base64": voice_b64, "md5": voice_md5}}
+
+
+def file_item(media_id, file_name=""):
+    """构造文件消息项。
+
+    文件走三步上传拿 media_id（见 upload_init / chunk / finish），
+    与图片 / 语音的 base64 直传不同——大文件不能塞进单帧。
+
+    @param media_id  上传完成后平台返回的媒体 id
+    @param file_name 文件名（部分平台版本要求带上）
+    @returns 消息项字典
+    """
+    item = {"msgtype": "file", "file": {"media_id": media_id}}
+    if file_name:
+        item["file"]["file_name"] = file_name
+    return item
+
+
 def send_frame(chatid, chat_type, payload):
     """构造主动推送帧。
 

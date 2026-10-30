@@ -218,75 +218,13 @@ def _truncate(text):
     return text[:head] + "\n\n…（中间省略）…\n\n" + text[-tail:]
 
 
-def _collect_images(m):
-    """取出消息里的图片块（dataURL 或 http 地址）。
-
-    这是企业微信通道的核心能力：图片能真正发出去，不再只回路径。
-    @param m 消息对象
-    @returns 本地路径列表
-    """
-    out = []
-    for b in (m.get("blocks") or []):
-        if not b or b.get("type") != "image":
-            continue
-        src = str(b.get("src") or "")
-        if not src:
-            continue
-        path = _materialize_image(src)
-        if path:
-            out.append(path)
-    return out
-
-
-def _materialize_image(src):
-    """把图片地址落成本地文件，返回路径；失败返回空串。
-
-    @param src dataURL 或 http(s) 地址
-    @returns 本地路径
-    """
-    import urllib.request
-    import uuid
-    import paths
-    try:
-        os.makedirs(str(paths.WECOM_MEDIA_DIR), exist_ok=True)
-    except OSError:
-        return ""
-    name = "out_" + uuid.uuid4().hex[:12]
-    if src.startswith("data:image/"):
-        try:
-            head, _, b64part = src.partition(",")
-            ext = ".png"
-            if "jpeg" in head or "jpg" in head:
-                ext = ".jpg"
-            elif "gif" in head:
-                ext = ".gif"
-            elif "webp" in head:
-                ext = ".webp"
-            import base64 as _b64
-            data = _b64.b64decode(b64part)
-            path = str(paths.WECOM_MEDIA_DIR / (name + ext))
-            with open(path, "wb") as f:
-                f.write(data)
-            return path
-        except Exception as e:
-            log("dataURL 落盘失败：", e)
-            return ""
-    if src.startswith(("http://", "https://")):
-        try:
-            ext = ".png"
-            low = src.lower().split("?")[0]
-            for e in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
-                if low.endswith(e):
-                    ext = e
-                    break
-            path = str(paths.WECOM_MEDIA_DIR / (name + ext))
-            with urllib.request.urlopen(src, timeout=30) as r, open(path, "wb") as f:
-                f.write(r.read())
-            return path
-        except Exception as e:
-            log("图片下载失败：", e)
-            return ""
-    return ""
+# 出站媒体收集（图片落盘 / 文件下载 / 语音定位）已抽到 wecom_media_collect.py，
+# 使本文件保持在行数上限内；此处按原名导入，保持既有调用不变。
+from .wecom_media_collect import (  # noqa: E402
+    collect_images as _collect_images,
+    collect_files as _collect_files,
+    collect_voice as _collect_voice_files,
+)
 
 
 def handle_report(client, payload):
@@ -314,25 +252,72 @@ def handle_report(client, payload):
             return 0
         bodies = []
         images = []
+        files = []
+        voices = []
         for m in fresh:
             b = _body_of(m, push)
             if b:
                 bodies.append(b)
             images.extend(_collect_images(m))
-        if not bodies and not images:
+            files.extend(_collect_files(m))
+            # 语音只在 AI 消息上推：用户与工具消息没有朗读文本
+            vpath, vtext = _collect_voice_files(m)
+            if vpath and vtext and _classify(m) == "ai":
+                voices.append(vpath)
+        if not bodies and not images and not files and not voices:
             _mark_all(conv_id, fresh)
             return 0
         # 取本条消息的 req_id：有它才能走「回复」，客户端才会停止转圈。
         # 取完即清，一个 id 只用于回复一条消息。
         req_id = take_req_id(chatid)
         sent = 0
+        # 发送顺序：媒体优先。原因：主动推送不支持 msg_item，
+        # 而回复凭证（req_id）一次只能用一条消息，若文本先把它用掉，
+        # 后面的图片/文件/语音就都发不出去。故媒体先用，文本随后。
+        #
+        # 图片：msg_item 直传 base64
+        for path in images:
+            if not req_id:
+                # 无凭证时主动推送发不了图（官方限制），明确记日志而非假装成功
+                log("图片跳过：无 req_id，主动推送不支持图片")
+                continue
+            ok, data = client.respond_image(req_id, chatid, path, chat_type)
+            req_id = ""
+            if ok:
+                sent += 1
+                log("已发送图片：", os.path.basename(path))
+            else:
+                log("图片发送失败：", str(data)[:200])
+        # 文件：三步上传拿 media_id 后再发
+        for path in files:
+            if not req_id:
+                log("文件跳过：无 req_id，主动推送不支持文件")
+                continue
+            ok, data = client.respond_file(req_id, chatid, path, chat_type)
+            req_id = ""
+            if ok:
+                sent += 1
+                log("已发送文件：", os.path.basename(path))
+            else:
+                log("文件发送失败：", str(data)[:200])
+        # 语音：与图片同构的 msg_item 直传
+        for path in voices:
+            if not req_id:
+                log("语音跳过：无 req_id，主动推送不支持语音")
+                continue
+            ok, data = client.respond_voice(req_id, chatid, path, chat_type)
+            req_id = ""
+            if ok:
+                sent += 1
+                log("已发送语音：", os.path.basename(path))
+            else:
+                log("语音发送失败：", str(data)[:200])
+        # 文本最后发：有凭证走回复（客户端停止转圈），否则走主动推送
         if bodies:
             text = _truncate(SEP.join(bodies))
             if req_id:
                 ok, data = client.respond_to(req_id, chatid, text, chat_type)
-                # 回复已消费掉这个 req_id，后续图片只能用主动推送
                 req_id = ""
-                # 单独记一条：区分「走回复」与「走主动推送」，排障时一眼可辨
                 log("已发送回复 %d 条消息，长度 %d，ok=%s" % (len(bodies), len(text), ok))
             else:
                 ok, data = client.send_markdown(chatid, text, chat_type)
@@ -343,20 +328,6 @@ def handle_report(client, payload):
             else:
                 log("文本发送失败（下轮重试）：", str(data)[:200])
                 return sent
-        for path in images:
-            if req_id:
-                # 带 req_id 走回复通道：msg_item 直传 base64，无需素材上传
-                ok, data = client.respond_image(req_id, chatid, path, chat_type)
-                req_id = ""
-            else:
-                # 无 req_id 时主动推送发不了图（官方限制），明确记日志而非假装成功
-                log("图片跳过：无 req_id，主动推送不支持图片")
-                continue
-            if ok:
-                sent += 1
-                log("已发送图片：", os.path.basename(path))
-            else:
-                log("图片发送失败：", str(data)[:200])
         _mark_all(conv_id, fresh)
         return sent
 
