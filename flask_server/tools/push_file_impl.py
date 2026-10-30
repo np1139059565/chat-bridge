@@ -19,9 +19,13 @@ import os
 from tool_helpers import ToolParamError, abspath as _abspath, require as _require
 
 
-# 允许推送的扩展名白名单（小写，带前导点）。
-# 后续要支持更多类型时只需在此追加，无需改动推送逻辑。
-ALLOWED_EXTS = (".zip", ".md")
+# 允许推送的扩展名白名单统一复用 read_file 那一套（file_types.PASTEABLE_EXTS），
+# 不再各自维护：一处扩展类型，读取、粘贴、推送三处同时生效，
+# 避免出现「read_file 认、push_file 不认」的口径分裂。
+from file_types import PASTEABLE_EXTS, suffix_of
+# 传输黑名单（脚本 / 可执行体）与 QQ、网页的反向接收共用同一份定义，
+# 避免三个入口各写一份、口径走散。
+from file_blocklist import BLOCKED_EXTS, blocked_hint
 
 # 单文件体积上限默认值（字节）：50MB。
 # QQ 富媒体上传对体积有限制，过大文件既慢又易失败，故在发送前拦截。
@@ -46,10 +50,12 @@ def _max_bytes():
 def _suffix(path):
     """取文件小写扩展名（带前导点）。
 
+    直接委托 file_types.suffix_of：它额外处理了 .gitignore 这类
+    「点开头无主名」的文件，口径与 read_file 完全一致。
     @param path 文件路径
     @returns 小写扩展名；无扩展名返回空串
     """
-    return os.path.splitext(str(path or ""))[1].lower()
+    return suffix_of(path)
 
 
 def t_push_file(p):
@@ -67,12 +73,14 @@ def t_push_file(p):
     if not os.path.isfile(fp):
         raise ToolParamError("文件不存在：%s" % fp)
 
-    # 类型白名单：防止把任意文件（密钥、脚本、可执行体）推到手机上
+    # 类型校验：先挡推送专用的危险类型，再复用 read_file 的白名单
     ext = _suffix(fp)
-    if ext not in ALLOWED_EXTS:
+    if ext in BLOCKED_EXTS:
+        raise ToolParamError(blocked_hint(fp))
+    if ext not in PASTEABLE_EXTS:
         raise ToolParamError(
-            "不支持的文件类型 %s，当前仅支持：%s"
-            % (ext or "（无扩展名）", "、".join(ALLOWED_EXTS))
+            "不支持的文件类型 %s；请确认扩展名在白名单内（与 read_file 共用同一份清单）"
+            % (ext or "（无扩展名）")
         )
 
     # 体积校验：超大文件上传耗时长且易被平台拒绝，提前拦截并说明

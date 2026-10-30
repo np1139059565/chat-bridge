@@ -103,6 +103,35 @@ def extract_image(d):
     return ""
 
 
+def extract_file(d):
+    """从事件里提取文件附件的下载地址与文件名；没有则返回 ("", "")。
+
+    与图片 / 语音同源：正文 content 通常为空，附件放在 attachments 里。
+    判定依据按可靠性排序：
+      - content_type 含 file / application（文档、压缩包的常见形态）；
+      - 或 attachments 里带非空的 filename 且不是图片 / 语音（文件必有文件名）。
+    图片与语音必须先被判走（见 _handle_media 的判定顺序），故此处不会误吞它们。
+    @param d 原始事件数据
+    @returns (下载地址, 文件名)；未命中返回两个空串
+    """
+    atts = d.get("attachments") or []
+    for a in atts:
+        if not isinstance(a, dict):
+            continue
+        ct = str(a.get("content_type") or "").lower()
+        fname = str(a.get("filename") or "").strip()
+        url = str(a.get("url") or a.get("file_url") or "")
+        if not url:
+            continue
+        # 明确的图片 / 语音：交给各自的处理器，这里跳过
+        if ct.startswith("image") or ct in ("pic", "voice", "audio"):
+            continue
+        # 文件的两条判据：content_type 指向文件，或带了文件名
+        if ct.startswith("file") or ct.startswith("application") or fname:
+            return url, fname
+    return "", ""
+
+
 def download_file(url, dest_path):
     """下载 URL 到本地文件；成功返回 True。
 

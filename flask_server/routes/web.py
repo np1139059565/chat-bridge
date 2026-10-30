@@ -291,6 +291,9 @@ def web_voice():
     return jsonify(success=True, cardId=card_id, file=fname)
 
 
+# 网页文件上传已迁至 routes/web_file.py（独立蓝图），使本文件保持在行数上限内。
+
+
 @bp.route("/api/web/messages", methods=["GET", "OPTIONS"])
 def web_messages():
     """主动拉取新消息。

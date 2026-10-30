@@ -24,6 +24,7 @@ def log(*args):
 from .qq_event_parse import (  # noqa: E402
     EVENT_C2C_MESSAGE, to_data_url as _to_data_url, extract as _extract,
     extract_voice as _extract_voice, extract_image as _extract_image,
+    extract_file as _extract_file,
     download_file as _download_file, dump_raw_event as _dump_raw_event,
 )
 
@@ -88,6 +89,11 @@ class QqGateway:
         if image_url:
             # 图文消息：把正文一并带上，由图片卡片统一承载，避免文字被丢掉
             self._handle_image(openid, image_url, msg_id, content or "")
+            return True
+        # 文件放在图片之后判断：文件附件常带 filename，而图片判据更强（content_type）
+        file_url, file_name = _extract_file(data)
+        if file_url:
+            self._handle_file(openid, file_url, file_name, msg_id)
             return True
         return False
 
@@ -259,6 +265,18 @@ class QqGateway:
             log("已投递图片卡片", card.id[:8], "等待抽屉取走")
         except Exception as e:
             log("投递图片卡片失败：", e)
+
+    def _handle_file(self, openid, file_url, file_name, msg_id):
+        """处理一条文件消息：委托 qq_files 模块（下载 → 校验 → 投卡片）。
+
+        实现单独成模块，避免本文件超出行数上限；此处只做转发。
+        @param openid    发件用户
+        @param file_url  文件下载地址
+        @param file_name 对端提供的文件名
+        @param msg_id    消息 id
+        """
+        from . import qq_files
+        qq_files.handle_file(self, openid, file_url, file_name, msg_id)
 
     def _reply_voice(self, openid, text):
         """向 QQ 回发一条提示文本（复用被动回复窗口）。"""

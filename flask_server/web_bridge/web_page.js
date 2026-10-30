@@ -277,6 +277,15 @@
     }
   }
 
+  // ---------- 文件选择（一次一个，独立于图片预览） ----------
+  // 绑定与上传逻辑都在 web_upload.js（使本文件保持在行数上限内）。
+  // 成功回调里清空输入并刷新列表；失败提示由该模块直接弹出。
+  WebUpload.bind(
+    function () { return inputEl.value.trim(); },
+    clientLog,
+    function () { inputEl.value = ''; autoGrow(); fetchMessages(false); }
+  );
+
   // ---------- 图片选择（支持一次多张） ----------
   var pendingImages = [];   // 已选图片的 dataURL 数组
   document.getElementById('btnImg').addEventListener('click', function () {

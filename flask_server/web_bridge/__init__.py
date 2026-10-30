@@ -119,5 +119,38 @@ class WebBridge:
         )
 
 
+    def ingest_file(self, path, name, size, text=""):
+        """把网页上传的一个文件投成卡片，送进网页 AI。
+
+        与图片的区别：文件是二进制，AI 看不见也不需要看见，
+        它需要的是路径——拿到后自己按需调 read_file。
+        因此卡片正文只写「文件在哪」，不塞内容。
+        @param path 服务端落盘的绝对路径
+        @param name 原始文件名
+        @param size 体积（字节）
+        @param text 随文件附带的说明文字；为空则自动生成一句
+        @returns 卡片 id；失败返回空串
+        """
+        body = str(text or "").strip()
+        # 没写说明时给 AI 一句上下文：谁发来的、什么文件、在哪
+        if not body:
+            body = "用户从网页发来文件：%s（%d 字节），已保存到 %s" % (name, size, path)
+        payload = {
+            "kind": "web-file",
+            "path": str(path or ""),
+            "name": str(name or ""),
+            "size": int(size or 0),
+            "text": body,
+        }
+        return self._create_card(
+            card_type="web-file",
+            title="网页文件",
+            content=body,
+            payload=payload,
+            log_hint="文件卡片",
+            extra="name=" + str(name or ""),
+        )
+
+
 # 全局单例
 web = WebBridge()

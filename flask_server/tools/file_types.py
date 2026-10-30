@@ -151,7 +151,9 @@ PASTEABLE_EXT_TEXT = """
 .jpf,.jpx,.mpeg,.mpg,.msp,.pbm,.pcd,
 .pcx,.pfm,.pgm,.pnm,.ppm,.pxr,.qoi,
 .ras,.rgb,.rgba,.sgi,.tga,.vda,.vst,
-.wmf,.xpm,.epub,.mobi
+.wmf,.xpm,.epub,.mobi,
+.zip,.rar,.7z,.tar,.gz,.tgz,.bz2,.xz,
+.zst,.cab,.iso,.jar,.war,.apk,.whl
 """
 
 

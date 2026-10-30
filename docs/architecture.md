@@ -135,7 +135,8 @@ chat-bridge/
 | 指令 | `command_registry.py` / `command_dispatch.py` / `command_external.py` / `command_panel.py` | 指令表与校验、抽屉命令下发、外部指令、QQ 指令执行 |
 | 存储与日志 | `bridge_store.py` / `bridge_log.py` / `json_scan.py` / `window_store.py` | 配置与去重记账、异步日志、文本内 JSON 扫描、被动回复窗口持久化 |
 | 图片 | `message_images.py` | 网页消息内图片的推送 |
-| 文件 | `message_files.py` | 本地文件推送与最近客户端取用（供 `push_file` 工具） |
+| 文件（出站） | `message_files.py` | 本地文件推送与最近客户端取用（供 `push_file` 工具） |
+| 文件（入站） | `qq_files.py` | QQ 来件接收：下载 → 校验 → 落盘 → 投卡片告知 AI 路径 |
 
 **web_bridge/（网页版机器人）**
 
