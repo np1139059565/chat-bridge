@@ -32,6 +32,55 @@ def log(*args):
     app_log.info("[bridge][wecom]", *args)
 
 
+# 文件头魔数 → 扩展名。各签名无前缀重叠，匹配顺序不影响结果。
+# RIFF 容器不在此表：同为 RIFF 前缀的 webp / wav / riff 要靠偏移 8 的类型区分，
+# 由 sniff_extension 单独分支处理。
+_MAGIC = [
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+    (b"BM", ".bmp"),
+    (b"%PDF", ".pdf"),
+    (b"PK\x03\x04", ".zip"),  # docx/xlsx/pptx 同属 zip
+    (b"\x1f\x8b", ".gz"),
+    (b"#!AMR", ".amr"),
+    (b"OggS", ".ogg"),
+    (b"ID3", ".mp3"),
+    (b"\xff\xfb", ".mp3"),
+    (b"RIFF", ".wav"),       # 需配合偏移 8 的 WAVE
+]
+
+
+def sniff_extension(data):
+    """按文件头魔数判断扩展名。
+
+    为什么需要：企业微信的媒体下载地址不带扩展名，
+    早先从 URL 取扩展名会永远落到兜底的 .bin，
+    导致图片/PDF 保存后前端认不出来、也贴不进输入框。
+
+    @param data 解密后的文件字节
+    @returns 带点的扩展名；认不出返回 .bin
+    """
+    if not data:
+        return ".bin"
+    head = data[:16]
+    # RIFF 容器要再看偏移 8 的类型，区分 webp / wav
+    if head[:4] == b"RIFF":
+        if head[8:12] == b"WEBP":
+            return ".webp"
+        if head[8:12] == b"WAVE":
+            return ".wav"
+        return ".riff"
+    for sig, ext in _MAGIC:
+        if head.startswith(sig):
+            return ext
+    # MP4/视频：偏移 4 处是 'ftyp'
+    if head[4:8] == b"ftyp":
+        return ".mp4"
+    return ".bin"
+
+
 class WecomMediaMixin:
     """企业微信富媒体收发能力。"""
 
@@ -98,7 +147,9 @@ class WecomMediaMixin:
         data = proto.decrypt_media(raw, aeskey) if aeskey else raw
         try:
             os.makedirs(dest_dir, exist_ok=True)
-            ext = os.path.splitext(url.split("?")[0])[1] or ".bin"
+            # 扩展名必须从文件头魔数判断：企业微信的媒体地址不带扩展名，
+            # 从 URL 取会永远落到兜底的 .bin，前端无法识别成图片/PDF。
+            ext = sniff_extension(data)
             path = os.path.join(dest_dir, "wecom_" + _uuid.uuid4().hex[:12] + ext)
             with open(path, "wb") as f:
                 f.write(data)
