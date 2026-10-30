@@ -97,18 +97,9 @@ def handle_upload(data):
     if not safe:
         return {"success": False, "error": "bad_name"}, 400
 
-    # 安全校验前移：脚本 / 可执行体一律拒收，不落盘
-    from file_types import PASTEABLE_EXTS, suffix_of
-    from file_blocklist import BLOCKED_EXTS, blocked_hint
-    ext = suffix_of(safe)
-    if ext in BLOCKED_EXTS:
-        return {
-            "success": False,
-            "error": "blocked_type",
-            "message": blocked_hint(safe),
-        }, 400
-
     # 类型校验前移：不落盘就能判断的先拒掉，省一次写盘
+    from file_types import PASTEABLE_EXTS, suffix_of
+    ext = suffix_of(safe)
     if ext not in PASTEABLE_EXTS:
         return {
             "success": False,

@@ -220,7 +220,7 @@ POST 请求体示例：
 | `search_content` | `pattern` | `path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
 | `read_file` | `path`（字符串读单个文件，数组一次读多个；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；不指定行范围时为整文件读取，结果只含 `data.file`（`mime`/`name`/`path`/`source`），正文由前端经 `GET /api/web/source-file` 取原始字节后作为附件粘贴；指定行范围时为分段读取，片段以 `data:text/plain` 的 dataURL 放在 `data.file.content`；回传 AI 的只有精简标记；数组单次上限 20 个文件，体积受 `limits.max_json_chars` 约束 |
 | `read_image` | `path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
-| `push_file` | `path` | —（把本地文件推到用户手机 QQ 供下载；类型白名单复用 `file_types.PASTEABLE_EXTS`，并额外拦截 `file_blocklist.BLOCKED_EXTS` 中的可执行文件与脚本；体积上限见设置页 `push_file.max_bytes`，默认 50MB；推送目标取「最近发消息的 QQ 用户」，被动回复窗口过期时返回原因） |
+| `push_file` | `path` | —（把本地文件推到用户手机 QQ 供下载；类型白名单复用 `file_types.PASTEABLE_EXTS`；体积上限见设置页 `push_file.max_bytes`，默认 50MB；推送目标取「最近发消息的 QQ 用户」，被动回复窗口过期时返回原因） |
 | `list_skills` | — | — |
 | `read_skill` | `skill`, `path` | `offset`, `limit` |
 | `read_lints` | — | `paths`, `severity` |
@@ -531,7 +531,7 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 
 从网页发送一个文件。请求：`{ name, data（base64）, text }`。
 
-校验顺序与 `push_file` 一致：文件名净化（去目录部分）→ 拒绝 `file_blocklist.BLOCKED_EXTS`（可执行体与脚本）→ 要求扩展名在 `file_types.PASTEABLE_EXTS` 内 → 体积上限与 QQ 来件同口径 → 落盘到 `data/qq_files/` → 投 `web-file` 卡片。
+校验顺序与 `push_file` 一致：文件名净化（去目录部分）→ 要求扩展名在 `file_types.PASTEABLE_EXTS` 内 → 体积上限与 QQ 来件同口径 → 落盘到 `data/qq_files/` → 投 `web-file` 卡片。
 
 成功返回 `{ success, cardId, name, path, size }`；类型不支持返回 400 + `error: unsupported_type` 与可读的 `message`，网页据此直接提示用户，**不会**把读不了的文件投给 AI。
 

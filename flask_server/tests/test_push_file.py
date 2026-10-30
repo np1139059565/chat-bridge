@@ -55,10 +55,9 @@ class TestPushFileValidation(unittest.TestCase):
         self.assertIn("文件不存在", str(ctx.exception))
 
     def test_disallowed_extension_raises(self):
-        """扩展名既不在白名单、也不在黑名单时，应按「不支持」拒绝。
+        """扩展名不在白名单时，应按「不支持」拒绝。
 
-        用 .xyz：它在两份清单之外，才能走到「不在白名单」这条分支。
-        （.txt 已在白名单内；.exe 会被黑名单先拦住，走的是另一条分支。）
+        用 .xyz：它不在公共白名单内，能稳定走到「不在白名单」这条分支。
         """
         p = self._touch("a.xyz")
         with self.assertRaises(ToolParamError) as ctx:
@@ -146,24 +145,4 @@ class TestAllowedExts(unittest.TestCase):
         for ext in (".zip", ".rar", ".7z", ".tar", ".gz"):
             self.assertIn(ext, PASTEABLE_EXTS, "%s 应在白名单内" % ext)
 
-    def test_dangerous_types_blocked(self):
-        """可执行文件与脚本应在传输黑名单内。
 
-        注意：这些类型可能在公共白名单里（作为文本贴给 AI 无害），
-        但传输侧必须单独拦住，故断言对象是 BLOCKED_EXTS 而非 PASTEABLE_EXTS。
-        """
-        from file_blocklist import BLOCKED_EXTS
-        for ext in (".exe", ".dll", ".bat", ".cmd", ".ps1", ".vbs", ".apk", ".jar"):
-            self.assertIn(ext, BLOCKED_EXTS, "%s 应在传输黑名单内" % ext)
-
-    def test_blocklist_blocks_push(self):
-        """命中黑名单的文件，push_file 应拒绝并给出打包建议。"""
-        import tempfile
-        with tempfile.TemporaryDirectory() as d:
-            p = os.path.join(d, "evil.bat")
-            with open(p, "wb") as f:
-                f.write(b"echo hi")
-            with self.assertRaises(ToolParamError) as ctx:
-                t_push_file({"path": p})
-            self.assertIn("安全", str(ctx.exception))
-            self.assertIn("压缩包", str(ctx.exception))

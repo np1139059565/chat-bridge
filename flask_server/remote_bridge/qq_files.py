@@ -70,18 +70,11 @@ def _worker(gateway, openid, file_url, file_name, msg_id):
     # 延迟导入：避免模块加载期就牵扯文件系统与工具层
     import paths
     from file_types import PASTEABLE_EXTS, suffix_of
-    from file_blocklist import BLOCKED_EXTS, blocked_hint
     from .qq_event_parse import download_file as _download
 
     # 文件名兜底：对端没给名字时用时间戳占位，扩展名校验随后会拦掉它
     safe = _safe_name(file_name, "qqfile_%d" % int(time.time() * 1000))
     ext = suffix_of(safe)
-
-    # 安全校验前移：脚本 / 可执行体一律拒收，不下载、不落盘
-    if ext in BLOCKED_EXTS:
-        _reply(gateway, openid, blocked_hint(safe))
-        log("来件命中黑名单，已拒绝：", safe)
-        return
 
     # 类型校验前移：不下载就能判断的，先拒掉，省一次网络传输
     if ext not in PASTEABLE_EXTS:

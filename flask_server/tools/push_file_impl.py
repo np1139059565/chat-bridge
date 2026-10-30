@@ -23,9 +23,6 @@ from tool_helpers import ToolParamError, abspath as _abspath, require as _requir
 # 不再各自维护：一处扩展类型，读取、粘贴、推送三处同时生效，
 # 避免出现「read_file 认、push_file 不认」的口径分裂。
 from file_types import PASTEABLE_EXTS, suffix_of
-# 传输黑名单（脚本 / 可执行体）与 QQ、网页的反向接收共用同一份定义，
-# 避免三个入口各写一份、口径走散。
-from file_blocklist import BLOCKED_EXTS, blocked_hint
 
 # 单文件体积上限默认值（字节）：50MB。
 # QQ 富媒体上传对体积有限制，过大文件既慢又易失败，故在发送前拦截。
@@ -73,10 +70,8 @@ def t_push_file(p):
     if not os.path.isfile(fp):
         raise ToolParamError("文件不存在：%s" % fp)
 
-    # 类型校验：先挡推送专用的危险类型，再复用 read_file 的白名单
+    # 类型校验：复用 read_file 的白名单
     ext = _suffix(fp)
-    if ext in BLOCKED_EXTS:
-        raise ToolParamError(blocked_hint(fp))
     if ext not in PASTEABLE_EXTS:
         raise ToolParamError(
             "不支持的文件类型 %s；请确认扩展名在白名单内（与 read_file 共用同一份清单）"
