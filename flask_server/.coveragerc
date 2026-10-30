@@ -25,8 +25,10 @@ omit =
 skip_covered = True
 show_missing = True
 
-; 覆盖率下限：低于此值测试钩子判失败
-fail_under = 43
+; 覆盖率下限：低于此值测试钩子判失败。
+; 只升不降：每补一批测试后上调到新的水位，锁住已得的覆盖率。
+; 2026-10-30：43 → 44（补配置路由测试后整体 44.38%）
+fail_under = 44
 
 [html]
 directory = htmlcov
