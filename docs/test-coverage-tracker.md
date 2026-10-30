@@ -20,78 +20,85 @@
 
 ## 二、总体状况
 
-盘点口径：`flask_server/` 下 104 个业务模块，38 个测试文件。
+盘点口径：`flask_server/` 下 125 个业务模块（不含 `__init__.py`），50 个测试文件。
 
-| 目录 | 模块数 | 零覆盖 | 占比 | 零覆盖代码行数 | 优先级 |
+统计命令：`cd flask_server && python -m pytest tests -q --cov --cov-report=term`，
+口径由 `.coveragerc` 定义（只算业务源码，排除 `tests/` 自身与运行时产物，启用分支覆盖）。
+
+| 目录 | 模块数 | 零覆盖 | 占比 | 未覆盖单元 | 优先级 |
 |---|---|---|---|---|---|
-| `remote_bridge/` | 25 | 21 | 84% | 3998 | **P0** |
-| `custom_tools/` | 9 | 6 | 67% | 1095 | P1 |
-| `tools/` | 8 | 5 | 62% | 806 | P1 |
-| `web_bridge/` | 5 | 3 | 60% | 582 | P1 |
-| `routes/` | 13 | 6 | 46% | 1432 | P2 |
-| `core/` | 37 | 1 | 3% | 125 | P2 |
-| 根目录 | 7 | 2 | 29% | 426 | P3 |
-| **合计** | **104** | **44** | **42%** | **8464** | |
+| `remote_bridge/` | 40 | 5 | 13% | 3589 | **P0** |
+| `routes/` | 17 | 9 | 53% | 1415 | P2 |
+| `core/` | 39 | 0 | 0% | 1058 | P2 |
+| `tools/` | 11 | 0 | 0% | 591 | P1 |
+| `custom_tools/` | 9 | 0 | 0% | 530 | P1 |
+| `web_bridge/` | 5 | 0 | 0% | 519 | P1 |
+| 根目录 | 4 | 2 | 50% | 258 | P3 |
+| **合计** | **125** | **16** | **13%** | **7960** | |
+
+整体覆盖率 **43.3%**（含分支）。零覆盖模块数已从 44 降到 16，但
+`remote_bridge/` 与 `routes/` 的未覆盖行数占全项目七成——零覆盖模块减少不等于覆盖面扩大，
+这两处仍是主要缺口。
 
 优先级依据：出错影响面 × 代码复杂度 × 是否在关键链路上。
 
 ---
 
-## 三、P0：`remote_bridge/`（21 个模块零覆盖）
+## 三、P0：`remote_bridge/`（40 个模块，5 个零覆盖）
 
 远程桥接是 QQ ↔ 网页 AI 的通道，一旦出错用户直接收不到消息。且本目录代码行数最多、分支最密。
 
 ### 3.1 语音链路（本次事故所在）
 
-- [ ] `voice_pyttsx3_runner.py` — 父进程侧调度：写文本、拉起子进程、超时处理、产物校验
+- [x] `voice_pyttsx3_runner.py` — 父进程侧调度：写文本、拉起子进程、超时处理、产物校验
 - [ ] `pyttsx3_worker.py` — 子进程：读文本、初始化引擎、设音色语速、合成
 - [ ] `voice_tts.py` — 三引擎分发（现仅测策略层，未测执行层，需补执行层用例）
 - [ ] `voice_voices.py` — 音色清单列举
-- [ ] `voice_cache.py` — 成品缓存复用
-- [ ] `voice_pending.py` — 待确认语音文字暂存
+- [x] `voice_cache.py` — 成品缓存复用
+- [x] `voice_pending.py` — 待确认语音文字暂存
 - [ ] `voice_asr.py` — SILK 解码与语音识别
 
 ### 3.2 消息链路
 
-- [ ] `message_parse.py` — 消息解析与块文本组装
-- [ ] `message_voice.py` — 从消息提取语音文本
-- [ ] `message_images.py` — 消息内图片推送
-- [ ] `outbound.py` — 出站正文组装
+- [x] `message_parse.py` — 消息解析与块文本组装
+- [x] `message_voice.py` — 从消息提取语音文本
+- [x] `message_images.py` — 消息内图片推送
+- [x] `outbound.py` — 出站正文组装
 
 ### 3.3 QQ 协议
 
-- [ ] `qq_gateway.py` — 事件分发
+- [x] `qq_gateway.py` — 事件分发
 - [ ] `qq_client.py` — 机器人协议层
-- [ ] `qq_event_parse.py` — 事件解析与下载
+- [x] `qq_event_parse.py` — 事件解析与下载
 - [ ] `qq_media.py` — 富媒体发送
 
 ### 3.4 指令
 
-- [ ] `command_registry.py` — 指令表、别名、校验
-- [ ] `command_dispatch.py` — 抽屉命令下发
-- [ ] `command_external.py` — 外部指令处理
-- [ ] `command_panel.py` — QQ 指令执行
+- [x] `command_registry.py` — 指令表、别名、校验
+- [x] `command_dispatch.py` — 抽屉命令下发
+- [x] `command_external.py` — 外部指令处理
+- [x] `command_panel.py` — QQ 指令执行
 
 ### 3.5 存储与工具
 
-- [ ] `bridge_store.py` — 配置分区读写与去重记账
-- [ ] `bridge_log.py` — 异步日志落盘
-- [ ] `json_scan.py` — 文本内 JSON 扫描
+- [x] `bridge_store.py` — 配置分区读写与去重记账
+- [x] `bridge_log.py` — 异步日志落盘
+- [x] `json_scan.py` — 文本内 JSON 扫描
 
 ---
 
 ## 四、P1：`custom_tools/` / `tools/` / `web_bridge/`
 
-### 4.1 `custom_tools/`（6 个）
+### 4.1 `custom_tools/`（8 个模块，0 个零覆盖）
 
-- [ ] `loader.py` — 技能解析、命令拼装
-- [ ] `registry.py` — 注册表读写、安装删除
-- [ ] `meta.py` — 对外视图组装
-- [ ] `scan.py` — 目录扫描
-- [ ] `skill_docs.py` — 技能文档读写
-- [ ] `commands.py` — 外部指令视图
+- [x] `loader.py` — 技能解析、命令拼装
+- [x] `registry.py` — 注册表读写、安装删除
+- [x] `meta.py` — 对外视图组装
+- [x] `scan.py` — 目录扫描
+- [x] `skill_docs.py` — 技能文档读写
+- [x] `commands.py` — 外部指令视图
 
-### 4.2 `tools/`（5 个）
+### 4.2 `tools/`（11 个模块，0 个零覆盖）
 
 - [ ] `proc_runner.py` — 子进程执行与超时保护
 - [ ] `command_tasks.py` — 异步任务管理
@@ -99,17 +106,17 @@
 - [ ] `memory_quality_impl.py` — 蒸馏质量管理工具
 - [ ] `tool_meta.py` — 内置工具元数据
 
-### 4.3 `web_bridge/`（3 个）
+### 4.3 `web_bridge/`（5 个模块，0 个零覆盖）
 
-- [ ] `web_inbox.py` — 对话收件箱存储层
-- [ ] `web_inbox_store.py` — 收件箱持久化层
-- [ ] `audio_prune.py` — 音频目录回收
+- [x] `web_inbox.py` — 对话收件箱存储层
+- [x] `web_inbox_store.py` — 收件箱持久化层
+- [x] `audio_prune.py` — 音频目录回收
 
 ---
 
 ## 五、P2 / P3：`routes/` 与其余
 
-### 5.1 `routes/`（6 个）
+### 5.1 `routes/`（17 个模块，9 个零覆盖）
 
 - [ ] `bridge.py` — 远程桥接上报接口
 - [ ] `config_route.py` — 配置读写接口
@@ -140,6 +147,10 @@
 
 单元测试已纳入 pre-commit 钩子（`pytest` 可用时运行 `flask_server/tests`，不可用时降级为 `unittest`）。任何测试失败都会阻止提交。
 
+覆盖率也纳入同一钩子：装了 `pytest-cov` 时按 `flask_server/.coveragerc` 统计并校验 `fail_under`，
+低于下限即判提交失败；未装插件则只跑测试。下限当前为 43，是只升不降的基线，
+每补一批测试后上调到新的水位。
+
 > 校验方式：`pre-commit run --all-files`
 
 ---
@@ -149,3 +160,4 @@
 | 日期 | 完成项 | 提交 |
 |---|---|---|
 | — | 建立清单、接入测试钩子 | — |
+| 2026-10-30 | 补 `sniff_extension` 与来件入口（文件名净化 / 类型 / 体积）用例；接入覆盖率闸门并集中口径；刷新本表数字 | `6b2c494` `b40a856` `23bfee8` |
