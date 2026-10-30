@@ -32,6 +32,9 @@ from run_command_impl import (
     t_run_command,
     _load_run_command_languages,
 )
+# push_file 按「声明与实现分离」放独立模块：文件推送属交付类能力，
+# 与文件读写职责不同，且需依赖远程桥接上下文。
+from push_file_impl import t_push_file
 # memory_search 同样拆到独立模块，重导出其入口，保持「声明与实现分离」
 from memory_search_impl import t_memory_search
 # 蒸馏质量管理（抽检 + 修正）拆到独立模块
@@ -393,6 +396,7 @@ DISPATCH = {
     "search_content": t_search_content,
     "read_file": t_read_file,
     "read_image": t_read_image,
+    "push_file": t_push_file,
     "list_skills": t_list_skills,
     "read_skill": t_read_skill,
     "read_lints": t_read_lints,

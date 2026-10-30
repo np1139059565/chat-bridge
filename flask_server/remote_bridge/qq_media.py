@@ -11,6 +11,7 @@
   _http_error_detail 等基础能力，本模块不重复实现。
 """
 import base64
+import os
 import urllib.error
 import app_log
 
@@ -67,6 +68,32 @@ class QqMediaMixin:
             up = self._http_post(url, {
                 "file_type": 3,          # 3 = 语音
                 "file_data": b64,
+                "srv_send_msg": False,
+            }, self._auth_header())
+        except urllib.error.HTTPError as e:
+            return "", "upload HTTP %s %s" % (e.code, self._http_error_detail(e))
+        except Exception as e:
+            return "", str(e)
+        return (up or {}).get("file_info") or "", ""
+
+    def _upload_file(self, openid, b64, file_name):
+        """上传普通文件富媒体，返回 (file_info, error)。
+
+        与图片 / 语音同一套「上传拿 file_info」流程，差别在：
+        - file_type=4 表示文件；
+        - 必须带 file_name，接收端靠它显示文件名与扩展名（决定能否另存 / 打开）。
+        用 file_data 传本地内容，绕开「QQ 服务器来取文件」对公网地址的依赖。
+        @param openid    接收方用户 openid
+        @param b64       文件内容的 Base64 字符串
+        @param file_name 原文件名（含扩展名）
+        @returns (file_info, error)
+        """
+        url = _api_base() + "/v2/users/%s/files" % openid
+        try:
+            up = self._http_post(url, {
+                "file_type": 4,          # 4 = 文件
+                "file_data": b64,
+                "file_name": file_name,
                 "srv_send_msg": False,
             }, self._auth_header())
         except urllib.error.HTTPError as e:
@@ -141,6 +168,34 @@ class QqMediaMixin:
             return False, "read_file_failed: %s" % e
         # 第一步：上传语音富媒体，拿 file_info
         file_info, err = self._upload_voice(openid, b64)
+        if err:
+            return False, err
+        if not file_info:
+            return False, "no_file_info"
+        # 第二步：发送富媒体消息
+        return self._send_media(openid, file_info, msg_id, msg_seq)
+
+    def send_c2c_file(self, openid, file_path, msg_id="", msg_seq=1):
+        """发送单聊文件（富媒体）。
+
+        读本地文件 → Base64 编码 → 作为 file_data 上传（file_type=4，带 file_name）
+        拿 file_info → 发 msg_type=7。与发图 / 发语音同一条链路。
+        @param openid    接收方用户 openid
+        @param file_path 本地文件路径
+        @param msg_id    被动回复引用的用户消息 id
+        @param msg_seq   同一 msg_id 下的序号
+        @returns (ok, data_or_error)
+        """
+        if not self._ensure_token():
+            return False, "no_token"
+        try:
+            b64 = self._read_file_b64(file_path)
+        except Exception as e:
+            return False, "read_file_failed: %s" % e
+        # 文件名必须随上传一起带给平台：接收端靠它显示名称与扩展名
+        file_name = os.path.basename(str(file_path or "")) or "file.bin"
+        # 第一步：上传文件富媒体，拿 file_info
+        file_info, err = self._upload_file(openid, b64, file_name)
         if err:
             return False, err
         if not file_info:

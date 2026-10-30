@@ -163,6 +163,7 @@ WAV 转 MP3 默认用 `soundfile` + `lameenc`；两者都不可用时自动回�
   - `limits.max_json_chars`：工具结果 JSON 体积上限。
 - 自定义工具清单由插件自动维护，存于 `definition.yaml` / `runtime.yaml` 的 `custom_tools` 分区。
 - 远程桥接配置（QQ 凭证、推送开关、自定义指令）由设置页维护，存于 `definition.yaml` / `runtime.yaml` 的 `bridge` 分区；`remote_bridge_state.json` 为其去重记账，自动生成。
+- `push_file` 工具的文件大小上限在设置页「工具配置」里调（键 `push_file.max_bytes`，默认 50MB）。
 
 ## 自定义工具 / Skill
 

@@ -220,6 +220,7 @@ POST 请求体示例：
 | `search_content` | `pattern` | `path`, `glob`, `context_around`（上下文行数）, `case_sensitive` |
 | `read_file` | `path`（字符串读单个文件，数组一次读多个；绝对路径原样，相对路径以工程根为基准） | `offset`, `limit`；不指定行范围时为整文件读取，结果只含 `data.file`（`mime`/`name`/`path`/`source`），正文由前端经 `GET /api/web/source-file` 取原始字节后作为附件粘贴；指定行范围时为分段读取，片段以 `data:text/plain` 的 dataURL 放在 `data.file.content`；回传 AI 的只有精简标记；数组单次上限 20 个文件，体积受 `limits.max_json_chars` 约束 |
 | `read_image` | `path` | —（支持 png/jpg/jpeg/gif/webp/bmp，单张上限 10MB） |
+| `push_file` | `path` | —（把本地文件推到用户手机 QQ 供下载；当前放行 `.zip` / `.md`，体积上限见设置页 `push_file.max_bytes`，默认 50MB；推送目标取「最近发消息的 QQ 用户」，被动回复窗口过期时返回原因） |
 | `list_skills` | — | — |
 | `read_skill` | `skill`, `path` | `offset`, `limit` |
 | `read_lints` | — | `paths`, `severity` |

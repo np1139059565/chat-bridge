@@ -254,6 +254,11 @@ def push_image(qq_client, openid, path):
     return ok
 
 
+# 文件推送与客户端取用已抽到 message_files.py，使本文件保持在行数上限内；
+# 此处按原名导入，保持 push_file / get_last_client 的既有引用不变。
+from .message_files import get_last_client, push_file  # noqa: E402
+
+
 def _should_push(m, push):
     """判断一条消息是否应当推送：类型开关打开，且不是 QQ 自己发来的。"""
     kind = _classify(m)

@@ -52,6 +52,17 @@ CONFIG_SCHEMA = {
             "hint": "超过此体积的图片会被拒绝读取，请先压缩。",
         },
     ],
+    "push_file": [
+        {
+            "key": "max_bytes",
+            "label": "文件大小上限（字节）",
+            "type": "integer",
+            "default": 50 * 1024 * 1024,
+            "min": 1024,
+            "max": 200 * 1024 * 1024,
+            "hint": "超过此体积的文件会被拒绝推送；QQ 富媒体上传对体积有限制。",
+        },
+    ],
     "run_command": [
         {
             "key": "timeout",

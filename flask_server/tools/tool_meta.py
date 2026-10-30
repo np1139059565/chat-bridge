@@ -73,6 +73,14 @@ TOOLS = {
             {"name": "path", "type": "string", "required": True, "description": "图片路径（绝对路径原样，相对路径以工程根为基准）"},
         ],
     },
+    "push_file": {
+        # 交付类工具：把电脑上的文件推到用户手机，让用户能直接下载。
+        # 目前只放行压缩包与 Markdown 文档，避免误推敏感或可执行文件。
+        "description": "把电脑上的文件推送到用户手机 QQ，供其下载（当前支持 .zip 压缩包与 .md 文档）",
+        "parameters": [
+            {"name": "path", "type": "string", "required": True, "description": "要推送的文件路径（绝对路径原样，相对路径以工程根为基准）"},
+        ],
+    },
     "list_skills": {
         "description": "列出本机可用的 skill（名称 + 摘要），供 AI 判断该读取哪个技能文档",
         "parameters": [],
