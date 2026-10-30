@@ -307,13 +307,7 @@ def _naming_issue(node):
 # 命名检查豁免的目录前缀（相对工程根，正斜杠）。
 # 测试目录整体豁免：unittest 的用例类与生命周期钩子（setUp / tearDown /
 # setUpClass 等）是框架约定名，不适用 snake_case / PascalCase 规则。
-# 诊断扩展目录整体豁免：其中 qpython_server.py 实现了标准库
-# BaseHTTPRequestHandler 约定的 do_GET / do_POST / do_OPTIONS，
-# 这些名字由框架回调，改名会导致收不到请求。
-NAMING_EXEMPT_PREFIXES = (
-    "flask_server/tests/",
-    "firefox-diag-ext/",
-)
+NAMING_EXEMPT_PREFIXES = ("flask_server/tests/",)
 
 
 def check_py_naming(root):
