@@ -1,12 +1,9 @@
 // 模块：extend/dialog/parts/00_data.js
-// 用途：对话框 Vue 应用的共享命名空间、常量与 data/computed/mounted。
-//  - 定义 window.AIMirrorDialog（下称 D），承载 methods/data/computed 等分片。
-//  - 提供后端不可达时的占位工具名 FALLBACK_TOOLS、空会话壳 EMPTY_CONV。
-//    工具参数的唯一来源是后端 /tools，前端不维护参数副本。
+// 用途：对话框 Vue 的共享命名空间、常量与 data/computed/mounted。
+//   定义 window.AIMirrorDialog（下称 D），承载 methods/data/computed 等分片；
+//   提供后端不可达时的占位工具名与空会话壳。工具参数唯一来源是后端 /tools。
 // 依赖：lib/dom-utils.js（debounce / hashStr / toArray）
-//
-// 数据模型：会话只存 msgTree（节点含完整信息）、visibleKeys、branchKeys、
-//   externalCards。顺序完全由消息树结构与入列先后决定。
+// 数据模型：会话只存 msgTree、visibleKeys、branchKeys、externalCards。
 window.AIMirrorDialog = (function () {
   'use strict';
   const D = window.AIMirrorDialog || {};
@@ -228,6 +225,8 @@ window.AIMirrorDialog = (function () {
       // 字段定义集中在 00a_weixin_data.js，此处展开合并——
       // 微信状态字段较多，集中一处便于新增，也避免本文件超出长度上限。
       ...D.weixinInitialState(),
+      // 远程桥接（企业微信 ↔ 网页 AI）：第三条通道，字段定义见 00b_wecom_data.js
+      ...D.wecomInitialState(),
       rules: [],
       rulesDir: '',
       rulesOpen: false,

@@ -76,6 +76,10 @@ WEIXIN_BUF_PATH = WEIXIN_DIR / "updates_buf.txt"
 # 于是每次发送都被服务端以 prepare failed 拒绝，且重试永远无效。
 WEIXIN_CTX_PATH = WEIXIN_DIR / "context_tokens.json"
 
+# 企业微信（智能机器人）目录：接收的图片/文件落这里，发送前也暂存于此。
+# 与微信目录分开：两者媒体格式与生命周期不同，混放会让回收逻辑互相干扰。
+WECOM_MEDIA_DIR = DATA_DIR / "wecom_media"
+
 # 桥接日志目录：按天一个文件，便于回溯运行轨迹（后端 print 默认只进终端，
 # 不落盘；此处给桥接层一个持久化的日志落点）。
 LOGS_DIR = DATA_DIR / "logs"

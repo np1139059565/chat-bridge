@@ -10,6 +10,8 @@
 依赖：json、paths、app_log
 """
 import json
+import threading
+import time
 
 import paths
 import app_log
@@ -96,16 +98,23 @@ def read_state():
     return _cache
 
 
-def write_state(state):
-    """把收件箱状态写回磁盘，并同步刷新内存缓存。
+# 待写状态与后台写线程：内存缓存立即更新，磁盘写盘异步执行。
+# 收件箱一次全量写可达 700KB / 600ms，若同步写会卡住上报链路；
+# 改为「只保留最后一次状态、由单线程串行写盘」，多个写请求自动合并。
+_pending = None
+_pending_lock = threading.Lock()
+_pending_event = threading.Event()
+_writer_started = False
 
-    先确保目录存在；写失败只记录——收件箱是缓存，写不进去不应阻断消息流。
-    写成功后立即更新缓存与签名，使后续读取不必再解析一遍。
+
+def _write_state_now(state):
+    """真正执行一次写盘（仅供后台线程调用）。
+
+    @param state 要写入的状态对象
     """
-    global _cache, _cache_sig
-    import time as _t
+    global _cache_sig
     path = paths.WEB_INBOX_PATH
-    _t0 = _t.perf_counter()
+    _t0 = time.perf_counter()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         text = json.dumps(state, ensure_ascii=False)
@@ -113,10 +122,76 @@ def write_state(state):
     except Exception as e:
         app_log.warn("[web]", "写回收件箱失败：", e)
         return
-    _ms = (_t.perf_counter() - _t0) * 1000.0
+    _ms = (time.perf_counter() - _t0) * 1000.0
     if _ms >= _SLOW_IO_MS:
         app_log.warn("[web][inbox]",
                      "写盘耗时=%.0fms 消息=%d 字节=%d"
                      % (_ms, len(state.get("messages") or []), len(text)))
-    _cache = state
     _cache_sig = file_sig()
+
+
+def _writer_loop():
+    """后台写盘循环：每次取最新待写状态，写完再取下一个。
+
+    合并语义：写盘期间若又有新状态进来，只保留最新的那份，
+    中间态直接丢弃——收件箱是全量快照，后一份天然覆盖前一份。
+    """
+    global _pending
+    while True:
+        _pending_event.wait()
+        with _pending_lock:
+            state = _pending
+            _pending = None
+            _pending_event.clear()
+        if state is not None:
+            _write_state_now(state)
+
+
+def _ensure_writer():
+    """惰性启动后台写线程（守护线程，随进程退出）。"""
+    global _writer_started
+    if _writer_started:
+        return
+    with _pending_lock:
+        if _writer_started:
+            return
+        t = threading.Thread(target=_writer_loop, daemon=True, name="inbox-writer")
+        t.start()
+        _writer_started = True
+
+
+def flush_pending(timeout=3.0):
+    """等待待写状态落盘（进程退出前调用）。
+
+    异步写盘牺牲了「返回即落盘」的保证：进程被优雅停止时，
+    最后一份可能还在队列里。此处给一个有时限的等待，
+    把「退出瞬间的丢失」压缩到可忽略。
+
+    @param timeout 最长等待秒数
+    @returns 是否已无待写数据
+    """
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with _pending_lock:
+            if _pending is None:
+                return True
+        time.sleep(0.02)
+    return False
+
+
+def write_state(state):
+    """更新内存缓存并安排后台写盘，立即返回。
+
+    内存缓存同步更新：紧随其后的读取能立刻看到新内容，不必等磁盘。
+    磁盘写盘异步执行：调用方（上报链路）不再为 700KB 全量写等待。
+    极端情况下进程崩溃可能丢失最后一次未落盘的写——收件箱是展示缓存，
+    抽屉下次上报会重新补上，可接受。
+
+    @param state 新的收件箱状态
+    """
+    global _cache, _pending
+    _cache = state
+    _ensure_writer()
+    with _pending_lock:
+        _pending = state
+    _pending_event.set()

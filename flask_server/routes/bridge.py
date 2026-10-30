@@ -186,6 +186,25 @@ def _is_weixin_openid(openid):
     return bool(openid) and str(openid).endswith(_WEIXIN_SUFFIX)
 
 
+def _is_wecom_openid(openid):
+    """判断某个 openid 是否属于企业微信用户。
+
+    企业微信单聊的用户 id 没有固定后缀（形如 NenHanSuoMengYinChunLeng），
+    无法像微信那样靠后缀识别。这里用「是否出现在企业微信会话表里」判断：
+    该表在收到每条消息时登记，是权威来源。
+
+    @param openid 用户标识
+    @returns 属于企业微信返回 True
+    """
+    if not openid or str(openid) in (_WEB_OPENID,):
+        return False
+    try:
+        from remote_bridge import wecom_router
+        return str(openid) in (wecom_router._load_chats() or {})
+    except Exception:
+        return False
+
+
 def _take_result_context(data):
     """取出待回传请求，并确定回传去向。
 
@@ -208,6 +227,13 @@ def _take_result_context(data):
         if not bridge.wx_client:
             return None, "", jsonify(success=False, error="weixin_offline")
         return bridge.wx_client, openid, None
+    # 企业微信版：单聊的 openid 是纯用户 id（无 @im.wechat 后缀），
+    # 只能按「是否属于企业微信通道」判断，不能靠后缀。
+    # 若漏掉这一支，会掉进下面的 QQ 分支、走窗口检查而静默失败。
+    if _is_wecom_openid(openid):
+        if not bridge.wecom_client:
+            return None, "", jsonify(success=False, error="wecom_offline")
+        return bridge.wecom_client, openid, None
     client = bridge.client
     if not client:
         return None, "", jsonify(success=False, error="bridge_offline")

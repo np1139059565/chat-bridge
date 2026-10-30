@@ -16,6 +16,8 @@ jieba>=0.42
 pytest>=7.0
 
 # 远程桥接语音链路依赖
+# cryptography：企业微信接收侧媒体需 AES-256-CBC 解密（wecom_proto.decrypt_media）
+cryptography>=41.0
 pilk>=0.2.4
 vosk>=0.3.45
 edge-tts>=7.2.8

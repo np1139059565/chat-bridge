@@ -205,6 +205,26 @@ def _delete_node_related(conn, node_id):
     return conn.execute("DELETE FROM nodes WHERE id=?", (node_id,)).rowcount
 
 
+def purge_orphan_edges():
+    """清理孤儿边：src 或 dst 指向已不存在节点的边。
+
+    为什么需要：早期 delete_conversation 只删节点不删边，
+    留下指向空节点的边。它们永远占空间，也没有别的代码会清掉。
+    此函数可安全反复调用，用于启动时兜底或手动清理。
+
+    @return 清理的边数
+    """
+    conn = get_conn()
+    # 用 NOT EXISTS 而非 NOT IN：子查询可能返回 NULL，NOT IN 会整体失效
+    n = conn.execute(
+        "DELETE FROM edges WHERE"
+        "  NOT EXISTS (SELECT 1 FROM nodes WHERE nodes.id = edges.src_node)"
+        "  OR NOT EXISTS (SELECT 1 FROM nodes WHERE nodes.id = edges.dst_node)"
+    ).rowcount
+    maybe_commit(conn)
+    return n
+
+
 def hard_delete(node_id):
     """硬删除：真删节点行及其全部关联数据，不可恢复。
 
@@ -220,7 +240,12 @@ def hard_delete(node_id):
 def hard_delete_many(node_ids):
     """批量硬删一批节点（连同它们的边与卡片）。
 
-    供图谱的「清理下级节点 / 清理旧节点」使用。
+    性能关键：必须按批处理，不能逐个节点循环。
+    旧实现每个节点跑 5 条 SQL，且删边要扫两遍 edges 表——
+    清空一个含万级节点的会话就是数万次 SQL、数十秒卡顿，
+    期间还占着写锁，拖慢所有其它请求。
+    改为「按批删关联数据 + 一条 SQL 删节点」，SQL 次数与批大小无关。
+
     @param node_ids 节点 id 列表
     @return 实际删除的节点数
     """
@@ -228,9 +253,20 @@ def hard_delete_many(node_ids):
         return 0
     conn = get_conn()
     total = 0
-    for nid in node_ids:
-        total += _delete_node_related(conn, nid)
-    maybe_commit(conn)
+    # 分批处理：单条 SQL 的占位符数量有上限（SQLite 默认 999），
+    # 且一次事务过大会长时间占锁，分批提交兼顾正确性与并发。
+    batch_size = 500
+    for i in range(0, len(node_ids), batch_size):
+        chunk = node_ids[i:i + batch_size]
+        ph = ",".join("?" for _ in chunk)
+        # 先删所有引用这批节点的关联数据，再删节点本身
+        conn.execute("DELETE FROM edges WHERE src_node IN (%s) OR dst_node IN (%s)"
+                     % (ph, ph), list(chunk) + list(chunk))
+        conn.execute("DELETE FROM cards WHERE node_id IN (%s)" % ph, chunk)
+        conn.execute("DELETE FROM revision_log WHERE node_id IN (%s)" % ph, chunk)
+        conn.execute("DELETE FROM notes WHERE node_id IN (%s)" % ph, chunk)
+        total += conn.execute("DELETE FROM nodes WHERE id IN (%s)" % ph, chunk).rowcount
+        maybe_commit(conn)
     return total
 
 

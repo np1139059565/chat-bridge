@@ -19,6 +19,17 @@ import json_utils
 SYNAPSE_MIN_INTERSECT = 3
 SYNAPSE_MIN_JACCARD = 0.3
 
+# 单个节点最多能建多少条突触边。
+# 无上限时，含「消息」「测试」这类通用词的新节点会和几百个历史节点匹配，
+# 每次入库都写入几百条边，累计到百万级，把写盘拖到秒级、拖慢全部通道。
+# 按相关度取前 N：检索时本就按相关度排序，靠后的关联价值低，
+# 砍掉它们对记忆质量影响很小。
+SYNAPSE_MAX_EDGES_PER_NODE = 20
+
+# 单次检索最多让多少个节点参与两两强化。
+# 两两配对是 O(n²)：100 个节点 = 4950 次 UPDATE，在百万行表上极慢。
+MAX_REINFORCE_NODES = 20
+
 # 分批让出解释器锁的粒度：每处理这么多条就 sleep(0) 让出一次执行权。
 # 纯 CPU 的两两匹配会长时间霸占 GIL，把并发请求一并卡住；定期让出可避免。
 _YIELD_EVERY = 50
@@ -36,13 +47,37 @@ def build_synapses(new_node_id):
     if not nk:
         return 0
     conn = get_conn()
-    # 一次查出全部候选（id + keywords）做内存匹配，不逐个 get_node，
-    # 避免 N 个节点触发 N 次查询、在并发入库时把写锁长期占住。
-    rows = conn.execute(
-        "SELECT id, keywords FROM nodes WHERE id!=? AND keywords IS NOT NULL AND keywords!='' AND deleted=0",
-        (new_node_id,),
-    ).fetchall()
+    # 先用内存倒排索引预筛候选，再按 id 精确取关键词。
+    # 原实现直接全表读所有节点关键词（万级时约 14ms，十万级会线性增长），
+    # 而系统里本就有 gram_index 倒排桶（见 memory_loader.keyword_prefilter），
+    # 用字片段直接命中候选，开销只与候选数相关、与库规模无关。
+    # 预筛不可用（缓存未加载 / 索引为空）时回退全表，保证正确性。
+    rows = None
+    try:
+        import memory_loader
+        cand = memory_loader.keyword_prefilter(list(nk))
+        if cand is not None:
+            cand_ids = [cid for cid, _hit in cand if cid != new_node_id]
+            if cand_ids:
+                ph = ",".join("?" for _ in cand_ids)
+                rows = conn.execute(
+                    "SELECT id, keywords FROM nodes WHERE id IN (%s)"
+                    " AND keywords IS NOT NULL AND keywords!='' AND deleted=0" % ph,
+                    cand_ids,
+                ).fetchall()
+            else:
+                rows = []
+    except Exception as e:
+        time.sleep(0)
+        rows = None
+    if rows is None:
+        # 回退：索引不可用时全表读（保持原有行为，不因索引故障漏建边）
+        rows = conn.execute(
+            "SELECT id, keywords FROM nodes WHERE id!=? AND keywords IS NOT NULL AND keywords!='' AND deleted=0",
+            (new_node_id,),
+        ).fetchall()
     count = 0
+    scored = []
     # 分批让出解释器锁：关键词两两匹配是纯 CPU 计算，节点多时会长时间霸占
     # GIL，把其它请求线程一并卡住（表现为多个不相关接口同时卡、同时放行）。
     # 每处理 _YIELD_EVERY 个候选就 sleep(0) 主动让出一次执行权，
@@ -53,9 +88,39 @@ def build_synapses(new_node_id):
         ok = set(_loads(r["keywords"], []))
         if not ok:
             continue
-        if _try_link(new_node_id, nk, r["id"], ok):
+        score = _score_pair(nk, ok)
+        if score is None:
+            continue
+        scored.append((score, r["id"], ok))
+    # 只保留相关度最高的前 N 个候选再建边。
+    # 不加这一步时，含通用词的新节点会与数百个历史节点全部建边，
+    # 每次入库写入数百行、累计到百万级，把写盘拖到秒级并拖慢所有通道。
+    scored.sort(key=lambda x: x[0], reverse=True)
+    for _score, cand_id, ok in scored[:SYNAPSE_MAX_EDGES_PER_NODE]:
+        if _try_link(new_node_id, nk, cand_id, ok):
             count += 1
     return count
+
+
+def _score_pair(nk, ok):
+    """给「新节点 vs 候选节点」打相关度分，不达标返回 None。
+
+    抽出来供排序用：建边前要按相关度取前 N 个候选，
+    所以需要先算出分数、再决定给谁建边。
+    判定门槛与 _try_link 保持一致，避免「评了高分却建不成边」。
+
+    @param nk 新节点关键词集合
+    @param ok 候选节点关键词集合
+    @returns Jaccard 分数；未达门槛返回 None
+    """
+    inter = _related(nk, ok)
+    if len(inter) < _adaptive_threshold(nk, ok):
+        return None
+    union = len(nk) + len(ok) - len(inter)
+    jac = len(inter) / union if union else 0.0
+    if jac < SYNAPSE_MIN_JACCARD:
+        return None
+    return jac
 
 
 def _adaptive_threshold(nk, ok):
@@ -143,11 +208,19 @@ def _grams(word):
 def reinforce_by_hits(hit_ids):
     """一次检索命中多个节点时，两两强化它们之间的突触边。
 
+    必须限数量：两两配对是 O(n²)，命中 100 个节点就是 4950 次数据库操作。
+    早期无上限时，每次检索都在百万行表上跑几千次 UPDATE，
+    是三个通道同时变慢的主因之一。
+
+    只取前 MAX_REINFORCE_NODES 个节点参与配对：检索结果本就按相关度
+    排序，靠后的节点关联度低，少强化它们对记忆质量影响极小。
+
     @param hit_ids 本次命中的节点 id 列表
     """
-    for i in range(len(hit_ids)):
-        for j in range(i + 1, len(hit_ids)):
-            memory_edges.reinforce_edge(hit_ids[i], hit_ids[j], "associative")
+    ids = list(hit_ids or [])[:MAX_REINFORCE_NODES]
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            memory_edges.reinforce_edge(ids[i], ids[j], "associative")
 
 
 class UnionFind:

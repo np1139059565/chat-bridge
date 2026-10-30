@@ -18,6 +18,7 @@
 """
 from . import bridge_store, message_router, qq_gateway, command_panel
 from . import weixin_gateway, weixin_router, weixin_login
+from . import wecom_client, wecom_gateway, wecom_router
 import app_log
 
 
@@ -37,6 +38,9 @@ class RemoteBridge:
         self.wx_client = None
         self.wx_gateway = weixin_gateway.WeixinGateway(on_command=command_panel.handle_command)
         self.wx_login = None
+        # 企业微信通道（第三条）：WebSocket 长连接，支持主动推送与图片/文件
+        self.wecom_client = None
+        self.wecom_gateway = wecom_gateway.WecomGateway(on_command=command_panel.handle_command)
 
     # ---------- QQ ----------
     def _check_startable(self, cfg):
@@ -145,6 +149,38 @@ class RemoteBridge:
         self.wx_login = weixin_login.WeixinLogin(self.wx_client)
         return self.wx_login
 
+    # ---------- 企业微信 ----------
+    def _start_wecom(self, cfg):
+        """按配置启动企业微信通道。
+
+        与微信的差别：微信凭证来自扫码，企业微信凭证是手工填的 BotID/Secret。
+        两者都只看开关与凭证是否齐备；缺凭证就不启动，页面仍可保存配置。
+        @param cfg 桥接配置
+        @returns 是否成功启动
+        """
+        wc = cfg.get("wecom") or {}
+        if not wc.get("enabled"):
+            log("企业微信通道未启用，跳过启动")
+            return False
+        bot_id = (wc.get("bot_id") or "").strip()
+        secret = (wc.get("secret") or "").strip()
+        if not bot_id or not secret:
+            log("缺少企业微信 BotID / Secret，无法启动")
+            return False
+        self.wecom_client = wecom_client.WecomClient(
+            bot_id, secret, self.wecom_gateway.handle_message)
+        self.wecom_gateway.client = self.wecom_client
+        ok = self.wecom_client.start()
+        if ok:
+            log("企业微信通道已启动")
+        return ok
+
+    def _stop_wecom(self):
+        """停止企业微信通道。"""
+        if self.wecom_client:
+            self.wecom_client.stop()
+        self.wecom_client = None
+
     # ---------- 生命周期 ----------
     def start(self):
         """按配置启动全部通道。已启动则先停再起（配置可能变了）。"""
@@ -152,12 +188,14 @@ class RemoteBridge:
         self.stop()
         qq_ok = self._start_qq(cfg)
         wx_ok = self._start_weixin(cfg)
-        return qq_ok or wx_ok
+        wc_ok = self._start_wecom(cfg)
+        return qq_ok or wx_ok or wc_ok
 
     def stop(self):
         """停止全部通道。"""
         self._stop_qq()
         self._stop_weixin()
+        self._stop_wecom()
 
     def restart(self):
         """重启全部通道：配置变更后调用。"""
@@ -185,6 +223,12 @@ class RemoteBridge:
                 weixin_router.handle_report(self.wx_client, payload)
             except Exception as e:
                 log("微信推送异常：", e)
+        wc = cfg.get("wecom") or {}
+        if wc.get("enabled") and self.wecom_client:
+            try:
+                wecom_router.handle_report(self.wecom_client, payload)
+            except Exception as e:
+                log("企业微信推送异常：", e)
         return sent
 
     def status(self):
@@ -198,6 +242,7 @@ class RemoteBridge:
         last_event = getattr(self.client, "_last_event", "") if self.client else ""
         wx_cfg = cfg.get("weixin") or {}
         wx_connected = bool(self.wx_client and getattr(self.wx_client, "_ws_connected", False))
+        wc_cfg = cfg.get("wecom") or {}
         return {
             "enabled": bool(cfg.get("enabled")),
             "connected": connected,
@@ -212,6 +257,15 @@ class RemoteBridge:
                 "hasCred": bool(self.wx_client and self.wx_client.has_cred()),
                 "botId": ((self.wx_client._cred or {}).get("bot_id") if self.wx_client else "") or "",
                 "lastEvent": getattr(self.wx_client, "_last_event", "") if self.wx_client else "",
+            },
+            # 企业微信通道状态
+            "wecom": {
+                "enabled": bool(wc_cfg.get("enabled")),
+                "connected": bool(self.wecom_client and getattr(self.wecom_client, "_connected", False)),
+                "hasCred": bool((wc_cfg.get("bot_id") or "").strip()
+                                and (wc_cfg.get("secret") or "").strip()),
+                "botId": (wc_cfg.get("bot_id") or ""),
+                "lastEvent": getattr(self.wecom_client, "_last_event", "") if self.wecom_client else "",
             },
         }
 

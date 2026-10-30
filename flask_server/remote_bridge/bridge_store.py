@@ -1,18 +1,14 @@
 """远程桥接 —— 配置与去重记账存储
 
 职责：
-1. 读写桥接配置：QQ 凭证、推送开关、指令列表（存于两份主配置的 bridge 分区）
+1. 读写桥接配置（各通道凭证、推送开关、指令列表，存于两份主配置的 bridge 分区）
 2. 维护「已推送消息 id 集合」并持久化，按会话隔离
 
 设计说明：
-- 配置按「定义 / 运行时」分落两份主配置的 bridge 分区：
-  definition.yaml（入库）存指令、选择器、订阅事件位；
-  runtime.yaml（不入库）存凭证、总开关、推送开关。
-  如此既避免 QQ 凭证随仓库外泄，又保证指令等定义换机器时仍保留。
-- 已推送集合必须持久化：sendPage 每次推送全量切片，若不记账，
-  服务重启后会把历史消息全量复推、刷屏用户手机。
-- 所有写操作都加锁，桥接层可能在 WebSocket 回调线程与 Flask 请求线程
-  中同时读写。
+- 配置按「定义 / 运行时」分落两份主配置：definition.yaml（入库）存指令与选择器；
+  runtime.yaml（不入库）存凭证与开关。既防凭证外泄，又保证定义换机器仍保留。
+- 已推送集合必须持久化：抽屉每次推送全量切片，不记账则重启后全量复推、刷屏。
+- 所有写操作加锁：桥接层可能在 WebSocket 回调线程与 Flask 请求线程同时读写。
 """
 import json
 import threading
@@ -23,26 +19,20 @@ import runtime
 import config_file
 import app_log
 
-# 路径说明：
-#   definition.yaml / runtime.yaml —— 桥接配置集中在两份合并文件的 bridge 分区，见下
-#   remote_bridge_state.json      —— 已推送去重记账，运行时产物，不入库
+# 路径：配置在两份合并文件的 bridge 分区；去重记账在 remote_bridge_state.json（不入库）
 BRIDGE_STATE_PATH = paths.BRIDGE_STATE_PATH
 
 # 桥接配置集中在两份合并文件的 bridge 分区（见 core/config_file.py）：
-#   definition.yaml 的 bridge —— 定义（入库）：指令、选择器、订阅事件位
-#   runtime.yaml 的 bridge    —— 运行时与密钥（不入库）：开关、凭证、推送开关
-# 密钥字段：与运行时同写 runtime.yaml（不入库）
+#   definition.yaml —— 定义（入库）：指令、选择器、订阅事件位
+#   runtime.yaml    —— 运行时与密钥（不入库）：开关、凭证、推送开关
 SECRET_KEYS = ("app_id", "app_secret")
-# 定义字段：写 definition.yaml 的 bridge 分区（入库，换机器应保留）
-#   command_params：内置指令的参数（键为指令名不带 /，如 {"md": {"selector": "..."}}）。
-#   md_selector 为旧字段，保留在兼容列表里，读取时归并进 command_params。
+# 定义字段：写 definition.yaml（入库）。md_selector 为旧字段，读取时归并进 command_params。
 SETTING_KEYS = ("intents", "md_selector", "command_params", "commands")
 # 运行时字段：写 runtime.yaml 的 bridge 分区（不入库，随本机状态变）
-RUNTIME_KEYS = ("enabled", "push", "weixin")
+RUNTIME_KEYS = ("enabled", "push", "weixin", "wecom")
 
-# 用可重入锁：save_config 持锁期间会调用 get_config()，
-# 后者在未初始化时会进入 load_config() 再取同一把锁。
-# 普通 Lock 会在此自锁死，故必须用 RLock。
+# 必须用可重入锁：save_config 持锁期间会调 get_config()，后者可能再取同一把锁，
+# 普通 Lock 会在此自锁死。
 _lock = threading.RLock()
 
 # 推送开关默认值：三类消息都推，思考过程默认不推
@@ -62,9 +52,7 @@ def _default_config():
             # 开时语音经识别转文字、回发等 /vo 确认后才投给 AI。默认关。
             "voice": False,
             # 语音合成引擎：piper / pyttsx3 / sapi / edge_tts / auto。
-            # auto 时按 voice_fallback 的顺序逐个尝试，全部失败才算合成失败。
-            # 默认 auto：新环境未装 Piper 时自动落到系统语音或在线引擎，
-            # 不会因缺少本地模型而失效。
+            # auto 按 voice_fallback 顺序逐个尝试；默认 auto 保证新环境缺 Piper 时仍能用。
             "voice_engine": "auto",
             # auto 模式的引擎优先级，逗号分隔。
             # sapi 排在线引擎之前：它离线、零安装，比依赖外网的在线接口更可靠。
@@ -96,11 +84,17 @@ def _default_config():
         },
         # 指令列表：{name, label, selector, page_url} 或组合指令 {name, label, steps, interval}
         "commands": [],
-        # 微信通道（ClawBot / iLink）配置。
-        # 与 QQ 并列的第二条通道，独立开关、独立推送；
-        # 凭证不在此处，扫码成功后写独立的凭证文件（含 bot_token，权限 600）。
+        # 微信通道（ClawBot / iLink）配置。凭证不在配置里，扫码后写独立文件（权限 600）。
         "weixin": {
             "enabled": False,       # 默认关闭：需扫码登录后才启用
+        },
+        # 企业微信智能机器人通道（第三条通道）。
+        # 与微信并列独立：走 WebSocket 长连接，支持主动推送与图片/文件。
+        # 凭证（BotID / Secret）是密钥，与 enabled 同存 runtime.yaml（不入库）。
+        "wecom": {
+            "enabled": False,       # 默认关闭：需填好凭证后再启用
+            "bot_id": "",           # 机器人 ID
+            "secret": "",           # 机器人密钥（只显示一次，注意首尾空格）
         },
     }
 
@@ -183,6 +177,8 @@ def load_config():
             cfg["push"].update(raw["push"])
         if isinstance(raw.get("weixin"), dict):
             cfg["weixin"].update(raw["weixin"])
+        if isinstance(raw.get("wecom"), dict):
+            cfg["wecom"].update(raw["wecom"])
         if isinstance(raw.get("commands"), list):
             _merge_commands(cfg, raw)
         _CONFIG = cfg
@@ -216,6 +212,8 @@ def save_config(patch):
             cfg["push"].update(patch["push"])
         if isinstance(patch.get("weixin"), dict):
             cfg["weixin"].update(patch["weixin"])
+        if isinstance(patch.get("wecom"), dict):
+            cfg["wecom"].update(patch["wecom"])
         if isinstance(patch.get("commands"), list):
             cfg["commands"] = patch["commands"]
         # 分写：密钥进密钥文件（不入库），其余进设置文件（入库）
@@ -258,9 +256,8 @@ def _write_state(state):
     @param state 要写入的字段字典
     """
     try:
-        # 加锁：本函数是「读—改—写」，若两个写者并发（如已推记账与窗口存盘），
-        # 会互相覆盖对方刚写的字段而丢数据。_lock 为可重入锁，
-        # 从 mark_pushed 等持锁路径调用本函数也不会自锁死。
+        # 加锁：本函数是「读—改—写」，两个写者并发会互相覆盖字段。
+        # _lock 可重入，从 mark_pushed 等持锁路径调用也不会自锁死。
         with _lock:
             old = _read_state()      # 先取现有内容
             old.update(state)        # 用本次字段覆盖同名键
@@ -270,13 +267,8 @@ def _write_state(state):
         app_log.warn("[bridge]", "写回去重状态失败：", e)
 
 
-# 说明：openid 与被动回复窗口一律不落盘。
-# 二者都是「当前这次 QQ 会话」的运行时状态：窗口带 msg_id 与序号，
-# 序号在同一 msg_id 下必须唯一，重启后若把旧窗口原样恢复、
-# 却从 1 重新计数，必然与已用序号相撞被 QQ 判重丢弃（40054005）。
-# 因此它们的生命周期严格跟随进程：进程没了就重建，
-# 由用户下一条 QQ 消息重新打开窗口。推送时若窗口已失效，
-# 消息进入待推缓存积压，待新窗口建立后自动补推。
+# 说明：QQ 的 openid 与被动回复窗口不落盘——序号在同一 msg_id 下必须唯一，
+# 重启后从 1 重数会撞号被判重丢弃，故其生命周期严格跟随进程。
 
 
 # 去重集合的内存缓存：{ 会话 id: set(消息 id) }
@@ -359,11 +351,8 @@ def mark_pushed(conv_id, msg_ids):
 
 
 # ---------- 待推消息缓存（推送失败后重试） ----------
-# 用途：某条消息推送失败（窗口关闭 / 网络错误）时暂存于此，下次上报时优先重试。
-# 解决：一条消息推送失败后若滚出网页可见区，就不再出现在上报切片里，
-#       没有这份缓存就永远推不到（表现为「最后一轮被漏、下次才补」）。
-# 仅存内存：进程重启即清空，可接受——重启后抽屉会重新上报全量切片，
-#          且窗口正常时消息本就会推成功。
+# 推送失败的消息暂存于此，下次上报时优先重试：失败的消息若滚出可见区就不再
+# 出现在切片里，没有缓存则永远推不到。仅存内存，重启后抽屉会重新上报全量。
 _pending_msgs = {}
 
 
@@ -384,6 +373,43 @@ def load_last_weixin_user():
     @returns 用户标识；未记录时返回空串
     """
     return (_read_state() or {}).get("last_weixin_user") or ""
+
+
+def save_wecom_chats(chats):
+    """持久化企业微信会话表。
+
+    企业微信的主动推送依赖 chatid；只存内存的话服务重启后就推不出去了。
+    与微信的上下文令牌不同，chatid 不含时效信息，可安全长期保存。
+
+    @param chats 会话表 {chatid: {chat_type, user, ts}}
+    """
+    if chats is not None:
+        _write_state({"wecom_chats": chats})
+
+
+def load_wecom_chats():
+    """读取持久化的企业微信会话表。
+
+    @returns 会话表；未记录时返回空字典
+    """
+    return (_read_state() or {}).get("wecom_chats") or {}
+
+
+def save_last_wecom_user(user_id):
+    """持久化最近发来企业微信消息的用户标识（回退用途）。
+
+    @param user_id 用户标识
+    """
+    if user_id:
+        _write_state({"last_wecom_user": user_id})
+
+
+def load_last_wecom_user():
+    """读取持久化的企业微信用户标识。
+
+    @returns 用户标识；未记录时返回空串
+    """
+    return (_read_state() or {}).get("last_wecom_user") or ""
 
 
 def merge_pending(conv_id, messages):

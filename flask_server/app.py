@@ -25,6 +25,7 @@ from routes.cards import bp as cards_bp
 from routes.ext import bp as ext_bp
 from routes.bridge import bp as bridge_bp
 from routes.bridge_weixin import bp as bridge_weixin_bp
+from routes.bridge_wecom import bp as bridge_wecom_bp
 from routes.memory_graph import bp as memory_bp
 from routes.memory_graph_page import bp as memory_page_bp
 from routes.web import bp as web_bp
@@ -43,6 +44,7 @@ def _register_blueprints(app):
     app.register_blueprint(ext_bp)
     app.register_blueprint(bridge_bp)
     app.register_blueprint(bridge_weixin_bp)
+    app.register_blueprint(bridge_wecom_bp)
     app.register_blueprint(memory_bp)
     app.register_blueprint(memory_page_bp)
     app.register_blueprint(web_bp)

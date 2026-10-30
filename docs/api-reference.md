@@ -478,6 +478,25 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 
 退出登录：清除本机凭证并停止长轮询。返回 `{ success, ...status }`。
 
+### 企业微信通道（/api/bridge/wecom）
+
+企业微信智能机器人通道，与 QQ、微信并列的第三条通道。
+走 WebSocket 长连接（`wss://openws.work.weixin.qq.com`），凭证为手工填写的
+BotID / Secret，支持主动推送、图片、文件与群聊。
+
+#### GET /api/bridge/wecom/status
+
+查询企业微信通道状态。
+返回 `{ success, channel: {enabled, connected, hasCred, botId, lastEvent}, botId, hasSecret, chatid, chatType }`。
+`hasSecret` 只表示是否已保存密钥，不回传明文。
+`chatid` 为当前活跃会话，主动推送依赖它。
+
+#### POST /api/bridge/wecom/config
+
+保存通道开关与凭证。请求：`{ enabled?, bot_id?, secret? }`。
+`secret` 留空表示不修改已有值——避免只想改开关时把密钥清空。
+保存后自动重启桥接以重建长连接。返回 `{ success, wecom, ...status }`。
+
 ---
 
 ## 九、网页版机器人（/api/web 与 /web-bot）
