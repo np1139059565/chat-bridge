@@ -19,7 +19,7 @@ import base64
 import os
 import time
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 
 import paths
 import web_bridge
@@ -143,3 +143,26 @@ def web_file():
         label = (str(data.get("text") or "").strip() or "[文件]") + " " + result.get("name", "")
         web_inbox.append("user", label, kind="web-file", image="")
     return jsonify(**result), status
+
+
+@bp.route("/api/web/file-download/<name>", methods=["GET", "OPTIONS"])
+def web_file_download(name):
+    """下载网页会话中被推送的文件（push_file 在网页版下的产物）。
+
+    手机浏览器点开链接即下载；文件名唯一（原名 + 时间戳），内容不变，
+    故设强缓存。先做目录穿越校验，只允许纯文件名且必须落在下载目录内。
+    @param name 下载目录下的文件名
+    @returns 文件响应；非法名或文件不存在返回 404
+    """
+    # 只允许纯文件名：拦截 / \ .. 等穿越构造，避免读到目录外的文件
+    if not name or "/" in name or "\\" in name or ".." in name:
+        return jsonify(success=False, error="not_found"), 404
+    base = paths.WEB_FILES_DIR.resolve()
+    target = (paths.WEB_FILES_DIR / name).resolve()
+    # 解析后仍须位于下载目录之下，双保险
+    if os.path.commonpath([str(base), str(target)]) != str(base):
+        return jsonify(success=False, error="not_found"), 404
+    if not target.is_file():
+        return jsonify(success=False, error="not_found"), 404
+    return send_file(str(target), as_attachment=True, download_name=name,
+                     conditional=True, max_age=604800)

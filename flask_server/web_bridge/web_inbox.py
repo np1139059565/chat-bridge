@@ -112,6 +112,12 @@ def append(role, text, voice="", kind="", image="", voice_text=""):
     @param voice_text 可选，待朗读的文本；点播时据此按需合成，不占用上报链路
     @returns 追加后的消息对象（含分配好的 seq 与 id）
     """
+    # 登记最近活跃渠道：仅当这是「用户在网页侧发的消息」时才登记。
+    # 本函数也会被 AI 回复、指令回执、系统提示调用，那些不算用户发声，
+    # 若一并登记会让「最后谁说话」被系统消息带偏。
+    if role == "user":
+        import active_channel
+        active_channel.note("web")
     # 复用 _make_msg 构造消息对象，避免与 append_many 各写一份字段表
     it = {
         "role": role, "text": text, "voice": voice, "voice_text": voice_text,

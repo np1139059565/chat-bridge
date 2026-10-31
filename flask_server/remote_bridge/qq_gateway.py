@@ -59,6 +59,12 @@ class QqGateway:
             # 积压消息要等下一次网页上报才推得出去。
             message_router.note_incoming(openid, msg_id, self.qq_client)
 
+        # 登记最近活跃渠道为 QQ：用户刚在 QQ 侧发了消息（含 /h 这类指令，
+        # 指令同样是一条入向消息）。后续主动下发（推送文件、合成语音）据此
+        # 往 QQ 投递，与网页侧共用同一条「谁最后说话就推给谁」的规则。
+        import active_channel
+        active_channel.note("qq")
+
         # 语音 / 图片等富媒体：正文通常为空，必须先于「content 判空」处理，
         # 否则会被当成空消息丢掉。命中即已消费本条事件。
         if self._handle_media(openid, data, msg_id, content):

@@ -65,6 +65,11 @@ WEB_IMAGES_DIR = WEB_DIR / "images"
 # 分段读取目录：read_file 分段读取的正文落这里，供「重新粘贴」按路径取回。
 # 只存片段文本，按数量上限回收（见 core/file_prune.py）。
 WEB_SEGMENTS_DIR = WEB_DIR / "segments"
+# 网页下载目录：push_file 在网页版会话中推送的文件落这里，
+# 由 /api/web/file-download 路由按文件名下发，手机浏览器据此直接下载。
+# 与网页图片目录分开：下载文件是任意白名单类型（zip / md），
+# MIME 与展示方式都不同，混放会让下发逻辑互相干扰。
+WEB_FILES_DIR = WEB_DIR / "files"
 # 记忆系统目录：结构化记忆数据库（消息树 + 蒸馏 + 事件层）落这里。
 # 单一 SQLite 文件承载全部记忆，启动时加载进内存，供接口读写。
 MEMORY_DB_DIR = DATA_DIR / "memory"

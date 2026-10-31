@@ -55,6 +55,32 @@ def _suffix(path):
     return suffix_of(path)
 
 
+def _push_to_web(fp, size):
+    """把文件交付给网页版：复制进下载目录，返回可点击的下载链接。
+
+    与 QQ 推送的区别：网页侧不依赖任何「最近一次交互句柄」，
+    文件落盘后由下载路由按文件名下发，手机浏览器直接下载。
+    @param fp   源文件绝对路径
+    @param size 文件字节数（已校验过体积上限）
+    @return { pushed, name, size, target, url, note? }
+    """
+    from web_file_delivery import save_for_web, download_url
+    try:
+        saved = save_for_web(fp)
+    except Exception as e:
+        # 落盘失败（磁盘满、权限不足等）属环境问题，如实告知并保留源文件
+        raise ToolParamError("文件已校验但保存到网页下载目录失败：%s" % e)
+    return {
+        "pushed": True,
+        "name": os.path.basename(fp),
+        "size": size,
+        "target": "web",
+        # 相对链接：前端按当前站点拼出完整地址，手机点开即下载
+        "url": download_url(saved["name"]),
+        "note": "已保存到网页下载目录。请在回复中把上面 url 原样写出，供用户在手机上点击下载。",
+    }
+
+
 def t_push_file(p):
     """把本地文件推送到用户手机 QQ。
 
@@ -87,11 +113,19 @@ def t_push_file(p):
             % (size / 1048576.0, limit / 1048576.0)
         )
 
+    # 投递方向：跟着「最后一个给机器人发消息的客户端」走。
+    # 谁刚说过话，产物就推回谁那里，与语音等其它下发的口径一致。
+    import active_channel
+    if active_channel.is_web():
+        return _push_to_web(fp, size)
+
     # 取桥接上下文：客户端句柄与推送目标都来自「最近一次 QQ 交互」
     from remote_bridge import message_router as mr
     client = mr.get_last_client()
     openid = mr.get_last_openid()
-    # 桥接未启用或从未收到过 QQ 消息：没有可用的推送目标
+    # 桥接未启用或从未收到过 QQ 消息：没有可用的推送目标。
+    # 这不是参数问题（path 是对的），而是推送通道尚未建立，
+    # 故归为环境类，提示先建立会话而不是反复改路径。
     if not client or not openid:
         raise ToolParamError(
             "远程桥接尚未就绪：请先在手机 QQ 里给机器人发一条消息，再重试"
