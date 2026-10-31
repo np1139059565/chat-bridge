@@ -112,8 +112,11 @@ def _run_with_timeout(fn, params, timeout):
     @raises TimeoutError 超时未返回
     """
     global _timeout_streak
-    pool = _TOOL_POOL
-    future = pool.submit(fn, params)
+    # 取池与提交须在同一把锁内：否则两步之间另一线程可能重建并 shutdown 该池，
+    # submit 抛 RuntimeError，被误归为工具代码缺陷。
+    with _pool_lock:
+        pool = _TOOL_POOL
+        future = pool.submit(fn, params)
     try:
         result = future.result(timeout=timeout)
     except _futures.TimeoutError:

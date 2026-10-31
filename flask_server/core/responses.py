@@ -34,7 +34,9 @@ def exception_payload(e, include_tool=None):
     @param include_tool 需要回填的 tool 字段；None 表示不含该字段
     """
     tb_str = traceback.format_exc()
-    origin = classify_error(e)
+    # 传入工具名：分类器据此区分「调用方漏传已声明的参数」与「实现里键名写错」，
+    # 不传的话该判别恒走保守分支、永远返回参数问题，等于形同虚设。
+    origin = classify_error(e, tool_name=include_tool)
     payload = {
         "success": False,
         "error": "%s: %s" % (type(e).__name__, e),

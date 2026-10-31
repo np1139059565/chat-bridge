@@ -169,16 +169,20 @@ def _context_lines(lines, lineno, count, before):
     return out
 
 
-def _collect_file_matches(f, regex, glob, context, current_total):
+def _collect_file_matches(f, regex, glob, context, current_total, limit=None):
     """在单个文件内按正则收集匹配行，可附带匹配行上下各若干行。
 
     @param context       匹配行上下各附带的上下文行数；0 表示只返回匹配行本身
     @param current_total 本次搜索已收集的匹配总数（含此前文件）
+    @param limit         本次搜索的条数上限；None 时退回模块默认值
     @return 该文件新增的匹配列表；文件不可读或不符合 glob 时为空
 
-    截断语义与原实现一致：一旦总数达到上限，本文件内层循环即停止，
-    但外层仍会继续遍历后续文件（每文件最多再贡献一条）。
+    截断语义：一旦累计总数达到上限，本文件内层循环立即停止，
+    由调用方据此结束后续文件的遍历。上限由调用方传入，
+    使设置页配置的 max_results 真正生效。
     """
+    # 上限取值：优先用调用方传入的配置值，未传时退回模块默认值
+    cap = _SEARCH_MATCH_LIMIT if limit is None else int(limit)
     if glob and not fnmatch.fnmatch(f.name, glob):
         return []
     try:
@@ -195,7 +199,8 @@ def _collect_file_matches(f, regex, glob, context, current_total):
                 hit["contextBefore"] = _context_lines(lines, i, context, True)
                 hit["contextAfter"] = _context_lines(lines, i, context, False)
             hits.append(hit)
-            if current_total + len(hits) >= _SEARCH_MATCH_LIMIT:
+            # 累计（此前文件 + 本文件）达到本次搜索上限即停止本文件收集
+            if current_total + len(hits) >= cap:
                 break
     return hits
 
@@ -228,7 +233,7 @@ def t_search_content(p):
     matches = []
     # 用 _iter_files 遍历：跳过 models/ .git/ 等大目录，避免递归卡死
     for f in _iter_files(root):
-        matches += _collect_file_matches(f, regex, glob, context, len(matches))
+        matches += _collect_file_matches(f, regex, glob, context, len(matches), max_results)
         if len(matches) >= max_results:
             matches = matches[:max_results]
             break

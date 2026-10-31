@@ -160,9 +160,12 @@ def require(p, *names):
     for n in names:
         v = p.get(n)
         if v is None or (isinstance(v, str) and v.strip() == ""):
+            # 提示语只说明「缺哪个参数 + 去查参数定义」，不写死任何具体参数名：
+            # 本函数服务于 task_id / rule / pattern 等所有参数，写死 path / file 会把调用方
+            # 引向与当前工具无关的方向。
             raise ToolParamError(
-                "缺少必填参数 %s。注意：本工具参数名就是 %s（请先用 get_tool_params 核对准确参数名，"
-                "不要臆造 path / file 等别名）" % (n, n)
+                "缺少必填参数 %s。请先用 get_tool_params 查询本工具的准确参数名，"
+                "按查询结果原样传入后重试。" % n
             )
     return True
 

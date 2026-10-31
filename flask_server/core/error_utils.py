@@ -28,13 +28,48 @@ def param_error_cls():
     return getattr(runtime.impl, "ToolParamError", None)
 
 
-def classify_error(e):
-    """把异常归类，决定 AI 该「改参数重试」还是「改工具代码」。"""
+def _declared_param_names(tool_name):
+    """取某内置工具声明过的参数名集合；取不到时返回空集合。
+
+    用途：区分「调用方漏传已声明的参数」与「工具实现引用了不存在的键」。
+    只查内置工具表：自定义 / 外部工具走各自的执行通道，不经过本分类器。
+    @param tool_name 工具名；None 或未知工具返回空集合
+    @returns 参数名集合
+    """
+    if not tool_name:
+        return set()
+    entry = runtime.TOOLS.get(tool_name) or {}
+    names = set()
+    for p in entry.get("parameters") or []:
+        # 参数定义形如 {"name": "path", ...}；缺 name 的条目跳过
+        n = p.get("name") if isinstance(p, dict) else None
+        if n:
+            names.add(n)
+    return names
+
+
+def classify_error(e, tool_name=None):
+    """把异常归类，决定 AI 该「改参数重试」还是「改工具代码」。
+
+    @param e         捕获到的异常
+    @param tool_name 出错工具名；用于 KeyError 的精确判别，未知时可传 None
+    """
     # 参数异常类可能取不到（impl 未注入或未定义该类），此时跳过这一档判断
     _pec = param_error_cls()
     if _pec is not None and isinstance(e, _pec):
         return "parameter"
-    if isinstance(e, (KeyError, TypeError, ValueError)):
+    # KeyError 精确判别：缺失的键是工具声明过的参数 → 调用方漏传；
+    # 不是声明过的参数 → 实现里键名写错（代码缺陷），不能引向「改参数」。
+    # 这是唯一能在分类器层面可靠区分的异常类型；
+    # TypeError / ValueError 保持原判（见下方说明），不在此处猜测。
+    if isinstance(e, KeyError):
+        key = e.args[0] if e.args else None
+        declared = _declared_param_names(tool_name)
+        # 声明过、或工具名未知（无从判别）时，按参数问题处理，保持原有保守口径
+        if key in declared or not declared:
+            return "parameter"
+        return "tool_internal"
+    if isinstance(e, (TypeError, ValueError)):
         return "parameter"
     if isinstance(e, (FileNotFoundError, NotADirectoryError, IsADirectoryError,
                       PermissionError, UnicodeDecodeError)):
