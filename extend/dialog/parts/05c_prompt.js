@@ -202,6 +202,8 @@
     const payload = { tool: card.tool, type: 'bridge-chat-res', nonce: nonce };
     if (card.status === 'done') {
       payload.success = true;
+      // 成功分支必然是工具真实执行完毕，显式声明执行状态，与失败分支口径一致。
+      payload.executed = true;
       // 文件附件的结果里带正文（dataURL），直接序列化会把整段正文写进消息。
       // 此处换成只含元信息的摘要：正文已作为附件粘贴，标记只需交代身份与文件名。
       const files = D.extractFile(card.result);
@@ -220,8 +222,18 @@
     } else {
       payload.success = false;
       payload.origin = card.origin || 'unknown';
-      payload.originNote = 'parameter=参数问题，改参数重试即可；environment=路径/权限问题；'
-        + 'tool_internal=本地工具代码缺陷，改参数无效，需检查工具实现';
+      // 按真实归因给出对应说明，避免把无关的猜测一并抛出造成误导。
+      // 未识别的归因才退回「原因未分类」的中性描述。
+      payload.originNote = ({
+        precheck: 'precheck=执行前拦截，本次工具未被调用；'
+          + '原因是本次回复未通过质量/调用规范检查，按 hint 调整回复后重新调用即可',
+        parameter: 'parameter=参数问题，改参数重试即可',
+        environment: 'environment=路径/权限问题，确认路径与权限后重试',
+        tool_internal: 'tool_internal=本地工具代码缺陷，改参数无效，需检查工具实现',
+      })[payload.origin] || 'unknown=未能识别的失败来源，详见 error 与 hint';
+      // 执行状态：以 errorType 为唯一依据。not_executed 表示工具从未被调用（执行前拦截），
+      // 其余 errorType 均为工具真实执行后返回的失败。
+      payload.executed = card.errorType !== 'not_executed';
       if (card.errorType) payload.errorType = card.errorType;
       if (card.error) payload.error = card.error;
       if (card.location && card.location.file) payload.location = card.location;

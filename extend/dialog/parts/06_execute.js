@@ -93,6 +93,12 @@
     // 典型后果：一次返回多个调用块被拦下，AI 以为文件都改好了，实际一个没改。
     // 故状态记为 error，并在结果里明确写明未执行与原因。
     card.status = 'error';
+    // 归因固定为「执行前拦截」：本次是回复质量/调用规范检查未通过，工具从未被调用，
+    // 与参数错误、环境问题、工具代码缺陷无关。写准归因，回传时才能给出准确说明。
+    card.origin = 'precheck';
+    // 把拦截阶段的真实原因挂到 hint，回传函数会原样带出（resultText 已有 hint 字段）。
+    card.hint = '本次工具【未执行】：' + (card.preIssue.message || '')
+      + '\n请按上述要求调整后重新发起调用。';
     card.error = card.preIssue.error || 'not_executed';
     card.errorType = 'not_executed';
     card.result = {
