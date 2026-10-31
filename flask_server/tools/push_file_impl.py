@@ -64,20 +64,24 @@ def _push_to_web(fp, size):
     @param size 文件字节数（已校验过体积上限）
     @return { pushed, name, size, target, url, note? }
     """
-    from web_file_delivery import save_for_web, download_url
+    from web_file_delivery import save_for_web, download_url, notify_inbox
     try:
         saved = save_for_web(fp)
     except Exception as e:
         # 落盘失败（磁盘满、权限不足等）属环境问题，如实告知并保留源文件
         raise ToolParamError("文件已校验但保存到网页下载目录失败：%s" % e)
+    original = os.path.basename(fp)
+    # 由工具直接把下载条目投进网页收件箱：用户看到的就是可点条目，
+    # 不依赖 AI 在回复里复述链接（复述既多一轮，也可能抄错地址）。
+    notify_inbox(saved["name"], original)
     return {
         "pushed": True,
-        "name": os.path.basename(fp),
+        "name": original,
         "size": size,
         "target": "web",
-        # 相对链接：前端按当前站点拼出完整地址，手机点开即下载
+        # 相对链接：跟随用户实际访问的主机与端口，换机换 IP 都不会失效
         "url": download_url(saved["name"]),
-        "note": "已保存到网页下载目录。请在回复中把上面 url 原样写出，供用户在手机上点击下载。",
+        "note": "已投递下载条目到网页会话，用户可直接点击下载。无需在回复中重复链接。",
     }
 
 

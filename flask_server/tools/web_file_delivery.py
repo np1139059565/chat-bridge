@@ -86,5 +86,33 @@ def _prune():
 
 
 def download_url(name):
-    """拼出网页下载链接（相对路径，前端可基于当前站点直接打开）。"""
+    """拼出网页下载链接。
+
+    刻意返回相对路径：手机浏览器渲染消息时会基于当前页面地址解析，
+    主机与端口自动跟随用户实际访问的地址。若在此写死绝对地址，
+    服务换机、换 IP 或换端口后链接即刻失效（曾因此把链接指向了另一台机器的 IP）。
+    """
     return "/api/web/file-download/%s" % name
+
+
+def notify_inbox(name, original):
+    """把「文件已就绪」这条消息直接投进网页收件箱。
+
+    为什么不靠 AI 在回复里复述链接：AI 复述多一道转述环节，
+    既多一轮往返，也可能把地址抄错。由工具直接投递，
+    用户看到的就是可点击的下载条目。
+    @param name     下载目录中的落盘文件名
+    @param original 用户可读的原始文件名
+    """
+    try:
+        from web_bridge import web_inbox
+        # 用 system 角色：这是工具产出的交付消息，与 AI 正文区分开，
+        # 也不会触发「最近活跃渠道」登记（登记只认 user）。
+        web_inbox.append(
+            "system",
+            "文件已就绪，点击下载：[%s](%s)" % (original, download_url(name)),
+            kind="file-delivery",
+        )
+    except Exception:
+        # 投递失败不影响文件本身已落盘；用户仍可凭返回的链接手动下载
+        pass
