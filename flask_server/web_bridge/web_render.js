@@ -147,11 +147,16 @@
     out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     // 斜体 *x*
     out = out.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
-    // 链接 [text](url)
-    out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    // 链接 [text](url)：同时接受绝对地址与站内相对路径（以 / 开头）。
+    // 只认 http 时，工具投递的 /api/... 下载链接不会被渲染成锚点，
+    // 用户看到的是裸文本、点不动。相对路径由浏览器按当前站点补全主机端口，
+    // 比写死绝对地址更稳（换机换端口不会失效）。
+    out = out.replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^\s)]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener">$1</a>');
-    // 指令链接：/xxx 形式（在非标签文本中）
-    out = out.replace(/(^|[\s（(\[>])(\/[a-zA-Z][\w-]*)/g, function (m, pre, cmd) {
+    // 指令链接：/xxx 形式（在非标签文本中）。
+    // 末尾断言排除后面紧跟斜杠或字母数字的情形：否则 /api/web/xxx 这类路径
+    // 会把开头的 /api 误判成指令，渲染成蓝色指令按钮，把路径后半段切成死文本。
+    out = out.replace(/(^|[\s（(\[>])(\/[a-zA-Z][\w-]*)(?![\w\/])/g, function (m, pre, cmd) {
       return pre + '<a class="cmd-link" data-cmd="' + cmd + '">' + cmd + '</a>';
     });
     return out;
