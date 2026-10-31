@@ -24,8 +24,24 @@ import app_log
 import run_command_impl
 import serial_worker
 
-# 任务表上限：超过后淘汰最旧的「已完成」任务，防止内存无限增长
+# 任务表上限：超过后淘汰最旧的「已完成」任务，防止内存无限增长。
+# 注意它只管「历史结果保留多少」，管不住「待办积压多少」——后者见 _MAX_PENDING。
 _MAX_TASKS = 200
+
+# 待处理任务上限：排队中 + 执行中的任务数达到此值即拒绝新提交。
+# 为什么不靠 _MAX_TASKS 兜住：_prune_locked 只淘汰已结束的任务，若提交速度
+# 长期高于单 worker 的串行消费速度，任务表会一路涨满 pending 项、且永远无法淘汰
+# （找不到可淘汰对象），内存持续增长、排队时长无限延长。
+# 每个任务最长 60 秒，50 个积压已相当于近一小时排队，超过即无实际意义。
+_MAX_PENDING = 50
+
+
+class CommandQueueFull(Exception):
+    """异步命令队列积压过多，拒绝新任务。
+
+    刻意不继承 ValueError / TypeError：那两个会被 classify_error 归为 parameter，
+    而「队列已满」属运行条件饱和，应引导调用方等待或改同步，而非改参数。
+    """
 
 # 任务表：task_id -> dict
 #   { id, status, params, result, error, created_at, finished_at }
@@ -83,6 +99,18 @@ def submit(params):
     # 复制一份参数：避免调用方提交后再改动，影响后台执行
     safe_params = dict(params or {})
     with _lock:
+        # 积压保护：统计仍在排队或执行中的任务数，达到上限即拒绝。
+        # 必须在持锁时统计并入队，否则并发提交可能同时通过检查、越过上限。
+        pending = sum(
+            1 for t in _tasks.values()
+            if t["status"] in ("pending", "running")
+        )
+        if pending >= _MAX_PENDING:
+            raise CommandQueueFull(
+                "异步命令队列已满（%d 个任务排队或执行中，上限 %d）。"
+                "请等待已提交任务完成后再试，或改用同步方式（去掉 async 参数）。"
+                % (pending, _MAX_PENDING)
+            )
         _seq += 1
         task_id = "cmd-%d-%d" % (_now(), _seq)
         _tasks[task_id] = {

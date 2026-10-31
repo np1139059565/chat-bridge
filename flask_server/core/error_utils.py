@@ -39,9 +39,14 @@ def classify_error(e):
     if isinstance(e, (FileNotFoundError, NotADirectoryError, IsADirectoryError,
                       PermissionError, UnicodeDecodeError)):
         return "environment"
-    # 执行超时属环境 / 运行条件问题：脚本可能死循环或等外部响应，
+    # 执行超时属环境 / 运行条件问题：脚本可能死循环、跑得慢、或等外部响应，
     # 不是工具代码缺陷，归入 environment 提示调用方调整用法而非改代码。
-    if isinstance(e, subprocess.TimeoutExpired):
+    # 两种超时都要覆盖：
+    #   subprocess.TimeoutExpired —— 自定义脚本 / 命令类工具超时；
+    #   TimeoutError（内置，3.10 上为 OSError 子类，3.11 起与 futures.TimeoutError 合并）
+    #     —— 内置工具经 _run_with_timeout 兜底超时抛出。
+    # 漏判后者会把「工具跑得慢」误报成「工具代码缺陷」，把 AI 引向改代码的错误方向。
+    if isinstance(e, (subprocess.TimeoutExpired, TimeoutError)):
         return "environment"
     return "tool_internal"
 

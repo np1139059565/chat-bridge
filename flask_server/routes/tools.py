@@ -239,7 +239,17 @@ def _call_builtin(name, params):
     # 请求线程不再干等命令跑完。前端用 /tool/command_task 轮询结果。
     if name == "run_command" and _is_async_requested(params):
         import command_tasks
-        task_id = command_tasks.submit(params)
+        try:
+            task_id = command_tasks.submit(params)
+        except command_tasks.CommandQueueFull as e:
+            # 运行条件饱和：非参数错误、非代码缺陷；明确「未提交」与处理方式
+            return jsonify(
+                success=False, tool=name, error=str(e), errorType="CommandQueueFull",
+                origin="environment", executed=False,
+                originLabel=runtime.ORIGIN_LABEL.get("environment", "environment"),
+                hint="异步队列已满，本次命令未提交。请等待已提交任务完成，"
+                     "或去掉 async 参数改为同步执行。",
+            ), 200
         return jsonify(success=True, tool=name, async_mode=True,
                        task_id=task_id, status="pending")
     # 工具执行耗时埋点：记录「哪个工具、耗时多久、是否超时」，

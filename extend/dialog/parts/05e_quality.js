@@ -55,7 +55,12 @@
     // 显示一致（都当关），避免「界面显示关、检测却照跑」的错位。
     if ((this.bridgePush || {}).check_code_only !== true) return null;
     const hasCode = blocks.some((b) => b && b.type === 'code');
-    const hasText = blocks.some((b) => {
+    // 语音块也算「有文字说明」：语音块内是 JSON 文本，朗读内容本身就是对本次
+    // 回复的口语化说明，同样满足「代码块之外要有可读内容」的本意。
+    // 若不计入，语音开关开启时助手回一条纯语音 + 代码的回复会被误判为
+    // 「只有代码块」，与「语音块必须存在」的检查互相打架。
+    const hasVoice = blocks.some((b) => this.parseVoiceBlock(b));
+    const hasText = hasVoice || blocks.some((b) => {
       if (!b || b.type === 'code' || b.type === 'thinking') return false;
       let s = '';
       if (b.text != null) s = String(b.text);
