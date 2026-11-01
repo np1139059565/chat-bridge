@@ -155,6 +155,13 @@ class QqGateway:
         # 暂存待确认（不排队，新的覆盖旧的）
         voice_pending.stash(openid, text, msg_id)
         log("识别成功，已暂存待 /vo 确认：", text)
+        # 暂存完成后再回发提示：顺序很关键——先暂存、后提示，
+        # 用户看到提示立刻回 /vo 时，待确认内容一定已经在位。
+        # 此前该提示写在 return 之后，属永远执行不到的死代码，
+        # 导致识别成功后用户收不到任何提示、不知道该发 /vo。
+        self._reply_voice(
+            openid,
+            "识别到语音：\n" + text + "\n\n发送 /vo 确认转给 AI，不确认则忽略")
 
     def _download_and_recognize(self, openid, voice_url):
         """下载语音并识别为文字；失败时已回发提示并返回空串。
@@ -186,9 +193,9 @@ class QqGateway:
             log("语音里没识别出文字")
             self._reply_voice(openid, "语音里没识别出文字")
             return ""
+        # 只返回识别结果：回发提示由调用方 _voice_worker 在暂存之后发出。
+        # 提示必须晚于暂存，否则用户立刻回 /vo 时可能还没暂存好、确认不到内容。
         return text
-        # 4) 回发识别结果，等用户 /vo 确认
-        self._reply_voice(openid, "识别到语音：\n" + text + "\n\n发送 /vo 确认转给 AI，不确认则忽略")
 
     def _handle_image(self, openid, image_url, msg_id, text=""):
         """处理一条图片消息：下载存本地，并投一张卡片让镜像扩展贴进网页 AI。

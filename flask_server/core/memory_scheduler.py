@@ -33,9 +33,17 @@ _lock = threading.Lock()
 def run_once():
     """执行一轮维护：衰减 + 聚类。返回两步骤各自的结果，异常吞掉不抛。
 
-    @return dict { decay, events, errors }
+    总开关关闭时整轮跳过并直接返回：维护会长时间持有写锁，
+    而界面请求优先级最高，开关关闭即表示「不要为记忆做任何后台操作」。
+    @return dict { decay, events, checkpoint, errors, skipped }
     """
-    result = {"decay": None, "events": None, "checkpoint": None, "errors": []}
+    result = {"decay": None, "events": None, "checkpoint": None,
+              "errors": [], "skipped": False}
+    # 总开关：关闭时连读库都不做，直接返回，避免无谓唤醒与锁竞争
+    import memory_switch
+    if not memory_switch.is_enabled():
+        result["skipped"] = True
+        return result
     t0 = time.time()
     # 记开始：后台重活若与请求抢锁，日志里能看出「它正在跑」
     app_log.info("[mem][sched] 维护轮次开始")

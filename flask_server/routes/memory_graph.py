@@ -25,6 +25,18 @@ import graph_data
 bp = Blueprint("memory_graph", __name__)
 
 
+@bp.before_request
+def _guard_memory_switch():
+    """总开关守卫：记忆系统关闭时，所有记忆接口直接短路返回。
+
+    放在蓝图级前置钩子里，而不是逐个视图函数里判断：记忆接口有三十余个，
+    逐个加判断既易漏、也会让每个函数多三行噪音。这里统一挡在最前面，
+    视图函数完全不会被调用，也就不可能碰数据库。
+    """
+    import memory_guard
+    return memory_guard.blocked_response()
+
+
 def _ok(**kw):
     """统一成功响应。"""
     payload = {"success": True}

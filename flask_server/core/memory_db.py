@@ -135,6 +135,25 @@ _INDEXES = [
 ]
 
 
+class MemoryDisabled(RuntimeError):
+    """记忆系统已被总开关关闭：调用方应跳过记忆相关操作，而不是重试。
+
+    单独成类而非复用 RuntimeError 的原因：上层需要据此把「开关关闭」
+    与「真实故障」区分开，前者静默跳过、后者要报错留痕。
+    """
+
+
+def is_enabled():
+    """记忆系统当前是否允许访问数据库（委托 memory_switch）。
+
+    抽出成模块级函数，使调用方无需直接依赖 memory_switch，
+    也便于测试时整体替换判断口径。
+    @returns 允许访问为 True
+    """
+    import memory_switch
+    return memory_switch.is_enabled()
+
+
 def get_conn():
     """取得当前线程的记忆库连接；首次调用时建立连接。
 
@@ -142,7 +161,13 @@ def get_conn():
     原因：Flask 每个请求开新线程，每个新线程首次连库若都跑一遍建表语句，
     在有数据量后 CREATE VIRTUAL TABLE ... fts5 会耗时数秒并拿写锁，
     把全部请求堵死（曾观察到单条建表语句 8-13 秒、请求几十秒超时）。
+
+    总开关关闭时直接抛 MemoryDisabled：连连接都不建立，确保零磁盘操作。
     """
+    # 总开关：关闭时一律不碰数据库。放在最前，连线程局部缓存都不读，
+    # 保证「关闭」是彻底的操作层禁止，而非「建了连接只是不查」。
+    if not is_enabled():
+        raise MemoryDisabled("记忆系统已关闭（设置页未开启记忆检查）")
     conn = getattr(_local, "conn", None)
     if conn is not None:
         return conn
@@ -151,16 +176,20 @@ def get_conn():
     _t0 = time.perf_counter()
     # 确保目录存在：记忆库目录可能首次创建
     paths.MEMORY_DB_DIR.mkdir(parents=True, exist_ok=True)
-    # timeout=15：连接级等待锁的秒数（默认仅 5 秒）。
-    # 多人/多线程同时写时，5 秒不够就容易直接报 database is locked，
-    # 放宽到 15 秒，给排队等锁的写入更多耐心。
-    conn = sqlite3.connect(str(paths.MEMORY_DB_PATH), timeout=15.0)
+    # timeout / busy_timeout 取 2 秒（原为 15 秒）。
+    # 原取值的问题：一旦有写者持锁，任何碰记忆库的请求都会在这里干等，
+    # 最坏等满 15 秒——手机端看到的正是「断开十几秒才恢复」。
+    # 界面响应优先级最高，宁可让这次记忆写快速失败、由调用方降级处理，
+    # 也不能让请求线程陪着等十几秒。2 秒足以覆盖正常短事务的排队。
+    conn = sqlite3.connect(str(paths.MEMORY_DB_PATH), timeout=2.0)
     conn.row_factory = sqlite3.Row
     # WAL 是数据库级设置（写入文件头，永久生效），只需设一次。
     # 每个新连接都设一遍会在多线程同时连库时互相冲突、报 database is locked。
     _ensure_wal_once(conn)
-    # busy_timeout：与 timeout 双保险，单位毫秒；遇锁时自旋等待而非立即报错
-    conn.execute("PRAGMA busy_timeout=15000")
+    # busy_timeout：与 timeout 保持一致（2000 毫秒），单位毫秒。
+    # 两处必须同口径：只降 connect 的 timeout、留着 15 秒的 busy_timeout，
+    # SQLite 仍会按后者等待，前面的修改就形同虚设。
+    conn.execute("PRAGMA busy_timeout=2000")
     conn.execute("PRAGMA synchronous=NORMAL")
     # 慢 SQL 追踪：记录执行超过阈值的语句，用于定位「哪条 SQL 卡住」。
     # 诊断用，不改变查询行为。
@@ -172,6 +201,13 @@ def get_conn():
     # 否则每个请求线程首次连库都打一条，日志会被建连记录淹没。
     _ms = (time.perf_counter() - _t0) * 1000.0
     record_conn_cost(_ms)  # 累计统计建连耗时，便于回答「一天慢了多少次」
+    # 把建连耗时记进请求追踪：建连含 WAL 设置与建表检查，
+    # 首次连接可能明显耗时，是「某个请求莫名变慢」的常见原因。
+    try:
+        import req_trace
+        req_trace.mark("db.connect", _ms)
+    except Exception:
+        pass
     return conn
 
 

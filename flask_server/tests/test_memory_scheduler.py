@@ -30,6 +30,20 @@ import memory_scheduler
 class TestRunOnce(unittest.TestCase):
     """单轮维护的容错聚合。"""
 
+    def setUp(self):
+        """强制打开记忆总开关。
+
+        本类不继承记忆库测试基类（不需要真实库），故需自行打开开关，
+        否则 run_once 会因「开关关闭」直接跳过，测不到容错聚合逻辑。
+        """
+        import memory_switch
+        memory_switch.set_override(True)
+
+    def tearDown(self):
+        """取消开关覆盖，避免影响其它测试。"""
+        import memory_switch
+        memory_switch.clear_override()
+
     def test_all_steps_ok(self):
         """三步都正常时，errors 应为空。"""
         with mock.patch.object(memory_scheduler.memory_decay, "recompute_all", return_value=1), \

@@ -13,7 +13,7 @@
 - 指令：以 / 开头走 command_panel 的同一套指令逻辑；其回执经「网页回执出口」
   落进网页收件箱，与 QQ 指令共用实现、去向不同。
 """
-from flask import Blueprint, jsonify, request, Response, send_file
+from flask import Blueprint, jsonify, request, Response
 
 import paths
 import web_bridge
@@ -56,52 +56,12 @@ def _ensure_web_reply_sink():
 _ensure_web_reply_sink()
 
 
-def _safe_under(name, base_dir):
-    """把文件名解析为 base_dir 下的绝对路径，并拦截目录穿越。
-
-    只允许纯文件名（不含路径分隔符与上跳），解析后还必须落在 base_dir 内，
-    否则返回 None。这样即使有人构造 ../../ 也拿不到目录外的文件。
-    @param name     请求里的文件名
-    @param base_dir 允许的基准目录（Path）
-    @returns 合法文件路径字符串；非法返回 None
-    """
-    import os
-    if not name or "/" in name or "\\" in name or ".." in name:
-        return None
-    base = base_dir.resolve()
-    target = (base_dir / name).resolve()
-    try:
-        # 必须确实位于 base_dir 之下
-        if os.path.commonpath([str(base), str(target)]) != str(base):
-            return None
-    except ValueError:
-        # 跨盘符等情况 commonpath 会抛错，一律视为非法
-        return None
-    return str(target) if target.is_file() else None
-
-
-def _safe_audio_path(name):
-    """把音频文件名解析为绝对路径（走通用防护）。"""
-    return _safe_under(name, paths.WEB_AUDIO_DIR)
-
-
-def _send_image_under(name, base_dir):
-    """按基准目录安全地发送一张图片：目录穿越校验 + MIME 判定 + 强缓存。
-
-    图片文件名唯一（时间戳 + 序号）、内容不变，故设一周强缓存，
-    浏览器对同一张图复用已下载副本，点开看大图不再重新请求。
-    网页图片与工具截图两张表共用本函数，只是基准目录不同。
-    @param name     请求里的文件名
-    @param base_dir 允许的基准目录（Path）
-    @returns Flask 响应：命中图片返回文件，否则 404
-    """
-    path = _safe_under(name, base_dir)
-    if not path:
-        return jsonify(success=False, error="not_found"), 404
-    # 只按扩展名区分 jpeg 与 png，其余一律按 png 发送
-    ext = path.rsplit(".", 1)[-1].lower()
-    mime = "image/jpeg" if ext in ("jpg", "jpeg") else "image/png"
-    return send_file(path, mimetype=mime, conditional=True, max_age=604800)
+# 文件下发路由与目录穿越防护已迁至 routes/web_files_serve.py（独立蓝图）。
+# 这里保留同名别名：既有测试与代码按旧路径引用这三个辅助函数，
+# 保留别名可避免为了搬迁而改动一批调用点（改动面越小越安全）。
+from routes.web_files_serve import (  # noqa: E402,F401
+    _safe_under, _safe_audio_path, _send_image_under,
+)
 
 
 @bp.route("/web-bot", methods=["GET"])
@@ -202,9 +162,14 @@ def web_send():
         web_inbox.append("user", text, kind="command")
         _handle_command(text)
         return jsonify(success=True, command=True)
-    # 普通消息：投进卡片总线，送进网页 AI
+    # 普通消息：投进卡片总线，送进网页 AI。
+    # 两段分别计时（投卡片 / 写收件箱），实现见 web_poll_log。
+    from web_bridge import web_poll_log
+    _timer = web_poll_log.new_send_timer()
     card_id = web_bridge.web.ingest_text(text)
+    _timer.mark_card()
     web_inbox.append("user", text, kind="web-user")
+    _timer.mark_inbox(len(text))
     return jsonify(success=True, cardId=card_id)
 
 
@@ -319,39 +284,22 @@ def web_messages():
         limit = int(request.args.get("limit", "200"))
     except ValueError:
         limit = 200
+    # 打点与日志统一走 web_poll_log（实现见该模块，含异常兜底）
+    from web_bridge import web_poll_log
+    web_poll_log.log_poll_start()
+    import time as _t
+    _t0 = _t.perf_counter()
     if request.args.get("history") == "1":
         # 首次铺屏只给最近 50 条：其余靠滑到底部懒加载，避免一次渲染过多撑爆手机内存
         data = web_inbox.recent(50)
     else:
         data = web_inbox.list_since(cursor, limit)
+    # 读收件箱（含等锁 + 读缓存/解析）耗时：轮询卡顿最常见的嫌疑点
+    web_poll_log.log_poll_done(cursor, data, (_t.perf_counter() - _t0) * 1000.0)
     return jsonify(success=True, **data)
 
 
-@bp.route("/api/web/image-file/<name>", methods=["GET", "OPTIONS"])
-def web_image_file(name):
-    """取网页图片文件（指令结果截图等），供前端渲染 <img>。"""
-    return _send_image_under(name, paths.WEB_IMAGES_DIR)
-
-
-@bp.route("/api/web/screenshot-file/<name>", methods=["GET", "OPTIONS"])
-def web_screenshot_file(name):
-    """取工具截图文件（debug_chrome 的 get_page_snapshot 结果），供前端渲染 <img>。
-
-    前端据此把工具截图按文件名挂到对应消息上，无需把 base64 塞进正文。
-    """
-    return _send_image_under(name, paths.SCREENSHOTS_DIR)
-
-
-@bp.route("/api/web/audio/<name>", methods=["GET", "OPTIONS"])
-def web_audio(name):
-    """取语音音频文件：浏览器据此自动播放。"""
-    path = _safe_audio_path(name)
-    if not path:
-        return jsonify(success=False, error="not_found"), 404
-    # max_age：音频文件名唯一（时间戳+序号）、内容不变，故设强缓存，
-    # 让浏览器留住已下载副本，断网后仍可复播同一条语音。
-    # conditional=True 支持 Range 请求，手机浏览器拖动进度条也能正常响应。
-    return send_file(path, mimetype="audio/mpeg", conditional=True, max_age=604800)
+# 图片 / 截图 / 音频三个下发路由已迁至 routes/web_files_serve.py。
 
 
 # 语音合成的「占用标记 + 后台线程」统一由 web_mirror 维护：

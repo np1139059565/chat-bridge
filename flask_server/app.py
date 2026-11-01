@@ -32,6 +32,7 @@ from routes.web import bp as web_bp
 from routes.web_clientlog import bp as web_clientlog_bp
 from routes.web_source import bp as web_source_bp
 from routes.web_file import bp as web_file_bp
+from routes.web_files_serve import bp as web_files_serve_bp
 
 
 def _register_blueprints(app):
@@ -52,6 +53,7 @@ def _register_blueprints(app):
     app.register_blueprint(web_clientlog_bp)
     app.register_blueprint(web_source_bp)
     app.register_blueprint(web_file_bp)
+    app.register_blueprint(web_files_serve_bp)
 
 
 def _register_options(app):
@@ -127,6 +129,13 @@ def _req_start_hook():
         app_log.info("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
     else:
         app_log.debug("[req][%s] -> %s %s" % (g._req_id, request.method, request.path))
+    # 开启全链路追踪：记录进入时刻，后续各阶段用 req_trace.mark 打点
+    try:
+        import req_trace
+        req_trace.begin("%s %s" % (request.method, request.path))
+    except Exception:
+        # 追踪是诊断能力，绝不能因它自身异常影响请求
+        pass
 
 
 def _req_end_hook(resp):
@@ -148,6 +157,14 @@ def _req_end_hook(resp):
         app_log.warn(line)
     else:
         app_log.debug(line)
+    # 输出全链路各阶段耗时：把「总耗时」拆成「耗在哪」，
+    # 与上一条 [req] 日志用同一个 rid 可对照。
+    try:
+        import req_trace
+        req_trace.finish("status=%d" % resp.status_code)
+    except Exception:
+        # 追踪收尾失败不影响响应返回
+        pass
     return resp
 
 
@@ -354,8 +371,13 @@ def create_app():
     # 启动加载：把规则与记忆摘要一次性读进内存（方案核心目的）。
     # 失败不阻断启动：记忆库首次创建、或库损坏时，服务仍应可用。
     try:
+        import memory_switch
         import memory_loader
-        memory_loader.load_all()
+        # 总开关：关闭时连启动加载都不做，确保进程启动阶段零数据库操作
+        if memory_switch.is_enabled():
+            memory_loader.load_all()
+        else:
+            app_log.info("[memory]", "记忆系统已关闭，跳过启动加载")
     except Exception as e:
         app_log.warn("[memory]", "启动加载失败（不阻断服务）：", e)
     # 启动后台调度：周期性执行衰减与事件聚类（方案「事件层全自动」）。

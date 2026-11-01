@@ -143,6 +143,13 @@ def config():
         if err is not None:
             return err
         saved = save_config_to_yaml()
+        # 配置已变更：立即让记忆总开关缓存失效，使开关切换马上生效。
+        # 不做这一步的话，开关最长要等缓存过期才起作用，用户会以为没生效。
+        try:
+            import memory_switch
+            memory_switch.invalidate()
+        except Exception:
+            pass
         # 端口 / host 改动需要重启进程才能重新绑定，单靠写配置无法让正在运行的服务生效
         require_restart = any(c.startswith("flask.") for c in changed)
         return jsonify(success=saved, saved=saved, changed=changed, requireRestart=require_restart)

@@ -14,6 +14,24 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _enable_memory_switch():
+    """自动打开记忆总开关，使全部测试不依赖本机真实配置。
+
+    为什么需要：记忆系统总开关取自 runtime.yaml 的 check_memory。
+    开发机上该开关可能正被用户关闭，若测试直接读真实配置，
+    所有涉及记忆库的用例都会因「功能被关」而失败，测不到真实逻辑。
+
+    做成全局自动夹具而非逐个用例设置：涉及记忆库的测试文件有十几个，
+    逐个补既易漏、也会让每个文件多出前后两段样板代码。
+    """
+    import memory_switch
+    memory_switch.set_override(True)
+    yield
+    # 收尾必须取消覆盖，否则会污染同进程内后续用例
+    memory_switch.clear_override()
+
+
+@pytest.fixture(autouse=True)
 def _isolate_bridge_state(tmp_path):
     """把桥接状态文件重定向到临时目录，并清空内存状态。
 

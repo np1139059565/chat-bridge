@@ -15,6 +15,8 @@
 import os
 import shutil
 import time
+# quote：把落盘文件名编码成可安全拼进 URL 的字符串（空格、中文、# 等均被转义）
+from urllib.parse import quote
 
 import paths
 
@@ -91,8 +93,14 @@ def download_url(name):
     刻意返回相对路径：手机浏览器渲染消息时会基于当前页面地址解析，
     主机与端口自动跟随用户实际访问的地址。若在此写死绝对地址，
     服务换机、换 IP 或换端口后链接即刻失效（曾因此把链接指向了另一台机器的 IP）。
+
+    文件名必须做 URL 编码：落盘名保留原始可读名，可能含空格、中文或 # 等字符，
+    原样拼进链接会让前端 Markdown 链接正则匹配不上（遇空格即断），
+    或让浏览器把 # 之后当成锚点、请求到错误的文件名。
+    @param name 下载目录中的落盘文件名
+    @returns 可安全放进 Markdown 链接的相对地址
     """
-    return "/api/web/file-download/%s" % name
+    return "/api/web/file-download/%s" % quote(name, safe="")
 
 
 def notify_inbox(name, original):

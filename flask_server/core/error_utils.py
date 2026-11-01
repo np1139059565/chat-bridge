@@ -38,9 +38,23 @@ def _declared_param_names(tool_name):
     """
     if not tool_name:
         return set()
+    # 先查内置工具表
     entry = runtime.TOOLS.get(tool_name) or {}
+    params = entry.get("parameters") or []
+    # 内置表没查到：再查自定义 / 外部工具表。
+    # 外部工具（如 debug_chrome 提供的）注册在 custom_tools 而不在 runtime.TOOLS，
+    # 只查内置表会让它们声明的参数永远取不到，KeyError 一律落到保守分支，
+    # 实现里的键名写错会被误报成「调用方参数写错」。
+    if not params:
+        try:
+            import custom_tools as ct
+            ctool = ct.get_tool(tool_name) or {}
+            params = ctool.get("parameters") or []
+        except Exception:
+            # 自定义工具表不可用时保持空集合，退回原有保守口径
+            params = []
     names = set()
-    for p in entry.get("parameters") or []:
+    for p in params:
         # 参数定义形如 {"name": "path", ...}；缺 name 的条目跳过
         n = p.get("name") if isinstance(p, dict) else None
         if n:

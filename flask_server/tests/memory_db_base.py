@@ -37,6 +37,10 @@ class MemoryDBTestBase(unittest.TestCase):
 
     def setUp(self):
         """建立临时目录并重定向记忆库路径。"""
+        # 强制打开记忆总开关：自测要验证记忆逻辑本身，
+        # 不应受本机真实配置（用户可能关着开关）影响。
+        import memory_switch
+        memory_switch.set_override(True)
         self.tmp = tempfile.mkdtemp(prefix=self.PREFIX)
         # 记录原始路径，收尾时原样还原，避免影响同进程内的其它测试
         self._orig_dir = paths.MEMORY_DB_DIR
@@ -47,6 +51,12 @@ class MemoryDBTestBase(unittest.TestCase):
     def tearDown(self):
         """关闭连接、还原路径并删除临时目录。"""
         memory_db.close_conn()
+        # 取消开关覆盖：避免影响同进程内的其它测试
+        try:
+            import memory_switch
+            memory_switch.clear_override()
+        except Exception:
+            pass
         paths.MEMORY_DB_DIR = self._orig_dir
         paths.MEMORY_DB_PATH = self._orig_path
         shutil.rmtree(self.tmp, ignore_errors=True)

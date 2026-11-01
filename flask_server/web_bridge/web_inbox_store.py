@@ -90,8 +90,18 @@ def read_state():
         _cache_sig = sig
         return _cache
     _ms = (_t.perf_counter() - _t0) * 1000.0
+    # 把读盘耗时记进请求追踪：收件箱全量解析是大 JSON 操作，
+    # 若它占了轮询请求的主要耗时，[trace] 日志里会直接排在第一位。
+    try:
+        import req_trace
+        req_trace.mark("inbox.parse", _ms)
+    except Exception:
+        pass
     if _ms >= _SLOW_IO_MS:
-        app_log.warn("[web][inbox]", "读盘解析耗时=%.0fms" % _ms)
+        # 统计口径用刚解析出的 data（此刻 _cache 尚未更新，不能用它）
+        msgs = data.get("messages") if isinstance(data, dict) else None
+        app_log.warn("[web][inbox]", "读盘解析耗时=%.0fms 消息=%d 字节=%d"
+                     % (_ms, len(msgs or []), path.stat().st_size))
     # 字段兜底：外部改坏文件时不至于让后续逻辑崩在 None 上
     _cache = sanitize_state(data)
     _cache_sig = sig
