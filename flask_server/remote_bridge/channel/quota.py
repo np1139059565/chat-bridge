@@ -113,15 +113,28 @@ class UnlimitedQuota(QuotaPolicy):
 
 
 class WeixinQuota(QuotaPolicy):
-    """微信配额：24 小时内最多 10 条，且不支持主动推送。
+    """微信配额：用户每条消息发放一个约 10 条的回复池，24 小时有效。
 
-    超配额时必须把整批消息合并成一条长文本——这正是微信 router
+    关键语义（与平台真实行为对齐）：计数按「用户发来新消息」重置，
+    不是在旧计数上按时间累计。若按时间窗口累计，持续对话会在第 10 轮
+    被自己拦住，而微信实际允许每轮各回 10 条。
+
+    超配额时必须把整批消息合并成一条长文本——这正是微信通道
     与 QQ 逐条推送的根本差异。
     """
 
     window_seconds = 24 * 60 * 60
     limit = 10
     can_push_freely = False
+
+    def reset(self, user_id):
+        """用户发来新消息：重置其回复池。
+
+        与真实机制对齐的关键一步：每收到一条用户消息，额度重新计算。
+        @param user_id 用户标识
+        """
+        with self._lock:
+            self._usage[user_id] = [(time.time(), 0)]
 
 
 class QQWindowQuota(QuotaPolicy):

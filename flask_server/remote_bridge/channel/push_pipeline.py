@@ -193,10 +193,16 @@ def _push_locked(args):
             adapter.dedupe.forget(conv_id, m.get("id") or "")
         return 0
 
-    # 通道可要求合并（微信），否则逐条推送
-    merged_text = adapter.merge_batch(todo, push) if hasattr(adapter, "merge_batch") else None
-    if merged_text:
-        ok = adapter.send_text(recipient, merged_text, markdown=True)
+    # 通道可要求合并（微信），否则逐条推送。
+    # 返回 None 表示「不合并」；返回字符串（含空串）表示「走合并」，
+    # 空串意味着这批消息全都不该推（如只有用户消息而开关关闭），
+    # 此时直接保留已推标记即可，不必再逐条评估。
+    merged = adapter.merge_batch(todo, push) if hasattr(adapter, "merge_batch") else None
+    if merged is not None:
+        if not merged:
+            log("合并后无内容，%d 条不再推送" % len(todo))
+            return 0
+        ok = adapter.send_text(recipient, merged, markdown=True)
         if ok:
             adapter.quota.record(recipient, 1)
             log("合并推送成功 %d 条" % len(todo))
