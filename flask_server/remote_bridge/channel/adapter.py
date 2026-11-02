@@ -80,6 +80,19 @@ class ChannelAdapter:
         """
         return payload.get("openid") or ""
 
+    def push_media(self, recipient, items, push, ctx):
+        """在文本推送之后，发送这批消息里的媒体（图片 / 文件 / 语音）。
+
+        为什么媒体不能并入合并文本：合并后图片就变成一段文字路径，
+        用户看不到图。故支持媒体的通道在这里单独发，返回成功条数。
+        @param recipient 收件人
+        @param items     本轮待推消息
+        @param push      推送开关
+        @param ctx       锁外预处理结果
+        @returns 成功发送的媒体条数
+        """
+        return 0
+
     def merge_batch(self, items, push):
         """把一批消息合并成一条待发送正文。
 

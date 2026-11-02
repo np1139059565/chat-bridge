@@ -206,7 +206,10 @@ def _push_locked(args):
         if ok:
             adapter.quota.record(recipient, 1)
             log("合并推送成功 %d 条" % len(todo))
-            return len(todo)
+            # 文本送达后再发媒体：图片 / 文件 / 语音无法并入合并文本，
+            # 塞进去就变成一段路径文字，用户看不到内容。
+            media = adapter.push_media(recipient, todo, push, ctx) if hasattr(adapter, "push_media") else 0
+            return len(todo) + media
         # 合并推送失败：撤回占用，留待下轮重试
         for m in todo:
             adapter.dedupe.forget(conv_id, m.get("id") or "")
