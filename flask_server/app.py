@@ -349,9 +349,22 @@ def _init_runtime():
     runtime.refresh_external_providers()
 
 
+# 应用是否已完成装配：create_app() 可被测试脚本重复调用，
+# 装配只能执行一次（蓝图重名注册会抛 ValueError，后台线程会重复启动）。
+_app_ready = False
+
+
 def create_app():
-    """构建并返回可用的 Flask 应用实例（重复调用会复用同一 runtime.app）。"""
+    """构建并返回可用的 Flask 应用实例（重复调用复用同一 runtime.app）。
+
+    装配只执行一次：Flask 不允许同名蓝图重复注册，看门狗 / 心跳 /
+    远程桥接等后台线程也不应重复启动。重复调用直接返回已装配的实例。
+    """
+    global _app_ready
     app = runtime.app
+    # 已装配过：直接返回，避免蓝图重名报错与线程重复启动
+    if _app_ready:
+        return app
     _init_runtime()
     # 注册蓝图与响应头
     _register_blueprints(app)
@@ -394,4 +407,6 @@ def create_app():
         remote_bridge.init_bridge()
     except Exception as e:
         app_log.warn("[bridge]", "启动失败（不阻断服务）：", e)
+    # 装配完成：后续 create_app() 直接复用本实例
+    _app_ready = True
     return app

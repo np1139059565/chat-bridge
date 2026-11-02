@@ -97,7 +97,26 @@ def classify_error(e, tool_name=None):
     # 漏判后者会把「工具跑得慢」误报成「工具代码缺陷」，把 AI 引向改代码的错误方向。
     if isinstance(e, (subprocess.TimeoutExpired, TimeoutError)):
         return "environment"
+    # 功能未启用类异常：记忆系统被总开关关闭时抛 MemoryDisabled。
+    # 这是配置状态问题（去设置页打开开关即可），不是工具代码缺陷；
+    # 若不单列，RuntimeError 会一路落到 tool_internal，把调用方引向「改代码」。
+    if _is_disabled_error(e):
+        return "environment"
     return "tool_internal"
+
+
+def _is_disabled_error(e):
+    """判断异常是否表示「某功能未启用」。
+
+    按类名识别而非直接 import：记忆模块在总开关关闭时不应被强行导入，
+    且同类语义的异常可能分散在不同模块，统一按「类名以 Disabled 结尾」识别。
+    @param e 捕获到的异常
+    @returns 属于未启用类异常返回 True
+    """
+    for cls in type(e).__mro__:
+        if cls.__name__.endswith("Disabled"):
+            return True
+    return False
 
 
 def error_location(exc_tb):
