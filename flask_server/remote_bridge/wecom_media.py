@@ -27,6 +27,9 @@ from . import wecom_proto as proto
 # 图片编码前体积上限：平台限制 10MB，超出必然被拒
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
+# 分片总数上限：官方规定分片总数不超过 100，超出需调大分片体积
+MAX_UPLOAD_CHUNKS = 100
+
 
 def log(*args):
     """统一前缀打印，便于在服务端控制台过滤企业微信日志。"""
@@ -244,13 +247,19 @@ class WecomMediaMixin:
         if not raw:
             return "", "empty_file"
         name = os.path.basename(file_path)
+        # 分片与摘要先算好：初始化帧必须带上分片总数，平台据此校验后续分片
+        chunks = proto.split_chunks(raw)
+        if len(chunks) > MAX_UPLOAD_CHUNKS:
+            return "", "too_many_chunks: %d > %d" % (len(chunks), MAX_UPLOAD_CHUNKS)
+        file_md5 = hashlib.md5(raw).hexdigest()
 
         # 第一步：初始化，拿 upload_id
         rid = proto.new_req_id()
+        # req_id 必须同时传给帧构造与等待键：两处不一致时，平台应答到达也匹配不上，
+        # 表现为「平台明明回了 upload_id，本端却等到超时」。
         ack = self._send_wait(
-            proto.frame(proto.CMD_UPLOAD_INIT,
-                        {"file_name": name, "file_size": len(raw),
-                         "media_type": media_type}, req_id=rid), rid)
+            proto.upload_init_frame(name, len(raw), len(chunks), media_type, file_md5,
+                                    req_id=rid), rid)
         if not ack:
             return "", "upload_init_timeout"
         if ack.get("errcode") not in (0, None):
@@ -260,12 +269,10 @@ class WecomMediaMixin:
             return "", "no_upload_id"
 
         # 第二步：逐片上传
-        for idx, chunk in enumerate(proto.split_chunks(raw)):
+        for idx, chunk in enumerate(chunks):
             rid = proto.new_req_id()
             ack = self._send_wait(
-                proto.frame(proto.CMD_UPLOAD_CHUNK,
-                            {"upload_id": upload_id, "chunk_index": idx,
-                             "chunk_data": proto.b64(chunk)}, req_id=rid), rid)
+                proto.upload_chunk_frame(upload_id, idx, proto.b64(chunk), req_id=rid), rid)
             if not ack:
                 return "", "upload_chunk_timeout@%d" % idx
             if ack.get("errcode") not in (0, None):
@@ -273,14 +280,13 @@ class WecomMediaMixin:
 
         # 第三步：完成，拿 media_id
         rid = proto.new_req_id()
-        ack = self._send_wait(
-            proto.frame(proto.CMD_UPLOAD_FINISH, {"upload_id": upload_id}, req_id=rid), rid)
+        ack = self._send_wait(proto.upload_finish_frame(upload_id, req_id=rid), rid)
         if not ack:
             return "", "upload_finish_timeout"
         if ack.get("errcode") not in (0, None):
             return "", "upload_finish_failed: %s" % ack.get("errmsg")
-        body = ack.get("body") or ack
-        media_id = body.get("media_id") or ""
+        # 官方文档：media_id 在响应顶层，不在 body 里
+        media_id = ack.get("media_id") or (ack.get("body") or {}).get("media_id") or ""
         return (media_id, "") if media_id else ("", "no_media_id")
 
     def respond_file(self, req_id, chatid, file_path, chat_type=proto.CHAT_SINGLE,

@@ -81,12 +81,18 @@ class TestProto:
         assert obj["body"]["chat_type"] == 2
 
     def test_upload_frames_shape(self):
-        """上传三步的帧字段名必须准确。"""
-        init = json.loads(proto.upload_init_frame("a.png", 100, "image"))
+        """上传三步的帧字段名必须与官方文档一致。"""
+        init = json.loads(proto.upload_init_frame("a.png", 100, 1, "image"))
         assert init["cmd"] == proto.CMD_UPLOAD_INIT
-        assert init["body"]["file_size"] == 100
+        # 初始化帧：type / filename / total_size / total_chunks
+        assert init["body"]["type"] == "image"
+        assert init["body"]["filename"] == "a.png"
+        assert init["body"]["total_size"] == 100
+        assert init["body"]["total_chunks"] == 1
         chunk = json.loads(proto.upload_chunk_frame("u1", 0, "AAA"))
         assert chunk["body"]["chunk_index"] == 0
+        # 分片内容字段名为 base64_data
+        assert chunk["body"]["base64_data"] == "AAA"
         fin = json.loads(proto.upload_finish_frame("u1"))
         assert fin["body"]["upload_id"] == "u1"
 

@@ -268,43 +268,60 @@ def send_media_frame(chatid, msg_item, chat_type=CHAT_SINGLE, caption=""):
 
 
 # ---------- 媒体上传 ----------
-def upload_init_frame(file_name, file_size, media_type="image"):
+def upload_init_frame(filename, total_size, total_chunks, media_type="file", md5="",
+                      req_id=None):
     """构造媒体上传初始化帧。
 
-    @param file_name  文件名
-    @param file_size  文件字节数
-    @param media_type image / file / voice / video
+    字段名严格按官方文档：type / filename / total_size / total_chunks / md5。
+    写成 file_name / file_size / media_type 会被平台拒绝（errcode 40058）。
+
+    @param filename      文件名
+    @param total_size    文件总字节数
+    @param total_chunks  分片总数，不超过 100
+    @param media_type    file / image / voice / video
+    @param md5           文件 MD5，可选，服务端合并后校验完整性
+    @param req_id        请求 id；等待应答时必须与调用方的等待键一致，
+                         否则应答到达也匹配不上，表现为超时
     @returns JSON 字符串
     """
-    return frame(CMD_UPLOAD_INIT, {
-        "file_name": file_name,
-        "file_size": int(file_size),
-        "media_type": media_type,
-    })
+    body = {
+        "type": media_type,
+        "filename": filename,
+        "total_size": int(total_size),
+        "total_chunks": int(total_chunks),
+    }
+    if md5:
+        body["md5"] = md5
+    return frame(CMD_UPLOAD_INIT, body, req_id=req_id)
 
 
-def upload_chunk_frame(upload_id, chunk_index, chunk_data_b64):
+def upload_chunk_frame(upload_id, chunk_index, base64_data, req_id=None):
     """构造媒体分片上传帧。
 
-    @param upload_id      上传会话 id（init 返回）
-    @param chunk_index    分片序号，从 0 开始
-    @param chunk_data_b64 分片内容的 base64
+    官方字段名为 base64_data（单个分片编码前不超过 512KB），
+    写成 chunk_data 会被平台拒绝。
+
+    @param upload_id   上传会话 id（init 返回）
+    @param chunk_index 分片序号，从 0 开始
+    @param base64_data 分片内容的 base64
+    @param req_id      请求 id；等待应答时必须与调用方的等待键一致
     @returns JSON 字符串
     """
     return frame(CMD_UPLOAD_CHUNK, {
         "upload_id": upload_id,
         "chunk_index": int(chunk_index),
-        "chunk_data": chunk_data_b64,
-    })
+        "base64_data": base64_data,
+    }, req_id=req_id)
 
 
-def upload_finish_frame(upload_id):
+def upload_finish_frame(upload_id, req_id=None):
     """构造媒体上传完成帧。
 
     @param upload_id 上传会话 id
+    @param req_id    请求 id；等待应答时必须与调用方的等待键一致
     @returns JSON 字符串
     """
-    return frame(CMD_UPLOAD_FINISH, {"upload_id": upload_id})
+    return frame(CMD_UPLOAD_FINISH, {"upload_id": upload_id}, req_id=req_id)
 
 
 def split_chunks(data, size=UPLOAD_CHUNK_SIZE):
