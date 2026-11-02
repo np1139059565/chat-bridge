@@ -34,14 +34,25 @@ def build_body(m, push):
     tr = _tool_result_of(m)
     if tr is not None:
         return _tool_result_body(kind, tr)
-    # 正文：优先 md 原文（保格式），退回块拼纯文本（不含思考）
+    # 正文：只认 md 原文。
+    # 绝不再退回块拼：块拼会把工具调用与思考一并拼进正文，导致用户收到
+    # 大段无意义 JSON（曾因刷新页面重推，用户只发了指令却收到一堆工具结果）。
+    # 拿不到 md 就当没有正文，宁可跳过也不污染。
     raw_md = str(m.get("md") or "").strip()
-    body_text = raw_md or _blocks_to_text(m, False)
+    body_text = raw_md
     # 思考：md 是复制按钮产物、不含思考，故从 blocks 独立提取；
     # 仅在「思考」开关打开时随正文发出。
+    # 关键防线：若正文为空（没拿到 md），绝不单独推送思考——
+    # 思考是排查用的中间过程，用户只发了指令却收到一段思考，属严重干扰。
+    # 宁可这条什么都不推，也不能把思考当正文推出去。
     think = _thinking_text_of(m) if push.get("thinking", False) else ""
-    if think:
+    if think and body_text:
         return _thinking_body(kind, think, body_text)
+    if not body_text:
+        return {
+            "kind": kind, "text": "", "markdown": False,
+            "is_tool_result": False, "skip": True,
+        }
     return {
         "kind": kind, "text": body_text, "markdown": bool(raw_md),
         "is_tool_result": False, "skip": not body_text,

@@ -261,14 +261,9 @@ def push_image(qq_client, openid, path):
 from .message_files import get_last_client, push_file  # noqa: E402
 
 
-def _should_push(m, push):
-    """判断一条消息是否应当推送：类型开关打开，且不是 QQ 自己发来的。"""
-    kind = _classify(m)
-    # 推送开关：三类（user / tool / ai）各自控制
-    if not push.get(kind, True):
-        return False
-    # 去重：QQ 自己发来的消息不回推，避免把用户刚说的话复读回去
-    return not _has_qq_source(m)
+# 推送准入判断已抽到 message_gate.py（本文件已贴近行数上限），
+# 此处按原名导入，保持既有调用点不变。
+from .message_gate import should_push as _should_push  # noqa: E402
 
 
 def _push_one(qq_client, openid, m, push, voice_paths=None):
