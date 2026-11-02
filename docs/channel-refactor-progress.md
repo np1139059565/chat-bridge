@@ -76,9 +76,12 @@ class ChannelAdapter:
 
 ### 阶段二：QQ 接入公共层
 
-- [ ] `message_router.py` 改为调用 `push_pipeline`
-- [ ] 被动回复窗口保留为 QQ 专属（`window_store`）
-- [ ] 回归：单条推送、批量推送、窗口续期、去重
+- [x] 新建 QQ 通道适配器：正文 / 图片 / 卡片三类独立去重、语音分两段处理
+- [x] 覆盖 `push_one`：一条消息产出多个推送单元，公共层的单 id 去重不够用
+- [x] 沿用 `prepare_items` / `before_push` / `after_push` 三个钩子承载积压重试与语音时序
+- [x] 端到端验证：推送成功、计数正确、重复上报被去重
+- [ ] `message_router.py` 切换为调用 `push_pipeline`（旧实现仍在用）
+- [ ] 回归：窗口续期、语音、图片、卡片、真实账号收消息
 
 ### 阶段三：微信接入公共层
 
