@@ -95,8 +95,14 @@
     if (exist) {
       if (exist.isTool && blockIssue && !exist.preIssue) exist.preIssue = blockIssue;
       if (exist.isTool && !state.firstToolCard) state.firstToolCard = exist;
-      if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
-      // 重复卡片重跑：来源=generate、卡片在本轮最新消息上、且此前已执行过，三者缺一不可
+      // 上膛标记只在「本轮最后一条消息」上才转为自动候选：
+      // 旧卡片残留的 autoArmed 不得让历史消息里的卡片重新获得执行权。
+      if (exist.autoArmed && mi === incoming.length - 1) {
+        this.collectAutoCandidate(autoCandidates, exist);
+      }
+      // 已执行卡片：只登记以便留痕，不重置、不重跑。
+      // 执行权只属于最后一条消息里的卡片；已完成的调用沿用原结果，
+      // 避免刷新重新采集历史消息时把已执行卡片拉回待执行态再跑一遍。
       if (state.isFreshReply && mi === incoming.length - 1
           && exist.isTool && exist.executed) {
         state.rerunCard = exist;
@@ -115,9 +121,14 @@
         state.armedLast = holder.cards[b.id];
       }
     } else {
+      // 非滚动轮次：只有「本轮最后一条消息」上的卡片才有自动执行权。
+      // 约定：最后一条消息没有卡片时，前面的历史卡片一律不得自动执行——
+      // 否则 /rall 之类的刷新会让更早消息里的旧卡片被当成候选执行。
       // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
       // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
-      this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
+      if (mi === incoming.length - 1) {
+        this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
+      }
     }
   };
 

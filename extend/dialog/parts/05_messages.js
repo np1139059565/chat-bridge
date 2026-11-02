@@ -370,21 +370,14 @@
    */
   M._finalizeAutoExec = function (collected, notInTree, scrollOnly, atBottom) {
     const autoCandidates = collected.autoCandidates;
-    // 4.5) 重复卡片重跑：严格受限的旁路，与常规自动执行互不重叠
+    // 4.5) 已执行卡片的处置：保持已执行态，不退回待执行。
+    // 执行权只属于「本轮最后一条消息里的卡片」；一张卡片执行完成后，
+    // 其执行结果就是对这次调用的最终答复，重新采集到同一代码块时沿用该结果。
+    // 否则 /rall 这类刷新会重新采集历史消息，把已执行卡片重置成待执行并再跑一遍。
     const rerunCard = collected.rerunCard;
-    if (rerunCard && !notInTree && this.autoSendEnabled) {
-      // 重置为待执行态：清掉已执行标记与上一轮结果，回到可被调度的初始状态
-      rerunCard.executed = false;
-      rerunCard.skipped = false;
-      rerunCard.status = 'pending';
-      rerunCard.error = null;
-      rerunCard.phase = '';
-      rerunCard.countdown = 0;
-      if (rerunCard._cdTimer) { clearTimeout(rerunCard._cdTimer); rerunCard._cdTimer = null; }
-      log('重复卡片重跑：来源=generate 且最新卡片已执行，重置后重新执行 '
+    if (rerunCard && !notInTree) {
+      log('已执行卡片保持完成态：'
         + (rerunCard.tool || rerunCard.id || ''));
-      this.toast('检测到重复卡片，已重新执行最新卡片');
-      this.scheduleExecute(rerunCard);
     }
 
     // 5) 自动执行：仅本轮最新的一张；不入树切片绝不自动执行。
