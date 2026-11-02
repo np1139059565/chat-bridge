@@ -152,8 +152,13 @@ class WecomGateway:
         @param kind      媒体类型
         @param info      媒体描述
         """
+        # 诊断日志：记录平台下发的媒体字段名与关键取值。
+        # 平台字段名可能与文档不一致（曾因 from.userid 取错层级丢光所有消息），
+        # 这里把实际收到的键名打出来，避免继续按假设的字段名猜。
+        log("媒体字段：kind=%s keys=%s" % (kind, sorted(info.keys())))
         url = info.get("url") or info.get("download_url") or ""
-        aeskey = info.get("aeskey") or ""
+        aeskey = (info.get("aeskey") or info.get("aes_key")
+                  or info.get("aeskey_str") or "")
         if not url:
             log("媒体缺少下载地址，忽略")
             return

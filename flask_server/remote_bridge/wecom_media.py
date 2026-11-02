@@ -15,6 +15,7 @@
 设计：以 Mixin 形式提供方法，由 WecomClient 继承；
 依赖宿主类提供 _send_nowait 等基础能力，本模块不重复实现。
 """
+import base64
 import hashlib
 import os
 import time
@@ -391,7 +392,23 @@ class WecomMediaMixin:
         except Exception as e:
             log("下载媒体失败：", e)
             return ""
+        # 诊断日志：媒体解密失败是本通道最常见的故障，
+        # 且失败后表现为「文件存成 .bin、前端认不出」，从外部看不出原因。
+        # 这里把密钥长度与解密前后头部记下来，便于对照平台下发的真实字段。
+        if aeskey:
+            try:
+                klen = len(base64.b64decode(aeskey))
+            except Exception:
+                klen = -1
+            log("媒体解密：密文长度=%d 密钥base64长度=%d 解码后字节=%d"
+                % (len(raw), len(aeskey), klen))
+            if klen < 32:
+                log("媒体解密失败：密钥不足 32 字节，密文将原样落盘")
+        else:
+            log("媒体未加密（aeskey 为空），原始数据长度=%d，头部=%s"
+                % (len(raw), raw[:8].hex()))
         data = proto.decrypt_media(raw, aeskey) if aeskey else raw
+        log("媒体落盘前：长度=%d 头部=%s" % (len(data), data[:8].hex()))
         try:
             os.makedirs(dest_dir, exist_ok=True)
             # 扩展名必须从文件头魔数判断：企业微信的媒体地址不带扩展名，
