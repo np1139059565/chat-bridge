@@ -180,3 +180,40 @@ class TestClientContract:
         c = WecomClient("b", "s", None)
         ok, err = c.respond_image("", "chat1", "/nonexistent.png")
         assert ok is False and err == "missing_req_id_or_chatid"
+
+
+# ============ 媒体解密 ============
+class TestDecodeAesKey:
+    """平台下发的 aeskey 形态与解码。
+
+    平台实际下发 43 字符（URL-safe、无末尾 padding），
+    直接 b64decode 会抛异常，导致解密被静默跳过、密文存成 .bin。
+    """
+
+    def test_standard_44_with_padding(self):
+        """带 padding 的标准 44 字符可正常解码为 32 字节。"""
+        import base64
+        s = base64.b64encode(b"k" * 32).decode()
+        assert len(proto._decode_aeskey(s)) == 32
+
+    def test_43_chars_without_padding(self):
+        """去掉末尾 padding 的 43 字符仍应解码为 32 字节。"""
+        import base64
+        s = base64.b64encode(b"k" * 32).decode().rstrip("=")
+        assert len(s) == 43
+        assert len(proto._decode_aeskey(s)) == 32
+
+    def test_urlsafe_chars_accepted(self):
+        """URL-safe 变体中的 - 与 _ 应被接受。"""
+        import base64
+        raw = bytes(range(32))
+        s = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        assert proto._decode_aeskey(s) == raw
+
+    def test_empty_returns_empty(self):
+        """空串返回空字节串，由调用方降级处理。"""
+        assert proto._decode_aeskey("") == b""
+
+    def test_garbage_returns_empty(self):
+        """非法字符不抛异常，返回空字节串。"""
+        assert proto._decode_aeskey("!!!not-base64!!!") == b""

@@ -327,6 +327,33 @@ def b64(data):
 
 
 # ---------- 媒体下载解密 ----------
+def _decode_aeskey(aeskey_b64):
+    """把平台下发的 aeskey 字符串解码成原始密钥字节。
+
+    平台实际下发的是「URL-safe base64 且去掉末尾 padding」的形态：
+    32 字节密钥的标准 base64 为 44 字符（末尾一个 =），
+    实际收到的是 43 字符（无 =），且可能含 - 与 _ 而非 + 与 /。
+    直接 b64decode 会因长度非 4 的倍数抛异常，导致解密被静默跳过、
+    密文原样落盘成 .bin。
+
+    @param aeskey_b64 平台下发的密钥字符串
+    @returns 密钥字节；无法解码时返回空字节串
+    """
+    if not aeskey_b64:
+        return b""
+    s = str(aeskey_b64).strip()
+    # URL-safe 变体先转回标准字符集，否则 b64decode 会拒收
+    s = s.replace("-", "+").replace("_", "/")
+    # 补齐 padding：长度必须是 4 的倍数，缺几位补几个 =
+    pad = (-len(s)) % 4
+    if pad:
+        s += "=" * pad
+    try:
+        return base64.b64decode(s)
+    except Exception:
+        return b""
+
+
 def decrypt_media(ciphertext, aeskey_b64):
     """解密收到的媒体数据。
 
@@ -341,11 +368,8 @@ def decrypt_media(ciphertext, aeskey_b64):
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     except ImportError:
         return ciphertext
-    try:
-        key = base64.b64decode(aeskey_b64)
-    except Exception:
-        return ciphertext
-    if len(key) < 32:
+    key = _decode_aeskey(aeskey_b64)
+    if not key or len(key) < 32:
         return ciphertext
     key = key[:32]
     iv = key[:16]
