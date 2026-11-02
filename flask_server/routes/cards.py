@@ -56,8 +56,35 @@ def _pending_of(target_bus):
 
 @bp.route("/api/cards/pending", methods=["GET", "OPTIONS"])
 def pending_cards():
-    """镜像插件轮询：取走 AI 通道尚未投递的卡片。"""
+    """镜像插件轮询：取走 AI 通道尚未投递的卡片。
+
+    附带「旧版扩展」检测：本接口是旧扩展唯一的取件入口。若此时指令通道里
+    仍有待取命令，说明扩展还没重载、取不到指令（指令已迁到 /api/commands/pending）。
+    这种情况指令会静默失效，用户只会觉得「指令没反应」，极难定位，故显式告警。
+    """
+    _warn_if_stale_client()
     return _pending_of(bus)
+
+
+def _warn_if_stale_client():
+    """旧扩展仍在轮询旧接口、而指令通道有积压时告警。
+
+    为什么不做双写兼容：把指令同时放进 AI 通道，等于又让指令流经
+    AI 的取件路径，正是本次隔离要根除的问题。宁可显式告警、要求重载扩展，
+    也不为兼容而破坏隔离。
+    """
+    try:
+        pending = command_bus.claim_pending()
+        if not pending:
+            return
+        # 只告警不吞掉：这些命令仍在 command_bus 里，等新扩展来取
+        import app_log
+        app_log.warn(
+            "[isolation] 检测到旧版扩展：指令通道有 %d 条待取命令，但本接口只返回 AI 卡片。"
+            "请重新加载扩展以启用 /api/commands/pending。" % len(pending))
+    except Exception:
+        # 检测本身绝不能影响取件
+        pass
 
 
 @bp.route("/api/commands/pending", methods=["GET", "OPTIONS"])
