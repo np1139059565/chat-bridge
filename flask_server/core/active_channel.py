@@ -30,7 +30,8 @@ _lock = threading.Lock()
 _channel = ""
 
 # 允许登记的渠道名：白名单校验，避免写入拼错的值导致下发逻辑失效
-_CHANNELS = ("qq", "web")
+# wecom 为第三条通道（企业微信智能机器人）：与 qq / web 并列参与「最后谁说话就推给谁」
+_CHANNELS = ("qq", "web", "wecom")
 
 # 落盘文件：与桥接状态同目录，属运行时产物，不入库
 _STATE_PATH = paths.DATA_DIR / "active_channel.txt"

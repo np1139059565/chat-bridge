@@ -203,33 +203,61 @@ class RemoteBridge:
         return self.start()
 
     def report(self, payload):
-        """处理抽屉上报：分别推给 QQ 与微信。
+        """处理抽屉上报：只推给「最近活跃渠道」。
 
-        两条通道各自去重、各自记账，互不干扰；
-        某一条失败不影响另一条，也不影响请求本身。
+        为什么要独占：多通道同时启用时，同一条 AI 回复会被广播到每一条，
+        用户在 QQ 里问一句，企业微信也收到一份，像是机器人在到处复读。
+        正确行为是「谁最后跟我说话，回复就回给谁」。
+
+        活跃渠道由 active_channel 登记，各网关收到用户消息时写入
+        （QQ / 网页 / 企业微信三处）。取不到记录时（服务刚启动、
+        尚无任何入向消息）退回广播，避免所有渠道都静默。
+
         @param payload 上报体
-        @returns QQ 通道推送的条数（保持既有接口语义）
+        @returns 推送条数（保持既有接口语义，返回 QQ 通道条数）
         """
         cfg = bridge_store.get_config()
+        # 取活跃渠道；空串表示尚无记录，此时维持广播
+        import active_channel
+        target = active_channel.get()
         sent = 0
-        if cfg.get("enabled"):
+        if cfg.get("enabled") and self._wants(target, "qq"):
             try:
                 sent = message_router.handle_report(self.client, payload)
             except Exception as e:
                 log("QQ 推送异常：", e)
         wx = cfg.get("weixin") or {}
-        if wx.get("enabled") and self.wx_client:
+        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin"):
             try:
                 weixin_router.handle_report(self.wx_client, payload)
             except Exception as e:
                 log("微信推送异常：", e)
         wc = cfg.get("wecom") or {}
-        if wc.get("enabled") and self.wecom_client:
+        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom"):
             try:
                 wecom_router.handle_report(self.wecom_client, payload)
             except Exception as e:
                 log("企业微信推送异常：", e)
         return sent
+
+    @staticmethod
+    def _wants(target, channel):
+        """判断某个通道本轮是否该推送。
+
+        规则：无活跃记录时全部放行（广播兜底）；有记录时只放行该渠道。
+        active_channel 里的渠道名与这里略有差异（qq / web / wecom），
+        微信通道在 active_channel 里没有独立取值，故按 qq 之外处理。
+
+        @param target  活跃渠道名；空串表示尚无记录
+        @param channel 本方法要判断的通道名
+        @returns 该推返回 True
+        """
+        if not target:
+            return True
+        # 微信通道未在 active_channel 中登记，仅在活跃渠道不是 QQ 时参与
+        if channel == "weixin":
+            return target != "qq"
+        return target == channel
 
     def status(self):
         """返回桥接状态，供设置页展示与排查。

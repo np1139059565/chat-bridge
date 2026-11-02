@@ -103,6 +103,11 @@ class WecomGateway:
         req_id = (frame_msg.get("headers") or {}).get("req_id") or ""
         wecom_router.note_chat(chatid, chat_type, user, req_id=req_id)
 
+        # 登记最近活跃渠道为企业微信：用户刚在企业微信侧发了消息（含指令）。
+        # 后续上报只推给这个渠道，避免同一条回复同时发到 QQ 与网页。
+        import active_channel
+        active_channel.note("wecom")
+
         text = _text_of(body)
         if not text:
             kind, info = _media_of(body)
