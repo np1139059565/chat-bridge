@@ -31,6 +31,27 @@ def _reply_external_result(qq_client, openid, cmd, ok, data):
     _reply(qq_client, openid, "已执行：%s%s" % (cmd, ("，" + msg) if msg else ""))
 
 
+def _pick_target_page(provider):
+    """挑一个当前开着扩展的页面，作为指令的定向目标。
+
+    为什么需要：指令从 QQ / 网页下发，本身不带页面上下文。若不指定目标页，
+    命令就是公开的，任何开着扩展的页面都能取走——多标签时会被后台标签
+    抢先执行，用户看到的界面毫无变化，却收到「已执行」的回执。
+
+    取最近上报过「工具已打开」的页面；有多个时按登记表顺序取第一个，
+    这是当前能做到的最好近似（真正的「用户正在看的那个」只有浏览器知道）。
+    @param provider 提供方标识
+    @returns 页面地址；无可用页面时返回空串（退化为公开命令）
+    """
+    try:
+        import external_tools
+        pages = external_tools.command_hub.open_pages(provider)
+        return pages[0] if pages else ""
+    except Exception as e:
+        log("查询目标页面失败（退化为公开命令）：", e)
+        return ""
+
+
 def _run_external_command(qq_client, openid, cmd_entry):
     """执行一条外部指令：后台线程调 hub.dispatch，等结果回执。
 
@@ -50,9 +71,16 @@ def _run_external_command(qq_client, openid, cmd_entry):
 
     def _worker():
         try:
+            # 定向到「用户正开着的那个页面」：指令来自 QQ / 网页，本身不带页面上下文。
+            # 不指定 page_url 时命令是公开的，任何开着扩展的页面都能取走——
+            # 多标签场景下会被后台标签抢先执行，表现为「指令说执行了但界面没变」。
+            page_url = _pick_target_page(provider)
+            if page_url:
+                log("指令定向到页面：", page_url[:80])
             # 走指令专用池：与 AI 工具池物理隔离，
             # 指令执行失败后的善后不会动到 AI 工具共用的队列与等待表。
-            ok, data = external_tools.command_hub.dispatch(provider, tool, params)
+            ok, data = external_tools.command_hub.dispatch(
+                provider, tool, params, page_url=page_url)
         except Exception as e:
             log("外部指令执行异常：", cmd_name, e)
             _reply(qq_client, openid, "指令 %s 执行异常" % cmd_name)

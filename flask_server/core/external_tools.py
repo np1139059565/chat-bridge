@@ -145,6 +145,23 @@ class ProviderHub:
                     out.append(t)
         return out
 
+    def open_pages(self, provider):
+        """列出某提供方当前处于「工具已打开」状态的页面（已剔除超期登记）。
+
+        用途：用户从 QQ / 网页下发的指令没有页面上下文，需要投给
+        「用户正在看的那个页面」，而不是当公开命令被任意页面取走。
+        @param provider 提供方标识
+        @returns 页面地址列表（规整后）
+        """
+        now = time.time()
+        with self._lock:
+            pages = self._open_pages.get(provider, {})
+            # 顺手清理超期登记：页面崩溃 / 关闭标签来不及注销时靠这个兜底
+            alive = [u for u, ts in pages.items() if (now - ts) <= OPEN_WINDOW]
+            for u in [u for u, ts in pages.items() if (now - ts) > OPEN_WINDOW]:
+                pages.pop(u, None)
+            return alive
+
     def is_online(self, provider):
         with self._lock:
             last = self._last_poll.get(provider, 0)
