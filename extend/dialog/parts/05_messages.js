@@ -282,14 +282,17 @@
     try { this._attachPendingFiles(conv, incoming); } catch (e) { log('挂载文件失败：' + e); }
     const beforeNodes = Object.keys(conv.msgTree).length;
     const isInitialLoad = beforeNodes === 0;
-    // 入树前先查这批 id 是否已在树中：这是判断「是不是历史重放」的唯一硬依据
-    const anyIdInTree = this._anyIdInTree(conv, incoming);
+    // 入树前查「末条消息」是否已在树中。不能用整批查重：切片含历史消息，
+    // 用 some() 会恒为 true，把真正的新回复也挡掉（曾致 QQ 收不到消息）。
+    const tailMsg = incoming[incoming.length - 1];
+    const tailInTree = !!(tailMsg && this.keyOfId(conv.msgTree, this.msgId(tailMsg)));
     const up = this.upsertTree(conv, incoming, reason, atBottom);
     const addedNodes = Object.keys(conv.msgTree).length > beforeNodes;
 
-    // 不入树（断裂 / 碰撞 / 单节点 / 中间命中）：仍建卡供手动操作，但不自动执行。
+    // 不入树（断裂 / 碰撞 / 单节点重复 / 中间命中）：仍建卡供手动操作，但不自动执行。
+    // 注意单节点有三种结果：single_new / single_collision 均已入树，只有 single_dup 未入树。
     const notInTree = (up.mode === 'orphan' || up.mode === 'collision'
-      || up.mode === 'single' || up.mode === 'middle');
+      || up.mode === 'single_dup' || up.mode === 'middle');
     if (notInTree) log('本轮不入树（mode=' + up.mode + '）：建卡但跳过自动执行');
 
     // 2) 记录可见区切片的 key（有序）
@@ -309,11 +312,11 @@
     // 网页看得到这条消息，语音缺失却不告警。此处统一判定，两条路同进同出。
     const lastIsAssistant = incoming.length
       && incoming[incoming.length - 1].role === 'assistant';
-    // 新鲜回复判定：彻底废除 reason 特权，只认真实状态。
-    // scrollOnly 必须排除：向上滚动加载的更早历史，id 同样不在树里，
-    // 若末条恰为 AI 就会被误判为新回复，导致回看历史却重新复制并上报。
+    // 新鲜回复判定：只认「末条 AI 消息此前不在树中」。
+    // scrollOnly 排除：向上滚动加载的更早历史，末条同样不在树里，
+    // 若放行会导致回看历史却重新复制并上报。
     const isFreshReply = !isInitialLoad && !scrollOnly && addedNodes
-      && lastIsAssistant && !anyIdInTree;
+      && lastIsAssistant && !tailInTree;
     this._logQualityDiagnosis(reason, addedNodes, lastIsAssistant, isFreshReply, incoming);
 
     // 3.5) 记忆确认提醒：数 AI 生成轮次，达到阈值则产出提醒（细节见 05d_memory.js）。
@@ -357,19 +360,6 @@
   M._reportFreshReply = function (isFreshReply) {
     if (isFreshReply) this.reportToBridgeWithMd('generate');
   };
-
-  /**
-   * 这批消息的 id 是否已有任何一个在树中（新鲜回复的唯一去重依据）。
-   * 历史重放的 id 必然已在树里，据此与真正的新回复区分，不依赖 reason 推测。
-   * @returns {boolean} 存在重复 id 为 true
-   */
-  M._anyIdInTree = function (conv, incoming) {
-    const tree = (conv && conv.msgTree) || {};
-    return (incoming || []).some((m) => !!this.keyOfId(tree, this.msgId(m)));
-  };
-
-
-
 
   /**
    * 收尾：处理重复卡片重跑与「仅最新一张」的自动执行。
