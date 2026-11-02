@@ -270,6 +270,11 @@ def handle_report(client, payload):
     if not chatid or not messages:
         return 0
     push = bridge_store.get_config().get("push") or {}
+    # 第一步（锁外）：语音合成。合成是网络调用、一条要一秒以上，
+    # 放在锁内会让该会话长时间占锁、上报线程堆积。
+    # 与 QQ 通道共用 message_flow.synth_pending，避免两处各写一份。
+    from . import message_flow
+    voice_map = message_flow.synth_pending(messages, push, {})
     with _lock:
         fresh = _collect_fresh(conv_id, messages)
         if not fresh:
@@ -285,10 +290,9 @@ def handle_report(client, payload):
             images.extend(_collect_images(m))
             files.extend(_collect_files(m))
             # 语音只在 AI 消息上推：用户与工具消息没有朗读文本。
-            # 开关判定与 QQ 侧（message_flow.presynth_voice）保持同一口径：
-            # push["voice"] 关闭时一律不推，避免两通道规则不一致。
+            # 音频取自锁外预合成的结果；消息自带的 voice 字段作为兜底。
             if push.get("voice"):
-                vpath, vtext = _collect_voice_files(m)
+                vpath, vtext = _collect_voice_files(m, voice_map)
                 if vpath and vtext and _classify(m) == "ai":
                     voices.append(vpath)
         if not bodies and not images and not files and not voices:

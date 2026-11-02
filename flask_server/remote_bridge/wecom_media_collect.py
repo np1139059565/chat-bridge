@@ -71,12 +71,17 @@ def collect_files(m):
     return out
 
 
-def collect_voice(m):
-    """取出消息里要推送的语音文件（由 TTS 预先合成）。
+def collect_voice(m, voice_paths=None):
+    """取出消息里要推送的语音文件。
 
     语音不进正文：正文已有文字，语音是附加形态。与 QQ 通道一致，
     只在 AI 消息上推语音，且合成失败的条目会被上游跳过。
-    @param m 消息对象
+
+    音频来源优先取 voice_paths（调用方在锁外预合成好的），
+    其次取消息自带的 voice 字段（网页播放器已生成过音频）。
+
+    @param m           消息对象
+    @param voice_paths 预合成结果 {消息id: 音频路径}
     @returns (本地音频路径, 朗读文本) 二元组；无语音返回 ("", "")
     """
     # 延迟导入：复用远程桥接既有的语音块提取规则，避免两处判定不一致

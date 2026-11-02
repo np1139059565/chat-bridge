@@ -58,6 +58,40 @@ def presynth_voice(messages, push):
     return voice_paths
 
 
+def synth_pending(messages, push, voice_paths):
+    """并发合成「尚未有音频」的消息，返回 {消息id: 音频路径}。
+
+    这是语音合成的唯一实现，QQ 与企业微信两条通道共用：
+    推送目标不同，但「谁该合成、怎么合成、合成失败怎么办」完全一致。
+    各通道只负责在拿到路径后按自己的方式投递。
+
+    调用方必须在推送锁之外调用：合成是网络调用、一条要一秒以上，
+    放进锁内会让该会话长时间占锁、上报线程堆积。
+
+    @param messages    本轮消息列表
+    @param push        推送开关字典（读 voice 开关）
+    @param voice_paths 已命中缓存的 {消息id: 音频路径}
+    @returns {消息id: 音频路径}；无需合成或全部失败时为空字典
+    """
+    # 未开语音开关：本轮不合成
+    if not push.get("voice"):
+        return {}
+    pending = _collect_pending(messages, push, voice_paths)
+    if not pending:
+        return {}
+    from concurrent.futures import ThreadPoolExecutor
+    from app_limits import MAX_CONCURRENT_SYNTH
+    results = []
+    try:
+        # 并发合成：串行时十几条会把补推拖后十几秒；上限取自 app_limits
+        with ThreadPoolExecutor(max_workers=max(1, MAX_CONCURRENT_SYNTH)) as pool:
+            results = list(pool.map(_synth_one, pending))
+    except Exception as e:
+        log("语音并发合成异常（不影响主流程）：", e)
+    # 合成失败的条目路径为空串，直接剔除
+    return {mid: path for mid, path in results if path}
+
+
 def postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths):
     """文字推完后补语音：并发合成未命中的，逐条推给 QQ。
 

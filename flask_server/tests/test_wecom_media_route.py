@@ -132,7 +132,8 @@ class TestMediaWithoutReqId:
         """无 req_id 时文件与语音同样走主动推送。"""
         monkeypatch.setattr(router, "_collect_images", lambda m: [])
         monkeypatch.setattr(router, "_collect_files", lambda m: ["/tmp/a.zip"])
-        monkeypatch.setattr(router, "_collect_voice_files", lambda m: ("/tmp/v.amr", "朗读"))
+        monkeypatch.setattr(router, "_collect_voice_files",
+                            lambda m, vm=None: ("/tmp/v.amr", "朗读"))
         monkeypatch.setattr(bridge_store, "get_config", lambda: {"push": {"voice": True}})
         client = _FakeClient()
         router.handle_report(client, _payload([_text_msg()]))
@@ -207,7 +208,8 @@ class TestVoiceSwitch:
 
     def test_voice_sent_when_switch_on(self, _isolate_state, monkeypatch):
         """开关打开、且有凭证时，语音应发出。"""
-        monkeypatch.setattr(router, "_collect_voice_files", lambda m: ("/tmp/v.amr", "朗读"))
+        monkeypatch.setattr(router, "_collect_voice_files",
+                            lambda m, vm=None: ("/tmp/v.amr", "朗读"))
         monkeypatch.setattr(bridge_store, "get_config", lambda: {"push": {"voice": True}})
         router.note_chat("chat-A", 1, "u1", req_id="rid-1")
         client = _FakeClient()
