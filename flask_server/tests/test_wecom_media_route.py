@@ -63,6 +63,21 @@ class _FakeClient:
         self.texts.append(text)
         return True, {}
 
+    def send_image(self, chatid, path, chat_type=1, caption=""):
+        """记录一次主动推送的图片，报成功。"""
+        self.images.append(("", path))
+        return True, {}
+
+    def send_file(self, chatid, path, chat_type=1, caption=""):
+        """记录一次主动推送的文件，报成功。"""
+        self.files.append(("", path))
+        return True, {}
+
+    def send_voice(self, chatid, path, chat_type=1, caption=""):
+        """记录一次主动推送的语音，报成功。"""
+        self.voices.append(("", path))
+        return True, {}
+
 
 @pytest.fixture
 def _isolate_state(tmp_path, monkeypatch):
@@ -99,14 +114,30 @@ def _payload(messages, chatid="chat-A"):
 
 
 class TestMediaWithoutReqId:
-    """无回复凭证时：媒体跳过，文本仍能主动推送。"""
+    """无回复凭证时：媒体走主动推送，文本同样走主动推送。"""
 
-    def test_image_skipped_without_req_id(self, _isolate_state, monkeypatch):
-        """无 req_id 时图片不发，且不报错。"""
+    def test_image_active_pushed_without_req_id(self, _isolate_state, monkeypatch):
+        """无 req_id 时图片改走主动推送，仍然发出。
+
+        凭证为空串即表示走的是 send_image（主动推送），
+        有凭证时该位置会是具体的 rid。
+        """
         monkeypatch.setattr(router, "_collect_images", lambda m: ["/tmp/a.png"])
         client = _FakeClient()
         router.handle_report(client, _payload([_img_msg()]))
-        assert client.images == []
+        assert len(client.images) == 1
+        assert client.images[0][0] == ""
+
+    def test_file_and_voice_active_pushed_without_req_id(self, _isolate_state, monkeypatch):
+        """无 req_id 时文件与语音同样走主动推送。"""
+        monkeypatch.setattr(router, "_collect_images", lambda m: [])
+        monkeypatch.setattr(router, "_collect_files", lambda m: ["/tmp/a.zip"])
+        monkeypatch.setattr(router, "_collect_voice_files", lambda m: ("/tmp/v.amr", "朗读"))
+        monkeypatch.setattr(bridge_store, "get_config", lambda: {"push": {"voice": True}})
+        client = _FakeClient()
+        router.handle_report(client, _payload([_text_msg()]))
+        assert len(client.files) == 1 and client.files[0][0] == ""
+        assert len(client.voices) == 1 and client.voices[0][0] == ""
 
     def test_text_pushed_without_req_id(self, _isolate_state):
         """无 req_id 时文本走主动推送，仍然发得出去。"""
@@ -127,13 +158,17 @@ class TestMediaWithReqId:
         router.handle_report(client, _payload([_img_msg()]))
         assert [r[0] for r in client.images] == ["rid-1"]
 
-    def test_single_req_id_only_one_media(self, _isolate_state, monkeypatch):
-        """只有一个凭证时，两张图只发出第一张（凭证不够用）。"""
+    def test_single_req_id_then_active_push(self, _isolate_state, monkeypatch):
+        """只有一个凭证时：第一张走凭证回复，第二张走主动推送。
+
+        凭证不够并不等于发不出去——主动推送不依赖凭证，
+        故两张图都应发出，只是路径不同（第一张带 rid，第二张为空）。
+        """
         monkeypatch.setattr(router, "_collect_images", lambda m: ["/tmp/a.png", "/tmp/b.png"])
         router.note_chat("chat-A", 1, "u1", req_id="rid-1")
         client = _FakeClient()
         router.handle_report(client, _payload([_img_msg()]))
-        assert len(client.images) == 1
+        assert [r[0] for r in client.images] == ["rid-1", ""]
 
     def test_queued_req_ids_send_multiple_media(self, _isolate_state, monkeypatch):
         """凭证池化后：两条入向消息带来两个凭证，两张图应各用一张全部发出。

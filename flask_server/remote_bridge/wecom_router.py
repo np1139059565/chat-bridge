@@ -304,13 +304,12 @@ def handle_report(client, payload):
         #
         # 图片：msg_item 直传 base64
         for path in images:
-            # 每张图各自取一个凭证：一个 req_id 只能回复一条消息
+            # 有凭证走回复（客户端停止转圈）；无凭证走主动推送（不依赖窗口）
             req_id = take_req_id(chatid)
-            if not req_id:
-                # 无凭证时主动推送发不了图（官方限制），明确记日志而非假装成功
-                log("图片跳过：无 req_id，主动推送不支持图片")
-                continue
-            ok, data = client.respond_image(req_id, chatid, path, chat_type)
+            if req_id:
+                ok, data = client.respond_image(req_id, chatid, path, chat_type)
+            else:
+                ok, data = client.send_image(chatid, path, chat_type)
             if ok:
                 sent += 1
                 log("已发送图片：", os.path.basename(path))
@@ -319,10 +318,10 @@ def handle_report(client, payload):
         # 文件：三步上传拿 media_id 后再发
         for path in files:
             req_id = take_req_id(chatid)
-            if not req_id:
-                log("文件跳过：无 req_id，主动推送不支持文件")
-                continue
-            ok, data = client.respond_file(req_id, chatid, path, chat_type)
+            if req_id:
+                ok, data = client.respond_file(req_id, chatid, path, chat_type)
+            else:
+                ok, data = client.send_file(chatid, path, chat_type)
             if ok:
                 sent += 1
                 log("已发送文件：", os.path.basename(path))
@@ -331,10 +330,10 @@ def handle_report(client, payload):
         # 语音：与图片同构的 msg_item 直传
         for path in voices:
             req_id = take_req_id(chatid)
-            if not req_id:
-                log("语音跳过：无 req_id，主动推送不支持语音")
-                continue
-            ok, data = client.respond_voice(req_id, chatid, path, chat_type)
+            if req_id:
+                ok, data = client.respond_voice(req_id, chatid, path, chat_type)
+            else:
+                ok, data = client.send_voice(chatid, path, chat_type)
             if ok:
                 sent += 1
                 log("已发送语音：", os.path.basename(path))

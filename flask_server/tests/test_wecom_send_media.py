@@ -203,9 +203,32 @@ class TestSendMedia(unittest.TestCase):
         self.assertEqual(item["msgtype"], "file")
         self.assertEqual(item["file"]["media_id"], "mid-9")
 
-    def test_active_push_file_unsupported(self):
-        """主动推送发文件不受支持，应如实返回失败。"""
-        c = _FakeClient()
+    def test_active_push_file_uploads_then_sends(self):
+        """主动推送发文件：先走三步上传，再发主动推送帧。"""
+        acks = [
+            {"errcode": 0, "body": {"upload_id": "up-1"}},
+            {"errcode": 0},
+            {"errcode": 0, "body": {"media_id": "mid-9"}},
+        ]
+        c = _FakeClient(acks)
         ok, err = c.send_c2c_file("chat1", self.file)
-        self.assertFalse(ok)
-        self.assertIn("no_file_support", err)
+        self.assertTrue(ok)
+        self.assertEqual(err, {})
+        # 最后一帧是主动推送命令，且带文件媒体项
+        frame = json.loads(c.sent[-1])
+        self.assertEqual(frame["cmd"], proto.CMD_SEND_MSG)
+        item = frame["body"]["stream"]["msg_item"][0]
+        self.assertEqual(item["msgtype"], "file")
+        self.assertEqual(item["file"]["media_id"], "mid-9")
+
+    def test_active_push_image_uses_send_cmd(self):
+        """主动推送图片走 aibot_send_msg，不带回复凭证。"""
+        img = os.path.join(self._tmp.name, "a.png")
+        with open(img, "wb") as f:
+            f.write(b"\x89PNG\r\n\x1a\n" + b"x" * 50)
+        c = _FakeClient()
+        ok, _ = c.send_image("chat1", img)
+        self.assertTrue(ok)
+        frame = json.loads(c.sent[-1])
+        self.assertEqual(frame["cmd"], proto.CMD_SEND_MSG)
+        self.assertEqual(frame["body"]["stream"]["msg_item"][0]["msgtype"], "image")

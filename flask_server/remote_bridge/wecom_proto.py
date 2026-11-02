@@ -238,6 +238,35 @@ def send_frame(chatid, chat_type, payload):
     return frame(CMD_SEND_MSG, body)
 
 
+def send_media_frame(chatid, msg_item, chat_type=CHAT_SINGLE, caption=""):
+    """构造「主动推送一条媒体消息」的帧（图片 / 文件 / 语音通用）。
+
+    与 respond_media_frame 的区别只有两处：
+      - 命令用 aibot_send_msg（主动推送），不是 aibot_respond_msg（被动回复）；
+      - 不带 headers.req_id 对应的原消息，故不需要 req_id 参数。
+    消息体结构一致：msgtype=stream，媒体放在 stream.msg_item。
+
+    为什么要有它：被动回复受「一个 req_id 只能回一条消息」约束，
+    而用户没发消息时根本没有 req_id。主动推送让媒体不依赖回复窗口。
+
+    @param chatid    会话 id
+    @param msg_item  消息项字典，如 {"msgtype":"image","image":{...}}
+    @param chat_type 会话类型
+    @param caption   附带文字（可为空）
+    @returns JSON 字符串
+    """
+    payload = {
+        "msgtype": "stream",
+        "stream": {
+            "id": new_req_id(),
+            "finish": True,
+            "content": str(caption or ""),
+            "msg_item": [msg_item],
+        },
+    }
+    return send_frame(chatid, chat_type, payload)
+
+
 # ---------- 媒体上传 ----------
 def upload_init_frame(file_name, file_size, media_type="image"):
     """构造媒体上传初始化帧。

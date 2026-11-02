@@ -114,16 +114,37 @@ class WecomMediaMixin:
         ok = self._send_nowait(frame_text)
         return ok, ({} if ok else "send_failed")
 
-    def send_image(self, chatid, file_path, chat_type=proto.CHAT_SINGLE):
-        """主动推送一张图片。
+    def send_image(self, chatid, file_path, chat_type=proto.CHAT_SINGLE,
+                   caption=""):
+        """主动推送一张图片（不依赖回复凭证）。
 
-        注意：官方主动推送（aibot_send_msg）只支持文本与模板卡片，
-        不带 msg_item，故本方法在无 req_id 时无法真正发出图片。
-        保留此方法仅为签名兼容，调用方应优先用 respond_image。
+        与 respond_image 的唯一区别：走 aibot_send_msg，不带 req_id。
+        用户没发消息、或凭证已被前一条媒体用掉时，走这条路径。
 
+        @param chatid    会话 id
+        @param file_path 本地图片路径
+        @param chat_type 会话类型
+        @param caption   附带文字
         @returns (ok, data_or_error)
         """
-        return False, "active_push_no_image_support"
+        if not chatid:
+            return False, "no_chatid"
+        try:
+            with open(file_path, "rb") as f:
+                raw = f.read()
+        except Exception as e:
+            return False, "read_failed: %s" % e
+        if not raw:
+            return False, "empty_file"
+        if len(raw) > MAX_IMAGE_BYTES:
+            return False, "image_too_large"
+        b64 = proto.b64(raw)
+        md5 = hashlib.md5(raw).hexdigest()
+        frame_text = proto.send_media_frame(
+            chatid, proto.image_item(b64, md5),
+            chat_type=chat_type, caption=caption)
+        ok = self._send_nowait(frame_text)
+        return ok, ({} if ok else "send_failed")
 
     def send_c2c_image(self, chatid, image_path, msg_id="", msg_seq=1):
         """兼容 QQ 客户端签名的发图入口。"""
@@ -283,15 +304,74 @@ class WecomMediaMixin:
         ok = self._send_nowait(frame_text)
         return ok, ({} if ok else "send_failed")
 
+    def send_file(self, chatid, file_path, chat_type=proto.CHAT_SINGLE,
+                  caption=""):
+        """主动推送一个文件（不依赖回复凭证）：先三步上传，再发文件项。
+
+        @param chatid    会话 id
+        @param file_path 本地文件路径
+        @param chat_type 会话类型
+        @param caption   附带文字
+        @returns (ok, data_or_error)
+        """
+        if not chatid:
+            return False, "no_chatid"
+        media_id, err = self._upload_media(file_path, "file")
+        if err:
+            return False, err
+        frame_text = proto.send_media_frame(
+            chatid, proto.file_item(media_id, os.path.basename(file_path)),
+            chat_type=chat_type, caption=caption)
+        ok = self._send_nowait(frame_text)
+        return ok, ({} if ok else "send_failed")
+
     def send_c2c_file(self, chatid, file_path, msg_id="", msg_seq=1):
         """兼容 QQ 客户端签名的发文件入口。
 
-        企业微信的主动推送不支持 msg_item，无 req_id 时发不了文件；
-        此处如实返回失败原因，不做假装成功。
-
+        @param chatid    会话 id
+        @param file_path 本地文件路径
+        @param msg_id    忽略（QQ 专用）
+        @param msg_seq   忽略（QQ 专用）
         @returns (ok, data_or_error)
         """
-        return False, "active_push_no_file_support"
+        return self.send_file(chatid, file_path)
+
+    def send_voice(self, chatid, file_path, chat_type=proto.CHAT_SINGLE,
+                   caption=""):
+        """主动推送一条语音（不依赖回复凭证）。
+
+        与 respond_voice 同构：先转 AMR，再以 msg_item 直传 base64。
+        @param chatid    会话 id
+        @param file_path 本地音频路径
+        @param chat_type 会话类型
+        @param caption   附带文字
+        @returns (ok, data_or_error)
+        """
+        if not chatid:
+            return False, "no_chatid"
+        use_path, is_tmp = self._to_amr(file_path)
+        try:
+            try:
+                with open(use_path, "rb") as f:
+                    raw = f.read()
+            except Exception as e:
+                return False, "read_failed: %s" % e
+            if not raw:
+                return False, "empty_file"
+            b64 = proto.b64(raw)
+            md5 = hashlib.md5(raw).hexdigest()
+            frame_text = proto.send_media_frame(
+                chatid, proto.voice_item(b64, md5),
+                chat_type=chat_type, caption=caption)
+            ok = self._send_nowait(frame_text)
+            return ok, ({} if ok else "send_failed")
+        finally:
+            # 转码产物是用完即弃的临时文件，无论成败都删掉
+            if is_tmp:
+                try:
+                    os.remove(use_path)
+                except OSError:
+                    pass
 
     def download_media(self, url, aeskey="", dest_dir=""):
         """下载并解密收到的媒体文件。
