@@ -31,6 +31,44 @@ def _enable_memory_switch():
     memory_switch.clear_override()
 
 
+# 需要隔离到临时目录的运行时数据路径：全部是「用后可重建」的产物，
+# 但测试若写进真实路径，就会污染用户数据（曾真实发生：跑测试后
+# 网页会话里冒出数十条「文件已就绪」投递消息、下载目录塞满测试文件）。
+_RUNTIME_DATA_ATTRS = (
+    "WEB_DIR", "WEB_INBOX_PATH", "WEB_AUDIO_DIR", "WEB_IMAGES_DIR",
+    "WEB_SEGMENTS_DIR", "WEB_FILES_DIR",
+    "QQ_FILES_DIR", "QQ_IMAGES_DIR", "SCREENSHOTS_DIR", "VOICE_DIR",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_runtime_data(tmp_path):
+    """把所有运行时数据目录重定向到临时目录，测试永不写真实数据。
+
+    为什么必须做：测试此前只重定向了记忆库，网页收件箱、下载目录、
+    音频目录等全指向真实路径。任何碰到收件箱的测试都会写进用户真实数据，
+    既污染现场、也让测试结果依赖上一次人工操作。
+
+    重定向是逐个改模块变量而非改 DATA_DIR：各路径在 import 时已推导完成，
+    改父目录不会影响子路径变量，必须逐个覆盖才真正生效。
+
+    @param tmp_path pytest 为每个用例生成的独立临时目录
+    """
+    import paths
+    saved = {}
+    root = tmp_path / "data"
+    for attr in _RUNTIME_DATA_ATTRS:
+        if not hasattr(paths, attr):
+            continue
+        saved[attr] = getattr(paths, attr)
+        # 每个目录都放到临时根下，保持与真实布局同构，便于排查
+        setattr(paths, attr, root / attr.lower())
+    yield
+    # 还原：模块级变量改了必须改回，否则后续用例仍指向临时目录
+    for attr, val in saved.items():
+        setattr(paths, attr, val)
+
+
 @pytest.fixture(autouse=True)
 def _isolate_active_channel(tmp_path):
     """把「最近活跃渠道」隔离到临时文件，并复位内存状态。
