@@ -96,6 +96,11 @@ class WeixinGateway:
         # 刷新「谁在跟我说话」：微信推送目标靠它兜底。
         # 用微信自己的记账，不碰 QQ 的窗口状态——两条通道的会话互不相干。
         weixin_router.note_incoming(user_id)
+        # 同步登记到公共层：统一推送管线从 channel.target 读「最近用户」，
+        # 且配额按用户消息重置，故两处都要写。旧链路停用后此处自然只剩公共层。
+        from .channel import target as target_store, quota as quota_store
+        target_store.weixin.note(user_id)
+        quota_store.weixin.reset(user_id)
         self._dispatch_text(user_id, content, msg)
 
     def _dispatch_text(self, user_id, content, msg):

@@ -102,6 +102,10 @@ class WecomGateway:
         # 推送时必须用它走 respond 才能让客户端停止转圈（主动推送做不到）。
         req_id = (frame_msg.get("headers") or {}).get("req_id") or ""
         wecom_router.note_chat(chatid, chat_type, user, req_id=req_id)
+        # 同步登记到公共层：统一推送管线从 channel.target 读「最近会话」。
+        # 两处并写，切换前后行为一致；旧链路停用后可只留公共层。
+        from .channel import target as target_store
+        target_store.wecom.note(chatid)
 
         # 登记最近活跃渠道为企业微信：用户刚在企业微信侧发了消息（含指令）。
         # 后续上报只推给这个渠道，避免同一条回复同时发到 QQ 与网页。

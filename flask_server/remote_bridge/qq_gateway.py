@@ -58,6 +58,10 @@ class QqGateway:
             # 才被赋值，服务重启后若用户先发 QQ 指令，补推会因缺客户端而跳过，
             # 积压消息要等下一次网页上报才推得出去。
             message_router.note_incoming(openid, msg_id, self.qq_client)
+            # 同步登记到公共层：统一推送管线从 channel.target 读「最近用户」。
+            # 两处并写，切换前后行为一致；旧链路停用后可只留公共层。
+            from .channel import target as target_store
+            target_store.qq.note(openid)
 
         # 登记最近活跃渠道为 QQ：用户刚在 QQ 侧发了消息（含 /h 这类指令，
         # 指令同样是一条入向消息）。后续主动下发（推送文件、合成语音）据此
