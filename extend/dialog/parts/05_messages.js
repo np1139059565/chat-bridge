@@ -309,9 +309,11 @@
     // 网页看得到这条消息，语音缺失却不告警。此处统一判定，两条路同进同出。
     const lastIsAssistant = incoming.length
       && incoming[incoming.length - 1].role === 'assistant';
-    // 新鲜回复判定：彻底废除 reason 特权。只要不是初次加载、真有节点新增、
-    // 且这批 id 不在树中（!anyIdInTree），才算新回复。
-    const isFreshReply = !isInitialLoad && addedNodes && lastIsAssistant && !anyIdInTree;
+    // 新鲜回复判定：彻底废除 reason 特权，只认真实状态。
+    // scrollOnly 必须排除：向上滚动加载的更早历史，id 同样不在树里，
+    // 若末条恰为 AI 就会被误判为新回复，导致回看历史却重新复制并上报。
+    const isFreshReply = !isInitialLoad && !scrollOnly && addedNodes
+      && lastIsAssistant && !anyIdInTree;
     this._logQualityDiagnosis(reason, addedNodes, lastIsAssistant, isFreshReply, incoming);
 
     // 3.5) 记忆确认提醒：数 AI 生成轮次，达到阈值则产出提醒（细节见 05d_memory.js）。
