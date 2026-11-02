@@ -113,6 +113,17 @@
     const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
     holder.cards[b.id] = this._makeCard(b, call, blockIssue);
     if (!call) return;
+    // 记录归属消息指纹：刷新后代码块 id 会变，但消息指纹相对稳定，
+    // 用它拼「执行签名」判定这次调用是否已执行过（见 executeCard）。
+    holder.cards[b.id].msgId = this.msgId(m);
+    // 签名命中说明这条调用此前执行过：直接恢复为已执行态，
+    // 否则刷新后卡片会退回待执行、甚至被自动流程再跑一遍。
+    const doneSig = this._executedSig(this.msgId(m), call);
+    if (doneSig) {
+      holder.cards[b.id].executed = true;
+      holder.cards[b.id].status = 'done';
+      holder.cards[b.id].restoredFromSig = true;
+    }
     if (!state.firstToolCard) state.firstToolCard = holder.cards[b.id];
     if (scrollOnly) {
       // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行
@@ -231,6 +242,39 @@
    * @param {Object|null} issue 建卡阶段检测出的问题
    * @returns {Object} 卡片对象
    */
+  /**
+   * 计算一次工具调用的执行签名，用于跨刷新恢复「已执行」状态。
+   *
+   * 为什么需要它：代码块 id 是内容指纹，网页重新渲染后同一段调用会得到不同 id，
+   * 只靠卡片自身状态无法跨刷新保留，刷新后卡片会退回待执行。
+   * 签名改用「消息指纹 + 工具名 + 参数」，这三者在刷新后保持稳定。
+   * @param {string} msgId 归属消息指纹
+   * @param {Object} call 解析出的工具调用 {tool, parameters}
+   * @returns {string} 命中返回签名，未命中返回空串
+   */
+  M._executedSig = function (msgId, call) {
+    if (!msgId || !call || !call.tool) return '';
+    const conv = this.ensureConv(this.activeConv);
+    const store = (conv && conv.executedSigs) || {};
+    const sig = msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
+    return store[sig] ? sig : '';
+  };
+
+  /**
+   * 登记一次工具调用为「已执行」，供刷新后恢复状态。
+   *
+   * 代码块 id 会随网页重新渲染变化，只靠卡片自身状态无法跨刷新保留，
+   * 故用「消息指纹 + 工具名 + 参数」这组稳定信息作为键。
+   * @param {Object} card 刚执行完的卡片
+   */
+  M._markExecutedSig = function (card) {
+    if (!this.activeConv || !card || !card.msgId || !card.tool) return;
+    const conv = this.ensureConv(this.activeConv);
+    if (!conv.executedSigs) conv.executedSigs = {};
+    const sig = card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
+    conv.executedSigs[sig] = true;
+  };
+
   M._makeCard = function (b, call, issue) {
     return {
       id: b.id,

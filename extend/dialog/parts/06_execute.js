@@ -65,6 +65,8 @@
     // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
     card.executed = true;
     card.finishedAt = Date.now();
+    // 记录执行签名，供刷新后恢复「已执行」态（实现见 05g_cards）
+    this._markExecutedSig(card);
     if (this._persist) this._persist();
     // 上报一次：工具结果此时才产生，不上报的话 QQ 端只看得到工具调用、
     // 看不到结果。以 'tool' 来源上报，后端据此放行（不按普通回看丢弃）。

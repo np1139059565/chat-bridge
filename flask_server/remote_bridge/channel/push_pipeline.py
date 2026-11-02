@@ -200,7 +200,11 @@ def _push_locked(args):
     merged = adapter.merge_batch(todo, push) if hasattr(adapter, "merge_batch") else None
     if merged is not None:
         if not merged:
-            log("合并后无内容，%d 条不再推送" % len(todo))
+            # 无文本内容不等于无内容可推：这一批可能全是图片 / 语音。
+            # 直接返回会让媒体被整批丢掉，故仍走一次媒体发送。
+            log("合并后无文本，尝试发送媒体 %d 条" % len(todo))
+            if hasattr(adapter, "push_media"):
+                return adapter.push_media(recipient, todo, push, ctx)
             return 0
         ok = adapter.send_text(recipient, merged, markdown=True)
         if ok:
