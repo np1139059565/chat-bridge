@@ -65,6 +65,15 @@ def _push_to_web(fp, size):
     @return { pushed, name, size, target, url, note? }
     """
     from web_file_delivery import save_for_web, download_url, notify_inbox
+    # 测试环境守卫：pytest 运行期间直接拒绝网页投递。
+    # 理由：该分支会真的复制文件到下载目录、真的往收件箱写「文件已就绪」，
+    # 一旦测试未正确复位活跃渠道，就会污染用户真实数据（曾真实发生：
+    # 跑测试后网页会话里冒出数十条投递消息）。测试应当永远不写真实数据。
+    import sys
+    if "pytest" in sys.modules:
+        raise ToolParamError(
+            "测试环境下禁止网页投递：该分支会写真实下载目录与收件箱。"
+            "请在用例中复位 active_channel，或 mock 本函数。")
     try:
         saved = save_for_web(fp)
     except Exception as e:

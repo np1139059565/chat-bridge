@@ -130,7 +130,7 @@ def _dispatch(action, params=None, openid="", screenshot=False):
     import card_bus
     payload = {"action": action, "params": params or {}}
     want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
-    card = card_bus.bus.create(
+    card = card_bus.command_bus.create(
         source="bridge",
         card_type="drawer-command",
         title="远程指令",
@@ -176,7 +176,7 @@ def _dispatch_with_result(action, params, openid):
     import card_bus
     rid = _register_pending(openid)
     payload = {"action": action, "params": params or {}, "request_id": rid}
-    card = card_bus.bus.create(
+    card = card_bus.command_bus.create(
         source="bridge",
         card_type="drawer-command",
         title="远程指令",

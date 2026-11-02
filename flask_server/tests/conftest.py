@@ -32,6 +32,34 @@ def _enable_memory_switch():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_active_channel(tmp_path):
+    """把「最近活跃渠道」隔离到临时文件，并复位内存状态。
+
+    为什么需要：该状态已落盘，测试若读真实文件，会受开发机上
+    「上次是谁在说话」影响——本机可能正停在 web，导致推送分支断言失败。
+    不隔离就变成「测试结果取决于上一次人工操作」，属不可接受的随机失败。
+
+    @param tmp_path pytest 为每个用例生成的独立临时目录
+    """
+    # 必须用与业务代码相同的导入路径（core/ 已在 sys.path，
+    # `import core.active_channel` 与 `import active_channel` 是两个不同的模块对象，
+    # 改错对象等于没改）。
+    import active_channel as ac
+    old_path = ac._STATE_PATH
+    old_channel = ac._channel
+    old_loaded = ac._loaded
+    # 指向一个不存在的临时文件：等价于「尚无任何客户端发过消息」
+    ac._STATE_PATH = tmp_path / "active_channel.txt"
+    ac._channel = ""
+    ac._loaded = True   # 标记已加载，避免 get() 去读旧路径
+    yield
+    # 还原：模块级变量改了必须改回，否则后续用例仍指向临时目录
+    ac._STATE_PATH = old_path
+    ac._channel = old_channel
+    ac._loaded = old_loaded
+
+
+@pytest.fixture(autouse=True)
 def _isolate_bridge_state(tmp_path):
     """把桥接状态文件重定向到临时目录，并清空内存状态。
 

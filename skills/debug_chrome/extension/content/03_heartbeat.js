@@ -99,6 +99,21 @@
           console.error('[AI-Style-Debug] 命令处理失败：', err);
         }
       }
+      // 指令通道：与 AI 工具通道分开拉取。
+      // 两条通道各有独立队列，互不占用；处理函数沿用同一个 handleTask，
+      // 因为命令结构一致，差异只在来源。
+      const cmdCommands = await A.doCommandHeartbeat();
+      if (cmdCommands.length) {
+        A.log('取到指令命令 ' + cmdCommands.length + ' 条：',
+          cmdCommands.map((c) => (c.tool || '') + '@' + (c.request_id || '')).join(', '));
+      }
+      for (const cmd of cmdCommands) {
+        try {
+          await A.withTimeout(A.handleTask(cmd), A.TASK_TIMEOUT_MS);
+        } catch (err) {
+          console.error('[AI-Style-Debug] 指令命令处理失败：', err);
+        }
+      }
     } catch (err) {
       state.pollFailCount += 1;
       // 连续失败达到阈值才判定离线：单次失败可能来自瞬时抖动或页面切换，
@@ -121,19 +136,30 @@
   // isOpen：本页面工具（抽屉）是否打开。后端据此判断「目标页面能否消费命令」，
   // 目标页面工具没打开时，属于它的命令立即逸散到其他页面。
   // @param {boolean} isOpen 工具是否打开；省略时按当前抽屉是否存在判断
-  A.doHeartbeat = async function (isOpen) {
+  A._pollChannel = async function (path, isOpen) {
     const id = await A.getTabId();
     if (id == null) throw new Error('NO_TAB_ID');
     const open = (typeof isOpen === 'boolean') ? isOpen : !!state.drawerIframe;
     // 交给 service worker 代发：内容脚本运行在页面源下，直连本机回环地址
     // 会被 Chrome 的 Private Network Access 拦截（Permission denied for loopback）。
-    const data = await A.proxyFetch(`${state.backendUrl}/api/ext/${A.PROVIDER}`, {
+    const data = await A.proxyFetch(`${state.backendUrl}${path}`, {
       method: 'POST',
       body: { action: 'poll', tab_id: id, page_url: location.href, is_open: open },
       timeoutMs: A.POLL_TIMEOUT_MS,
     });
     if (!data || !data.success) throw new Error((data && data.error) || 'POLL_FAILED');
     return data.commands || [];
+  };
+
+  // AI 工具通道：拉取 AI 发起的外部工具调用
+  A.doHeartbeat = async function (isOpen) {
+    return A._pollChannel(`/api/ext/${A.PROVIDER}`, isOpen);
+  };
+
+  // 指令执行通道：拉取用户指令（如 /dc）。与上面共用同一个拉取函数，
+  // 只有地址不同——两条通道在服务端各有独立队列，互不占用。
+  A.doCommandHeartbeat = async function (isOpen) {
+    return A._pollChannel(`/api/command-ext/${A.PROVIDER}`, isOpen);
   };
 
   /**

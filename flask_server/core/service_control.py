@@ -86,14 +86,48 @@ def _port_alive(port, host="127.0.0.1"):
         return False
 
 
-def restart_server(delay=3.0, exit_delay=0.4):
+def _wait_inflight(timeout=8.0):
+    """等待两条通道的在途调用结束，最多等 timeout 秒。
+
+    为什么需要：重启是 os._exit 硬退出，在途调用会被直接掐断，
+    调用方（AI 工具、用户指令）看到的是「连接失败」这类假故障。
+    先等它们拿到结果再退，把「重启」与「故障」区分开。
+
+    两条通道都要等：它们各有独立队列，漏掉一条仍会有调用被掐断。
+    @param timeout 最长等待秒数
+    """
+    try:
+        from external_tools import hub, command_hub
+    except Exception:
+        # 外部工具模块不可用（未装扩展等）：没有在途调用要等
+        return
+    # 取两者中最长的等待：两个池子并行等，总耗时不超过 timeout
+    hub.wait_idle(timeout)
+    command_hub.wait_idle(timeout)
+
+
+def restart_server(delay=3.0, exit_delay=0.4, wait_inflight=True):
     """先退出旧进程、再拉起新进程（同端口重启用）。
 
     同端口不能并行监听，故只能先退再起。旧进程延迟 exit_delay 秒退出，
-    给调用方的 HTTP 响应留出写回时间。
+    给调用方的 HTTP 响应留出写回时间；并在退出前等待在途调用结束。
+    @param delay         新进程延迟启动秒数（避开端口释放窗口）
+    @param exit_delay    回执写回后的退出延迟（秒）
+    @param wait_inflight 是否等待在途调用结束（默认等）
     """
     _spawn(delay=delay)
-    threading.Timer(exit_delay, lambda: os._exit(0)).start()
+
+    def _exit_when_idle():
+        """等在途调用结束后退出。
+
+        放在 Timer 的回调里而非另起线程：Timer 已经提供了「延迟 exit_delay 秒」
+        这一段，只需在它触发后补上等待逻辑即可，无需再引入第二种调度机制。
+        """
+        if wait_inflight:
+            _wait_inflight()
+        os._exit(0)
+
+    threading.Timer(exit_delay, _exit_when_idle).start()
 
 
 def rolling_restart(port, host="127.0.0.1", timeout=25.0):

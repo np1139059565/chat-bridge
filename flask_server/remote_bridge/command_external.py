@@ -50,7 +50,9 @@ def _run_external_command(qq_client, openid, cmd_entry):
 
     def _worker():
         try:
-            ok, data = external_tools.hub.dispatch(provider, tool, params)
+            # 走指令专用池：与 AI 工具池物理隔离，
+            # 指令执行失败后的善后不会动到 AI 工具共用的队列与等待表。
+            ok, data = external_tools.command_hub.dispatch(provider, tool, params)
         except Exception as e:
             log("外部指令执行异常：", cmd_name, e)
             _reply(qq_client, openid, "指令 %s 执行异常" % cmd_name)

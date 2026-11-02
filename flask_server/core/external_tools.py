@@ -348,6 +348,30 @@ class ProviderHub:
             "created_at": time.time(),               # 入队时刻：用于计算目标页独占窗口
         }
 
+    def inflight(self):
+        """当前在途（已入队、尚未拿到结果）的调用数。
+
+        供重启前等待使用：重启会直接杀掉进程，在途调用会被掐断，
+        调用方看到的是「连接失败」这类假故障。
+        @returns 在途调用数
+        """
+        with self._lock:
+            return len(self._events)
+
+    def wait_idle(self, timeout=8.0, step=0.1):
+        """等待在途调用清零，最多等 timeout 秒。
+
+        @param timeout 最长等待秒数
+        @param step    轮询步长（秒）
+        @returns 是否已清零
+        """
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if self.inflight() == 0:
+                return True
+            time.sleep(step)
+        return self.inflight() == 0
+
     def dispatch(self, provider, tool, params, silent=False, page_url="", host_page_url=""):
         """把一次工具调用入队，并阻塞等待提供方回传结果。
 
@@ -385,5 +409,16 @@ class ProviderHub:
         return False
 
 
-# 全局单例
+# ---------- 两个实例，同一个类，物理隔离 ----------
+# hub：AI 工具通道。AI 调外部工具（get_element_style 等）走这里。
+# command_hub：指令通道。用户指令执行（如 /dc）走这里。
+#
+# 为什么必须是两个实例：两者共用一份实例时，队列、等待事件表、结果表全在一起。
+# 指令执行失败后的善后（_abort_request 撤回队列项）会动到 AI 工具共用的队列，
+# 反之亦然。曾出现过「重启把在途工具调用一并掐断」的事故，
+# 根因就是两条链路在同一个池子里排队。
+#
+# 为什么不是两个类：两者行为完全一致，差异只在「谁的命令进哪个队列」，
+# 那是实例归属问题、不是行为问题。复制类只会让日后改一处漏一处。
 hub = ProviderHub()
+command_hub = ProviderHub()

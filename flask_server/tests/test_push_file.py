@@ -31,9 +31,23 @@ class TestPushFileValidation(unittest.TestCase):
         import tempfile
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = self._tmp.name
+        # 复位「最近活跃渠道」，让本用例确定性地走 QQ 分支。
+        # 必须在此显式复位：本文件是 unittest.TestCase 风格，
+        # pytest 的 autouse fixture 不会自动作用于它，conftest 里的隔离对它无效。
+        # 不复位的后果是测试读开发机真实状态——若最近用过网页版，
+        # push_file 会走网页分支，真的复制文件、真的往收件箱写投递消息，
+        # 既造成断言失败，也会污染用户数据（曾真实发生）。
+        import active_channel
+        self._ac_state = (active_channel._channel, active_channel._loaded,
+                          active_channel._STATE_PATH)
+        active_channel._channel = ""
+        active_channel._loaded = True
 
     def tearDown(self):
-        """清理临时目录。"""
+        """清理临时目录并还原活跃渠道状态。"""
+        import active_channel
+        (active_channel._channel, active_channel._loaded,
+         active_channel._STATE_PATH) = self._ac_state
         self._tmp.cleanup()
 
     def _touch(self, name, size=8):
@@ -100,9 +114,19 @@ class TestPushFileSuccess(unittest.TestCase):
         self.md = os.path.join(self._tmp.name, "note.md")
         with open(self.md, "w", encoding="utf-8") as f:
             f.write("# hi\n")
+        # 复位活跃渠道，确保走 QQ 分支（理由同 TestPushFileValidation）。
+        # 走网页分支会真的复制文件并往收件箱写投递消息，污染真实数据。
+        import active_channel
+        self._ac_state = (active_channel._channel, active_channel._loaded,
+                          active_channel._STATE_PATH)
+        active_channel._channel = ""
+        active_channel._loaded = True
 
     def tearDown(self):
-        """清理临时目录。"""
+        """清理临时目录并还原活跃渠道状态。"""
+        import active_channel
+        (active_channel._channel, active_channel._loaded,
+         active_channel._STATE_PATH) = self._ac_state
         self._tmp.cleanup()
 
     def test_success_returns_pushed_true(self):

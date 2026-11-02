@@ -209,6 +209,26 @@ POST 请求体示例：
 > 在线判定（10 秒内有过 `poll`）仅用于界面「已连接」指示灯，不参与执行判断。
 > 外部工具调用一律入队等待提供方取走执行；等待上限内未取走才返回 `ForwardTimeout`（origin=environment）。
 
+### POST /api/command-ext/&lt;provider&gt;
+
+指令执行通道，请求与响应结构同 `POST /api/ext/<provider>`。
+
+与 `/api/ext` 的区别只在**归属**：`/api/ext` 承载 AI 发起的工具调用，
+本接口承载用户指令（如 `/dc`）的执行。两者在服务端各有独立队列、独立等待表，
+指令执行失败后的善后不会影响 AI 工具共用的资源。
+
+---
+
+## 五·B、指令通道（/api/commands）
+
+### GET /api/commands/pending
+
+抽屉轮询：取走指令通道下发的待执行命令，返回 `{ success, cards }`。
+
+卡片类型固定为 `drawer-command`，由抽屉就地执行，不会进入待发送列表、
+不会下发给网页 AI。与 `GET /api/cards/pending`（AI 卡片通道）是两条独立通道，
+取件逻辑共用同一实现，差异只在归属的通道实例。
+
 ---
 
 ## 六、内置工具参数速查

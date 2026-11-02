@@ -146,8 +146,23 @@
    */
   M.pollExternalCards = async function () {
     if (!this.panelVisible) return;
+    // AI 通道卡片：可能下发给网页 AI 的外部卡片
+    await this._pollCardChannel('/api/cards/pending');
+    // 指令通道卡片：只含抽屉命令，必定被 consumeBridgeCommand 就地消费，
+    // 不会进入 externalCards、不会下发给 AI。与上面共用同一套消费逻辑。
+    await this._pollCardChannel('/api/commands/pending');
+  };
+
+  /**
+   * 从某条通道取卡片并逐张消费（指令通道与 AI 通道共用）。
+   *
+   * 抽成一个函数的原因：两条通道的取件与消费流程完全一致，
+   * 差异只在地址；复制一份会让日后改一处漏一处。
+   * @param {string} url 取件接口地址
+   */
+  M._pollCardChannel = async function (url) {
     try {
-      const data = await D.apiFetch(this, '/api/cards/pending', {
+      const data = await D.apiFetch(this, url, {
         headers: { 'Accept': 'application/json' }
       });
       const cards = (data && data.cards) || [];
