@@ -61,8 +61,8 @@
     // 1) 空历史：整片建树
     if (!Object.keys(tree).length) return this._treeBuildNew(conv, tree, ids, list);
 
-    // 2) 单节点切片：构不成链
-    if (n < 2) return this._treeSingle(conv, ids);
+    // 2) 单节点切片：构不成链，按 id 去重后决定是否入树
+    if (n < 2) return this._treeSingle(conv, tree, ids, list);
 
     // 3) 计算切片的所有边，并与树比对
     const sliceKeys = [];
@@ -126,17 +126,17 @@
    * @returns {Object} 处理结果 { mode }
    */
   M._treeNoMatch = function (conv, tree, ids, list, reason, atBottom, sliceKeys) {
-    // 1) 寻点回退：允许按节点接上的两种情形——
-    //    · 来源是 generate：AI 刚说完新话，切片首条边的另一端天然不在树里；
-    //    · 切片可从树中已有节点往下延伸：首条已在树、其余都不在树。
-    //    回看类来源（scroll / switch / manual）只在后者放行，避免把历史误接到末端。
-    const canAppend = reason === 'generate' || this.isAppendableFromExisting(tree, ids);
-    if (canAppend) {
+    // 1) 寻点回退：切片首条已在树、其余都不在树 —— 从已知节点往后接
+    if (this.isAppendableFromExisting(tree, ids)) {
       const r = this._treeAppendFromExisting(conv, tree, ids, list, reason);
       if (r) return r;
     }
-    // 2) 末路兜底：寻点也失效时，generate 且在底部才整片接到分支末端
-    if (reason === 'generate' && atBottom) {
+    // 2) 整片都不在树中：必须先确认没有 id 重复，才允许接到末尾。
+    //    为什么：刷新页面后会重放历史消息，这些消息的 id 很可能已在树里，
+    //    若仅凭 reason 标记就整片追加，等于绕过查重、把旧消息当新消息入树。
+    //    因此这里不再看来源标记，只看「这批 id 是否已在树中出现过」。
+    const hasDup = ids.some((id) => this.keyOfId(tree, id));
+    if (!hasDup && atBottom) {
       const r2 = this._treeAppendToTail(conv, tree, ids, list);
       if (r2) return r2;
     }
@@ -244,14 +244,45 @@
   };
 
   /**
-   * 单节点切片：构不成链，忽略并清空切片。
-   * @returns {Object} { mode:'single' }
+   * 单节点切片：构不成链，按节点 id 做去重判定。
+   *
+   * 规则（防止产生 123-123 自指边）：
+   * 1. 树中无此节点：直接入树。
+   * 2. 树中已有此节点：
+   *    - 若在末尾（没有子边），判定为完全重复，丢弃。
+   *    - 若在中间，判定为 id 碰撞，允许入树。
+   * @returns {Object} { mode:'single_new' | 'single_dup' | 'single_collision' }
    */
-  M._treeSingle = function (conv, ids) {
-    log('upsertTree：收到单节点切片，已忽略。id=' + ids[0]);
-    if (this.toast) this.toast('收到单节点切片，已忽略');
+  M._treeSingle = function (conv, tree, ids, list) {
+    const id = ids[0];
+    const node = list[0];
+    const existingKey = this.keyOfId(tree, id);
+
+    if (!existingKey) {
+      // 无重复：直接入树
+      const newKey = '0-' + id;
+      if (!tree[newKey]) tree[newKey] = this.makeNode(node);
+      conv.orphanSlice = [];
+      log('upsertTree：单节点无重复，直接入树。id=' + id);
+      return { mode: 'single_new' };
+    }
+
+    // 已存在：判断是否在末尾（是否有以它开头的子边）
+    const isTail = !Object.keys(tree).some((k) => k.startsWith(id + '-'));
+    if (isTail) {
+      // 在末尾：彻底重复，丢弃，防止产生自指边
+      conv.orphanSlice = [];
+      log('upsertTree：单节点已在末尾，丢弃以防自指。id=' + id);
+      if (this.toast) this.toast('重复消息已丢弃');
+      return { mode: 'single_dup' };
+    }
+
+    // 在中间：id 碰撞，允许入树，但不覆盖已有结构
+    const newKey = '0-' + id;
+    if (!tree[newKey]) tree[newKey] = this.makeNode(node);
     conv.orphanSlice = [];
-    return { mode: 'single' };
+    log('upsertTree：单节点存在于中间（碰撞），允许入树。id=' + id);
+    return { mode: 'single_collision' };
   };
 
   M._treeAppendTail = function (conv, tree, ids, list, b, n) {

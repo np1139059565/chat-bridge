@@ -97,7 +97,7 @@
       if (exist.isTool && !state.firstToolCard) state.firstToolCard = exist;
       if (exist.autoArmed) this.collectAutoCandidate(autoCandidates, exist);
       // 重复卡片重跑：来源=generate、卡片在本轮最新消息上、且此前已执行过，三者缺一不可
-      if (reason === 'generate' && mi === incoming.length - 1
+      if (state.isFreshReply && mi === incoming.length - 1
           && exist.isTool && exist.executed) {
         state.rerunCard = exist;
       }

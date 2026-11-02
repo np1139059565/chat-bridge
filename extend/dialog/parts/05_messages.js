@@ -260,18 +260,11 @@
     const scrollOnly = reason === 'scroll';
     // 滚动轮次是否停在底部：自动执行复检的条件之一，其余来源不看它
     const atBottom = !!(opts && opts.atBottom);
-    // 块列表归一化：非数组统一转成数组，避免后续遍历抛错
     (messages || []).forEach((m) => {
-      if (!m) return;
-      if (!Array.isArray(m.blocks)) {
-        m.blocks = (m.blocks && typeof m.blocks === 'object') ? Object.values(m.blocks) : [];
-      }
+      if (m && !Array.isArray(m.blocks)) m.blocks = (m.blocks && typeof m.blocks === 'object') ? Object.values(m.blocks) : [];
     });
     const incoming = (messages || []).filter((m) => m && m.blocks.length > 0);
-    if (!incoming.length) {
-      log('ingestMessages：切片为空，忽略');
-      return;
-    }
+    if (!incoming.length) { log('ingestMessages：切片为空，忽略'); return; }
     // 记忆检查：出现「新的」真实用户发言则打开计数窗口（工具结果回传不算用户发言，
     // 同一用户发言重复出现不会重复开窗）。窗口内由 memoryIssueForRound 数 AI 生成轮次。
     this.noteUserTurn(incoming);
@@ -284,12 +277,13 @@
     //    atBottom 一并传入：末路兜底需要它判断「用户是否正看着最新处」，
     //    只有 generate 且在底部时，才允许把找不到锚点的整片接到分支末端。
     //    beforeNodes 用于判断本轮是否真的有新节点入库（供上报解耦用，见末尾）。
-    // 方案 2：把服务端图片按「文字关联」挂到对应用户消息的块上，
-    // 必须放在入树之前——入树后消息块已被引用，再改可能来不及参与本轮渲染。
+    // 挂载待处理资产（图片 / 文件描述），必须在入树之前
     try { this._attachPendingImages(conv, incoming); } catch (e) { log('挂载图片失败：' + e); }
-    // 同理挂回文件描述：块类型无「文件」，故写入消息的 files 字段，供渲染时出「重新粘贴」按钮。
     try { this._attachPendingFiles(conv, incoming); } catch (e) { log('挂载文件失败：' + e); }
     const beforeNodes = Object.keys(conv.msgTree).length;
+    const isInitialLoad = beforeNodes === 0;
+    // 入树前先查这批 id 是否已在树中：这是判断「是不是历史重放」的唯一硬依据
+    const anyIdInTree = this._anyIdInTree(conv, incoming);
     const up = this.upsertTree(conv, incoming, reason, atBottom);
     const addedNodes = Object.keys(conv.msgTree).length > beforeNodes;
 
@@ -315,7 +309,9 @@
     // 网页看得到这条消息，语音缺失却不告警。此处统一判定，两条路同进同出。
     const lastIsAssistant = incoming.length
       && incoming[incoming.length - 1].role === 'assistant';
-    const isFreshReply = (reason === 'generate') || (addedNodes && lastIsAssistant);
+    // 新鲜回复判定：彻底废除 reason 特权。只要不是初次加载、真有节点新增、
+    // 且这批 id 不在树中（!anyIdInTree），才算新回复。
+    const isFreshReply = !isInitialLoad && addedNodes && lastIsAssistant && !anyIdInTree;
     this._logQualityDiagnosis(reason, addedNodes, lastIsAssistant, isFreshReply, incoming);
 
     // 3.5) 记忆确认提醒：数 AI 生成轮次，达到阈值则产出提醒（细节见 05d_memory.js）。
@@ -349,25 +345,29 @@
   M._logQualityDiagnosis = function (reason, addedNodes, lastIsAssistant, isFreshReply, incoming) {
     try {
       const tail = incoming.length ? incoming[incoming.length - 1] : null;
-      const tailTypes = tail
-        ? window.AIMirrorDomUtils.toArray(tail.blocks).map((b) => (b && b.type) || '?').join(',')
-        : '';
-      log('质量诊断：reason=' + reason + ' addedNodes=' + addedNodes
-        + ' lastIsAssistant=' + lastIsAssistant + ' isFreshReply=' + isFreshReply
-        + ' 末条role=' + (tail && tail.role) + ' 块类型=[' + tailTypes + ']');
+      const tailTypes = tail ? window.AIMirrorDomUtils.toArray(tail.blocks).map((b) => (b && b.type) || '?').join(',') : '';
+      log('质量诊断：reason=' + reason + ' addedNodes=' + addedNodes + ' lastIsAssistant=' + lastIsAssistant
+        + ' isFreshReply=' + isFreshReply + ' 末条role=' + (tail && tail.role) + ' 块类型=[' + tailTypes + ']');
     } catch (e) { /* 诊断日志失败不影响主流程 */ }
   };
 
-  /**
-   * 本轮若属 AI 新鲜回复，则上报给远程桥接层。
-   * 抽成子函数以控制 ingestMessages 行数；判定与质量检测共用同一 isFreshReply。
-   * 原实现只在 generate 来源上报，轮询错过「生成中→空闲」跳变、消息以 scroll
-   * 采集时会漏报；解耦为「本轮确属 AI 新增内容即上报」，后端按消息 id 去重。
-   * @param {boolean} isFreshReply 本轮是否属 AI 新鲜回复
-   */
+  /** 本轮若属 AI 新鲜回复，则上报给远程桥接层。@param {boolean} isFreshReply */
   M._reportFreshReply = function (isFreshReply) {
     if (isFreshReply) this.reportToBridgeWithMd('generate');
   };
+
+  /**
+   * 这批消息的 id 是否已有任何一个在树中（新鲜回复的唯一去重依据）。
+   * 历史重放的 id 必然已在树里，据此与真正的新回复区分，不依赖 reason 推测。
+   * @returns {boolean} 存在重复 id 为 true
+   */
+  M._anyIdInTree = function (conv, incoming) {
+    const tree = (conv && conv.msgTree) || {};
+    return (incoming || []).some((m) => !!this.keyOfId(tree, this.msgId(m)));
+  };
+
+
+
 
   /**
    * 收尾：处理重复卡片重跑与「仅最新一张」的自动执行。
