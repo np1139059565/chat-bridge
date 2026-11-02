@@ -396,14 +396,13 @@ class WecomMediaMixin:
         # 且失败后表现为「文件存成 .bin、前端认不出」，从外部看不出原因。
         # 这里把密钥长度与解密前后头部记下来，便于对照平台下发的真实字段。
         if aeskey:
-            try:
-                klen = len(base64.b64decode(aeskey))
-            except Exception:
-                klen = -1
+            # 用与解密一致的解码逻辑统计密钥长度：平台下发的是去 padding
+            # 的 URL-safe 形态，直接 b64decode 会抛异常并误报为「密钥不足」。
+            klen = len(proto._decode_aeskey(aeskey))
             log("媒体解密：密文长度=%d 密钥base64长度=%d 解码后字节=%d"
                 % (len(raw), len(aeskey), klen))
             if klen < 32:
-                log("媒体解密失败：密钥不足 32 字节，密文将原样落盘")
+                log("媒体解密失败：密钥解码后不足 32 字节，密文将原样落盘")
         else:
             log("媒体未加密（aeskey 为空），原始数据长度=%d，头部=%s"
                 % (len(raw), raw[:8].hex()))
