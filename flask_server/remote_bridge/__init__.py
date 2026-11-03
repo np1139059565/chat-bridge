@@ -246,20 +246,22 @@ class RemoteBridge:
         # 出问题时把这一项关掉即可恢复原行为，不必回滚代码。
         if _use_pipeline(cfg):
             return self._report_via_pipeline(cfg, payload, target)
+        # 广播开关在旧链路上同样生效，保证切换回退后行为一致
+        broadcast = bool(cfg.get("broadcast"))
         sent = 0
-        if cfg.get("enabled") and self._wants(target, "qq"):
+        if cfg.get("enabled") and self._wants(target, "qq", broadcast):
             try:
                 sent = message_router.handle_report(self.client, payload)
             except Exception as e:
                 log("QQ 推送异常：", e)
         wx = cfg.get("weixin") or {}
-        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin"):
+        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin", broadcast):
             try:
                 weixin_router.handle_report(self.wx_client, payload)
             except Exception as e:
                 log("微信推送异常：", e)
         wc = cfg.get("wecom") or {}
-        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom"):
+        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom", broadcast):
             try:
                 wecom_router.handle_report(self.wecom_client, payload)
             except Exception as e:
@@ -276,23 +278,25 @@ class RemoteBridge:
         """
         from .channel import push_pipeline
         push = cfg.get("push") or {}
+        # 广播开关：打开后所有已启用的通道各收一份，避免单条通道丢消息导致漏看
+        broadcast = bool(cfg.get("broadcast"))
         sent = 0
         # 三条通道按同一套规则调度，差异全在各自的适配器里
-        if cfg.get("enabled") and self.client and self._wants(target, "qq"):
+        if cfg.get("enabled") and self.client and self._wants(target, "qq", broadcast):
             try:
                 self.qq_adapter.client = self.client
                 sent = push_pipeline.run(self.qq_adapter, payload, push, log)
             except Exception as e:
                 log("QQ 推送异常（管线）：", e)
         wx = cfg.get("weixin") or {}
-        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin"):
+        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin", broadcast):
             try:
                 self.weixin_adapter.client = self.wx_client
                 push_pipeline.run(self.weixin_adapter, payload, push, log)
             except Exception as e:
                 log("微信推送异常（管线）：", e)
         wc = cfg.get("wecom") or {}
-        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom"):
+        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom", broadcast):
             try:
                 self.wecom_adapter.client = self.wecom_client
                 push_pipeline.run(self.wecom_adapter, payload, push, log)
@@ -301,17 +305,25 @@ class RemoteBridge:
         return sent
 
     @staticmethod
-    def _wants(target, channel):
+    def _wants(target, channel, broadcast=False):
         """判断某个通道本轮是否该推送。
 
-        规则：无活跃记录时全部放行（广播兜底）；有记录时只放行该渠道。
-        active_channel 里的渠道名与这里略有差异（qq / web / wecom），
-        微信通道在 active_channel 里没有独立取值，故按 qq 之外处理。
+        两种模式：
+          broadcast=True  广播 —— 所有已启用且在线的通道都推一份
+          broadcast=False 单通道 —— 只推给最近说话的通道
 
-        @param target  活跃渠道名；空串表示尚无记录
-        @param channel 本方法要判断的通道名
+        广播模式的用途：某条通道不稳时，另一条能兜住同一份内容，
+        用户不至于因为一条通道丢消息而漏看。代价是同一条回复会出现两次，
+        且各通道各自记账（去重集合按通道隔离），互不干扰。
+
+        @param target    活跃渠道名；空串表示尚无记录
+        @param channel   本方法要判断的通道名
+        @param broadcast 是否广播模式
         @returns 该推返回 True
         """
+        # 广播：不限来源，谁在线就推给谁
+        if broadcast:
+            return True
         if not target:
             return True
         # 微信通道未在 active_channel 中登记，仅在活跃渠道不是 QQ 时参与

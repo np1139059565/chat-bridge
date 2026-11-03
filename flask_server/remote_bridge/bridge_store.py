@@ -29,7 +29,7 @@ SECRET_KEYS = ("app_id", "app_secret")
 # 定义字段：写 definition.yaml（入库）。md_selector 为旧字段，读取时归并进 command_params。
 SETTING_KEYS = ("intents", "md_selector", "command_params", "commands")
 # 运行时字段：写 runtime.yaml 的 bridge 分区（不入库，随本机状态变）
-RUNTIME_KEYS = ("enabled", "push", "weixin", "wecom")
+RUNTIME_KEYS = ("enabled", "push", "weixin", "wecom", "broadcast")
 
 # 必须用可重入锁：save_config 持锁期间会调 get_config()，后者可能再取同一把锁，
 # 普通 Lock 会在此自锁死。
@@ -40,6 +40,7 @@ def _default_config():
     """返回桥接配置的默认值。"""
     return {
         "enabled": True,               # 桥接总开关，默认开启（远程功能开箱即用）
+        "broadcast": False,             # 广播：所有已启用通道各收一份，防止单通道丢消息
         "app_id": "",                  # QQ 机器人 AppID
         "app_secret": "",              # QQ 机器人 AppSecret
         "intents": 0,                 # 订阅的事件位；0 表示用代码里的默认值（单聊）
@@ -128,7 +129,7 @@ _CONFIG = None
 
 def _merge_basic(cfg, raw):
     """合并基础字段：文件里有的用文件值，没有的保留默认。"""
-    for k in ("enabled", "app_id", "app_secret", "intents"):
+    for k in ("enabled", "broadcast", "app_id", "app_secret", "intents"):
         if k in raw:
             cfg[k] = raw[k]
 
@@ -197,7 +198,7 @@ def save_config(patch):
     global _CONFIG
     with _lock:
         cfg = get_config()
-        for k in ("enabled", "app_id", "app_secret", "intents"):
+        for k in ("enabled", "broadcast", "app_id", "app_secret", "intents"):
             if k in patch:
                 cfg[k] = patch[k]
         # 内置指令参数：逐指令、逐键合并（patch 只覆盖给到的键，不整体替换）
