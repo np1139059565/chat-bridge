@@ -172,10 +172,52 @@ class WecomGateway:
             log("媒体下载失败")
             return
         log("媒体已落盘：", path)
+        # 图片走「贴进网页 AI 输入框」的路径，与 QQ 一致：
+        # 只把本地路径当文本投给网页 AI，模型看不到图，等于没收到。
+        # 故转成 dataURL 放进图片卡片，由前端贴进输入框。
+        if kind == "image":
+            self._deliver_image_card(chatid, path)
+            return
         text = "【收到%s】本地路径：%s" % (
-            {"image": "图片", "file": "文件", "voice": "语音", "video": "视频"}.get(kind, kind),
+            {"file": "文件", "voice": "语音", "video": "视频"}.get(kind, kind),
             path)
         self._deliver_as_card(body, chatid, chat_type, text)
+
+    def _deliver_image_card(self, chatid, path):
+        """投一张企微图片卡片，供前端贴进网页 AI 输入框。
+
+        与 QQ 的做法一致：把图片转成 dataURL 放进卡片，前端识别后
+        直接贴图，模型才真正「看得到」图片内容。只投本地路径的话，
+        模型拿到的是一段文字，图片等于没收到。
+
+        @param chatid 会话 id
+        @param path   本地图片路径
+        """
+        import os
+        try:
+            from .qq_event_parse import to_data_url
+        except Exception as e:
+            log("图片转 dataURL 不可用：", e)
+            return
+        ext = os.path.splitext(path)[1].lower()
+        data_url = to_data_url(path, ext)
+        if not data_url:
+            log("图片转 dataURL 失败，退化为路径文本")
+            self._deliver_as_card({}, chatid, 1, "【收到图片】本地路径：%s" % path)
+            return
+        try:
+            card = card_bus.bus.create(
+                source="wecom",
+                card_type="qq-image",
+                title="企业微信图片",
+                content="（企业微信图片，自动贴入网页 AI 输入框）",
+                payload={"kind": "qq-image", "data_url": data_url,
+                         "openid": chatid, "path": path,
+                         "text": "用户截图"},
+            )
+            log("已投递图片卡片", card.id[:8], "等待抽屉取走")
+        except Exception as e:
+            log("投递图片卡片失败：", e)
 
     def _deliver_as_card(self, body, chatid, chat_type, content, req_id=""):
         """把消息包装成 external-call 卡片投给网页 AI。

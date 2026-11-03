@@ -92,17 +92,23 @@ def synth_pending(messages, push, voice_paths):
     return {mid: path for mid, path in results if path}
 
 
-def postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths):
-    """文字推完后补语音：并发合成未命中的，逐条推给 QQ。
+def postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths,
+                            push_voice_fn=None):
+    """文字推完后补语音：并发合成未命中的，逐条推给目标通道。
 
     在会话推送锁之外调用：语音推送只是补充，不该占住正文推送锁。
     合成按「文本内容哈希」入缓存，网页点播用过的音频直接复用。
 
-    @param qq_client   QQClient 实例
-    @param openid      收件人
-    @param messages    本轮消息列表
-    @param push        推送开关字典
-    @param voice_paths 已有的 {消息id: 音频路径}（就地补充，含缓存命中项）
+    通道差异只在最后一步「怎么发出去」：由调用方传入 push_voice_fn，
+    缺省沿用 QQ 的实现。合成、缓存、顺序这些公共逻辑各通道完全一致。
+
+    @param qq_client    通道客户端实例
+    @param openid       收件人
+    @param messages     本轮消息列表
+    @param push         推送开关字典
+    @param voice_paths  已有的 {消息id: 音频路径}（就地补充，含缓存命中项）
+    @param push_voice_fn 可选，签名 (client, openid, path) -> bool；
+                        缺省用 QQ 的 message_voice.push_voice
     """
     from concurrent.futures import ThreadPoolExecutor
     from app_limits import MAX_CONCURRENT_SYNTH
@@ -121,7 +127,7 @@ def postsynth_and_push_voice(qq_client, openid, messages, push, voice_paths):
     except Exception as e:
         log("语音并发合成异常（不影响主流程）：", e)
     # 按原顺序逐条推语音，保持「文本→语音」的对应关系
-    _push_voice_results(qq_client, openid, results)
+    _push_voice_results(qq_client, openid, results, push_voice_fn)
 
 
 def _collect_pending(messages, push, voice_paths):
@@ -162,20 +168,24 @@ def _synth_one(item):
         return mid, ""
 
 
-def _push_voice_results(qq_client, openid, results):
+def _push_voice_results(qq_client, openid, results, push_voice_fn=None):
     """按合成结果的原有顺序逐条推送语音。
 
-    @param qq_client QQClient 实例
-    @param openid    收件人
-    @param results   [(消息id, 音频路径), ...]
+    @param qq_client     通道客户端实例
+    @param openid        收件人
+    @param results       [(消息id, 音频路径), ...]
+    @param push_voice_fn 通道自己的推送函数；缺省用 QQ 的 push_voice
     """
     for _mid, path in results:
         # 合成失败的条目没有路径，直接跳过
         if not path:
             continue
         try:
-            from .message_voice import push_voice
-            push_voice(qq_client, openid, path)
+            if push_voice_fn:
+                push_voice_fn(qq_client, openid, path)
+            else:
+                from .message_voice import push_voice
+                push_voice(qq_client, openid, path)
         except Exception as e:
             log("语音推送失败（不影响主流程）：", e)
 

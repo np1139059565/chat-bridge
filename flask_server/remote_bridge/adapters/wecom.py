@@ -163,13 +163,36 @@ class WecomAdapter(ChannelAdapter):
         return 1 if ok else 0
 
     def before_push(self, recipient, conv_id, items, push):
-        """锁外预处理：预合成语音。
+        """锁外预处理：只查语音缓存，不做合成。
 
-        合成是网络调用、一条要一秒以上，放锁内会让该会话长时间占锁。
-        @returns 上下文，透传给 push_media
+        与 QQ 通道保持一致：合成一条要一秒以上，放在推文字前会让用户干等，
+        故此处只做零成本查找，未命中的留到正文推完后由 after_push 补合成。
+        @returns 上下文，含 {消息id: 音频路径}
         """
         from .. import message_flow
-        return {"voice_map": message_flow.synth_pending(items, push, {})}
+        return {"voice_map": message_flow.presynth_voice(items, push)}
+
+    def after_push(self, recipient, conv_id, items, push, ctx):
+        """锁外收尾：并发合成剩余语音并补推。
+
+        与 QQ 通道保持一致：语音只是补充，不该占住正文推送锁，
+        也不该让用户为了听语音而晚收到文字。
+        @param ctx 上下文，含 before_push 得到的 voice_map
+        """
+        from .. import message_flow
+
+        def _push_voice(client, chatid, path):
+            """用企微的主动推送发一条语音。
+
+            与 QQ 的差别只在最后这一步：QQ 走被动回复窗口，
+            企微直接主动推送，合成、缓存、顺序等公共逻辑完全共用。
+            """
+            ok, _err = client.send_voice(chatid, path)
+            return ok
+
+        message_flow.postsynth_and_push_voice(
+            self.client, recipient, items, push, (ctx or {}).get("voice_map") or {},
+            push_voice_fn=_push_voice)
 
     def _body_of(self, m, push):
         """取一条消息的待推正文（含类型前缀）；不可推返回空串。
