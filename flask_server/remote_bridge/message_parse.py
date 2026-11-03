@@ -208,9 +208,26 @@ def _block_list(b, push_thinking):
 
 
 def _block_table(b, push_thinking):
-    """表格块：单元格以「 | 」相连，逐行换行拼接。"""
-    rows = b.get("rows") or []
-    return "\n".join(" | ".join(str(c) for c in row) for row in rows)
+    """表格块：转成纯文本列表，避开竖线在手机端读成碎句的问题。
+
+    首行按表头处理，每条数据行输出为「- 列名：值；列名：值」。
+    列数与表头对不上时退回「；」直接连接，保证内容不丢。
+    """
+    rows = [r for r in (b.get("rows") or []) if r]
+    if not rows:
+        return ""
+    # 单元格统一转字符串并去掉换行，避免一条列表项被撑成多行
+    norm = [[str(c).replace("\n", " ").strip() for c in row] for row in rows]
+    header, body = (norm[0], norm[1:]) if len(norm) > 1 else ([], norm)
+    lines = []
+    for row in body:
+        # 列数与表头一致时按「列名：值」组织，否则退回简单连接
+        if header and len(header) == len(row):
+            cells = ["%s：%s" % (header[i], row[i]) for i in range(len(row))]
+        else:
+            cells = row
+        lines.append("- " + "；".join(cells))
+    return "\n".join(lines)
 
 
 # 块类型 → 处理函数。新增块类型时在此登记即可，无需改动主流程。
