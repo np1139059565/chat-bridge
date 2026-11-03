@@ -127,23 +127,23 @@ class WecomGateway:
     def _dispatch_text(self, client, body, ctx, text):
         """分派文本：斜杠走指令，其余投卡片。
 
-        @param ctx 会话上下文（chatid / chat_type / req_id 三者总是一起用，
-                   打包传递，避免参数列表过长）
+        与网页版机器人一致：所有出向消息统一走主动推送，
+        不区分「是否在回复窗口内」。企业微信不需要窗口，
+        主动推送也没有「一个凭证只能回一条」的限制。
 
-        req_id 必须一路带到推送环节：企业微信客户端只有在收到
-        带同一个 req_id 的 aibot_respond_msg 之后才停止转圈，
-        用主动推送做不到这一点。
+        @param ctx 会话上下文（chatid / chat_type）
         """
         if text.startswith("/"):
             handled = bool(self.on_command
                            and self.on_command(client, ctx.chatid,
                                                body.get("msg_id") or "", text))
             if not handled:
-                client.respond_to(ctx.req_id, ctx.chatid,
-                                  "未知指令：%s\n发送 /h 查看可用指令"
-                                  % str(text).strip().split(None, 1)[0])
+                client.send_markdown(ctx.chatid,
+                                     "未知指令：%s\n发送 /h 查看可用指令"
+                                     % str(text).strip().split(None, 1)[0],
+                                     ctx.chat_type)
             return
-        self._deliver_as_card(body, ctx.chatid, ctx.chat_type, text, ctx.req_id)
+        self._deliver_as_card(body, ctx.chatid, ctx.chat_type, text)
 
     def _handle_media(self, client, body, chatid, chat_type, kind, info):
         """处理图片 / 文件 / 语音消息。
