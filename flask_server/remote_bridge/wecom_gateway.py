@@ -176,10 +176,48 @@ class WecomGateway:
         if kind == "image":
             self._deliver_image_card(chatid, path)
             return
+        # 文件与语音以卡片投递，卡片正文写明本地路径：
+        # 与其它通道等价，AI 拿到路径后可自行决定读不读
+        if kind in ("file", "voice"):
+            self._deliver_media_card(chatid, path, kind, info)
+            return
+        # 其余类型（视频）暂以文本描述投递
         text = "【收到%s】本地路径：%s" % (
-            {"file": "文件", "voice": "语音", "video": "视频"}.get(kind, kind),
-            path)
+            {"video": "视频"}.get(kind, kind), path)
         self._deliver_as_card(body, chatid, chat_type, text)
+
+    def _deliver_media_card(self, chatid, path, kind, info):
+        """把文件或语音投成卡片，卡片正文写明本地路径。
+
+        与图片的区别：文件是二进制，模型看不见也不需要看见，
+        它需要的是路径——拿到后自行调 read_file 或让用户下载。
+
+        @param chatid 会话 id
+        @param path   本地落盘路径
+        @param kind   file / voice
+        @param info   平台下发的媒体描述
+        """
+        import os
+        # 文件名优先取平台下发值，缺失时用落盘文件的基本名
+        name = info.get("name") or os.path.basename(path)
+        # 体积取落盘后的真实大小，平台下发的值可能缺失
+        size = os.path.getsize(path) if os.path.exists(path) else 0
+        label = "文件" if kind == "file" else "语音"
+        # 卡片正文写成一句完整的话，AI 与用户都能直接看懂
+        body = "用户从企业微信发来%s：%s（%d 字节），已保存到 %s" % (
+            label, name, size, path)
+        try:
+            card = card_bus.bus.create(
+                source="wecom",
+                card_type="qq-file",
+                title="企业微信" + label,
+                content=body,
+                payload={"kind": "qq-file", "openid": chatid,
+                         "path": path, "name": name, "size": size},
+            )
+            log("已投递" + label + "卡片", card.id[:8], "等待抽屉取走")
+        except Exception as e:
+            log("投递" + label + "卡片失败：", e)
 
     def _deliver_image_card(self, chatid, path):
         """投一张企微图片卡片，供前端贴进网页 AI 输入框。
