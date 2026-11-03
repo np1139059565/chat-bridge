@@ -41,18 +41,7 @@
       firstToolCard: null,    // 本轮第一张工具卡片（供重跑等旁路使用）
       // isFreshReply：本轮是否属 AI 新鲜回复（与上报同一判定）。
       // 检测/回传用它取代「reason==='generate'」，避免采集来源漂移时漏检测。
-      isFreshReply: !!isFreshReply,
-      // lastAssistantIdx：本轮切片里最后一条助手消息的下标。
-      // 为什么不用 incoming.length - 1：工具调用块之后常跟着语音块、
-      // bridge_copy_md、click 等消息，它们到达后会把 AI 回复挤出末位，
-      // 若只认末条，卡片就再也不被收集，表现为「没有执行按钮、也不自动执行」。
-      // 用「最后一条助手消息」既覆盖上述情况，又不会把更早的历史消息纳入。
-      lastAssistantIdx: (function () {
-        for (let i = incoming.length - 1; i >= 0; i--) {
-          if (incoming[i] && incoming[i].role === 'assistant') return i;
-        }
-        return -1;
-      })()
+      isFreshReply: !!isFreshReply
     };
     incoming.forEach((m, mi) => {
       this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
@@ -106,18 +95,15 @@
     if (exist) {
       if (exist.isTool && blockIssue && !exist.preIssue) exist.preIssue = blockIssue;
       if (exist.isTool && !state.firstToolCard) state.firstToolCard = exist;
-      // 上膛标记只在「本轮最后一条消息」上才转为自动候选：
+      // 上膛标记只在「切片末条」上才转为自动候选：
       // 旧卡片残留的 autoArmed 不得让历史消息里的卡片重新获得执行权。
-      // 同下方的放宽理由：用「最后一条助手消息」而非切片末条，
-      // 否则后续到达的语音块 / 指令回执会把卡片挤出末位，标记形同虚设。
-      if (exist.autoArmed && mi === state.lastAssistantIdx) {
+      if (exist.autoArmed && mi === incoming.length - 1) {
         this.collectAutoCandidate(autoCandidates, exist);
       }
       // 已执行卡片：只登记以便留痕，不重置、不重跑。
-      // 执行权只属于最后一条消息里的卡片；已完成的调用沿用原结果，
+      // 执行权只属于切片末条消息里的卡片；已完成的调用沿用原结果，
       // 避免刷新重新采集历史消息时把已执行卡片拉回待执行态再跑一遍。
-      // 同上：用「最后一条助手消息」而非切片末条，避免被后续消息挤出后漏登记。
-      if (state.isFreshReply && mi === state.lastAssistantIdx
+      if (state.isFreshReply && mi === incoming.length - 1
           && exist.isTool && exist.executed) {
         state.rerunCard = exist;
       }
@@ -142,25 +128,19 @@
     if (scrollOnly) {
       // 滚动轮次里，只有「真正的新回复」上的新卡片才预备自动执行。
       // 同样不能用切片末位单独判定：向上滚动加载历史时，末位未必是新消息。
-      if (mi === state.lastAssistantIdx && state.isFreshReply) {
+      if (mi === incoming.length - 1 && state.isFreshReply) {
         holder.cards[b.id].autoArmed = true;
         state.armedLast = holder.cards[b.id];
       }
     } else {
-      // 非滚动轮次：只有「真正的新回复」里的卡片才有自动执行权。
-      // 判据不能只看 mi === incoming.length - 1：那只是「本次切片末位」。
-      // 刷新（/rall）时切片可能被截断，末位其实是早已存在的历史消息，
-      // 它上面的卡片会被误当成新卡片执行。
-      // state.isFreshReply 要求末条是助手消息且此前不在树中，才是真正的新消息。
+      // 非滚动轮次：自动执行权只属于「切片末条消息」里的卡片，且本轮须是新鲜回复。
+      // 两个条件缺一不可：
+      //   mi === incoming.length - 1 —— 只认末条，防止历史消息里的卡片抢占执行权；
+      //   state.isFreshReply        —— 末条须是此前不在树中的助手消息，
+      //                                排除「刷新后切片被截断、末位其实是旧消息」的情况。
       // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
       // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
-      // 判据：本消息是本轮「最后一条助手消息」，且本轮属新鲜回复。
-      // 不用 incoming.length - 1：工具调用块之后常跟着语音块、bridge_copy_md、
-      // click 等消息，它们到达后把 AI 回复挤出末位，卡片就再也不被收集，
-      // 表现为「卡片没有执行按钮、也不自动执行」。
-      // 也不用「任意助手消息」：那会把切片里更早的历史消息纳入，
-      // 若其卡片从未执行过，会被误执行。取「最后一条助手消息」两者兼顾。
-      if (mi === state.lastAssistantIdx && state.isFreshReply) {
+      if (mi === incoming.length - 1 && state.isFreshReply) {
         this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
       }
     }
