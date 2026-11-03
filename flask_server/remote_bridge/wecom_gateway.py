@@ -211,14 +211,32 @@ class WecomGateway:
                     texts.append(c)
             elif mt == "image":
                 images.append(it.get("image") or {})
-        for info in images:
-            if info:
-                self._handle_media(client, body, chatid, chat_type, "image", info)
         joined = chr(10).join(texts).strip()
-        if joined:
+        # 图片先下载落盘，再与文字一起投成**一张**卡片。
+        # 不能逐张投：那样前端会逐张贴图，既丢归属又乱顺序。
+        paths = []
+        for info in images:
+            if not info:
+                continue
+            url = info.get("url") or info.get("download_url") or ""
+            if not url:
+                continue
+            aeskey = (info.get("aeskey") or info.get("aes_key")
+                      or info.get("aeskey_str") or "")
+            import paths as _paths
+            p = client.download_media(url, aeskey, str(_paths.WECOM_MEDIA_DIR))
+            if p:
+                paths.append(p)
+        if paths:
+            # 图文合一：文字作为卡片正文，图片数组一并交给前端贴图
+            from .channel import delivery
+            delivery.deliver_images("wecom", chatid, paths, text=joined,
+                                    title="企业微信图片")
+            log("图文消息已投递 文字长度=%d 图片数=%d" % (len(joined), len(paths)))
+        elif joined:
             self._deliver_as_card(body, chatid, chat_type, joined)
-            log("图文消息已投递 文字长度=%d 图片数=%d" % (len(joined), len(images)))
-        elif not images:
+            log("图文消息已投递 文字长度=%d 图片数=0" % len(joined))
+        else:
             log("图文消息无可用内容，忽略")
 
     def _handle_media(self, client, body, chatid, chat_type, kind, info):
