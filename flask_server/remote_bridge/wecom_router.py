@@ -43,72 +43,29 @@ _lock = threading.RLock()
 
 # 最近活跃的会话：{chatid: {chat_type, user, ts}}，供主动推送定位
 _chats = {}
-# 待回复的请求 id 队列：{chatid: [req_id, ...]}。只存内存——它绑定那一条消息，
-# 重启后即失效，落盘会在下次推送时用到过期 id 而被服务端拒绝。
-#
-# 为什么是队列而不是单值：一个 req_id 只能回复一条消息，且企业微信的
-# 媒体回复（图片 / 文件 / 语音）必须带 req_id 才发得出去。若只留最新一个，
-# 一批里有两张图时第二张就无凭证可用、被静默跳过。改为保留最近若干个，
-# 媒体按到达顺序逐个消费。
-_last_req_id = {}
-
-# 每会话最多保留的待回复凭证数。取值不宜过大：req_id 有时效（官方回复窗口
-# 24 小时），也只在内存中，保留太多既无意义也无收益。一轮对话里媒体通常
-# 不超过 3 个，留 8 个足够覆盖“一次发多张图”的常见场景。
-MAX_REQ_IDS = 8
 
 
-def note_chat(chatid, chat_type=1, user="", req_id=""):
+def note_chat(chatid, chat_type=1, user=""):
     """记录一个活跃会话，并持久化。
 
     企业微信的主动推送依赖 chatid；只存内存的话服务重启后就推不出去了。
-    req_id 也要记：推送时必须用它走 respond，客户端才停止转圈。
-    只存内存、不落盘——它绑定的是那一条消息，重启后即失效，
-    落盘反而会在下次推送时用到过期的 id。
 
     @param chatid    会话 id
     @param chat_type 1 单聊 / 2 群聊
     @param user      发送者
-    @param req_id    本条消息的请求 id
     """
     if not chatid:
         return
     with _lock:
+        # 会话表按 chatid 覆盖更新，记录类型、发送者与最近活跃时间
         _chats[chatid] = {"chat_type": int(chat_type or 1),
                           "user": user or "", "ts": int(time.time())}
-        if req_id:
-            # 追加到队尾：同一会话连续来消息时保留多个可用凭证，
-            # 供一批里的多张图片 / 文件依次消费。
-            q = _last_req_id.setdefault(chatid, [])
-            q.append(req_id)
-            # 超出上限时丢最旧的：旧凭证大概率已过回复窗口，留着也用不上
-            if len(q) > MAX_REQ_IDS:
-                del q[:len(q) - MAX_REQ_IDS]
+        # 复制快照用于落盘：锁外写盘，避免持锁做磁盘 IO
         snapshot = {k: dict(v) for k, v in _chats.items()}
     try:
         bridge_store.save_wecom_chats(snapshot)
     except Exception as e:
         log("持久化会话失败（不影响本次推送）：", e)
-
-
-def take_req_id(chatid):
-    """取出并消费某会话待回复的 req_id。
-
-    取完即清：一个 req_id 只能用于回复一条消息，重复使用会被服务端拒绝。
-
-    @param chatid 会话 id
-    @returns 请求 id；无则空串
-    """
-    with _lock:
-        q = _last_req_id.get(chatid) or []
-        if not q:
-            return ""
-        # 从队头取：先进先出，保证媒体回复按消息到达顺序逐条对应
-        rid = q.pop(0)
-        # 队列空了就把键删掉，避免无意义地长期占着字典槽位
-        if not q:
-            _last_req_id.pop(chatid, None)
-        return rid
 
 
 def _load_chats():
@@ -298,22 +255,14 @@ def handle_report(client, payload):
         if not bodies and not images and not files and not voices:
             _mark_all(conv_id, fresh)
             return 0
-        # 凭证按需取用：每个媒体发之前才从队列里取一个。
-        # 一个 req_id 只能回复一条消息，故不能提前取一个给整批复用——
-        # 那样第二批媒体就无凭证可用而被跳过（「多张图只收到第一张」的根因）。
+        # 出向消息全部走主动推送：企业微信不依赖被动回复窗口，
+        # 主动推送没有「一个凭证只能回一条」的限制，故障时也只有一条通路要查。
         sent = 0
-        # 发送顺序：媒体优先。原因：主动推送不支持 msg_item，
-        # 而回复凭证（req_id）一次只能用一条消息，若文本先把它用掉，
-        # 后面的图片/文件/语音就都发不出去。故媒体先用，文本随后。
+        # 发送顺序：媒体优先。主动推送不受凭证约束，顺序只为让图片尽快到达。
         #
         # 图片：msg_item 直传 base64
         for path in images:
-            # 有凭证走回复（客户端停止转圈）；无凭证走主动推送（不依赖窗口）
-            req_id = take_req_id(chatid)
-            if req_id:
-                ok, data = client.respond_image(req_id, chatid, path, chat_type)
-            else:
-                ok, data = client.send_image(chatid, path, chat_type)
+            ok, data = client.send_image(chatid, path, chat_type)
             if ok:
                 sent += 1
                 log("已发送图片：", os.path.basename(path))
@@ -321,11 +270,7 @@ def handle_report(client, payload):
                 log("图片发送失败：", str(data)[:200])
         # 文件：三步上传拿 media_id 后再发
         for path in files:
-            req_id = take_req_id(chatid)
-            if req_id:
-                ok, data = client.respond_file(req_id, chatid, path, chat_type)
-            else:
-                ok, data = client.send_file(chatid, path, chat_type)
+            ok, data = client.send_file(chatid, path, chat_type)
             if ok:
                 sent += 1
                 log("已发送文件：", os.path.basename(path))
@@ -333,27 +278,17 @@ def handle_report(client, payload):
                 log("文件发送失败：", str(data)[:200])
         # 语音：与图片同构的 msg_item 直传
         for path in voices:
-            req_id = take_req_id(chatid)
-            if req_id:
-                ok, data = client.respond_voice(req_id, chatid, path, chat_type)
-            else:
-                ok, data = client.send_voice(chatid, path, chat_type)
+            ok, data = client.send_voice(chatid, path, chat_type)
             if ok:
                 sent += 1
                 log("已发送语音：", os.path.basename(path))
             else:
                 log("语音发送失败：", str(data)[:200])
-        # 文本最后发：有凭证走回复（客户端停止转圈），否则走主动推送
+        # 文本最后发：媒体先到的观感优于「先看到文字再等图」
         if bodies:
             text = _truncate(SEP.join(bodies))
-            req_id = take_req_id(chatid)
-            if req_id:
-                ok, data = client.respond_to(req_id, chatid, text, chat_type)
-                log("已发送回复 %d 条消息，长度 %d，ok=%s" % (len(bodies), len(text), ok))
-            else:
-                ok, data = client.send_markdown(chatid, text, chat_type)
-                log("已发送推送 %d 条消息，长度 %d，ok=%s（无 req_id）"
-                    % (len(bodies), len(text), ok))
+            ok, data = client.send_markdown(chatid, text, chat_type)
+            log("已发送推送 %d 条消息，长度 %d，ok=%s" % (len(bodies), len(text), ok))
             if ok:
                 sent += 1
             else:

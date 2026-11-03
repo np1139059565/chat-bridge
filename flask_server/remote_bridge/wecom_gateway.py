@@ -66,9 +66,9 @@ def sender_of(body):
     return f.get("userid") or body.get("userid") or body.get("from_user") or ""
 
 
-# 会话上下文：chatid / chat_type / req_id 三者在分派链路上总是同时使用，
+# 会话上下文：chatid 与 chat_type 在分派链路上总是同时使用，
 # 打包成一个不可变对象传递，避免函数参数列表过长（质量门禁限制 6 个）。
-_ChatCtx = namedtuple("ChatCtx", ["chatid", "chat_type", "req_id"])
+_ChatCtx = namedtuple("ChatCtx", ["chatid", "chat_type"])
 
 
 class WecomGateway:
@@ -98,10 +98,8 @@ class WecomGateway:
             log("消息缺少 chatid 与 userid，忽略")
             return
         log("收到消息 chatid=" + chatid[:12] + " type=" + str(chat_type))
-        # 记住会话，并带上本条消息的 req_id：
-        # 推送时必须用它走 respond 才能让客户端停止转圈（主动推送做不到）。
-        req_id = (frame_msg.get("headers") or {}).get("req_id") or ""
-        wecom_router.note_chat(chatid, chat_type, user, req_id=req_id)
+        # 记住会话：主动推送依赖 chatid 定位收件人
+        wecom_router.note_chat(chatid, chat_type, user)
         # 同步登记到公共层：统一推送管线从 channel.target 读「最近会话」。
         # 两处并写，切换前后行为一致；旧链路停用后可只留公共层。
         from .channel import target as target_store
@@ -121,7 +119,7 @@ class WecomGateway:
             log("消息无可用正文，忽略")
             return
         log("收到消息", "user=" + (user[:8] if user else "?"), "长度=" + str(len(text)))
-        ctx = _ChatCtx(chatid, chat_type, req_id)
+        ctx = _ChatCtx(chatid, chat_type)
         self._dispatch_text(client, body, ctx, text)
 
     def _dispatch_text(self, client, body, ctx, text):
@@ -219,11 +217,10 @@ class WecomGateway:
         except Exception as e:
             log("投递图片卡片失败：", e)
 
-    def _deliver_as_card(self, body, chatid, chat_type, content, req_id=""):
+    def _deliver_as_card(self, body, chatid, chat_type, content):
         """把消息包装成 external-call 卡片投给网页 AI。
 
-        req_id 一并放进 payload：推送环节要靠它走 respond 回复，
-        否则客户端永远停在「发送中」。
+        出向回复统一走主动推送，卡片只承载内容本身。
         """
         payload = {
             "type": "external-call",
@@ -232,7 +229,6 @@ class WecomGateway:
             "source": "wecom",
             "openid": chatid,
             "msg_id": body.get("msg_id") or "",
-            "req_id": req_id,
             "from_voice": False,
             "page_url": "",
         }

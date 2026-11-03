@@ -275,15 +275,15 @@ class WecomAdapter(ChannelAdapter):
                 parts.append(text)
         return "\n".join(parts).strip()
 
-    def record_incoming(self, chatid, chat_type=1, user="", req_id=""):
-        """收到用户消息：登记会话、记下 chat_type、保留回复凭证。
+    def record_incoming(self, chatid, chat_type=1, user=""):
+        """收到用户消息：登记会话并记下 chat_type。
 
+        chat_type 决定出向消息按单聊还是群聊编码。
         @param chatid    会话 id
         @param chat_type 1 单聊 / 2 群聊
         @param user      发送者
-        @param req_id    本条消息的请求 id
         """
         target_store.wecom.note(chatid)
         self._chat_type[chatid] = int(chat_type or 1)
         from .. import wecom_router
-        wecom_router.note_chat(chatid, chat_type, user, req_id)
+        wecom_router.note_chat(chatid, chat_type, user)
