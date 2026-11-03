@@ -116,7 +116,9 @@ class WecomGateway:
             if kind:
                 self._handle_media(client, body, chatid, chat_type, kind, info)
                 return
-            log("消息无可用正文，忽略")
+            # 带上字段名：图文等复合消息的正文不在 text / image 里，
+            # 只有看到真实字段才能判断该从哪取，否则只能反复猜。
+            log("消息无可用正文，忽略 body 字段=%s" % sorted(body.keys()))
             return
         log("收到消息", "user=" + (user[:8] if user else "?"), "长度=" + str(len(text)))
         ctx = _ChatCtx(chatid, chat_type)
