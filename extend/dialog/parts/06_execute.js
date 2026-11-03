@@ -29,7 +29,7 @@
       }
     }
     // 第二判据：id 找不到时按签名再确认（实现见 05g_cards.cardMatchesBySig）。
-    // 代码块 id 随内容追加而变，按旧 id 查必落空；签名不受影响。
+    // 代码块 id 随内容追加而变，按旧 id 查必落空。
     return this.cardMatchesBySig(card);
   };
 

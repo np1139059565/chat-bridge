@@ -11,6 +11,7 @@
 - 所有写操作加锁：桥接层可能在 WebSocket 回调线程与 Flask 请求线程同时读写。
 """
 import json
+import os
 import threading
 from pathlib import Path
 
@@ -227,10 +228,8 @@ def save_config(patch):
 def _state_path():
     """取当前状态文件路径（每次调用时解析，便于测试重定向）。
 
-    为什么不在函数里直接用模块常量 BRIDGE_STATE_PATH：
-    测试需要把状态文件指向临时目录，否则测试会写进生产状态文件——
-    曾因此把测试用的假用户 id 写进生产文件，导致线上一直拿不存在的
-    用户去发送、每次都被服务端拒绝。
+    不用模块常量直读：测试需把状态文件指向临时目录，否则测试的假用户 id
+    会写进生产文件，线上随即拿不存在的用户去发送、每次都被拒。
 
     @returns Path 对象
     """
@@ -252,24 +251,27 @@ def _read_state():
 def _write_state(state):
     """写回去重状态文件（与现有内容合并，不覆盖其它字段）。
 
-    合并写入：状态文件里除已推集合外，还存着 last_openid 等字段。
-    若直接用新字典整体覆盖，会把其它字段一并抹掉，故先读旧内容再更新。
+    合并写入：状态文件里还存着 last_openid 等字段，直接覆盖会抹掉它们。
+    原子写：先写临时文件再 os.replace 覆盖。重启走 os._exit(0) 强制退出、不做清理，
+    直接覆盖可能被截断成半截 JSON，下次启动解析失败即回退空结构、去重集合归零、
+    整批重推。同文件系统内重命名是原子操作，不会出现半截文件。
+
     @param state 要写入的字段字典
     """
     try:
-        # 加锁：本函数是「读—改—写」，两个写者并发会互相覆盖字段。
-        # _lock 可重入，从 mark_pushed 等持锁路径调用也不会自锁死。
+        # 加锁：本函数是「读—改—写」；_lock 可重入，持锁路径调用不会自锁死
         with _lock:
             old = _read_state()      # 先取现有内容
             old.update(state)        # 用本次字段覆盖同名键
-            _state_path().write_text(
-                json.dumps(old, ensure_ascii=False), encoding="utf-8")
+            path = _state_path()
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            tmp.write_text(json.dumps(old, ensure_ascii=False), encoding="utf-8")
+            os.replace(str(tmp), str(path))   # 原子替换
     except Exception as e:
         app_log.warn("[bridge]", "写回去重状态失败：", e)
 
 
-# 说明：QQ 的 openid 与被动回复窗口不落盘——序号在同一 msg_id 下必须唯一，
-# 重启后从 1 重数会撞号被判重丢弃，故其生命周期严格跟随进程。
+# QQ 的 openid 与回复窗口不落盘：序号须在同一 msg_id 下唯一，重启重数会撞号被判重。
 
 
 # 去重集合的内存缓存：{ 会话 id: set(消息 id) }
@@ -281,10 +283,7 @@ def _ensure_pushed_loaded():
     global _pushed
     if _pushed is not None:
         return
-    state = _read_state()
-    _pushed = {}
-    for conv_id, ids in (state.get("pushed") or {}).items():
-        _pushed[conv_id] = set(ids or [])
+    _pushed = {k: set(v or []) for k, v in (_read_state().get("pushed") or {}).items()}
 
 
 def list_commands():

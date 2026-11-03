@@ -311,13 +311,16 @@
    * @returns {boolean} 镜像里能找到同一调用返回 true
    */
   M.cardMatchesBySig = function (card) {
-    if (!card || !card.msgId || !card.tool) return false;
+    if (!card || !card.tool) return false;
     const messages = this.messages || [];
     const want = JSON.stringify(card.parameters || {});
+    // 只按「工具名 + 参数」匹配，不掺消息指纹。
+    // 消息指纹由全部块内容算出，AI 追加内容时必然改变，掺进去就等于让判据失效。
+    // 参数通常含路径 / 命令等具体内容，重复概率低；即便误判为「存在」，
+    // 后果也只是这张待执行卡片被执行——本就是要执行的动作，
+    // 远好过误判为「不存在」导致卡片永远无法执行。
     for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      if (!msg || this.msgId(msg) !== card.msgId) continue;
-      const blocks = window.AIMirrorDomUtils.toArray(msg.blocks);
+      const blocks = window.AIMirrorDomUtils.toArray(messages[i] && messages[i].blocks);
       for (let j = 0; j < blocks.length; j++) {
         const b = blocks[j];
         if (!b || b.type !== 'code') continue;
