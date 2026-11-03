@@ -131,7 +131,14 @@
       log('拦截指令卡片（防泄露）：id=' + c.id);
       return false;
     }
-    if (vm.externalCards.some((x) => x.id === c.id)) return false;
+    // 本地已有这张卡：说明此前已展示过，此时正是应当确认的时刻。
+    // 若不确认，后端会认为它「从未送达」，每轮轮询都重新投递一次，
+    // 而这里又会因「已存在」直接返回——卡片永远停在未确认状态，
+    // 表现为同一条工具调用结果被反复重放。
+    if (vm.externalCards.some((x) => x.id === c.id)) {
+      vm.confirmCardDelivered(c.id);
+      return false;
+    }
     const card = buildExternalCard(c, conv);
     vm.externalCards.push(card);
     added.push(card);
