@@ -95,27 +95,13 @@ class WebBridge:
         urls = [str(u) for u in (data_urls or []) if u]
         if not urls:
             return ""
-        payload = {
-            "kind": "qq-image",
-            # data_urls：图片数组（前端据此一次贴多张）
-            "data_urls": urls,
-            # data_url：单张兼容字段（旧消费端只认它时取第一张）
-            "data_url": urls[0],
-            "openid": "web-user",
-            "path": "",
-            "text": (text or "").strip() or "用户截图",
-            # image_names：图片在服务端的文件名（与收件箱同源）。
-            # 抽屉据此把图片挂到对应消息上，渲染时按名取图显示，
-            # 不依赖网页 DOM（网页里用户图未必是 img 元素）。
-            "image_names": [str(n) for n in (image_names or []) if n],
-        }
-        return self._create_card(
-            card_type="qq-image",     # 沿用既有图片卡片类型，抽屉按此消费
-            title="网页图片",
-            content="（网页图片，自动贴入网页 AI 输入框）",
-            payload=payload,
-            log_hint="图片卡片",
-            extra="张数=" + str(len(urls)),
+        # 拼装委托公共层：三条通道共用同一份实现，避免能力漂移。
+        # image_names 是网页版特有字段（抽屉据此把图挂到对应消息上），
+        # 通过 extra 透传，不影响其它通道。
+        from remote_bridge.channel import delivery
+        return delivery.deliver_images(
+            "web", "web-user", sources=urls, text=text, title="网页图片",
+            extra={"image_names": [str(n) for n in (image_names or []) if n]},
         )
 
 

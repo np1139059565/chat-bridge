@@ -267,21 +267,15 @@ class QqGateway:
         return img_path, ext
 
     def _deliver_image_card(self, openid, img_path, data_url, text):
-        """投一张 qq-image 卡片，供前端识别并贴图（不下发网页 AI）。"""
-        try:
-            card = card_bus.bus.create(
-                source="qq",
-                card_type="qq-image",
-                title="QQ 图片",
-                content="（QQ 图片，自动贴入网页 AI 输入框）",
-                payload={"kind": "qq-image", "data_url": data_url,
-                         "openid": openid, "path": img_path,
-                         # 图文消息：带上同消息文字；纯图片则补「用户截图」
-                         "text": (text or "").strip() or "用户截图"},
-            )
-            log("已投递图片卡片", card.id[:8], "等待抽屉取走")
-        except Exception as e:
-            log("投递图片卡片失败：", e)
+        """投一张 qq-image 卡片，供前端识别并贴图（不下发网页 AI）。
+
+        具体拼装委托公共层：三条通道共用同一份实现，
+        避免各写一份导致能力不一致（企业微信就曾因漏了多图支持
+        而把一条四图消息拆成四张卡片）。
+        """
+        from .channel import delivery
+        delivery.deliver_images("qq", openid, sources=[data_url],
+                                text=text, title="QQ 图片")
 
     def _handle_file(self, openid, file_url, file_name, msg_id):
         """处理一条文件消息：委托 qq_files 模块（下载 → 校验 → 投卡片）。

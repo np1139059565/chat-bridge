@@ -230,7 +230,7 @@ class WecomGateway:
         if paths:
             # 图文合一：文字作为卡片正文，图片数组一并交给前端贴图
             from .channel import delivery
-            delivery.deliver_images("wecom", chatid, paths, text=joined,
+            delivery.deliver_images("wecom", chatid, sources=paths, text=joined,
                                     title="企业微信图片")
             log("图文消息已投递 文字长度=%d 图片数=%d" % (len(joined), len(paths)))
         elif joined:

@@ -54,26 +54,40 @@ def to_data_url(img_path):
     return "data:%s;base64,%s" % (mime, base64.b64encode(raw).decode("ascii"))
 
 
-def deliver_images(source, openid, paths, text="", title=None):
-    """把一组本地图片投成**一张**卡片，可附带同消息文字。
+def deliver_images(source, openid, sources=None, text="", title=None, extra=None):
+    """把一组图片投成**一张**卡片，可附带同消息文字。
 
     多图必须合并且只投一张：拆成多张会让前端逐张贴图，
     既丢失「同一条消息」的归属，也打乱贴图顺序。
 
-    @param source 通道标识（qq / wecom / web）
-    @param openid 接收方标识
-    @param paths  本地图片路径列表
-    @param text   随图附带的文字；为空时补「用户截图」给模型上下文
-    @param title  卡片标题；缺省按通道名生成
+    两种输入形态，按来源选其一：
+      - paths：本地文件路径，本函数负责转 dataURL（QQ / 企微走这条）；
+      - data_urls：已是 dataURL 的数组（网页版上传后直接拿到，无需转码）。
+
+    @param source    通道标识（qq / wecom / web）
+    @param openid    接收方标识
+    @param paths     本地图片路径列表
+    @param text      随图附带的文字；为空时补「用户截图」给模型上下文
+    @param title     卡片标题；缺省按通道名生成
+    @param data_urls 已转好的 dataURL 列表（与 paths 二选一）
+    @param extra     附加到 payload 的字段（如网页版的 image_names）
     @returns 卡片 id；无可用图片时返回空串
     """
+    # 逐个识别来源形态：data: 开头是已转好的 dataURL，其余按本地路径读取。
+    # 这样调用方不必区分两种参数名，一条通道传自己的那种即可。
     urls = []
     used = []
-    for p in (paths or []):
-        u = to_data_url(p)
+    for s in (sources or []):
+        s = str(s or "")
+        if not s:
+            continue
+        if s.startswith("data:"):
+            urls.append(s)
+            continue
+        u = to_data_url(s)
         if u:
             urls.append(u)
-            used.append(p)
+            used.append(s)
     if not urls:
         log("图片全部转码失败，跳过投递")
         return ""
@@ -84,9 +98,11 @@ def deliver_images(source, openid, paths, text="", title=None):
         # data_url：单张兼容字段，旧消费端只认它时取第一张
         "data_url": urls[0],
         "openid": openid,
-        "path": used[0],
+        "path": used[0] if used else "",
         "text": (text or "").strip() or "用户截图",
     }
+    if extra:
+        payload.update(extra)
     try:
         card = card_bus.bus.create(
             source=source,
