@@ -30,14 +30,9 @@ def log(*args):
 
 
 # 会话键后缀：与 QQ / 微信的已推集合隔离，避免互相压制
-CONV_SUFFIX = "@wecom"
 # 单条消息最多发送的字符数
-MAX_TEXT_CHARS = 3500
 # 合并多条消息时的分隔线
-SEP = "\n\n———\n\n"
 # 各类消息的展示前缀
-PREFIX = {"user": "👤 用户", "tool": "🛠 工具", "ai": "🤖 AI"}
-
 # 推送串行锁：同一会话的「读已推集合 → 发送 → 写回」必须整体串行
 _lock = threading.RLock()
 

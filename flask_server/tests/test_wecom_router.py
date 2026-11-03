@@ -70,9 +70,25 @@ class TestGateway:
 class TestRouter:
     """推送过滤与合并策略。"""
 
-    def test_conversation_suffix_isolated(self):
-        """会话键带独立后缀，与 QQ / 微信的已推集合互不干扰。"""
-        assert router.CONV_SUFFIX == "@wecom"
+    def test_dedupe_isolated_across_channels(self):
+        """已推集合按通道独立：同一条消息 id 在企微推过，不影响 QQ。
+
+        去重集合是模块级单例，本用例会写真实内存状态，
+        故用专用会话键并在结束时清空，避免污染其它用例。
+        """
+        from remote_bridge.channel import dedupe
+        key = "conv-isolation-test"
+        try:
+            # 企微推过这条消息
+            assert dedupe.wecom.filter_new(key, ["m1"]) == ["m1"]
+            # QQ 侧仍视为新消息：两条通道互不压制
+            assert dedupe.qq.filter_new(key, ["m1"]) == ["m1"]
+            # 同一通道再问：已推过，不再返回
+            assert dedupe.wecom.filter_new(key, ["m1"]) == []
+        finally:
+            # 清掉本用例写入的记录，恢复干净状态
+            dedupe.wecom.forget(key)
+            dedupe.qq.forget(key)
 
     def test_image_block_collected(self):
         """图片块能被收集出来（企业微信的核心能力）。"""
