@@ -4,15 +4,13 @@
 
     1. 主动推送无配额压力 —— 但仍合并文本，避免手机被短消息刷屏
     2. 图片 / 文件 / 语音能真正发出去 —— 这是换用企微的核心理由
-    3. 媒体与文本走不同接口，且回复凭证 req_id 一次只能用一条
+    3. 媒体与文本走不同接口，媒体在文本之后单独发送
 
-关于发送顺序的代价（须如实记录）：
-    原实现的顺序是「媒体先发 → 文本最后」，原因是 req_id 只能回复一条消息，
-    文本若先把它用掉，后续图片就只能降级为主动推送。
-    本适配器由公共管线驱动，顺序是「文本先发 → 媒体随后」，故同一批里
-    媒体的第一条往往拿不到 req_id，走主动推送接口。
-    功能上不丢消息（主动推送同样能送达），代价是客户端转圈时间略长。
-    若要恢复原顺序，需在管线里为企微开「媒体优先」分支。
+出向消息一律走主动推送：企业微信不依赖被动回复窗口，
+主动推送没有「一条凭证只能回一条」的限制，故障时也只有一条通路要查。
+
+关于发送顺序：本适配器由公共管线驱动，顺序是「文本先发 → 媒体随后」。
+媒体随后单独发送，因此一批里的多张图片都能依次发出、不会互相挤占。
 """
 from ..channel.adapter import ChannelAdapter
 from ..channel import dedupe as dedupe_store
@@ -68,7 +66,7 @@ class WecomAdapter(ChannelAdapter):
         return bridge_store.merge_pending(conv_id, items)
 
     def send_text(self, target, text, markdown=False):
-        """发送文本：优先走回复凭证（客户端停止转圈），否则主动推送。
+        """发送文本：走主动推送。
 
         @param target   会话 id
         @param text     正文
@@ -77,10 +75,9 @@ class WecomAdapter(ChannelAdapter):
         """
         if not self.client:
             return False, "NO_CLIENT"
+        # 会话类型决定按单聊还是群聊编码
         chat_type = self._chat_type.get(target, 1)
-        # 只走主动推送：企业微信不依赖「被动回复窗口」（needs_window=False），
-        # 主动推送没有「一个 req_id 只能回一条」的限制，也不会因凭证过期而失败。
-        # 回复凭证那套逻辑已剔除，避免两条通路互相干扰、故障时难以定位。
+        # 主动推送：不受凭证约束，也不会因凭证过期而失败
         return self.client.send_markdown(target, text, chat_type)
 
     def resolve_target(self, payload):
@@ -155,7 +152,7 @@ class WecomAdapter(ChannelAdapter):
         return sent
 
     def _send_media(self, recipient, chat_type, path, kind):
-        """发一件媒体：优先用回复凭证，没有则主动推送。
+        """发一件媒体：走主动推送。
 
         @param recipient 会话 id
         @param chat_type 1 单聊 / 2 群聊
@@ -163,8 +160,7 @@ class WecomAdapter(ChannelAdapter):
         @param kind      image / file / voice
         @returns 成功返回 1，失败返回 0
         """
-        # 只走主动推送：不受「一个 req_id 只能回一条媒体」的限制，
-        # 多张图能依次发出。回复凭证那套逻辑已剔除。
+        # 主动推送：不受凭证约束，多张图能依次发出
         fn = getattr(self.client, "send_" + kind, None)
         if not fn:
             log("媒体类型不支持主动推送 kind=%s" % kind)

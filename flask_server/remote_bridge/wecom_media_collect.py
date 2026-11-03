@@ -6,8 +6,8 @@
 发送本身不在这里（见 wecom_media.WecomMediaMixin）。
 
 三类媒体的差异：
-  图片 —— dataURL 或 http 地址，落盘后由 respond_image 直传 base64；
-  文件 —— 本地路径或 http 地址，落盘后由 respond_file 走三步上传；
+  图片 —— dataURL、相对接口地址或 http 地址，落盘后以 base64 直传；
+  文件 —— 本地路径或 http 地址，落盘后走三步上传拿 media_id；
   语音 —— 由上游 TTS 预先合成好，这里只做定位与存在性校验。
 """
 import base64
@@ -53,7 +53,7 @@ def collect_files(m):
     """取出消息里的文件块（本地路径，或可下载的 http 地址）。
 
     与图片的区别：文件发出去靠「三步上传拿 media_id」而非 base64 直传，
-    故这里只需给出本地路径，上传细节交给 respond_file。
+    故这里只需给出本地路径，上传细节交给发送层。
     文件块里常见的字段是 path / url 与 name，两者都兼容。
     @param m 消息对象
     @returns 本地路径列表
