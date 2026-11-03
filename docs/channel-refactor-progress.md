@@ -126,6 +126,18 @@ remote_bridge/
 
 **回退方法**：在 `flask_server/config/runtime.yaml` 的 `bridge:` 分区下加一行 `use_pipeline: false`（当前该分区未配置此项，缺省即走新管线），重启服务即可。
 
+### 待走查：非末条消息的卡片被执行（复发）
+
+V1 通过后仍能复现：非最后一条消息里的卡片被自动执行。
+
+已做改动：候选判据由「切片末位」改为「末位 + isFreshReply」。
+仍复现说明另有通路，后续需走查的方向：
+
+1. `_finalizeAutoExec` 的 `scrollOnly` 分支是否绕过了 isFreshReply
+2. 重跑候选 `rerunCard` 是否会把历史卡片拉回执行
+3. 卡片 `autoArmed` 的落盘与恢复是否导致旧标记复活
+4. 切片 `incoming` 的组装是否可能把历史消息算作末位
+
 ## 验收标准
 
 - 三条通道的推送行为与改造前一致（V2–V5 全通过）
