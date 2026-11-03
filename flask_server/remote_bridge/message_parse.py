@@ -187,6 +187,13 @@ def _block_code(b, push_thinking):
         if obj.get("type") == "bridge-chat-call":
             return "[工具调用] %s 参数=%s" % (
                 obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False))
+        if obj.get("type") == "bridge-chat-res":
+            # 工具结果：只报成败，不推完整 result。
+            # 完整 JSON 含 nonce、路径、命令输出等内部字段，手机上是一大坨噪音，
+            # 且可能泄露本机路径。用户真正关心的是「成没成」。
+            mark = "成功" if obj.get("success") else "失败"
+            err = obj.get("error") or ""
+            return "[工具结果] %s" % (mark + ("：" + str(err) if err else ""))
         if obj.get("type") == "bridge-voice":
             # 语音块与工具调用块同为 JSON 结构：原样输出 JSON 文本，
             # 保持与识别端（_extract_voice_from_blocks）一致，不再包成 voice 围栏。

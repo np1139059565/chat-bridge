@@ -130,6 +130,10 @@ class WecomGateway:
 
         text = _text_of(body)
         if not text:
+            # 诊断：无正文时打出消息类型与 mixed 的原始结构。
+            # 只看 msgtype 看不出子项长什么样，必须打原始值才能定位。
+            log("无正文诊断 msgtype=%s mixed=%s"
+                % (body.get("msgtype") or "", str(body.get("mixed"))[:600]))
             # 图文混排：文字与图片同处一条消息，需合并成一次投递，
             # 拆成两条会破坏「一条消息里带图文」的通道铁律。
             mixed = _mixed_of(body)
@@ -180,6 +184,9 @@ class WecomGateway:
         @param chat_type 会话类型
         @param items     mixed 子项列表
         """
+        # 诊断：打出每个子项的类型与键名，判断正文是否真在消息里
+        log("mixed 子项：count=%d detail=%s"
+            % (len(items), [(i.get("msgtype"), sorted(i.keys())) for i in items]))
         texts = []
         images = []
         for it in items:
