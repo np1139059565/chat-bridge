@@ -128,6 +128,17 @@ class WecomGateway:
         import active_channel
         active_channel.note("wecom")
 
+        # 图文混排必须优先处理：平台会在 mixed 消息顶层也带上文字，
+        # 若先取 text 判断，会因「有文字」而走文本分支，把同一条里的图片整个丢掉。
+        # 用户侧看到的就是「发了图和字，只收到字」。
+        if (body.get("msgtype") or "") == "mixed":
+            mixed = _mixed_of(body)
+            if mixed:
+                # 顶层 text 也要带上：平台可能把正文放在顶层而非子项里，
+                # 只取子项会漏掉这部分文字。
+                self._handle_mixed(client, body, chatid, chat_type, mixed,
+                                   _text_of(body))
+                return
         text = _text_of(body)
         if not text:
             # 诊断：无正文时打出消息类型与 mixed 的原始结构。
@@ -172,7 +183,7 @@ class WecomGateway:
             return
         self._deliver_as_card(body, ctx.chatid, ctx.chat_type, text)
 
-    def _handle_mixed(self, client, body, chatid, chat_type, items):
+    def _handle_mixed(self, client, body, chatid, chat_type, items, top_text=""):
         """处理图文混排消息：文字与图片合并成一次投递。
 
         顺序：先抽出全部文字拼成正文，再把图片逐张投成图片卡片，
@@ -183,11 +194,14 @@ class WecomGateway:
         @param chatid    会话 id
         @param chat_type 会话类型
         @param items     mixed 子项列表
+        @param top_text  顶层正文（平台可能把文字放在顶层而非子项里）
         """
         # 诊断：打出每个子项的类型与键名，判断正文是否真在消息里
-        log("mixed 子项：count=%d detail=%s"
-            % (len(items), [(i.get("msgtype"), sorted(i.keys())) for i in items]))
-        texts = []
+        log("mixed 子项：count=%d detail=%s top_text_len=%d"
+            % (len(items), [(i.get("msgtype"), sorted(i.keys())) for i in items],
+               len(top_text or "")))
+        # 顶层文字先入列：它是这条消息的正文，子项里的文字按出现顺序追加
+        texts = [top_text] if top_text else []
         images = []
         for it in items:
             mt = it.get("msgtype") or ""
