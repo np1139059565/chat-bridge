@@ -51,16 +51,26 @@ def is_own_source(m, channel):
     return bool(obj and obj.get("source") == channel)
 
 
-def extract_text(m, push):
+def extract_text(m, push, use_md=False):
     """提取正文：保留自然语言与普通代码，剔除工具调用痕迹。
 
     工具调用的 JSON 参数在手机上是一屏花括号，属噪音，故剔除；
     真代码块保留——用户可能确实要看代码。
 
-    @param m    消息对象
-    @param push 推送开关
+    @param m       消息对象
+    @param push    推送开关
+    @param use_md  是否优先采用采集到的 Markdown 原文。
+                   支持 Markdown 的通道（QQ / 企微）传 True，能保住标题、
+                   粗体、列表等格式；不支持的通道（微信）传 False，避免
+                   用户看到裸的井号与星号。
     @returns 正文文本；无可用内容返回空串
     """
+    # Markdown 原文由前端「复制」按钮采集，格式最完整；
+    # 缺失时退回按块拼纯文本，保证内容不丢。
+    if use_md:
+        raw = str(m.get("md") or "").strip()
+        if raw:
+            return raw
     parts = []
     for b in (m.get("blocks") or []):
         if not b:
@@ -85,7 +95,7 @@ def extract_text(m, push):
     return "\n".join(parts).strip()
 
 
-def body_of(m, push, channel, check_own=True):
+def body_of(m, push, channel, check_own=True, use_md=False):
     """取一条消息的待推正文（含类型前缀）；不可推返回空串。
 
     @param m         消息对象
@@ -94,11 +104,12 @@ def body_of(m, push, channel, check_own=True):
     @param check_own 是否在此处检查「自己发的」。
                      走合并批次的通道（微信）由管线在上游过滤过，
                      此处传 False 避免重复判断。
+    @param use_md    是否优先采用 Markdown 原文（见 extract_text）
     @returns 正文
     """
     if check_own and is_own_source(m, channel):
         return ""
-    text = extract_text(m, push)
+    text = extract_text(m, push, use_md)
     if not text:
         return ""
     kind = mp._classify(m)

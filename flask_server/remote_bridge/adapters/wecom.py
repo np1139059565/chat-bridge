@@ -208,7 +208,9 @@ class WecomAdapter(ChannelAdapter):
         """
         if not self._should_push(m, push):
             return ""
-        return text_store.body_of(m, push, "wecom")
+        # use_md=True：企微 markdown 消息类型支持标题 / 粗体 / 列表等语法，
+        # 优先用前端采集的原文，保住格式；缺失时自动退回按块拼。
+        return text_store.body_of(m, push, "wecom", use_md=True)
 
     def _should_push(self, m, push):
         """判断一条消息是否应当推送：类型开关打开，且不是企微自己发的。
@@ -237,7 +239,8 @@ class WecomAdapter(ChannelAdapter):
         @param push 推送开关
         @returns 正文文本
         """
-        return text_store.extract_text(m, push)
+        # 与 _body_of 保持一致：企微支持 Markdown，优先用原文
+        return text_store.extract_text(m, push, use_md=True)
 
     def record_incoming(self, chatid, chat_type=1, user=""):
         """收到用户消息：登记会话并记下 chat_type。

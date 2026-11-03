@@ -102,6 +102,36 @@ def test_own_source_detected():
     assert text_store.is_own_source(m, "qq") is False
 
 
+def test_md_used_when_supported():
+    """支持 Markdown 的通道：优先用 md 原文，保住标题等格式。"""
+    m = {"id": "md1", "role": "assistant",
+         "md": "## 标题\n\n正文**加粗**",
+         "blocks": [{"type": "heading", "level": 2, "text": "标题"},
+                    {"type": "paragraph", "text": "正文加粗"}]}
+    got = text_store.extract_text(m, {}, use_md=True)
+    assert got == "## 标题\n\n正文**加粗**"
+
+
+def test_md_ignored_when_unsupported():
+    """不支持 Markdown 的通道：忽略 md，改按块拼纯文本，避免露出裸语法。"""
+    m = {"id": "md2", "role": "assistant",
+         "md": "## 标题\n\n正文**加粗**",
+         "blocks": [{"type": "heading", "level": 2, "text": "标题"},
+                    {"type": "paragraph", "text": "正文加粗"}]}
+    got = text_store.extract_text(m, {}, use_md=False)
+    assert "##" not in got
+    assert "**" not in got
+    assert "标题" in got
+
+
+def test_md_missing_falls_back_to_blocks():
+    """开启 md 优先但原文缺失时，退回按块拼，内容不丢。"""
+    m = {"id": "md3", "role": "assistant",
+         "blocks": [{"type": "paragraph", "text": "只有块"}]}
+    got = text_store.extract_text(m, {}, use_md=True)
+    assert "只有块" in got
+
+
 def test_check_own_can_be_disabled():
     """check_own=False 时跳过来源判断（微信由管线在上游过滤）。"""
     env = {"type": "external-call", "source": "weixin", "request": "hi"}

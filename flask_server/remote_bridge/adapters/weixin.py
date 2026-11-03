@@ -132,6 +132,8 @@ class WeixinAdapter(ChannelAdapter):
         @param push 推送开关
         @returns 正文文本；无可用内容返回空串
         """
+        # 不传 use_md：微信不支持 Markdown 渲染，传了会让用户看到裸的
+        # 井号与星号。改按块拼纯文本，格式虽丢但可读。
         return text_store.extract_text(m, push)
 
     def record_incoming(self, user_id):
