@@ -76,9 +76,15 @@ def _reply(qq_client, openid, text, markdown=False):
         return True
     # 按客户端能力分流：
     # QQ 必须持有「被动回复窗口」才能发送（窗口由用户消息打开，带 msg_id 与序号）；
-    # 微信凭 context_token 直接投递，没有窗口概念。
-    # 无脑走窗口检查会让微信的每条指令都因「窗口已关闭」而静默失败。
-    if getattr(qq_client, "needs_window", True):
+    # 微信 / 企微直接投递，没有窗口概念。
+    # 无脑走窗口检查会让另两条通道的每条指令都因「窗口已关闭」而静默失败。
+    # 属性缺失时按「需要窗口」处理并告警：宁可走保守分支，也不让新通道
+    # 因漏声明而误入无窗口路径、把消息发到不该去的地方。
+    needs_window = getattr(qq_client, "needs_window", None)
+    if needs_window is None:
+        log("客户端未声明 needs_window，按需要窗口处理：", type(qq_client).__name__)
+        needs_window = True
+    if needs_window:
         msg_id, seq = message_router.next_seq(openid)
         if not msg_id:
             log("窗口已关闭，无法回复")

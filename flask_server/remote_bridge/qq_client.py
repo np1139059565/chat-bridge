@@ -95,6 +95,11 @@ class QQClient(QqMediaMixin):
     富媒体（图片 / 语音）发送能力由 QqMediaMixin 提供（见 qq_media.py）。
     """
 
+    # 是否需要「被动回复窗口」：QQ 只能在用户消息开启的窗口内回复，
+    # 发送时必须带 msg_id 与递增序号。显式声明为类属性，
+    # 使「哪些通道需要窗口」成为可查的契约，而不是依赖读取时的默认值推断。
+    needs_window = True
+
     def __init__(self, app_id, app_secret, on_event, intents=None):
         """
         @param app_id     机器人 AppID
