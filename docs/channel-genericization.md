@@ -248,6 +248,44 @@ C 是执行时二次校验时 id 已过期。**应统一按「消息指纹 + 工
 3. 媒体在文本之后单独发送，若文本已成功、媒体失败，下一轮会把整批重推，
    导致文本重复。
 
+### D12 旧推送链路清理 —— 已完成
+
+**背景**：`use_pipeline` 开关关闭时可退回三套旧 router。该开关默认开启、从未真正使用，
+保留它等于保留一份没人验证的代码，反而让人误以为有退路。经确认后按「只留统一管线」清理。
+
+**清理内容**：
+
+| 文件 | 变化 | 说明 |
+|---|---|---|
+| `flask_server/remote_bridge/__init__.py` | 移除 `_use_pipeline` 与回退分支 | 只保留 `_report_via_pipeline` |
+| `flask_server/remote_bridge/weixin_router.py` | 436 → 146 行 | 删 `handle_report` 及其调用闭包 |
+| `flask_server/remote_bridge/wecom_router.py` | 322 → 107 行 | 同上；保留会话登记与查询 |
+| `tests/test_weixin_router.py` | 332 → 141 行 | 删测旧链路的用例 |
+| 企业微信媒体路由测试 | 整文件删除 | 全部测旧链路 |
+| `tests/test_wecom_router.py` | 133 → 80 行 | 删测已删私有函数的用例 |
+
+**清理过程中的两次失误（记录备查）**：
+1. 首次按「函数名白名单」删，未核实外部引用，误删有活引用的 `last_user` / `quota_status` / `note_incoming`，已用版本控制还原。
+2. 第二次从「待删函数」出发算调用闭包，漏掉外部引用函数自身的依赖，误删 `_quota_slot`，运行时 `NameError`，再次还原。
+
+**最终采用的方法**（可复用）：从「被外部引用的函数」出发算**保留闭包**，
+闭包之外才是死代码。这样外部引用函数的依赖会被自动纳入保留集合。
+每步都实际调用验证，而非只看导入是否成功。
+
+### D6c 续：正文组装抽到公共层 —— 已完成
+
+新增 `flask_server/remote_bridge/channel/text.py`，提供：
+`truncate` / `is_own_source` / `extract_text` / `body_of`。
+
+企业微信与微信两份实现原先逐字相同，现均改为委托调用；
+两者差异通过参数表达（微信截断上限 1800、企微 3500；
+微信不重复检查来源，由管线在上游过滤）。
+
+**测试随之调整**：
+- 新增 `tests/test_channel_delivery.py`（7 例）与 `tests/test_channel_text.py`（9 例），
+  直接守公共层契约，不再按通道各写一份；
+- 原按通道写的用例中，能力仍存在的迁到公共层测试，能力已删的随之移除。
+
 ## 三、改造原则
 
 1. **推送目标单一来源**：统一从 `flask_server/remote_bridge/channel/target.py` 取「最近用户」，
