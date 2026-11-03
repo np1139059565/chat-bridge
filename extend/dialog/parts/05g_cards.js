@@ -126,19 +126,24 @@
     }
     if (!state.firstToolCard) state.firstToolCard = holder.cards[b.id];
     if (scrollOnly) {
-      // 滚动轮次里，只有「最后一条消息」上的新卡片才预备自动执行
-      if (mi === incoming.length - 1) {
+      // 滚动轮次里，只有「真正的新回复」上的新卡片才预备自动执行。
+      // 同样不能用切片末位单独判定：向上滚动加载历史时，末位未必是新消息。
+      if (mi === incoming.length - 1 && state.isFreshReply) {
         holder.cards[b.id].autoArmed = true;
         state.armedLast = holder.cards[b.id];
       }
     } else {
-      // 非滚动轮次：只有「本轮最后一条消息」上的卡片才有自动执行权。
-      // 约定：最后一条消息没有卡片时，前面的历史卡片一律不得自动执行——
-      // 否则 /rall 之类的刷新会让更早消息里的旧卡片被当成候选执行。
+      // 非滚动轮次：只有「真正的新回复」里的卡片才有自动执行权。
+      // 判据不能只看 mi === incoming.length - 1：那只是「本次切片末位」。
+      // 刷新（/rall）时切片可能被截断，末位其实是早已存在的历史消息，
+      // 它上面的卡片会被误当成新卡片执行。
+      // state.isFreshReply 要求末条是助手消息且此前不在树中，才是真正的新消息。
       // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
       // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
-      if (mi === incoming.length - 1) {
+      if (mi === incoming.length - 1 && state.isFreshReply) {
         this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
+      } else if (mi === incoming.length - 1) {
+        log('自动候选跳过：末条非新回复（历史切片截断），卡片=' + (b.id || ''));
       }
     }
   };
@@ -256,7 +261,9 @@
     if (!msgId || !call || !call.tool) return '';
     const conv = this.ensureConv(this.activeConv);
     const store = (conv && conv.executedSigs) || {};
-    const sig = msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
+    // 签名键带上会话 id：消息指纹是内容摘要，相同内容的消息在不同会话里指纹相同，
+    // 只用「消息指纹 + 工具 + 参数」会在跨会话时撞键，把别处执行过的调用误判成本次已执行。
+    const sig = this.activeConv + '|' + msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
     return store[sig] ? sig : '';
   };
 
@@ -271,7 +278,8 @@
     if (!this.activeConv || !card || !card.msgId || !card.tool) return;
     const conv = this.ensureConv(this.activeConv);
     if (!conv.executedSigs) conv.executedSigs = {};
-    const sig = card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
+    // 与 _executedSig 保持同一键格式（含会话 id），否则登记与查询对不上。
+    const sig = this.activeConv + '|' + card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
     conv.executedSigs[sig] = true;
   };
 

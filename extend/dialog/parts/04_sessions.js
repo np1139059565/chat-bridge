@@ -151,6 +151,14 @@
           if (c && c.id && !known.has(c.id)) conv.externalCards.push(c);
         });
       }
+      // 恢复执行签名库：与消息树一并并入内存，供建卡时判定「这条调用做过没有」。
+      // 只增不减地合并，避免本次存档缺字段时清掉内存里已有的记录。
+      if (saved.executedSigs && typeof saved.executedSigs === 'object') {
+        conv.executedSigs = conv.executedSigs || {};
+        Object.keys(saved.executedSigs).forEach((sig) => {
+          if (saved.executedSigs[sig]) conv.executedSigs[sig] = true;
+        });
+      }
       conv.visibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : (conv.visibleKeys || []);
       if (Array.isArray(saved.branchKeys)) conv.branchKeys = saved.branchKeys;
       if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
@@ -175,6 +183,10 @@
       branchKeys: conv.branchKeys || [],     // 组装分支（只存 key）
       externalCards: conv.externalCards || [],
       orphanSlice: conv.orphanSlice || [],
+      // executedSigs：已执行调用的签名库。
+      // 必须随存档一起落盘：重启后内存清空，若不恢复，签名库为空，
+      // _executedSig 永远命中不了，卡片会退回待执行并被自动流程再跑一遍。
+      executedSigs: conv.executedSigs || {},
       updatedAt: Date.now()
     };
   };

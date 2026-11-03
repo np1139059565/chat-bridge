@@ -398,8 +398,11 @@
     } else {
       log('自动执行决策：无候选，不执行');
     }
-    // 预备标记只生效一次
+    // 预备标记只生效一次。
+    // 除了候选池里的，还要清掉本轮建卡时被上膛、但未进池的卡片（如滚动轮次视口不在底部），
+    // 否则标记残留到下一轮，历史卡片可能在后续采集里被重新认领执行。
     autoCandidates.forEach((c) => { if (c) c.autoArmed = false; });
+    if (collected.armedLast) collected.armedLast.autoArmed = false;
   };
 
   /**
