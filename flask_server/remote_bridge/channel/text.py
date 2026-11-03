@@ -51,6 +51,93 @@ def is_own_source(m, channel):
     return bool(obj and obj.get("source") == channel)
 
 
+def _block_category(b):
+    """判断一个块在展示顺序里属于哪一类。
+
+    类别决定它在正文中的位置，与块在 DOM 里的先后无关：
+    AI 回复的块顺序可能是「正文 → 工具调用 → 思考」这类乱序，
+    直接按 DOM 拼接会让读者先看到工具调用、最后才看到思考。
+
+    @param b 内容块
+    @returns 'thinking' / 'text' / 'tool' / 'voice'
+    """
+    bt = (b or {}).get("type")
+    if bt == "thinking":
+        return "thinking"
+    if bt == "code":
+        obj = mp._load_json_block(b)
+        if obj:
+            t = obj.get("type")
+            if t == "bridge-chat-call":
+                return "tool"
+            if t == "bridge-voice":
+                return "voice"
+    return "text"
+
+
+def _assemble_ordered(m, push, use_md):
+    """按「思考 → 正文 → 工具调用 → 语音」的固定顺序组装正文。
+
+    平台不支持真正的折叠（Markdown 无 details 语法），
+    故思考与工具调用用代码块包裹，视觉上独立、弱化注意力，等效于折叠。
+
+    @param m      消息对象
+    @param push   推送开关
+    @param use_md 是否优先采用 Markdown 原文
+    @returns 正文文本
+    """
+    if use_md:
+        raw = str(m.get("md") or "").strip()
+        # md 原文只含正文，不含思考与工具调用，故仅在无这两类块时直接采用
+        cats = {_block_category(b) for b in (m.get("blocks") or []) if b}
+        if raw and "thinking" not in cats and "tool" not in cats:
+            return raw
+    groups = {"thinking": [], "text": [], "tool": [], "voice": []}
+    for b in (m.get("blocks") or []):
+        if not b:
+            continue
+        cat = _block_category(b)
+        if cat == "thinking":
+            # 思考受开关控制：关闭时整类不产出
+            if push.get("thinking"):
+                t = str(b.get("text") or "").strip()
+                if t:
+                    groups["thinking"].append(t)
+            continue
+        if cat == "voice":
+            obj = mp._load_json_block(b) or {}
+            t = str(obj.get("text") or "").strip()
+            if t:
+                groups["voice"].append(t)
+            continue
+        if cat == "tool":
+            # 工具调用只报工具名，不带参数：参数是 JSON，手机上占满一屏且无阅读价值。
+            # 用户需要知道「AI 调了什么工具」，不需要看具体入参。
+            obj = mp._load_json_block(b) or {}
+            groups["tool"].append("[工具调用] " + str(obj.get("tool") or ""))
+            continue
+        fn = mp._BLOCK_HANDLERS.get(b.get("type"))
+        if not fn:
+            continue
+        t = fn(b, bool(push.get("thinking")))
+        if t:
+            groups[cat].append(t)
+    # 纯工具调用消息不产出正文：没有可读内容，推出去只是一屏花括号。
+    # 顺序调整只作用于「已进正文的内容」，不改变「什么内容进正文」。
+    if not groups["text"] and not groups["thinking"] and not groups["voice"]:
+        return ""
+    parts = []
+    # 思考与工具调用用代码块包裹：平台无折叠语法，代码块是等效表达
+    if groups["thinking"]:
+        parts.append("```\n" + "\n\n".join(groups["thinking"]) + "\n```")
+    parts.extend(groups["text"])
+    if groups["tool"]:
+        parts.append("```\n" + "\n".join(groups["tool"]) + "\n```")
+    if groups["voice"]:
+        parts.extend(groups["voice"])
+    return "\n".join(parts).strip()
+
+
 def extract_text(m, push, use_md=False):
     """提取正文：保留自然语言与普通代码，剔除工具调用痕迹。
 
@@ -65,34 +152,7 @@ def extract_text(m, push, use_md=False):
                    用户看到裸的井号与星号。
     @returns 正文文本；无可用内容返回空串
     """
-    # Markdown 原文由前端「复制」按钮采集，格式最完整；
-    # 缺失时退回按块拼纯文本，保证内容不丢。
-    if use_md:
-        raw = str(m.get("md") or "").strip()
-        if raw:
-            return raw
-    parts = []
-    for b in (m.get("blocks") or []):
-        if not b:
-            continue
-        btype = b.get("type")
-        if btype == "code":
-            obj = mp._load_json_block(b)
-            # 工具调用 / 工具结果 / 语音块都不进正文
-            if obj and obj.get("type") in (
-                    "bridge-chat-call", "bridge-chat-res", "bridge-voice"):
-                continue
-            code = str(b.get("code") or "").strip()
-            if code:
-                parts.append("```\n" + code + "\n```")
-            continue
-        fn = mp._BLOCK_HANDLERS.get(btype)
-        if not fn:
-            continue
-        text = fn(b, bool(push.get("thinking")))
-        if text:
-            parts.append(text)
-    return "\n".join(parts).strip()
+    return _assemble_ordered(m, push, use_md)
 
 
 def body_of(m, push, channel, check_own=True, use_md=False):

@@ -102,6 +102,36 @@ def test_own_source_detected():
     assert text_store.is_own_source(m, "qq") is False
 
 
+def test_blocks_reordered_by_category():
+    """块按「思考 → 正文 → 工具调用」排序，与它们在 DOM 里的先后无关。"""
+    import json as _json
+    m = {"id": "ord1", "role": "assistant", "blocks": [
+        # 故意乱序：工具调用在前、正文居中、思考在最后
+        {"type": "code", "code": _json.dumps(
+            {"type": "bridge-chat-call", "tool": "read_file", "parameters": {}})},
+        {"type": "paragraph", "text": "正文内容"},
+        {"type": "thinking", "text": "思考过程"},
+    ]}
+    out = text_store.extract_text(m, {"thinking": True})
+    # 思考在最前，正文居中，工具调用在最后
+    assert out.index("思考过程") < out.index("正文内容")
+    assert out.index("正文内容") < out.index("read_file")
+
+
+def test_tool_call_reports_name_only():
+    """工具调用只报名字，参数不进正文。"""
+    import json as _json
+    m = {"id": "ord2", "role": "assistant", "blocks": [
+        {"type": "paragraph", "text": "执行中"},
+        {"type": "code", "code": _json.dumps(
+            {"type": "bridge-chat-call", "tool": "run_command",
+             "parameters": {"command": "secret_param"}})},
+    ]}
+    out = text_store.extract_text(m, {})
+    assert "run_command" in out
+    assert "secret_param" not in out
+
+
 def test_md_used_when_supported():
     """支持 Markdown 的通道：优先用 md 原文，保住标题等格式。"""
     m = {"id": "md1", "role": "assistant",
