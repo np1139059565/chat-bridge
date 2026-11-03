@@ -130,7 +130,34 @@ mixed 子项：count=4 detail=[('image',...), ('text',...), ('image',...), ('tex
 - 文件卡片：`qq_files.py` 一份、`wecom_gateway` 一份。
 公共层的对应函数已就绪，只差替换调用点。
 
-### D7 企业微信缺少 Markdown 渲染 —— 待修复
+### D7 企业微信缺少 Markdown 渲染 —— 已修复（待真机验证）
+
+**排查结论：不是平台限制，是我们自己的取正文路径不同。**
+
+| 通道 | 取正文方式 | 结果 |
+|---|---|---|
+| QQ | `outbound.build_body`，**优先用 `md` 原文** | `## 标题\n正文**加粗**` |
+| 企业微信 | `text.extract_text`，从 blocks 拼纯文本 | `标题\n正文加粗` |
+
+同一份上报数据，两条通道取了不同来源，格式差异由此而来。
+标题块的前端已记录 `level` 字段、引用块记录为 `quote`，是后端把结构丢了。
+
+**修法**：`flask_server/remote_bridge/channel/text.py` 的 `extract_text` / `body_of` 增加 `use_md` 参数。
+支持 Markdown 的通道传 `True`（企微），不支持的不传（微信，避免露出裸语法）。
+QQ 走自己的 `build_body`，本来就优先用 md，无需改动。
+
+**通道能力现状**：
+| 通道 | 支持 Markdown | 依据 |
+|---|---|---|
+| QQ | 是 | `msg_type=2`，正文放 `markdown.content` |
+| 企业微信 | 是 | `msgtype=markdown`，正文放 `markdown.content`（协议文档标注已验证） |
+| 微信 | 否 | `send_text` 忽略 markdown 参数 |
+| 网页 | 否 | 收件箱按纯文本渲染 |
+
+**待确认**：企微 markdown 实际支持的语法子集（表格已知不支持，已被转为纯文本列表）。
+本次修复解决的是「有格式却没用上」，语法子集问题若仍存在需单独处理。
+
+### D7 原始记录（保留备查）
 
 **现象**：同一条 AI 回复，QQ 与企业微信收到的内容形态差异明显，QQ 侧更优质。
 企业微信收到的文本没有 Markdown 格式（加粗、列表、代码块均不渲染）。
