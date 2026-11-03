@@ -88,36 +88,6 @@ def sniff_extension(data):
 class WecomMediaMixin:
     """企业微信富媒体收发能力。"""
 
-    def respond_image(self, req_id, chatid, file_path, chat_type=proto.CHAT_SINGLE,
-                      caption=""):
-        """回复一张图片（走 msg_item 直传 base64，不上传素材）。
-
-        @param req_id     原消息的请求 id（必须透传，客户端才停止转圈）
-        @param chatid     会话 id
-        @param file_path  本地图片路径（JPG / PNG，编码前 ≤ 10MB）
-        @param chat_type  会话类型
-        @param caption    附带文字
-        @returns (ok, data_or_error)
-        """
-        if not req_id or not chatid:
-            return False, "missing_req_id_or_chatid"
-        try:
-            with open(file_path, "rb") as f:
-                raw = f.read()
-        except Exception as e:
-            return False, "read_failed: %s" % e
-        if len(raw) > MAX_IMAGE_BYTES:
-            return False, "image_too_large"
-        b64 = proto.b64(raw)
-        md5 = hashlib.md5(raw).hexdigest()
-        # 走通用媒体帧：旧 respond_image_frame 不接收 caption，
-        # 传入会抛 TypeError，故统一改用 respond_media_frame。
-        frame_text = proto.respond_media_frame(
-            req_id, chatid, proto.image_item(b64, md5),
-            chat_type=chat_type, caption=caption)
-        ok = self._send_nowait(frame_text)
-        return ok, ({} if ok else "send_failed")
-
     def send_image(self, chatid, file_path, chat_type=proto.CHAT_SINGLE,
                    caption=""):
         """主动推送一张图片（不依赖回复凭证）。
@@ -190,47 +160,6 @@ class WecomMediaMixin:
             pass
         return file_path, False
 
-    def respond_voice(self, req_id, chatid, file_path, chat_type=proto.CHAT_SINGLE,
-                      caption=""):
-        """回复一条语音（走 msg_item 直传 base64，与图片同构）。
-
-        格式限制：平台对语音格式有要求（通常 AMR），调用方须先转好格式。
-        转换不在本方法内做——本方法只管把给定文件发出去。
-
-        @param req_id     原消息的请求 id（必须透传）
-        @param chatid     会话 id
-        @param file_path  本地音频路径
-        @param chat_type  会话类型
-        @param caption    附带文字
-        @returns (ok, data_or_error)
-        """
-        if not req_id or not chatid:
-            return False, "missing_req_id_or_chatid"
-        # 平台要求 AMR：先转码，发完再清理临时文件
-        use_path, is_tmp = self._to_amr(file_path)
-        try:
-            try:
-                with open(use_path, "rb") as f:
-                    raw = f.read()
-            except Exception as e:
-                return False, "read_failed: %s" % e
-            if not raw:
-                return False, "empty_file"
-            b64 = proto.b64(raw)
-            md5 = hashlib.md5(raw).hexdigest()
-            frame_text = proto.respond_media_frame(
-                req_id, chatid, proto.voice_item(b64, md5),
-                chat_type=chat_type, caption=caption)
-            ok = self._send_nowait(frame_text)
-            return ok, ({} if ok else "send_failed")
-        finally:
-            # 转码产物是用完即弃的临时文件，无论成败都删掉
-            if is_tmp:
-                try:
-                    os.remove(use_path)
-                except OSError:
-                    pass
-
     def _upload_media(self, file_path, media_type="file"):
         """三步上传取 media_id：初始化 → 逐片上传 → 完成。
 
@@ -290,28 +219,6 @@ class WecomMediaMixin:
         # 官方文档：media_id 在响应顶层，不在 body 里
         media_id = ack.get("media_id") or (ack.get("body") or {}).get("media_id") or ""
         return (media_id, "") if media_id else ("", "no_media_id")
-
-    def respond_file(self, req_id, chatid, file_path, chat_type=proto.CHAT_SINGLE,
-                     caption=""):
-        """回复一个文件：先三步上传拿 media_id，再发文件消息项。
-
-        @param req_id     原消息的请求 id（必须透传）
-        @param chatid     会话 id
-        @param file_path  本地文件路径
-        @param chat_type  会话类型
-        @param caption    附带文字
-        @returns (ok, data_or_error)
-        """
-        if not req_id or not chatid:
-            return False, "missing_req_id_or_chatid"
-        media_id, err = self._upload_media(file_path, "file")
-        if err:
-            return False, err
-        frame_text = proto.respond_media_frame(
-            req_id, chatid, proto.file_item(media_id, os.path.basename(file_path)),
-            chat_type=chat_type, caption=caption)
-        ok = self._send_nowait(frame_text)
-        return ok, ({} if ok else "send_failed")
 
     def send_file(self, chatid, file_path, chat_type=proto.CHAT_SINGLE,
                   caption=""):

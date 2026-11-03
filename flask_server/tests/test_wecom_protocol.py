@@ -193,13 +193,6 @@ class TestClientContract:
         """缺凭证时启动应失败，而不是静默空转。"""
         assert WecomClient("", "", None).start() is False
 
-    def test_respond_image_requires_req_id(self):
-        """无 req_id 时不能回复图片（客户端会一直转圈）。"""
-        c = WecomClient("b", "s", None)
-        ok, err = c.respond_image("", "chat1", "/nonexistent.png")
-        assert ok is False and err == "missing_req_id_or_chatid"
-
-
 # ============ 媒体解密 ============
 class TestDecodeAesKey:
     """平台下发的 aeskey 形态与解码。

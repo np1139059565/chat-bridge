@@ -229,13 +229,6 @@ class WecomClient(WecomMediaMixin):
     def _handle_msg(self, msg):
         """处理消息回调，交给上层。"""
         self._last_event = "message"
-        # 诊断日志：平台的图文消息结构可能与文档不一致，
-        # 打出入参字段名，排障时据此判断该从哪取内容，而非按假设猜。
-        try:
-            body = msg.get("body") or {}
-            log("消息体字段：top=%s body=%s" % (sorted(msg.keys()), sorted(body.keys())))
-        except Exception:
-            pass
         try:
             if self.on_message:
                 self.on_message(self, msg)

@@ -171,38 +171,6 @@ class TestSendMedia(unittest.TestCase):
         """清理临时目录。"""
         self._tmp.cleanup()
 
-    def test_respond_voice_sends_frame(self):
-        """语音回复应发出一帧且 msgtype 为 voice。"""
-        c = _FakeClient()
-        ok, err = c.respond_voice("rid", "chat1", self.voice)
-        self.assertTrue(ok)
-        item = json.loads(c.sent[0])["body"]["stream"]["msg_item"][0]
-        self.assertEqual(item["msgtype"], "voice")
-
-    def test_respond_voice_missing_req_id(self):
-        """缺 req_id 时应直接拒绝，不构造帧。"""
-        c = _FakeClient()
-        ok, err = c.respond_voice("", "chat1", self.voice)
-        self.assertFalse(ok)
-        self.assertEqual(err, "missing_req_id_or_chatid")
-        self.assertEqual(c.sent, [])
-
-    def test_respond_file_uploads_then_sends(self):
-        """文件回复应先走三步上传，再发文件帧。"""
-        acks = [
-            {"errcode": 0, "body": {"upload_id": "up-1"}},
-            {"errcode": 0},
-            {"errcode": 0, "body": {"media_id": "mid-9"}},
-        ]
-        c = _FakeClient(acks)
-        ok, err = c.respond_file("rid", "chat1", self.file)
-        self.assertTrue(ok)
-        self.assertEqual(err, {})
-        # 最后一帧是文件消息，带 media_id
-        item = json.loads(c.sent[-1])["body"]["stream"]["msg_item"][0]
-        self.assertEqual(item["msgtype"], "file")
-        self.assertEqual(item["file"]["media_id"], "mid-9")
-
     def test_active_push_file_uploads_then_sends(self):
         """主动推送发文件：先走三步上传，再发主动推送帧。"""
         acks = [
