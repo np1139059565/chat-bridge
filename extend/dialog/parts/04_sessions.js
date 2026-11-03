@@ -159,6 +159,10 @@
           if (saved.executedSigs[sig]) conv.executedSigs[sig] = true;
         });
       }
+      // 诊断：后端取回多少条签名，以及恢复后内存里共多少条
+      log('loadConversation 签名恢复：会话=' + convId
+        + ' 后端=' + Object.keys(saved.executedSigs || {}).length
+        + ' 内存=' + Object.keys(conv.executedSigs || {}).length);
       conv.visibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : (conv.visibleKeys || []);
       if (Array.isArray(saved.branchKeys)) conv.branchKeys = saved.branchKeys;
       if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
@@ -202,7 +206,8 @@
     if (!conv) return;
     const payload = this.buildConvPayload(conv);
     log('persistConv 写入后端：会话=' + id + '，节点=' + Object.keys(payload.msgTree || {}).length
-      + '，外部卡片=' + (payload.externalCards || []).length);
+      + '，外部卡片=' + (payload.externalCards || []).length
+      + '，签名=' + Object.keys(payload.executedSigs || {}).length);
     // 后端唯一权威：消息树只写后端，不再写 chrome.storage.local。
     // 写入是异步的，失败由 memSaveConv 内部提示，不阻塞调用方。
     if (this.memSaveConv) this.memSaveConv(id, payload);

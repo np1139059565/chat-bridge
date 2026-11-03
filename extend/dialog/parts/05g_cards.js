@@ -276,12 +276,18 @@
    * @returns {string} 命中返回签名，未命中返回空串
    */
   M._executedSig = function (msgId, call) {
-    if (!msgId || !call || !call.tool) return '';
+    if (!msgId || !call || !call.tool) {
+      log('[签名诊断] 跳过：msgId=' + (msgId || '(空)') + ' tool=' + (call && call.tool));
+      return '';
+    }
     const conv = this.ensureConv(this.activeConv);
     const store = (conv && conv.executedSigs) || {};
     // 签名键带上会话 id：消息指纹是内容摘要，相同内容的消息在不同会话里指纹相同，
     // 只用「消息指纹 + 工具 + 参数」会在跨会话时撞键，把别处执行过的调用误判成本次已执行。
     const sig = this.activeConv + '|' + msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
+    // 诊断：库里有多少签名、本次算出的签名是什么、是否命中
+    log('[签名诊断] 查 sig=' + sig + ' 库内条数=' + Object.keys(store).length
+      + ' 命中=' + !!store[sig]);
     return store[sig] ? sig : '';
   };
 
@@ -298,6 +304,7 @@
     if (!conv.executedSigs) conv.executedSigs = {};
     // 与 _executedSig 保持同一键格式（含会话 id），否则登记与查询对不上。
     const sig = this.activeConv + '|' + card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
+    log('[签名诊断] 登记 sig=' + sig);
     conv.executedSigs[sig] = true;
   };
 
