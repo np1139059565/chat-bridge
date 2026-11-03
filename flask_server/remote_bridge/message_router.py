@@ -81,9 +81,7 @@ _last_report = {}
 # 最近一次上报用的 QQClient 引用：重放时复用（note_incoming 拿不到 client）。
 _last_client = None
 
-# 最近一个发来消息的 openid。
-# 抽屉上报时并不知道 openid（那是 QQ 侧的概念），因此回退用它——
-# 单用户场景下，「最近跟我说话的人」就是推送目标。
+# 最近一个发来消息的 openid：抽屉上报不带它，推送时用它兜底。
 _last_openid = ""
 
 
@@ -117,10 +115,11 @@ def _remember_window(openid, msg_id):
 def get_last_openid():
     """取最近发来消息的 openid。
 
-    抽屉上报工具结果时并不知道 openid（那是 QQ 侧的概念），
-    需要推 QQ 图片时用它作推送目标的回退。
+    先取内存值（本轮最新），为空再回退公共层的落盘记录：
+    内存随重启归零，落盘那份正好补上，避免重启后推送目标为空。
     """
-    return _last_openid
+    from .channel import target
+    return _last_openid or target.qq.get() or ""
 
 
 def get_window(openid):
