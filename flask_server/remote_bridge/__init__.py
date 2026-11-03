@@ -16,26 +16,13 @@
 设计原则：桥接层对网页 AI 完全透明。它不注册工具 provider、不进工具目录、
 不写入 System Prompt。网页 AI 感知不到它的存在。
 """
-from . import bridge_store, message_router, qq_gateway, command_panel
-from . import weixin_gateway, weixin_router, weixin_login
-from . import wecom_client, wecom_gateway, wecom_router
+from . import bridge_store, qq_gateway, command_panel
+from . import weixin_gateway, weixin_login
+from . import wecom_client, wecom_gateway
 from .adapters.qq import QQAdapter
 from .adapters.weixin import WeixinAdapter
 from .adapters.wecom import WecomAdapter
 import app_log
-
-
-def _use_pipeline(cfg):
-    """是否走统一推送管线。
-
-    默认开启。配置里把 bridge.use_pipeline 设为 false 可退回旧的三套 router，
-    用于新链路出问题时快速恢复——不必回滚代码。
-    @param cfg 桥接配置
-    @returns 走管线返回 True
-    """
-    v = cfg.get("use_pipeline")
-    # 未配置时按开启处理：新链路是目标形态
-    return True if v is None else bool(v)
 
 
 def log(*args):
@@ -241,32 +228,9 @@ class RemoteBridge:
         # 取活跃渠道；空串表示尚无记录，此时维持广播
         import active_channel
         target = active_channel.get()
-        # 新链路开关：开启后走统一推送管线，关闭则沿用旧的三套 router。
-        # 保留开关是为了让切换可回退——推送链路涉及真实账号，
-        # 出问题时把这一项关掉即可恢复原行为，不必回滚代码。
-        if _use_pipeline(cfg):
-            return self._report_via_pipeline(cfg, payload, target)
-        # 广播开关在旧链路上同样生效，保证切换回退后行为一致
-        broadcast = bool(cfg.get("broadcast"))
-        sent = 0
-        if cfg.get("enabled") and self._wants(target, "qq", broadcast):
-            try:
-                sent = message_router.handle_report(self.client, payload)
-            except Exception as e:
-                log("QQ 推送异常：", e)
-        wx = cfg.get("weixin") or {}
-        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin", broadcast):
-            try:
-                weixin_router.handle_report(self.wx_client, payload)
-            except Exception as e:
-                log("微信推送异常：", e)
-        wc = cfg.get("wecom") or {}
-        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom", broadcast):
-            try:
-                wecom_router.handle_report(self.wecom_client, payload)
-            except Exception as e:
-                log("企业微信推送异常：", e)
-        return sent
+        # 统一推送管线是唯一出口：旧的三套 router 已移除，
+        # 不再保留 use_pipeline 回退开关。
+        return self._report_via_pipeline(cfg, payload, target)
 
     def _report_via_pipeline(self, cfg, payload, target):
         """走统一推送管线：三条通道共用一套去重、配额与组装流程。

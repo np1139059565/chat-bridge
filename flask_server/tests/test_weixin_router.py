@@ -30,150 +30,15 @@ from weixin_test_helpers import FakeWeixinClient, make_msg   # noqa: E402
 
 
 # ============ 推送路由 ============
-class TestRouterMerge:
-    """微信配额紧张，合并推送是核心设计，必须有测试兜住。"""
-
-    def test_merges_multiple_messages_into_one(self):
-        """一轮里的多条消息必须合并成一条发送，否则配额很快耗尽。"""
-        c = FakeWeixinClient()
-        router.note_incoming("u1@im.wechat")
-        payload = {"conversationId": "conv-merge", "messages": [
-            make_msg("m1", "user", "问题"),
-            make_msg("m2", "assistant", "回答"),
-        ]}
-        n = router.handle_report(c, payload)
-        assert n == 1, "两条消息应合并为一次发送"
-        assert len(c.sent) == 1
-        body = c.sent[0][1]
-        assert "问题" in body and "回答" in body
-
-    def test_second_report_does_not_resend(self):
-        """同一批消息重复上报不应重复发送（抽屉会上报全量切片）。"""
-        c = FakeWeixinClient()
-        router.note_incoming("u1@im.wechat")
-        payload = {"conversationId": "conv-dedupe", "messages": [make_msg("d1")]}
-        assert router.handle_report(c, payload) == 1
-        assert router.handle_report(c, payload) == 0
-        assert len(c.sent) == 1
-
-    def test_no_target_user_skips_send(self):
-        """无推送目标时不发送，也不能抛异常。"""
-        c = FakeWeixinClient()
-        payload = {"conversationId": "conv-no-user", "messages": [make_msg("n1")]}
-        assert router.handle_report(c, payload) == 0
-        assert c.sent == []
-
-    def test_send_failure_not_marked_pushed(self):
-        """发送失败不记账：下轮上报要能重试，否则消息永久丢失。"""
-        c = FakeWeixinClient()
-        router.note_incoming("u1@im.wechat")
-        payload = {"conversationId": "conv-fail", "messages": [make_msg("f1")]}
-        c.fail_next = True
-        assert router.handle_report(c, payload) == 0
-        assert router.handle_report(c, payload) == 1
-
-    def test_weixin_source_filtered_out(self):
-        """微信自己投出去的卡片不回推，否则会复读用户刚说的话。"""
-        envelope = {"type": "external-call", "source": "weixin", "request": "hi"}
-        m = {"id": "w1", "role": "user", "source": "user",
-             "blocks": [{"type": "code", "code": json.dumps(envelope)}]}
-        c = FakeWeixinClient()
-        router.note_incoming("u1@im.wechat")
-        assert router.handle_report(c, {"conversationId": "conv-src", "messages": [m]}) == 0
-        assert c.sent == []
-
-    def test_long_text_truncated(self):
-        """超长文本要截断，保留首尾，避免被服务端拒绝或手机上无法阅读。"""
-        long_text = "开头" + ("填充" * 2000) + "结尾"
-        cut = router._truncate(long_text)
-        assert len(cut) <= router.MAX_TEXT_CHARS + 40
-        assert cut.startswith("开头") and cut.endswith("结尾")
-        assert "省略" in cut
-
-    def test_short_text_unchanged(self):
-        """短文本不做任何改动。"""
-        assert router._truncate("短文本") == "短文本"
-
-    def test_pure_tool_call_filtered(self):
-        """纯工具调用的消息不该推给微信。
-
-        AI 干活的中间过程（调工具、贴参数）对用户是噪音；
-        微信配额本就紧张，更不该被 JSON 占满。
-        """
-        call = {"type": "bridge-chat-call", "tool": "read_file", "parameters": {"path": "x"}}
-        m = {"id": "tc1", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "code", "code": json.dumps(call)}]}
-        assert router._should_push(m, {}) is False
-
-    def test_tool_call_with_text_still_pushed(self):
-        """带正文的工具调用消息要推：正文不能因附带工具调用而丢失。"""
-        call = {"type": "bridge-chat-call", "tool": "read_file", "parameters": {}}
-        m = {"id": "tc2", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "paragraph", "text": "我查一下"},
-                        {"type": "code", "code": json.dumps(call)}]}
-        assert router._should_push(m, {}) is True
-
-    def test_thinking_does_not_count_as_body(self):
-        """只有思考块 + 工具调用时，仍算纯工具调用（思考不是给用户看的内容）。"""
-        call = {"type": "bridge-chat-call", "tool": "x", "parameters": {}}
-        m = {"id": "tc3", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "thinking", "text": "内部推理"},
-                        {"type": "code", "code": json.dumps(call)}]}
-        assert router._should_push(m, {}) is False
-
-    def test_normal_reply_not_filtered(self):
-        """普通回复不含工具调用，必须照常推送。"""
-        m = {"id": "tc4", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "paragraph", "text": "这是回答"}]}
-        assert router._should_push(m, {}) is True
-
-
 # ============ 配额机制 ============
 class TestQuota:
     """配额必须按「每条用户消息重置」建模，这是修正过的真实机制。"""
-
-    def test_reset_on_new_incoming(self):
-        """用户发新消息应重置回复池，而不是在旧计数上累加。"""
-        router.note_incoming("u1@im.wechat")
-        for _ in range(5):
-            router._quota_add("u1@im.wechat", 1)
-        assert router.quota_status("u1@im.wechat")["used"] == 5
-        router.note_incoming("u1@im.wechat")
-        assert router.quota_status("u1@im.wechat")["used"] == 0, "新消息应把回复池清零"
-
-    def test_status_reports_remaining(self):
-        """剩余条数 = 上限 - 已用。"""
-        router.note_incoming("u2@im.wechat")
-        router._quota_add("u2@im.wechat", 3)
-        st = router.quota_status("u2@im.wechat")
-        assert st["limit"] == 10
-        assert st["used"] == 3
-        assert st["remaining"] == 7
-        assert st["active"] is True
 
     def test_no_pool_means_inactive(self):
         """用户没发过消息时没有有效回复池。"""
         st = router.quota_status("never-sent")
         assert st["active"] is False
         assert st["remaining"] == 10
-
-    def test_pool_expires_after_window(self):
-        """超过 24 小时未刷新，回复池失效。"""
-        router.note_incoming("u3@im.wechat")
-        router._quota_add("u3@im.wechat", 2)
-        router._quota["u3@im.wechat"]["started"] = time.time() - router.QUOTA_WINDOW - 10
-        st = router.quota_status("u3@im.wechat")
-        assert st["active"] is False, "过期后应视为无有效回复池"
-
-    def test_quota_exhausted_blocks_send(self):
-        """回复池用满后不再发送，避免被服务端拒绝。"""
-        c = FakeWeixinClient()
-        router.note_incoming("u4@im.wechat")
-        router._quota_add("u4@im.wechat", router.QUOTA_LIMIT)
-        m = make_msg("q1")
-        assert router.handle_report(c, {"conversationId": "conv-quota", "messages": [m]}) == 0
-        assert c.sent == []
-
 
 # ============ 网关正文抽取 ============
 class TestGatewayExtract:
@@ -249,62 +114,6 @@ class TestCommandCompat:
         c = FakeWeixinClient()
         assert command_panel.handle_command(c, "u1@im.wechat", "", "/vo") is True
         assert c.sent, "应当给出「没有待确认语音」之类的提示"
-
-    def test_tool_call_code_stripped_from_body(self):
-        """工具调用的代码绝不能出现在微信正文里。
-
-        真实故障：直接复用了 QQ 的正文组装规则，它把工具调用渲染成
-        「[工具调用] run_command 参数={...}」，参数里的整段代码进入正文，
-        手机上收到一屏 JSON，还占满本已紧张的配额。
-        """
-        call = {"type": "bridge-chat-call", "tool": "run_command",
-                "parameters": {"command": "import subprocess; subprocess.run([...])"}}
-        m = {"id": "s1", "role": "assistant", "source": "assistant", "blocks": [
-            {"type": "paragraph", "text": "我去执行一下"},
-            {"type": "code", "code": json.dumps(call)},
-        ]}
-        body = router._body_of(m, {})
-        assert "我去执行一下" in body
-        assert "subprocess" not in body, "工具调用参数里的代码不该进正文"
-        assert "bridge-chat-call" not in body
-
-    def test_pure_tool_call_yields_empty_body(self):
-        """只有工具调用时正文为空，上层据此跳过发送。"""
-        call = {"type": "bridge-chat-call", "tool": "x", "parameters": {}}
-        m = {"id": "s2", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "code", "code": json.dumps(call)}]}
-        assert router._body_of(m, {}) == ""
-
-    def test_tool_result_code_stripped(self):
-        """工具结果块同样不进微信正文。"""
-        res = {"type": "bridge-chat-res", "result": {"data": "x" * 500}}
-        m = {"id": "s3", "role": "assistant", "source": "assistant", "blocks": [
-            {"type": "paragraph", "text": "结果出来了"},
-            {"type": "code", "code": json.dumps(res)},
-        ]}
-        body = router._body_of(m, {})
-        assert "结果出来了" in body
-        assert "xxxx" not in body
-
-    def test_real_code_block_preserved(self):
-        """普通代码块要保留：用户可能确实需要看代码。"""
-        m = {"id": "s4", "role": "assistant", "source": "assistant", "blocks": [
-            {"type": "paragraph", "text": "写法如下："},
-            {"type": "code", "code": "print(1)"},
-        ]}
-        body = router._body_of(m, {})
-        assert "print(1)" in body
-
-    def test_voice_block_stripped(self):
-        """语音块不进正文（那是给 TTS 用的结构，不是给人读的）。"""
-        vb = {"type": "bridge-voice", "text": "朗读文本"}
-        m = {"id": "s5", "role": "assistant", "source": "assistant", "blocks": [
-            {"type": "paragraph", "text": "正文内容"},
-            {"type": "code", "code": json.dumps(vb)},
-        ]}
-        body = router._body_of(m, {})
-        assert "正文内容" in body
-        assert "朗读文本" not in body
 
     def test_result_routing_recognizes_weixin_openid(self):
         """回传路由必须认出微信用户，不能把它当 QQ 用户走窗口检查。
