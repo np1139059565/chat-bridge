@@ -343,21 +343,12 @@ class QqGateway:
         @param from_voice 是否由语音确认投递：前端据此要求在随后 AI 回复里
                           必须含 voice 代码块（供 TTS 朗读）
         """
+        # 语音确认场景在正文前贴一段提示，提高 AI 输出 voice 块的命中率
         request_text = _voice_request(content) if from_voice else content
-        payload = _external_payload(openid, request_text, msg_id, from_voice)
-        try:
-            import json
-            card = card_bus.bus.create(
-                source="qq",
-                card_type="external-call",
-                title=title,
-                content=json.dumps(payload, ensure_ascii=False, indent=2),
-                payload={"source": "qq", "openid": openid, "msg_id": msg_id,
-                         "from_voice": bool(from_voice)},
-            )
-            log("已投递卡片", card.id[:8], "等待抽屉取走")
-        except Exception as e:
-            log("投递卡片失败：", e)
+        # 信封拼装委托公共层：三条通道共用同一份结构
+        from .channel import delivery
+        delivery.deliver_text("qq", openid, request_text, msg_id=msg_id,
+                              title=title, from_voice=from_voice)
 
 
 def _voice_request(content):

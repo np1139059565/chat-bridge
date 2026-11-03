@@ -342,26 +342,9 @@ class WecomGateway:
         """把消息包装成 external-call 卡片投给网页 AI。
 
         出向回复统一走主动推送，卡片只承载内容本身。
+        信封拼装委托公共层，与另两条通道共用同一份结构。
         """
-        payload = {
-            "type": "external-call",
-            "nonce": "wecom-" + str(int(time.time() * 1000)),
-            "request": content,
-            "source": "wecom",
-            "openid": chatid,
-            "msg_id": body.get("msg_id") or "",
-            "from_voice": False,
-            "page_url": "",
-        }
-        try:
-            card = card_bus.bus.create(
-                source="wecom",
-                card_type="external-call",
-                title="企业微信用户",
-                content=json.dumps(payload, ensure_ascii=False, indent=2),
-                payload={"source": "wecom", "openid": chatid,
-                         "msg_id": body.get("msg_id") or ""},
-            )
-            log("已投递卡片", card.id[:8], "等待抽屉取走")
-        except Exception as e:
-            log("投递卡片失败：", e)
+        from .channel import delivery
+        delivery.deliver_text("wecom", chatid, content,
+                              msg_id=(body or {}).get("msg_id") or "",
+                              title="企业微信用户")

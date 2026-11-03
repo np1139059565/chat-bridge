@@ -149,28 +149,40 @@ def deliver_file(source, openid, path, name="", title=None):
         return ""
 
 
-def deliver_text(source, openid, text, title=None, extra=None):
+def deliver_text(source, openid, text, msg_id="", title=None, from_voice=False):
     """把一段文字投成 external-call 卡片，交给网页 AI。
 
-    @param source 通道标识
-    @param openid 接收方标识
-    @param text   正文
-    @param title  卡片标题；缺省按通道名生成
-    @param extra  附加到 payload 的字段（如 msg_id）
+    卡片 content 里放的是**完整信封**（含 type / nonce / request / source 等），
+    前端按这个结构解析来源与语音标记，改动结构会破坏前端识别。
+
+    @param source     通道标识
+    @param openid     接收方标识
+    @param text       正文
+    @param msg_id     被动回复引用的用户消息 id
+    @param title      卡片标题；缺省按通道名生成
+    @param from_voice 是否由语音确认投递：前端据此要求回复含 voice 块
     @returns 卡片 id；失败返回空串
     """
     import json
-    payload = {"source": source, "openid": openid}
-    if extra:
-        payload.update(extra)
+    import time
+    envelope = {
+        "type": "external-call",
+        "nonce": source + "-" + str(int(time.time() * 1000)),
+        "request": text,
+        "source": source,
+        "openid": openid,
+        "msg_id": msg_id or "",
+        "from_voice": bool(from_voice),
+        "page_url": "",
+    }
     try:
         card = card_bus.bus.create(
             source=source,
             card_type="external-call",
             title=title or (source + " 用户"),
-            content=json.dumps(payload, ensure_ascii=False, indent=2)
-                    if not text else text,
-            payload=payload,
+            content=json.dumps(envelope, ensure_ascii=False, indent=2),
+            payload={"source": source, "openid": openid,
+                     "msg_id": msg_id or ""},
         )
         log("已投递文本卡片", card.id[:8])
         return card.id

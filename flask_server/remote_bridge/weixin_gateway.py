@@ -128,28 +128,12 @@ class WeixinGateway:
         @param content 正文
         @param msg     原始消息对象
         """
-        payload = {
-            "type": "external-call",
-            "nonce": "wx-" + str(int(time.time() * 1000)),
-            "request": content,
-            "source": "weixin",
-            "openid": user_id,
-            "msg_id": msg.get("message_id") or "",
-            "from_voice": False,
-            "page_url": "",
-        }
-        try:
-            card = card_bus.bus.create(
-                source="weixin",
-                card_type="external-call",
-                title="微信用户",
-                content=json.dumps(payload, ensure_ascii=False, indent=2),
-                payload={"source": "weixin", "openid": user_id,
-                         "msg_id": msg.get("message_id") or ""},
-            )
-            log("已投递卡片", card.id[:8], "等待抽屉取走")
-        except Exception as e:
-            log("投递卡片失败：", e)
+        # 拼装委托公共层：三条通道共用同一份信封结构，
+        # 避免各写一份后结构漂移、前端识别不到来源。
+        from .channel import delivery
+        delivery.deliver_text("weixin", user_id, content,
+                              msg_id=msg.get("message_id") or "",
+                              title="微信用户")
 
     def reply_text(self, user_id, text):
         """向微信回发一条提示文本。
