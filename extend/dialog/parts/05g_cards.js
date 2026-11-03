@@ -127,12 +127,12 @@
     const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
     holder.cards[b.id] = this._makeCard(b, call, blockIssue);
     if (!call) return;
-    // 记录归属消息指纹：刷新后代码块 id 会变，但消息指纹相对稳定，
-    // 用它拼「执行签名」判定这次调用是否已执行过（见 executeCard）。
+    // 记录归属消息指纹：仅用于展示与排查，不参与执行签名
+    // （消息指纹随内容变化，用它做签名会导致刷新后无法恢复已执行态）。
     holder.cards[b.id].msgId = this.msgId(m);
     // 签名命中说明这条调用此前执行过：直接恢复为已执行态，
     // 否则刷新后卡片会退回待执行、甚至被自动流程再跑一遍。
-    const doneSig = this._executedSig(this.msgId(m), call);
+    const doneSig = this._executedSig(call);
     if (doneSig) {
       holder.cards[b.id].executed = true;
       holder.cards[b.id].status = 'done';
@@ -275,14 +275,28 @@
    * @param {Object} call 解析出的工具调用 {tool, parameters}
    * @returns {string} 命中返回签名，未命中返回空串
    */
-  M._executedSig = function (msgId, call) {
-    if (!msgId || !call || !call.tool) return '';
+  M._executedSig = function (call) {
+    if (!call || !call.tool) return '';
     const conv = this.ensureConv(this.activeConv);
     const store = (conv && conv.executedSigs) || {};
-    // 签名键带上会话 id：消息指纹是内容摘要，相同内容的消息在不同会话里指纹相同，
-    // 只用「消息指纹 + 工具 + 参数」会在跨会话时撞键，把别处执行过的调用误判成本次已执行。
-    const sig = this.activeConv + '|' + msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
+    // 签名不含消息指纹：消息指纹由全部块内容算出，AI 追加内容时必然改变，
+    // 刷新后重算必然对不上，已执行卡片就会退回待执行——这正是要修的故障。
+    // 保留会话 id：不同会话里内容相同的调用不应互相压制。
+    // 代价：同一会话内「同工具 + 同参数」的两次独立调用会被视作同一次，
+    // 但那种重复通常是同一次调用的重放，本就不该再执行一遍。
+    const sig = this._sigOf(call);
     return store[sig] ? sig : '';
+  };
+
+  /**
+   * 计算一次工具调用的稳定签名：会话 + 工具名 + 参数。
+   *
+   * 不含消息指纹——它随内容变化，会让刷新后无法恢复已执行状态。
+   * @param {Object} call 工具调用 {tool, parameters}
+   * @returns {string} 签名
+   */
+  M._sigOf = function (call) {
+    return this.activeConv + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
   };
 
   /**
@@ -293,12 +307,11 @@
    * @param {Object} card 刚执行完的卡片
    */
   M._markExecutedSig = function (card) {
-    if (!this.activeConv || !card || !card.msgId || !card.tool) return;
+    if (!this.activeConv || !card || !card.tool) return;
     const conv = this.ensureConv(this.activeConv);
     if (!conv.executedSigs) conv.executedSigs = {};
-    // 与 _executedSig 保持同一键格式（含会话 id），否则登记与查询对不上。
-    const sig = this.activeConv + '|' + card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
-    conv.executedSigs[sig] = true;
+    // 与 _executedSig 共用同一个签名函数，避免两处各写一份后格式漂移。
+    conv.executedSigs[this._sigOf(card)] = true;
   };
 
   /**
