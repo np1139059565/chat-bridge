@@ -142,11 +142,13 @@ class WecomMediaMixin:
             return False, "empty_file"
         if len(raw) > MAX_IMAGE_BYTES:
             return False, "image_too_large"
-        b64 = proto.b64(raw)
-        md5 = hashlib.md5(raw).hexdigest()
+        # 主动推送必须先用 media_id：先把图片上传，拿到平台侧编号再发消息。
+        # 直接把 base64 塞进 stream 会被判非法消息类型（errcode 40008）。
+        media_id, err = self._upload_media(file_path, "image")
+        if err:
+            return False, "upload_failed: %s" % err
         frame_text = proto.send_media_frame(
-            chatid, proto.image_item(b64, md5),
-            chat_type=chat_type, caption=caption)
+            chatid, media_id, media_type="image", chat_type=chat_type)
         ok = self._send_nowait(frame_text)
         return ok, ({} if ok else "send_failed")
 
@@ -326,9 +328,9 @@ class WecomMediaMixin:
         media_id, err = self._upload_media(file_path, "file")
         if err:
             return False, err
+        # 主动推送文件同样用 media_id 发普通 file 消息
         frame_text = proto.send_media_frame(
-            chatid, proto.file_item(media_id, os.path.basename(file_path)),
-            chat_type=chat_type, caption=caption)
+            chatid, media_id, media_type="file", chat_type=chat_type)
         ok = self._send_nowait(frame_text)
         return ok, ({} if ok else "send_failed")
 
@@ -365,11 +367,12 @@ class WecomMediaMixin:
                 return False, "read_failed: %s" % e
             if not raw:
                 return False, "empty_file"
-            b64 = proto.b64(raw)
-            md5 = hashlib.md5(raw).hexdigest()
+            # 主动推送必须先上传拿 media_id，不能直接塞 base64（见 send_image）
+            media_id, err = self._upload_media(use_path, "voice")
+            if err:
+                return False, "upload_failed: %s" % err
             frame_text = proto.send_media_frame(
-                chatid, proto.voice_item(b64, md5),
-                chat_type=chat_type, caption=caption)
+                chatid, media_id, media_type="voice", chat_type=chat_type)
             ok = self._send_nowait(frame_text)
             return ok, ({} if ok else "send_failed")
         finally:
