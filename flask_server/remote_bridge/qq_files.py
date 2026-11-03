@@ -116,30 +116,14 @@ def _deliver_card(openid, path, name, size):
     """投一张 qq-file 卡片，告诉 AI 文件落在哪。
 
     卡片正文刻意写成一句话而非二进制：AI 需要的是路径，不是内容。
-    它拿到路径后可按需调 read_file（文本类）或让用户下载（二进制类）。
+    具体拼装委托公共层，与企微的文件卡片共用一份实现。
     @param openid 发件用户
     @param path   本地落盘路径
     @param name   原始文件名
     @param size   体积（字节）
     """
-    try:
-        card = card_bus.bus.create(
-            source="qq",
-            card_type="qq-file",
-            title="QQ 文件",
-            content="用户从手机 QQ 发来文件：%s（%d 字节），已保存到 %s"
-                    % (name, size, path),
-            payload={
-                "kind": "qq-file",
-                "openid": openid,
-                "path": path,
-                "name": name,
-                "size": size,
-            },
-        )
-        log("已投递文件卡片", card.id[:8], "等待抽屉取走")
-    except Exception as e:
-        log("投递文件卡片失败：", e)
+    from .channel import delivery
+    delivery.deliver_file("qq", openid, path, name=name, title="QQ 文件")
 
 
 def _reply(gateway, openid, text):

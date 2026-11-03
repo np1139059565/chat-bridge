@@ -287,6 +287,7 @@ class WecomGateway:
 
         与图片的区别：文件是二进制，模型看不见也不需要看见，
         它需要的是路径——拿到后自行调 read_file 或让用户下载。
+        具体拼装委托公共层，与 QQ 的文件卡片共用一份实现。
 
         @param chatid 会话 id
         @param path   本地落盘路径
@@ -294,26 +295,12 @@ class WecomGateway:
         @param info   平台下发的媒体描述
         """
         import os
+        from .channel import delivery
         # 文件名优先取平台下发值，缺失时用落盘文件的基本名
         name = info.get("name") or os.path.basename(path)
-        # 体积取落盘后的真实大小，平台下发的值可能缺失
-        size = os.path.getsize(path) if os.path.exists(path) else 0
         label = "文件" if kind == "file" else "语音"
-        # 卡片正文写成一句完整的话，AI 与用户都能直接看懂
-        body = "用户从企业微信发来%s：%s（%d 字节），已保存到 %s" % (
-            label, name, size, path)
-        try:
-            card = card_bus.bus.create(
-                source="wecom",
-                card_type="qq-file",
-                title="企业微信" + label,
-                content=body,
-                payload={"kind": "qq-file", "openid": chatid,
-                         "path": path, "name": name, "size": size},
-            )
-            log("已投递" + label + "卡片", card.id[:8], "等待抽屉取走")
-        except Exception as e:
-            log("投递" + label + "卡片失败：", e)
+        delivery.deliver_file("wecom", chatid, path, name=name,
+                              title="企业微信" + label)
 
     def _deliver_image_card(self, chatid, path):
         """投一张企微图片卡片，供前端贴进网页 AI 输入框。
