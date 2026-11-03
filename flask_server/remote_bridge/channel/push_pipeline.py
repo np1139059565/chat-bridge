@@ -203,9 +203,17 @@ def _push_locked(args):
             # 无文本内容不等于无内容可推：这一批可能全是图片 / 语音。
             # 直接返回会让媒体被整批丢掉，故仍走一次媒体发送。
             log("合并后无文本，尝试发送媒体 %d 条" % len(todo))
-            if hasattr(adapter, "push_media"):
-                return adapter.push_media(recipient, todo, push, ctx)
-            return 0
+            if not hasattr(adapter, "push_media"):
+                return 0
+            media_ok = adapter.push_media(recipient, todo, push, ctx)
+            # 一条媒体都没发出去：整批挂起，下轮重试。
+            # 若只发出去一部分，已发出的无法逐条判定，按成功处理避免重复发。
+            if not media_ok:
+                for m in todo:
+                    adapter.dedupe.forget(conv_id, m.get("id") or "")
+                _save_pending(conv_id, todo)
+                return 0
+            return media_ok
         ok = adapter.send_text(recipient, merged, markdown=True)
         if ok:
             adapter.quota.record(recipient, 1)
@@ -214,13 +222,17 @@ def _push_locked(args):
             # 塞进去就变成一段路径文字，用户看不到内容。
             media = adapter.push_media(recipient, todo, push, ctx) if hasattr(adapter, "push_media") else 0
             return len(todo) + media
-        # 合并推送失败：撤回占用，留待下轮重试
+        # 合并推送失败：撤回占用并挂起整批，留待下轮重试。
+        # 挂起是必要的：这批消息可能已滚出可见区，下轮切片里不再出现，
+        # 只撤回占用不足以让它们重试。
         for m in todo:
             adapter.dedupe.forget(conv_id, m.get("id") or "")
+        _save_pending(conv_id, todo)
         return 0
 
     # 逐条推送
     sent = 0
+    failed = []
     for m in todo:
         mid = m.get("id") or ""
         if hasattr(adapter, "push_one"):
@@ -230,10 +242,34 @@ def _push_locked(args):
         if outcome == "fail":
             # 失败不记账：撤回占用，下轮上报会重试
             adapter.dedupe.forget(conv_id, mid)
+            failed.append(m)
             continue
         sent += 1
         adapter.quota.record(recipient, 1)
+    # 回写待推缓存：本轮失败的消息挂起。
+    # 必要性：失败的消息若已滚出可见区，下一轮切片里就没有它了，
+    # 只靠「撤回占用」无法让它重试，必须有这份缓存兜住。
+    _save_pending(conv_id, failed)
     return sent
+
+
+def _save_pending(conv_id, failed):
+    """把本轮推送失败的消息写入待推缓存，供下一轮补推。
+
+    只在失败时才有意义：成功与跳过的消息不该留在缓存里，
+    故整体替换而非追加，天然完成「移出已处理项」。
+
+    @param conv_id 会话 id
+    @param failed  本轮失败的消息对象列表
+    """
+    if not conv_id:
+        return
+    from .. import bridge_store
+    try:
+        bridge_store.set_pending(conv_id, failed)
+    except Exception:
+        # 缓存写入失败不能让主流程崩：消息已撤回占用，下轮仍有机会重试
+        pass
 
 
 def _should_push(adapter, m, push):

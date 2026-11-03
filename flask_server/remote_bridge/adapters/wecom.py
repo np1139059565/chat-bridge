@@ -55,6 +55,18 @@ class WecomAdapter(ChannelAdapter):
         # 最近会话的 chat_type：单聊 1 / 群聊 2，随 target 一起记
         self._chat_type = {}
 
+    def prepare_items(self, conv_id, items):
+        """合并上次推送失败的消息，让它们获得重试机会。
+
+        与 QQ 通道保持一致：失败的消息可能已滚出可见区、不再出现在切片里，
+        只能靠待推缓存补回来，否则那条消息永远丢失。
+        @param conv_id 会话标识
+        @param items   本轮切片消息
+        @returns 合并后的消息列表
+        """
+        from .. import bridge_store
+        return bridge_store.merge_pending(conv_id, items)
+
     def send_text(self, target, text, markdown=False):
         """发送文本：优先走回复凭证（客户端停止转圈），否则主动推送。
 
