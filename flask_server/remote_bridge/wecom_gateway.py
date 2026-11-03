@@ -53,6 +53,24 @@ def _media_of(body):
     return "", {}
 
 
+def _mixed_of(body):
+    """取出图文混排消息的子项列表。
+
+    企业微信把「文字 + 图片」放进 mixed.msg_item 数组，顶层 msgtype 为 mixed。
+    这类消息既没有顶层 text 也没有顶层 image，按普通文本或媒体判断都会落空，
+    表现为「收到了但无可用正文，直接忽略」。
+
+    @param body 回调体
+    @returns 子项字典列表；非图文消息返回空列表
+    """
+    mixed = body.get("mixed")
+    if not isinstance(mixed, dict):
+        return []
+    # 平台字段名为 msg_item；兼容 items 以防不同版本命名差异
+    items = mixed.get("msg_item") or mixed.get("items") or []
+    return [i for i in items if isinstance(i, dict)]
+
+
 def sender_of(body):
     """取发送者标识。
 
@@ -112,6 +130,12 @@ class WecomGateway:
 
         text = _text_of(body)
         if not text:
+            # 图文混排：文字与图片同处一条消息，需合并成一次投递，
+            # 拆成两条会破坏「一条消息里带图文」的通道铁律。
+            mixed = _mixed_of(body)
+            if mixed:
+                self._handle_mixed(client, body, chatid, chat_type, mixed)
+                return
             kind, info = _media_of(body)
             if kind:
                 self._handle_media(client, body, chatid, chat_type, kind, info)
@@ -144,6 +168,38 @@ class WecomGateway:
                                      ctx.chat_type)
             return
         self._deliver_as_card(body, ctx.chatid, ctx.chat_type, text)
+
+    def _handle_mixed(self, client, body, chatid, chat_type, items):
+        """处理图文混排消息：文字与图片合并成一次投递。
+
+        顺序：先抽出全部文字拼成正文，再把图片逐张投成图片卡片，
+        最后把文字作为一张 external-call 卡片投出去。
+
+        @param client    WecomClient
+        @param body      回调体
+        @param chatid    会话 id
+        @param chat_type 会话类型
+        @param items     mixed 子项列表
+        """
+        texts = []
+        images = []
+        for it in items:
+            mt = it.get("msgtype") or ""
+            if mt == "text":
+                c = ((it.get("text") or {}).get("content") or "").strip()
+                if c:
+                    texts.append(c)
+            elif mt == "image":
+                images.append(it.get("image") or {})
+        for info in images:
+            if info:
+                self._handle_media(client, body, chatid, chat_type, "image", info)
+        joined = chr(10).join(texts).strip()
+        if joined:
+            self._deliver_as_card(body, chatid, chat_type, joined)
+            log("图文消息已投递 文字长度=%d 图片数=%d" % (len(joined), len(images)))
+        elif not images:
+            log("图文消息无可用内容，忽略")
 
     def _handle_media(self, client, body, chatid, chat_type, kind, info):
         """处理图片 / 文件 / 语音消息。
