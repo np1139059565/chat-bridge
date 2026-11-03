@@ -41,7 +41,18 @@
       firstToolCard: null,    // 本轮第一张工具卡片（供重跑等旁路使用）
       // isFreshReply：本轮是否属 AI 新鲜回复（与上报同一判定）。
       // 检测/回传用它取代「reason==='generate'」，避免采集来源漂移时漏检测。
-      isFreshReply: !!isFreshReply
+      isFreshReply: !!isFreshReply,
+      // lastAssistantIdx：本轮切片里最后一条助手消息的下标。
+      // 为什么不用 incoming.length - 1：工具调用块之后常跟着语音块、
+      // bridge_copy_md、click 等消息，它们到达后会把 AI 回复挤出末位，
+      // 若只认末条，卡片就再也不被收集，表现为「没有执行按钮、也不自动执行」。
+      // 用「最后一条助手消息」既覆盖上述情况，又不会把更早的历史消息纳入。
+      lastAssistantIdx: (function () {
+        for (let i = incoming.length - 1; i >= 0; i--) {
+          if (incoming[i] && incoming[i].role === 'assistant') return i;
+        }
+        return -1;
+      })()
     };
     incoming.forEach((m, mi) => {
       this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
@@ -97,13 +108,16 @@
       if (exist.isTool && !state.firstToolCard) state.firstToolCard = exist;
       // 上膛标记只在「本轮最后一条消息」上才转为自动候选：
       // 旧卡片残留的 autoArmed 不得让历史消息里的卡片重新获得执行权。
-      if (exist.autoArmed && mi === incoming.length - 1) {
+      // 同下方的放宽理由：用「最后一条助手消息」而非切片末条，
+      // 否则后续到达的语音块 / 指令回执会把卡片挤出末位，标记形同虚设。
+      if (exist.autoArmed && mi === state.lastAssistantIdx) {
         this.collectAutoCandidate(autoCandidates, exist);
       }
       // 已执行卡片：只登记以便留痕，不重置、不重跑。
       // 执行权只属于最后一条消息里的卡片；已完成的调用沿用原结果，
       // 避免刷新重新采集历史消息时把已执行卡片拉回待执行态再跑一遍。
-      if (state.isFreshReply && mi === incoming.length - 1
+      // 同上：用「最后一条助手消息」而非切片末条，避免被后续消息挤出后漏登记。
+      if (state.isFreshReply && mi === state.lastAssistantIdx
           && exist.isTool && exist.executed) {
         state.rerunCard = exist;
       }
@@ -128,7 +142,7 @@
     if (scrollOnly) {
       // 滚动轮次里，只有「真正的新回复」上的新卡片才预备自动执行。
       // 同样不能用切片末位单独判定：向上滚动加载历史时，末位未必是新消息。
-      if (mi === incoming.length - 1 && state.isFreshReply) {
+      if (mi === state.lastAssistantIdx && state.isFreshReply) {
         holder.cards[b.id].autoArmed = true;
         state.armedLast = holder.cards[b.id];
       }
@@ -140,10 +154,14 @@
       // state.isFreshReply 要求末条是助手消息且此前不在树中，才是真正的新消息。
       // 从响应式容器回读卡片再入候选：holder.cards[b.id] 是 Vue 代理，
       // 后续倒计时改的是界面真正监听的那份；直接用局部 card 会改到原始对象。
-      if (mi === incoming.length - 1 && state.isFreshReply) {
+      // 判据：本消息是本轮「最后一条助手消息」，且本轮属新鲜回复。
+      // 不用 incoming.length - 1：工具调用块之后常跟着语音块、bridge_copy_md、
+      // click 等消息，它们到达后把 AI 回复挤出末位，卡片就再也不被收集，
+      // 表现为「卡片没有执行按钮、也不自动执行」。
+      // 也不用「任意助手消息」：那会把切片里更早的历史消息纳入，
+      // 若其卡片从未执行过，会被误执行。取「最后一条助手消息」两者兼顾。
+      if (mi === state.lastAssistantIdx && state.isFreshReply) {
         this.collectAutoCandidate(autoCandidates, holder.cards[b.id]);
-      } else if (mi === incoming.length - 1) {
-        log('自动候选跳过：末条非新回复（历史切片截断），卡片=' + (b.id || ''));
       }
     }
   };
@@ -281,6 +299,34 @@
     // 与 _executedSig 保持同一键格式（含会话 id），否则登记与查询对不上。
     const sig = this.activeConv + '|' + card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
     conv.executedSigs[sig] = true;
+  };
+
+  /**
+   * 按「执行签名」判断镜像里是否还存在这张卡对应的调用。
+   *
+   * 为什么需要它：代码块 id 是内容指纹，AI 回复追加内容后网页重渲染，
+   * 同一张卡片的 id 会变；此时按旧 id 查必然落空，卡片被误判为幽灵卡。
+   * 签名由「消息指纹 + 工具名 + 参数」组成，这些在内容追加时保持不变。
+   * @param {Object} card 工具卡片
+   * @returns {boolean} 镜像里能找到同一调用返回 true
+   */
+  M.cardMatchesBySig = function (card) {
+    if (!card || !card.msgId || !card.tool) return false;
+    const messages = this.messages || [];
+    const want = JSON.stringify(card.parameters || {});
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      if (!msg || this.msgId(msg) !== card.msgId) continue;
+      const blocks = window.AIMirrorDomUtils.toArray(msg.blocks);
+      for (let j = 0; j < blocks.length; j++) {
+        const b = blocks[j];
+        if (!b || b.type !== 'code') continue;
+        const call = this.parseToolCall(b);
+        if (!call || call.tool !== card.tool) continue;
+        if (JSON.stringify(call.parameters || {}) === want) return true;
+      }
+    }
+    return false;
   };
 
   M._makeCard = function (b, call, issue) {

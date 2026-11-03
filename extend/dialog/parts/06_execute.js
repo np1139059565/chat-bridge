@@ -20,6 +20,7 @@
   M.cardInMirror = function (card) {
     if (!card || !card.id) return false;
     const messages = this.messages || [];
+    // 第一判据：按代码块 id 精确命中（最常见、最可靠）
     for (let i = 0; i < messages.length; i++) {
       const blocks = window.AIMirrorDomUtils.toArray(messages[i] && messages[i].blocks);
       for (let j = 0; j < blocks.length; j++) {
@@ -27,7 +28,9 @@
         if (b && b.type === 'code' && b.id === card.id) return true;
       }
     }
-    return false;
+    // 第二判据：id 找不到时按签名再确认（实现见 05g_cards.cardMatchesBySig）。
+    // 代码块 id 随内容追加而变，按旧 id 查必落空；签名不受影响。
+    return this.cardMatchesBySig(card);
   };
 
   /**
