@@ -16,6 +16,16 @@ from ..channel.adapter import ChannelAdapter
 from ..channel import dedupe as dedupe_store
 from ..channel import quota as quota_store
 from ..channel import target as target_store
+from .. import bridge_log
+
+
+def log(*args):
+    """统一前缀日志：终端 + 按天落盘。
+
+    与另两条通道的适配器保持一致。缺了它，媒体发送失败时调用 log 会抛
+    NameError，整个推送流程被异常中断，表现为「管线报成功、用户收不到」。
+    """
+    bridge_log.write("[bridge][wecom]", *args)
 
 # 合并多条消息时的分隔线
 SEP = "\n\n———\n\n"

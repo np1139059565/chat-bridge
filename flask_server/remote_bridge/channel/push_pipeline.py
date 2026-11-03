@@ -188,7 +188,7 @@ def _push_locked(args):
     # 这不属于「推送失败」，而是「此刻不能推」——撤销占用，等配额恢复后
     # 下一轮上报自然会重试，消息不会丢。
     if adapter.quota.exhausted(recipient):
-        log("配额已用尽，本轮跳过 %d 条" % len(todo))
+        log("[%s] 配额已用尽，本轮跳过 %d 条" % (adapter.name, len(todo)))
         for m in todo:
             adapter.dedupe.forget(conv_id, m.get("id") or "")
         return 0
@@ -217,7 +217,9 @@ def _push_locked(args):
         ok = adapter.send_text(recipient, merged, markdown=True)
         if ok:
             adapter.quota.record(recipient, 1)
-            log("合并推送成功 %d 条" % len(todo))
+            # 带通道名与接收方：广播时既要看哪条通道发了，也要看发给了谁
+            log("[%s] 合并推送成功 %d 条 recipient=%s"
+                % (adapter.name, len(todo), recipient))
             # 文本送达后再发媒体：图片 / 文件 / 语音无法并入合并文本，
             # 塞进去就变成一段路径文字，用户看不到内容。
             media = adapter.push_media(recipient, todo, push, ctx) if hasattr(adapter, "push_media") else 0
