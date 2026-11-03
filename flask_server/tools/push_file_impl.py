@@ -94,6 +94,44 @@ def _push_to_web(fp, size):
     }
 
 
+def _push_to_wecom(fp, size):
+    """把文件交付给企业微信：走主动推送（三步上传拿 media_id）。
+
+    与 QQ 的区别：企业微信没有被动回复窗口，不需要 msg_id / seq，
+    也不需要等用户先说话；目标取公共层记录的最近企微用户。
+
+    @param fp   源文件绝对路径
+    @param size 文件字节数（已校验过体积上限）
+    @return { pushed, name, size, target, error? }
+    """
+    # 延迟导入：避免模块加载期就拉起桥接层（那里会读配置、建连接对象）
+    from remote_bridge import bridge
+    from remote_bridge.channel import target as target_store
+
+    client = getattr(bridge, "wecom_client", None)
+    if not client:
+        raise ToolParamError(
+            "企业微信通道未连接：请确认设置页已启用企业微信并已连上，再重试")
+    # 收件人取「最近跟机器人说话的企微用户」：与推送管线同一份来源
+    chatid = target_store.wecom.get()
+    if not chatid:
+        raise ToolParamError(
+            "尚无企业微信会话：请先在企业微信里给机器人发一条消息，再重试")
+
+    # 真正发送：失败原因如实回给调用方，便于转述给用户
+    ok, data = client.send_file(chatid, fp)
+    out = {
+        "pushed": bool(ok),
+        "name": os.path.basename(fp),
+        "size": size,
+        "target": "wecom",
+    }
+    if not ok:
+        out["error"] = str(data)
+        out["note"] = "推送未成功，文件仍保留在电脑上，可稍后重试"
+    return out
+
+
 def t_push_file(p):
     """把本地文件推送到用户手机 QQ。
 
@@ -129,6 +167,17 @@ def t_push_file(p):
     # 投递方向：跟着「最后一个给机器人发消息的客户端」走。
     # 谁刚说过话，产物就推回谁那里，与语音等其它下发的口径一致。
     import active_channel
+    # 当前活跃通道名：web / qq / wecom / 空串
+    channel = active_channel.get()
+    if channel == "web":
+        return _push_to_web(fp, size)
+    # 企业微信：走主动推送（三步上传拿 media_id），目标取公共层的最近用户。
+    # 不走 QQ 分支：企微用户 id 与 QQ openid 完全不同，混用会发给错误的人。
+    if channel == "wecom":
+        return _push_to_wecom(fp, size)
+    if channel == "weixin":
+        # 微信通道不支持发文件，如实说明，不跨通道代发
+        raise ToolParamError("微信通道暂不支持发送文件，请改用网页或其它通道")
     if active_channel.is_web():
         return _push_to_web(fp, size)
 

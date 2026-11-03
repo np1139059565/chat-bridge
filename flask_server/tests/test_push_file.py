@@ -151,6 +151,109 @@ class TestPushFileSuccess(unittest.TestCase):
         self.assertEqual(res["error"], "窗口已关闭")
 
 
+class TestPushFileWecom(unittest.TestCase):
+    """企业微信分支：走主动推送，目标取公共层的最近用户。
+
+    这一支曾完全没有测试覆盖，导致「适配器里 log 未定义」这类缺陷
+    在测试全绿的情况下跑到线上。此处的用例专门守住这条路径。
+    """
+
+    def setUp(self):
+        """准备临时文件，并把活跃渠道切成 wecom。"""
+        import tempfile
+        import active_channel
+        self._tmp = tempfile.TemporaryDirectory()
+        self.md = os.path.join(self._tmp.name, "note.md")
+        with open(self.md, "w", encoding="utf-8") as f:
+            f.write("# hi\n")
+        # 记住原始状态，tearDown 原样还原，避免污染其它用例
+        self._ac_state = (active_channel._channel, active_channel._loaded,
+                          active_channel._STATE_PATH)
+        active_channel._channel = "wecom"
+        active_channel._loaded = True
+
+    def tearDown(self):
+        """还原活跃渠道并清理临时目录。"""
+        import active_channel
+        (active_channel._channel, active_channel._loaded,
+         active_channel._STATE_PATH) = self._ac_state
+        self._tmp.cleanup()
+
+    def test_wecom_success(self):
+        """企微通道下：调用 send_file，目标取公共层最近用户。"""
+        from remote_bridge import bridge
+        from remote_bridge.channel import target as target_store
+        fake_client = mock.MagicMock()
+        fake_client.send_file.return_value = (True, {})
+        with mock.patch.object(bridge, "wecom_client", fake_client), \
+             mock.patch.object(target_store.wecom, "get", return_value="chat-1"):
+            res = t_push_file({"path": self.md})
+        # 结果标记与企业微信目标正确
+        self.assertTrue(res["pushed"])
+        self.assertEqual(res["target"], "wecom")
+        # 真的调了 send_file，且发给的是公共层记录的那个会话。
+        # 路径参数只比对字符串形态：调用方可能传 str 也可能传 Path，
+        # 两者指同一个文件，不应因此判失败。
+        fake_client.send_file.assert_called_once()
+        args = fake_client.send_file.call_args[0]
+        self.assertEqual(args[0], "chat-1")
+        self.assertEqual(os.path.basename(str(args[1])), "note.md")
+
+    def test_wecom_failure_reports_reason(self):
+        """企微发送失败时，如实带回原因而不是假装成功。"""
+        from remote_bridge import bridge
+        from remote_bridge.channel import target as target_store
+        fake_client = mock.MagicMock()
+        fake_client.send_file.return_value = (False, "upload_failed")
+        with mock.patch.object(bridge, "wecom_client", fake_client), \
+             mock.patch.object(target_store.wecom, "get", return_value="chat-1"):
+            res = t_push_file({"path": self.md})
+        self.assertFalse(res["pushed"])
+        self.assertEqual(res["error"], "upload_failed")
+
+    def test_wecom_offline_raises(self):
+        """企微未连接时给出明确提示，而不是掉进 QQ 分支。"""
+        from remote_bridge import bridge
+        with mock.patch.object(bridge, "wecom_client", None):
+            with self.assertRaises(ToolParamError) as ctx:
+                t_push_file({"path": self.md})
+        self.assertIn("企业微信通道未连接", str(ctx.exception))
+
+    def test_wecom_no_session_raises(self):
+        """有客户端但从未收到企微消息时，提示先发一条消息。"""
+        from remote_bridge import bridge
+        from remote_bridge.channel import target as target_store
+        with mock.patch.object(bridge, "wecom_client", mock.MagicMock()), \
+             mock.patch.object(target_store.wecom, "get", return_value=""):
+            with self.assertRaises(ToolParamError) as ctx:
+                t_push_file({"path": self.md})
+        self.assertIn("尚无企业微信会话", str(ctx.exception))
+
+
+class TestPushFileWeixinUnsupported(unittest.TestCase):
+    """微信通道不支持发文件：应明确拒绝，不跨通道代发。"""
+
+    def test_weixin_raises(self):
+        """活跃通道为 weixin 时直接报不支持。"""
+        import tempfile
+        import active_channel
+        with tempfile.TemporaryDirectory() as d:
+            md = os.path.join(d, "note.md")
+            with open(md, "w", encoding="utf-8") as f:
+                f.write("# hi\n")
+            state = (active_channel._channel, active_channel._loaded,
+                     active_channel._STATE_PATH)
+            active_channel._channel = "weixin"
+            active_channel._loaded = True
+            try:
+                with self.assertRaises(ToolParamError) as ctx:
+                    t_push_file({"path": md})
+                self.assertIn("微信通道暂不支持", str(ctx.exception))
+            finally:
+                (active_channel._channel, active_channel._loaded,
+                 active_channel._STATE_PATH) = state
+
+
 class TestAllowedExts(unittest.TestCase):
     """白名单来源的约定。"""
 
