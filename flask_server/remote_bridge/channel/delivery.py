@@ -60,17 +60,17 @@ def deliver_images(source, openid, sources=None, text="", title=None, extra=None
     多图必须合并且只投一张：拆成多张会让前端逐张贴图，
     既丢失「同一条消息」的归属，也打乱贴图顺序。
 
-    两种输入形态，按来源选其一：
-      - paths：本地文件路径，本函数负责转 dataURL（QQ / 企微走这条）；
-      - data_urls：已是 dataURL 的数组（网页版上传后直接拿到，无需转码）。
+    sources 里每项自动识别形态：
+      - 以 data: 开头 —— 已转好的 dataURL（网页版上传后直接拿到）；
+      - 其余 —— 本地文件路径，本函数负责转 dataURL（QQ / 企微走这条）。
+    调用方不必区分两种写法，传自己手里的那种即可。
 
-    @param source    通道标识（qq / wecom / web）
-    @param openid    接收方标识
-    @param paths     本地图片路径列表
-    @param text      随图附带的文字；为空时补「用户截图」给模型上下文
-    @param title     卡片标题；缺省按通道名生成
-    @param data_urls 已转好的 dataURL 列表（与 paths 二选一）
-    @param extra     附加到 payload 的字段（如网页版的 image_names）
+    @param source  通道标识（qq / wecom / web）
+    @param openid  接收方标识
+    @param sources 图片来源列表（dataURL 或本地路径，可混用）
+    @param text    随图附带的文字；为空时补「用户截图」给模型上下文
+    @param title   卡片标题；缺省按通道名生成
+    @param extra   附加到 payload 的字段（如网页版的 image_names）
     @returns 卡片 id；无可用图片时返回空串
     """
     # 逐个识别来源形态：data: 开头是已转好的 dataURL，其余按本地路径读取。

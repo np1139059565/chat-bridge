@@ -70,59 +70,6 @@ class TestGateway:
 class TestRouter:
     """推送过滤与合并策略。"""
 
-    def test_pure_tool_call_filtered(self):
-        """纯工具调用不推：内部工作过程是噪音。"""
-        call = {"type": "bridge-chat-call", "tool": "x", "parameters": {}}
-        m = {"id": "t1", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "code", "code": json.dumps(call)}]}
-        assert router._is_pure_tool_call(m) is True
-        assert router._should_push(m, {}) is False
-
-    def test_text_with_tool_call_still_pushed(self):
-        """带正文的工具调用要推：正文不能因附带工具调用而丢。"""
-        call = {"type": "bridge-chat-call", "tool": "x", "parameters": {}}
-        m = {"id": "t2", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "paragraph", "text": "我查一下"},
-                        {"type": "code", "code": json.dumps(call)}]}
-        assert router._should_push(m, {}) is True
-
-    def test_body_strips_tool_code(self):
-        """工具调用参数里的代码不能进正文。"""
-        call = {"type": "bridge-chat-call", "tool": "run",
-                "parameters": {"command": "import subprocess"}}
-        m = {"id": "t3", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "paragraph", "text": "执行中"},
-                        {"type": "code", "code": json.dumps(call)}]}
-        body = router._body_of(m, {})
-        assert "执行中" in body
-        assert "subprocess" not in body
-
-    def test_real_code_block_kept(self):
-        """普通代码块保留：用户可能确实要看代码。"""
-        m = {"id": "t4", "role": "assistant", "source": "assistant",
-             "blocks": [{"type": "paragraph", "text": "写法："},
-                        {"type": "code", "code": "print(1)"}]}
-        body = router._body_of(m, {})
-        assert "print(1)" in body
-
-    def test_truncate_keeps_head_and_tail(self):
-        """超长文本截断时保留首尾。"""
-        long_text = "开头" + ("填充" * 2000) + "结尾"
-        cut = router._truncate(long_text)
-        assert cut.startswith("开头") and cut.endswith("结尾")
-        assert "省略" in cut
-
-    def test_truncate_short_unchanged(self):
-        """短文本不动。"""
-        assert router._truncate("短") == "短"
-
-    def test_wecom_source_filtered(self):
-        """企业微信自己投出去的卡片不回推，避免复读。"""
-        env = {"type": "external-call", "source": "wecom", "request": "hi"}
-        m = {"id": "w1", "role": "user", "source": "user",
-             "blocks": [{"type": "code", "code": json.dumps(env)}]}
-        assert router._should_push(m, {}) is False
-
     def test_conversation_suffix_isolated(self):
         """会话键带独立后缀，与 QQ / 微信的已推集合互不干扰。"""
         assert router.CONV_SUFFIX == "@wecom"

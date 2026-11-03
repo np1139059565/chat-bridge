@@ -16,6 +16,7 @@ from ..channel.adapter import ChannelAdapter
 from ..channel import dedupe as dedupe_store
 from ..channel import quota as quota_store
 from ..channel import target as target_store
+from ..channel import text as text_store
 from .. import bridge_log
 
 
@@ -30,24 +31,8 @@ def log(*args):
 # 合并多条消息时的分隔线
 SEP = "\n\n———\n\n"
 
-# 各类消息的展示前缀
-PREFIX = {"user": "👤 用户", "tool": "🛠 工具", "ai": "🤖 AI"}
-
-# 单条消息最多发送的字符数
-MAX_TEXT_CHARS = 3500
-
-
-def _truncate(text):
-    """按上限截断文本，保留首尾。
-
-    @param text 原文本
-    @returns 截断后的文本
-    """
-    if len(text) <= MAX_TEXT_CHARS:
-        return text
-    head = MAX_TEXT_CHARS * 2 // 3
-    tail = MAX_TEXT_CHARS - head - 20
-    return text[:head] + "\n\n…（中间省略）…\n\n" + text[-tail:]
+# 正文拼装与截断统一走公共层，避免与微信等通道各写一份
+_truncate = text_store.truncate
 
 
 class WecomAdapter(ChannelAdapter):
@@ -215,18 +200,15 @@ class WecomAdapter(ChannelAdapter):
     def _body_of(self, m, push):
         """取一条消息的待推正文（含类型前缀）；不可推返回空串。
 
+        拼装细节在公共层 text.py：三条通道此前各写一份，
+        企微与微信两份甚至逐字相同，改一处容易漏另一处。
         @param m    消息对象
         @param push 推送开关
         @returns 正文
         """
         if not self._should_push(m, push):
             return ""
-        text = self._extract_text(m, push)
-        if not text:
-            return ""
-        from ..message_parse import _classify
-        kind = _classify(m)
-        return "%s\n%s" % (PREFIX.get(kind, kind), text)
+        return text_store.body_of(m, push, "wecom")
 
     def _should_push(self, m, push):
         """判断一条消息是否应当推送：类型开关打开，且不是企微自己发的。
@@ -246,40 +228,16 @@ class WecomAdapter(ChannelAdapter):
         @param m 消息对象
         @returns 来自企微返回 True
         """
-        from ..message_parse import _parse_envelope
-        obj = _parse_envelope(m)
-        return bool(obj and obj.get("source") == "wecom")
+        return text_store.is_own_source(m, "wecom")
 
     def _extract_text(self, m, push):
-        """提取正文：剔除工具调用与工具结果块。
+        """提取正文：剔除工具调用与工具结果块（实现见公共层）。
 
-        与微信同理：工具调用的 JSON 参数在手机上是噪音。
         @param m    消息对象
         @param push 推送开关
         @returns 正文文本
         """
-        from ..message_parse import _BLOCK_HANDLERS, _load_json_block
-        parts = []
-        for b in (m.get("blocks") or []):
-            if not b:
-                continue
-            btype = b.get("type")
-            if btype == "code":
-                obj = _load_json_block(b)
-                if obj and obj.get("type") in (
-                        "bridge-chat-call", "bridge-chat-res", "bridge-voice"):
-                    continue
-                code = str(b.get("code") or "").strip()
-                if code:
-                    parts.append("```\n" + code + "\n```")
-                continue
-            fn = _BLOCK_HANDLERS.get(btype)
-            if not fn:
-                continue
-            text = fn(b, bool(push.get("thinking")))
-            if text:
-                parts.append(text)
-        return "\n".join(parts).strip()
+        return text_store.extract_text(m, push)
 
     def record_incoming(self, chatid, chat_type=1, user=""):
         """收到用户消息：登记会话并记下 chat_type。

@@ -11,6 +11,7 @@ from ..channel.adapter import ChannelAdapter
 from ..channel import dedupe as dedupe_store
 from ..channel import quota as quota_store
 from ..channel import target as target_store
+from ..channel import text as text_store
 
 # 合并多条消息时的分隔线
 SEP = "\n\n———\n\n"
@@ -32,17 +33,14 @@ def _is_weixin_id(uid):
 
 
 def _truncate(text):
-    """按上限截断文本，保留首尾。
+    """按微信的上限截断文本，保留首尾。
 
-    开头通常是结论、结尾通常是收尾说明，中间的技术细节对手机阅读价值较低。
+    截断算法在公共层，此处只传微信自己的上限（1800，比企微短）：
+    微信对文本长度限制更严，这个差异属通道固有属性，不能抹平。
     @param text 原文本
     @returns 截断后的文本
     """
-    if len(text) <= MAX_TEXT_CHARS:
-        return text
-    head = MAX_TEXT_CHARS * 2 // 3
-    tail = MAX_TEXT_CHARS - head - 20
-    return text[:head] + "\n\n…（中间省略）…\n\n" + text[-tail:]
+    return text_store.truncate(text, MAX_TEXT_CHARS)
 
 
 class WeixinAdapter(ChannelAdapter):
@@ -91,12 +89,11 @@ class WeixinAdapter(ChannelAdapter):
     def is_own_source(self, m):
         """判断消息是否由微信通道自己投递（不回推，避免复读）。
 
+        判定逻辑在公共层，此处只声明本通道的标识。
         @param m 消息对象
         @returns 来自微信返回 True
         """
-        from ..message_parse import _parse_envelope
-        obj = _parse_envelope(m)
-        return bool(obj and obj.get("source") == "weixin")
+        return text_store.is_own_source(m, "weixin")
 
     def merge_batch(self, items, push):
         """把一批消息合并成一条长文本。
@@ -119,54 +116,23 @@ class WeixinAdapter(ChannelAdapter):
     def _body_of(self, m, push):
         """取一条消息的待推正文（含类型前缀）；不可推返回空串。
 
+        check_own 传 False：管线在上游已按来源过滤过，此处不重复判断。
         @param m    消息对象
         @param push 推送开关
         @returns 正文
         """
-        text = self._extract_text(m, push)
-        if not text:
-            return ""
-        from ..message_parse import _classify
-        kind = _classify(m)
-        return "%s\n%s" % (PREFIX.get(kind, kind), text)
+        return text_store.body_of(m, push, "weixin", check_own=False)
 
     def _extract_text(self, m, push):
-        """提取微信要看的正文：只保留自然语言，剔除工具调用痕迹。
+        """提取微信要看的正文（实现见公共层）。
 
-        不能复用 QQ 的 outbound.build_body：QQ 会把工具调用渲染成
-        「[工具调用] xxx 参数={...}」，参数里的 JSON 会整段进正文，
-        在手机上一屏全是花括号，还挤占紧张的配额。
-
-        保留：段落、标题、列表、表格、引用、普通代码块
-        剔除：工具调用块、工具结果块、语音块
+        剔除工具调用痕迹的理由：参数里的 JSON 在手机上一屏花括号，
+        还挤占微信紧张的配额。
         @param m    消息对象
         @param push 推送开关
         @returns 正文文本；无可用内容返回空串
         """
-        from ..message_parse import _BLOCK_HANDLERS, _load_json_block
-        parts = []
-        for b in (m.get("blocks") or []):
-            if not b:
-                continue
-            btype = b.get("type")
-            # 代码块要辨认：是工具调用/结果就丢，真代码就留
-            if btype == "code":
-                obj = _load_json_block(b)
-                if obj and obj.get("type") in (
-                        "bridge-chat-call", "bridge-chat-res", "bridge-voice"):
-                    continue
-                code = str(b.get("code") or "").strip()
-                if code:
-                    parts.append("```\n" + code + "\n```")
-                continue
-            # 其余块走既有处理器（思考是否保留受开关控制）
-            fn = _BLOCK_HANDLERS.get(btype)
-            if not fn:
-                continue
-            text = fn(b, bool(push.get("thinking")))
-            if text:
-                parts.append(text)
-        return "\n".join(parts).strip()
+        return text_store.extract_text(m, push)
 
     def record_incoming(self, user_id):
         """用户发来消息：登记为最近用户，并重置其回复池。
