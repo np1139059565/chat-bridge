@@ -101,17 +101,24 @@ def respond_frame(req_id, chatid, content, chat_type=CHAT_SINGLE, msgtype="markd
     @param msgtype   消息类型（markdown / text）
     @returns JSON 字符串
     """
+    # 消息体按 msgtype 二选一，不能混装：
+    #   markdown / text —— 纯文本回复，只带对应的内容字段；
+    #   stream          —— 流式回复，只带 stream 字段。
+    # 曾把 markdown 与 stream 同时塞进一个 body，平台判为
+    # errcode=40008 invalid message type 直接拒收，表现为「消息发不出去」。
     body = {
         "msgtype": msgtype,
         "chatid": chatid,
         "chat_type": chat_type,
-        "stream": {
+    }
+    if msgtype == "stream":
+        body["stream"] = {
             "id": new_req_id(),
             "index": 0,
             "finish": True,
-        },
-    }
-    if msgtype == "markdown":
+            "content": str(content or ""),
+        }
+    elif msgtype == "markdown":
         body["markdown"] = {"content": content}
     else:
         body["text"] = {"content": content}

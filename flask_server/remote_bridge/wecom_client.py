@@ -167,6 +167,9 @@ class WecomClient(WecomMediaMixin):
         先记一行原始帧日志：企业微信的下行格式与文档不完全一致
         （订阅应答顶层就没有 cmd 字段），排障时必须看真实数据而非猜测。
         """
+        # 记录回调线程 id：发送函数据此判断是否身处回调线程，
+        # 避免在其中同步等待应答导致自己等自己。
+        self._ws_thread_id = threading.get_ident()
         try:
             log("收到下行帧：", str(raw)[:400])
         except Exception:
@@ -275,20 +278,53 @@ class WecomClient(WecomMediaMixin):
             self._pending.pop(req_id, None)
         return slot["result"] or {}
 
-    def _send_nowait(self, frame_text):
-        """发送一帧，不等待应答。
+    def _send_nowait(self, frame_text, req_id=None):
+        """发送一帧并等待平台应答，据 errcode 判定是否真正成功。
+
+        为什么必须等应答：仅看 ws.send 是否抛异常，只能证明「本端把字节发出去了」，
+        平台侧的格式错误（如 errcode=40008 invalid message type）完全不可见，
+        表现就是「代码认为发送成功、用户却收不到」。
 
         @param frame_text 帧文本
-        @returns 是否发送成功
+        @param req_id     请求 id；传入则等对应应答，缺省从帧内解析
+        @returns 是否发送成功（平台 errcode 为 0 或无应答超时才按成功）
         """
         if not self._ws:
             return False
-        try:
-            self._ws.send(frame_text)
-            return True
-        except Exception as e:
-            log("发送失败：", e)
+        # 死锁保护：若当前就在 WebSocket 回调线程内（如网关收到未知指令后立即回复），
+        # 等待应答会阻塞这个唯一能处理应答的线程——自己等自己，必然超时。
+        # 此时只发不等，牺牲 errcode 校验换取不死锁。
+        if threading.get_ident() == getattr(self, "_ws_thread_id", None):
+            try:
+                self._ws.send(frame_text)
+                log("回调线程内发送，跳过应答等待")
+                return True
+            except Exception as e:
+                log("发送失败：", e)
+                return False
+        if not req_id:
+            try:
+                req_id = (json.loads(frame_text).get("headers") or {}).get("req_id") or ""
+            except Exception:
+                req_id = ""
+        if not req_id:
+            # 无 req_id 无法配对应答，退化为只发不等
+            try:
+                self._ws.send(frame_text)
+                return True
+            except Exception as e:
+                log("发送失败：", e)
+                return False
+        ack = self._send_wait(frame_text, req_id, timeout=10)
+        if not ack:
+            # 平台未回应答：多数情况是被静默丢弃，记为失败便于排查
+            log("发送无应答 req_id=%s" % req_id[:8])
             return False
+        errcode = ack.get("errcode")
+        if errcode not in (0, None):
+            log("发送被拒 errcode=%s errmsg=%s" % (errcode, ack.get("errmsg")))
+            return False
+        return True
 
     def respond(self, msg, content, chat_type=None, msgtype="markdown"):
         """回复一条消息（透传回调的 req_id）。

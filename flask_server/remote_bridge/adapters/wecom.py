@@ -66,11 +66,9 @@ class WecomAdapter(ChannelAdapter):
         if not self.client:
             return False, "NO_CLIENT"
         chat_type = self._chat_type.get(target, 1)
-        # 有凭证走回复：客户端那边会立即停止转圈
-        from .. import wecom_router
-        req_id = wecom_router.take_req_id(target)
-        if req_id:
-            return self.client.respond_to(req_id, target, text, chat_type)
+        # 只走主动推送：企业微信不依赖「被动回复窗口」（needs_window=False），
+        # 主动推送没有「一个 req_id 只能回一条」的限制，也不会因凭证过期而失败。
+        # 回复凭证那套逻辑已剔除，避免两条通路互相干扰、故障时难以定位。
         return self.client.send_markdown(target, text, chat_type)
 
     def resolve_target(self, payload):
@@ -153,18 +151,15 @@ class WecomAdapter(ChannelAdapter):
         @param kind      image / file / voice
         @returns 成功返回 1，失败返回 0
         """
-        from .. import wecom_router
-        req_id = wecom_router.take_req_id(recipient)
-        # 按媒体类型选对应接口：回复接口与主动推送接口各有一套
-        if req_id:
-            fn = getattr(self.client, "respond_" + kind, None)
-            if fn:
-                ok, _ = fn(req_id, recipient, path, chat_type)
-                return 1 if ok else 0
+        # 只走主动推送：不受「一个 req_id 只能回一条媒体」的限制，
+        # 多张图能依次发出。回复凭证那套逻辑已剔除。
         fn = getattr(self.client, "send_" + kind, None)
         if not fn:
+            log("媒体类型不支持主动推送 kind=%s" % kind)
             return 0
-        ok, _ = fn(recipient, path, chat_type)
+        ok, err = fn(recipient, path, chat_type)
+        if not ok:
+            log("媒体推送失败 kind=%s err=%s" % (kind, err))
         return 1 if ok else 0
 
     def before_push(self, recipient, conv_id, items, push):

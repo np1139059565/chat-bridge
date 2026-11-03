@@ -54,12 +54,24 @@ class TestProto:
         obj = json.loads(proto.respond_frame("REQ-XYZ", "chat1", "hi"))
         assert obj["headers"]["req_id"] == "REQ-XYZ"
 
-    def test_respond_stream_lives_in_body(self):
-        """流式标记在 body.stream，不是顶层 finish。"""
+    def test_respond_markdown_has_no_stream(self):
+        """markdown 回复只带 markdown 字段，不得混装 stream。
+
+        混装会被平台判为 errcode=40008 invalid message type 直接拒收。
+        纯文本回复与流式回复是两套互斥的消息体格式，只能二选一。
+        """
         obj = json.loads(proto.respond_frame("R", "c", "hi"))
-        assert "stream" in obj["body"]
+        assert "stream" not in obj["body"]
+        assert obj["body"]["msgtype"] == "markdown"
+
+    def test_respond_stream_payload(self):
+        """stream 类型的正文放在 body.stream.content，且带 finish 标记。"""
+        obj = json.loads(proto.respond_frame("R", "c", "hi", msgtype="stream"))
+        assert obj["body"]["msgtype"] == "stream"
         assert obj["body"]["stream"]["finish"] is True
-        assert "finish" not in obj["body"]
+        assert obj["body"]["stream"]["content"] == "hi"
+        assert "markdown" not in obj["body"]
+        assert "text" not in obj["body"]
 
     def test_respond_markdown_payload(self):
         """markdown 类型的正文放在 body.markdown.content。"""
