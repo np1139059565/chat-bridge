@@ -14,6 +14,7 @@ import base64
 import os
 import urllib.request
 import uuid
+from urllib.parse import unquote
 
 import paths
 from . import bridge_log
@@ -41,7 +42,8 @@ def collect_images(m):
         src = str(b.get("src") or "")
         if not src:
             continue
-        path = materialize_image(src)
+        # 相对接口地址先按前缀直接定位本地文件；命中就不必再走网络下载
+        path = resolve_local_image(src) or materialize_image(src)
         if path:
             out.append(path)
     return out
@@ -57,16 +59,29 @@ def collect_files(m):
     @returns 本地路径列表
     """
     out = []
+    # 文件信息的真实落点是消息的 files 字段：块类型里没有「文件」这一种，
+    # 附件以独立字段挂在消息上（见前端建节点处）。只扫 blocks 会一条都取不到。
+    for f in (m.get("files") or []):
+        if not isinstance(f, dict):
+            continue
+        # 优先用本地路径；没有就把 http 地址下载下来
+        path = str(f.get("path") or "")
+        if not path:
+            src = str(f.get("url") or f.get("src") or "")
+            if src.startswith(("http://", "https://")):
+                path = download_to_media(src, str(f.get("name") or ""))
+        if path and os.path.isfile(path):
+            out.append(path)
+    # 兼容旧格式：块里直接带文件路径的历史消息
     for b in (m.get("blocks") or []):
         if not b or b.get("type") != "file":
             continue
-        # 优先用本地路径；没有就把 http 地址下载下来
         path = str(b.get("path") or "")
         if not path:
             src = str(b.get("src") or b.get("url") or "")
             if src.startswith(("http://", "https://")):
                 path = download_to_media(src, str(b.get("name") or ""))
-        if path and os.path.isfile(path):
+        if path and os.path.isfile(path) and path not in out:
             out.append(path)
     return out
 
@@ -92,7 +107,11 @@ def collect_voice(m, voice_paths=None):
         text = ""
     if not text:
         return "", ""
-    path = str(m.get("voice") or "")
+    # 优先取锁外预合成好的音频：那是本轮真正生成的 TTS 产物，
+    # 放在 voice_paths 里按消息 id 索引。此前该参数被收下却从未使用，
+    # 导致语音永远取不到路径、一条都发不出去。
+    mid = str(m.get("id") or "")
+    path = str((voice_paths or {}).get(mid) or "") or str(m.get("voice") or "")
     if not path:
         return "", text
     # voice 字段可能只是文件名，统一解析到网页音频目录
@@ -118,6 +137,41 @@ def download_to_media(src, name=""):
     except Exception as e:
         log("文件下载失败：", e)
         return ""
+
+
+# 接口路径前缀 → 本地目录：前端上报的图片地址常是相对接口地址，
+# 直接按前缀映射到磁盘目录取文件，比再发一次 HTTP 请求稳且快。
+_LOCAL_IMAGE_ROUTES = (
+    ("/api/web/image-file/", lambda: paths.WEB_IMAGES_DIR),
+    ("/api/web/screenshot-file/", lambda: paths.SCREENSHOTS_DIR),
+)
+
+
+def resolve_local_image(src):
+    """把相对接口地址解析成本地图片文件路径。
+
+    前端采集图片时 src 可能是 `/api/web/image-file/xxx.png` 这样的相对地址，
+    而非 dataURL 或 http 绝对地址。这类地址不解析就会被当成无效源丢弃，
+    表现为「图片一条都发不出去」。
+
+    @param src 图片地址
+    @returns 本地路径；无法解析或文件不存在返回空串
+    """
+    if not src.startswith("/"):
+        return ""
+    for prefix, dir_fn in _LOCAL_IMAGE_ROUTES:
+        if not src.startswith(prefix):
+            continue
+        name = src[len(prefix):].split("?")[0]
+        # 只接受纯文件名：带路径分隔符一律拒绝，避免越权读到目录外
+        if not name or "/" in name or "\\" in name or ".." in name:
+            return ""
+        try:
+            path = str(dir_fn() / unquote(name))
+        except Exception:
+            return ""
+        return path if os.path.isfile(path) else ""
+    return ""
 
 
 def materialize_image(src):
