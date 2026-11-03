@@ -42,9 +42,9 @@ def _now():
     return int(time.time())
 
 
-# ---------------- 异步保存队列（改造 A：不占用请求线程） ----------------
-# 采用「最新覆盖」语义：同一会话若在尚未处理前又有新保存，后者覆盖前者，
-# 避免对同一会话做无谓的重复全量写。并发骨架统一走共享模块 serial_worker。
+# ---------------- 异步保存队列（不占用请求线程） ----------------
+# 采用「最新覆盖」：同会话未处理前又有新保存时后者覆盖前者，避免重复全量写。
+# 并发骨架统一走共享模块 serial_worker。
 
 
 def _handle_save(item):
@@ -69,9 +69,8 @@ _save_worker = serial_worker.SerialWorker(
 # 只存内存，进程重启后首次保存自然全量；会话删除时清除对应项。
 _saved_sig = {}
 _sig_lock = threading.Lock()
-# 缓存条目上限：签名缓存是「只增不减」的字典，长期运行、会话越开越多时
-# 内存会持续膨胀。超过上限即按插入顺序淘汰最旧的一批（dict 保序），
-# 被淘汰的条目下次保存时按「内容已变」重写一次，代价极小、结果正确。
+# 缓存条目上限：签名缓存只增不减，长期运行会持续膨胀。超限即按插入顺序
+# 淘汰最旧一批（dict 保序）；被淘汰条目下次保存时按内容已变重写一次，代价极小。
 _SIG_CACHE_MAX = 20000
 # 单次淘汰比例：每次超限淘汰 1/4，避免频繁触发淘汰。
 _SIG_EVICT_RATIO = 4
@@ -143,13 +142,11 @@ def _save_conversation_sync(conv_id, site_key, conv):
     @param conv 前端会话对象 { title, page_url, msgTree, visibleKeys, ... }
     @return 实际写入的节点数
     """
-    # 计时放在取连接之前：日志耗时为真实端到端耗时（含取连接）。
-    # 用 perf_counter（高精度单调时钟）：Windows 上 time.time() 精度约 15ms，
-    # 会把毫秒级耗时测成 0，用 perf_counter 才能如实反映。
+    # 计时含取连接，反映真实端到端耗时。用 perf_counter 而非 time.time：
+    # 后者在 Windows 上精度约 15ms，会把毫秒级耗时测成 0。
     _t0 = time.perf_counter()
     conn = get_conn()
-    # 进入批量模式：本轮所有写操作攒到最后统一提交，
-    # 避免「每节点多次提交」造成的频繁抢写锁。
+    # 进入批量模式：本轮写操作攒到最后统一提交，避免每节点多次提交抢写锁。
     begin_batch()
     result = None
     try:
@@ -248,18 +245,19 @@ def _write_meta(conn, conv_id, site_key, conv):
     """写会话级元数据（标题 / 页面地址 / 可见切片等）。"""
     conn.execute(
         "INSERT INTO conversations (conv_id, site_key, title, page_url, visible_keys,"
-        " branch_keys, external_cards, orphan_slice, updated_at)"
-        " VALUES (?,?,?,?,?,?,?,?,?)"
+        " branch_keys, external_cards, orphan_slice, executed_sigs, updated_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?)"
         " ON CONFLICT(conv_id, site_key) DO UPDATE SET"
         " title=excluded.title, page_url=excluded.page_url,"
         " visible_keys=excluded.visible_keys, branch_keys=excluded.branch_keys,"
         " external_cards=excluded.external_cards, orphan_slice=excluded.orphan_slice,"
-        " updated_at=excluded.updated_at",
+        " executed_sigs=excluded.executed_sigs, updated_at=excluded.updated_at",
         (conv_id, site_key, conv.get("title", ""), conv.get("page_url", ""),
          json.dumps(conv.get("visibleKeys") or [], ensure_ascii=False),
          json.dumps(conv.get("branchKeys") or [], ensure_ascii=False),
          json.dumps(conv.get("externalCards") or [], ensure_ascii=False),
          json.dumps(conv.get("orphanSlice") or [], ensure_ascii=False),
+         json.dumps(conv.get("executedSigs") or {}, ensure_ascii=False),  # 执行签名库
          _now()),
     )
 
@@ -361,7 +359,9 @@ def _conv_meta_fields(meta):
     """从 conversations 行取出会话级字段（meta 为空时全用兜底值）。"""
     if not meta:
         return {"title": "", "page_url": "", "visibleKeys": [], "branchKeys": [],
-                "externalCards": [], "orphanSlice": []}
+                "externalCards": [], "orphanSlice": [], "executedSigs": {}}
+    # 旧库可能还没迁出该列：用 keys() 判断，缺列时返回空字典而非报错
+    sigs = _loads(meta["executed_sigs"], {}) if "executed_sigs" in meta.keys() else {}
     return {
         "title": meta["title"] or "",
         "page_url": meta["page_url"] or "",
@@ -369,6 +369,7 @@ def _conv_meta_fields(meta):
         "branchKeys": _loads(meta["branch_keys"], []),
         "externalCards": _loads(meta["external_cards"], []),
         "orphanSlice": _loads(meta["orphan_slice"], []),
+        "executedSigs": sigs,   # 已执行签名库：刷新后据此恢复卡片状态
     }
 
 

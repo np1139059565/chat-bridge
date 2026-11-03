@@ -98,6 +98,16 @@ class TestSaveAndLoad(_DBBase):
         self.assertIn("0-a", loaded["msgTree"])
         self.assertIn("a-b", loaded["msgTree"])
 
+    def test_roundtrip_restores_executed_sigs(self):
+        """执行签名库必须原样往返：前端靠它在刷新后恢复卡片的已执行状态。"""
+        tree = {"0-a": _node("assistant", "回答")}
+        sigs = {"conv1|run_command|{}": True,
+                "conv1|read_file|{\"path\": \"a.py\"}": True}
+        mc._save_conversation_sync("c-sig", "site-1", _conv("c-sig", tree, executedSigs=sigs))
+        loaded = mc.load_conversation("c-sig", "site-1")
+        # 签名库必须完整取回，否则刷新后所有卡片都会退回待执行
+        self.assertEqual(loaded.get("executedSigs"), sigs)
+
     def test_load_missing_returns_none(self):
         """取不存在的会话应返回 None。"""
         self.assertIsNone(mc.load_conversation("nope", "s1"))

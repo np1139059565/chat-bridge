@@ -113,6 +113,7 @@ _SCHEMA = [
         branch_keys    TEXT,
         external_cards TEXT,
         orphan_slice   TEXT,
+        executed_sigs  TEXT,
         updated_at     INTEGER,
         PRIMARY KEY (conv_id, site_key)
     )""",
@@ -293,6 +294,9 @@ def _migrate_columns(conn):
     # (表名, 列名, 列定义) —— 新增列时在此登记一行即可
     migrations = [
         ("edges", "keywords", "TEXT"),   # 突触边：导致关联的关键词（JSON 数组）
+        # 已执行调用的签名库：前端据此在刷新后恢复卡片的「已执行」状态。
+        # 缺这一列时后端会静默丢弃该字段，刷新后所有卡片退回待执行。
+        ("conversations", "executed_sigs", "TEXT"),
     ]
     for table, col, decl in migrations:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(%s)" % table).fetchall()]

@@ -292,7 +292,7 @@ bridge:
     - /sa on
     - /dc
     - /rs
-    interval: 15
+    interval: 6
   - name: /reai
     label: 重新生成
     selector: document.querySelector('.ds-virtual-list--printable .ds-virtual-list-visible-items
