@@ -4,64 +4,7 @@
 > 每条必须写明：现象、根因或取证方向、影响面、优先级。
 > 处理完成后移出本文件，结论记入对应专题文档。
 
-## 一、待验证
-
-### 抽屉指令 `/dc` 与 `/do` 无响应
-
-**状态**：代码已修复，待实机验证。
-
-**现象**：执行 `/dc`、`/do` 后，界面回「指令 /dbg-open 未在时限内执行（扩展未打开或未在目标页）」，
-抽屉无变化。同期内置指令（如 `/sd`）正常执行。
-
-**根因**：扩展执行完命令后回传结果时漏传通道参数。
-
-`05_tool-handlers.js` 的 `postResult(requestId, result, channelPath)` 在缺省
-`channelPath` 时回落到 `/api/ext/<provider>`（AI 工具通道）。但 `handleTask`
-调用时只传了两个参数，导致**所有命令的结果都发回 AI 工具通道**。
-用户指令入的是 `command_hub`，其等待方在 `/api/command-ext/<provider>` 上等，
-永远等不到结果，`FORWARD_TIMEOUT`（10 秒）后报「未在时限内执行」。
-
-内置指令不受影响：它们走卡片总线（`drawer-command`）由镜像抽屉直接执行，
-回执走 `/api/bridge/result`，不经过这条通道。
-
-**修复**：
-
-1. `handleTask(task, channelPath)` 增加通道参数并透传给 `postResult`；
-2. `03_heartbeat.js` 的指令循环传入 `/api/command-ext/<provider>`；
-   AI 工具循环保持省略，继续走默认 `/api/ext/<provider>`。
-
-**验证方法**：重载调试扩展 → 抽屉设置页点 `/do`，抽屉应打开；
-点 `/dc`，抽屉应关闭；两条均不再出现「未在时限内执行」。
-
-**影响面**：外部指令回执链路；AI 工具通道不受影响。
-
-**优先级**：P1。
-
-### 提交钩子：结构质量剩余三项未清
-
-**状态**：已处理，钩子放行。
-
-三项超标项已按职责拆分，`hygiene` 与 `quality` 两个钩子均通过：
-
-| 项 | 位置 | 处理方式 | 拆分后 |
-|---|---|---|---|
-| 超大文件 | `extend/dialog/parts/05g_cards.js` | 签名存取四个函数迁入 `05j_card_sig.js` | 335 行 |
-| 超大文件 | `flask_server/remote_bridge/command_registry.py` | 分组与展示层迁入 `command_groups.py` | 294 行 |
-| JS 函数体过长 | `extend/dialog/parts/04_sessions.js` `loadConversation` | 抽出 `_scheduleConvRetry` 与 `_mergeSavedConv` | 低于 80 行 |
-
-拆分只移动职责位置，方法挂载点与调用方式不变。`help_groups()` 的输出结构由
-`test_command_groups.py` 五条用例覆盖，拆分后全部通过；测试的补丁目标同步改到
-`command_groups`，避免打在已迁走的旧位置而落空。
-
-**同批已完成（供核对）**：
-
-- `memory_cards.upsert_card` 参数由 10 个改为「定位键 + 字段字典」（`CARD_FIELDS`）；
-- `push_pipeline._push_merged` 改为上下文对象，与 `_push_locked` 同约定；
-- `memory_conversations.py` 读取侧拆出 `memory_conversation_read.py`，462 → 368 行；
-- `check_doc_sync.py` 补 `flask_server/remote_bridge` 解析基准，
-  并把 `channel-genericization.md` 列入历史文档豁免。
-
-## 二、下一阶段重点
+## 一、下一阶段重点
 
 ### 合并对话框 JS 测试与文件工具的重复块
 
@@ -73,7 +16,7 @@
 
 **优先级**：P1。
 
-## 三、待排期
+## 二、待排期
 
 ### 旧推送链路代码清理
 
@@ -93,7 +36,7 @@
 
 **优先级**：P1。
 
-## 四、暂缓
+## 三、暂缓
 
 ### 高复杂度函数与重复块清理
 
@@ -126,12 +69,12 @@
 **硬前提**：阶段零须先探明网页会话 id 是否在 DOM 上暴露、能否按 id 切换；
 该步不成立则方案需重新设计。详见 `docs/private-relay-progress.md`。
 
-## 五、已关闭
+## 四、已关闭
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
 | S3 幽灵卡片：执行时被判不在镜像中而拒绝 | 已解决 | 镜像判定改用工具名与参数组成的执行签名（`cardMatchesBySig`），不依赖随重渲染变化的代码块 id |
-| 提交钩子：三项结构质量超标 | 已解决 | 三个文件按职责拆分，`hygiene` 与 `quality` 钩子放行，见「一、待验证」同名条目 |
+| 提交钩子：三项结构质量超标 | 已解决 | 三个文件按职责拆分，`hygiene` 与 `quality` 钩子放行，详见 `docs/dialog-parts-split-progress.md` 第六节 |
 | S5 设置页「可用指令」缺外部指令与自定义指令 | 已解决 | `command_registry.help_groups()` 在内置分组后追加两组，设置页可见 |
 | S1 刷新后已执行卡片退回待执行 | 已解决 | `memLoadConv` 网络失败返回 `{ok:false}` 而非 null，加载锁按指数退避重试，实机连续刷新状态稳定 |
 | S2 非末条卡片抢占自动执行 | 已解决 | 候选判据改为「末位 + isFreshReply」，实机不再复现 |
