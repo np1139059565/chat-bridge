@@ -10,14 +10,14 @@
 
 关键差异（配额约束）：
   微信 24 小时内最多 10 条独立消息，且不支持主动推送。
-  因此本网关只负责「收」，推送由 weixin_router 合并成一条发。
+  因此本网关只负责「收」，推送由统一管线的微信适配器合并成一条发。
 """
 import json
 import time
 
 import card_bus
 
-from . import weixin_router, bridge_log
+from . import bridge_log
 
 
 def log(*args):
@@ -93,11 +93,9 @@ class WeixinGateway:
             log("消息无可用正文（可能是图片/文件），忽略")
             return
         log("收到消息", "user=" + user_id[:8], "长度=" + str(len(content)))
-        # 刷新「谁在跟我说话」：微信推送目标靠它兜底。
-        # 用微信自己的记账，不碰 QQ 的窗口状态——两条通道的会话互不相干。
-        weixin_router.note_incoming(user_id)
-        # 同步登记到公共层：统一推送管线从 channel.target 读「最近用户」，
-        # 且配额按用户消息重置，故两处都要写。旧链路停用后此处自然只剩公共层。
+        # 刷新「谁在跟我说话」：统一推送管线从 channel.target 读「最近用户」兜底，
+        # 配额按用户消息重置（微信每条用户消息发放一个新回复池）。
+        # 两条记账都在公共层，与 QQ 的窗口状态互不相干。
         from .channel import target as target_store, quota as quota_store
         target_store.weixin.note(user_id)
         quota_store.weixin.reset(user_id)

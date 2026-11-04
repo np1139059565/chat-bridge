@@ -1,11 +1,12 @@
 // 后台脚本：截图、标签页 ID 获取、点击图标切换抽屉
-// 后端地址默认值：与抽屉设置页输入框默认值一致，用户可手动修改。
-// 保留默认值，避免每次都要重新输入；代码别处不再写死端口。
-const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';
+// 后端地址的默认值与解析规则统一由 shared/backend-default.js 提供，
+// 本文件与内容脚本、抽屉共用同一来源，换端口只改那一处。
+importScripts('shared/backend-default.js');
+const DEFAULT_BACKEND_URL = self.AIStyleBackend.DEFAULT_BACKEND_URL;
 
 async function getBackendUrl() {
   const stored = await chrome.storage.local.get(['backendUrl', 'aistyleCfg']);
-  return stored.backendUrl || (stored.aistyleCfg && stored.aistyleCfg.backend_url) || DEFAULT_BACKEND_URL;
+  return self.AIStyleBackend.resolve(stored.backendUrl, stored.aistyleCfg);
 }
 
 async function handleCaptureScreenshot(sender, sendResponse) {

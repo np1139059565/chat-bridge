@@ -16,7 +16,9 @@
 from flask import Blueprint, jsonify, request
 
 import remote_bridge
-from remote_bridge import bridge, bridge_store, weixin_router
+from remote_bridge import bridge, bridge_store
+from remote_bridge.channel import quota as quota_store
+from remote_bridge.channel import target as target_store
 import app_log
 
 bp = Blueprint("bridge_weixin", __name__)
@@ -33,8 +35,9 @@ def _status_payload():
     if bridge.wx_login:
         login = bridge.wx_login.status()
     # 配额：单用户场景下按最近发消息的人展示
-    user = weixin_router.last_user()
-    quota = weixin_router.quota_status(user) if user else {"used": 0, "limit": 10, "remaining": 10}
+    # 目标与配额均从公共层取，避免与适配器各自记账导致两份状态不一致
+    user = target_store.weixin.get()
+    quota = quota_store.weixin.status(user) if user else {"used": 0, "limit": 10, "remaining": 10}
     return {"channel": st, "login": login, "quota": quota}
 
 

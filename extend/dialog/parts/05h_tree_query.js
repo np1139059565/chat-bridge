@@ -5,6 +5,9 @@
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
+  // 四个查询函数挂在 D.methods 上：调用方一律以 this.keyOfId / this.msgId 的形式访问，
+  // this 是 Vue 组件实例，实例方法只来自 D.methods；挂在 D 上的属性不会成为实例方法。
+  const M = D.methods;
 
   /**
    * 取某消息 id 在树中的 key（形如「父id-子id」）。
@@ -13,7 +16,7 @@
    * @param {string} id 消息指纹
    * @returns {string} 命中返回树键，不存在返回空串
    */
-  D.keyOfId = function (tree, id) {
+  M.keyOfId = function (tree, id) {
     if (!tree || !id) return '';
     const keys = Object.keys(tree);
     for (let i = 0; i < keys.length; i++) {
@@ -29,7 +32,7 @@
    * @param {string} id 消息指纹
    * @returns {string} 父 id；不存在返回空串
    */
-  D.parentIdOf = function (tree, id) {
+  M.parentIdOf = function (tree, id) {
     const k = this.keyOfId(tree, id);
     return k ? k.slice(0, k.indexOf('-')) : '';
   };
@@ -45,7 +48,7 @@
    * @param {string} msgId 待判定的消息指纹
    * @returns {boolean} 是会话末条返回 true
    */
-  D.isTreeTail = function (conv, msgId) {
+  M.isTreeTail = function (conv, msgId) {
     if (!conv || !msgId) return false;
     const tree = conv.msgTree || {};
     const keys = Object.keys(tree);
@@ -67,7 +70,7 @@
    * @param {Array} slice 本轮消息切片
    * @returns {Array<string>} 从根到末条的树键序列
    */
-  D.assembleBranchKeys = function (conv, slice) {
+  M.assembleBranchKeys = function (conv, slice) {
     const tree = conv.msgTree || {};
     const list = slice || [];
     if (!list.length) return [];

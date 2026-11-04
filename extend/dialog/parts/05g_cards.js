@@ -2,6 +2,7 @@
 // 用途：消息建卡与质量检测：为切片代码块建卡、收集自动执行候选、
 //       计算消息质量问题（代码块级 / 消息级分流）、消息级问题后台回传。
 //       从 05_messages.js 抽出，使该文件保持在行数上限内。
+//       执行签名的存取与卡片重判见 05j_card_sig.js。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）
 (function () {
   'use strict';
@@ -245,80 +246,6 @@
    * @param {Object|null} issue 建卡阶段检测出的问题
    * @returns {Object} 卡片对象
    */
-  /**
-   * 计算一次工具调用的执行签名，用于跨刷新恢复「已执行」状态。
-   *
-   * 为什么需要它：代码块 id 是内容指纹，网页重新渲染后同一段调用会得到不同 id，
-   * 只靠卡片自身状态无法跨刷新保留，刷新后卡片会退回待执行。
-   * 签名改用「消息指纹 + 工具名 + 参数」，这三者在刷新后保持稳定。
-   * @param {string} msgId 归属消息指纹
-   * @param {Object} call 解析出的工具调用 {tool, parameters}
-   * @returns {string} 命中返回签名，未命中返回空串
-   */
-  M._executedSig = function (msgId, call) {
-    if (!msgId || !call || !call.tool) {
-      log('[签名诊断] 跳过：msgId=' + (msgId || '(空)') + ' tool=' + (call && call.tool));
-      return '';
-    }
-    const conv = this.ensureConv(this.activeConv);
-    const store = (conv && conv.executedSigs) || {};
-    // 签名键带上会话 id：消息指纹是内容摘要，相同内容的消息在不同会话里指纹相同，
-    // 只用「消息指纹 + 工具 + 参数」会在跨会话时撞键，把别处执行过的调用误判成本次已执行。
-    const sig = this.activeConv + '|' + msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
-    // 诊断：库里有多少签名、本次算出的签名是什么、是否命中
-    log('[签名诊断] 查 sig=' + sig + ' 库内条数=' + Object.keys(store).length
-      + ' 命中=' + !!store[sig]);
-    return store[sig] ? sig : '';
-  };
-
-  /**
-   * 登记一次工具调用为「已执行」，供刷新后恢复状态。
-   *
-   * 代码块 id 会随网页重新渲染变化，只靠卡片自身状态无法跨刷新保留，
-   * 故用「消息指纹 + 工具名 + 参数」这组稳定信息作为键。
-   * @param {Object} card 刚执行完的卡片
-   */
-  M._markExecutedSig = function (card) {
-    if (!this.activeConv || !card || !card.msgId || !card.tool) return;
-    const conv = this.ensureConv(this.activeConv);
-    if (!conv.executedSigs) conv.executedSigs = {};
-    // 与 _executedSig 保持同一键格式（含会话 id），否则登记与查询对不上。
-    const sig = this.activeConv + '|' + card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
-    log('[签名诊断] 登记 sig=' + sig);
-    conv.executedSigs[sig] = true;
-  };
-
-  /**
-   * 按「执行签名」判断镜像里是否还存在这张卡对应的调用。
-   *
-   * 为什么需要它：代码块 id 是内容指纹，AI 回复追加内容后网页重渲染，
-   * 同一张卡片的 id 会变；此时按旧 id 查必然落空，卡片被误判为幽灵卡。
-   * 签名由「消息指纹 + 工具名 + 参数」组成，这些在内容追加时保持不变。
-   * @param {Object} card 工具卡片
-   * @returns {boolean} 镜像里能找到同一调用返回 true
-   */
-  M.cardMatchesBySig = function (card) {
-    if (!card || !card.tool) return false;
-    const messages = this.messages || [];
-    const want = JSON.stringify(card.parameters || {});
-    // 只按「工具名 + 参数」匹配，不掺消息指纹。
-    // 消息指纹由全部块内容算出，AI 追加内容时必然改变，掺进去就等于让判据失效。
-    // 参数通常含路径 / 命令等具体内容，重复概率低；即便误判为「存在」，
-    // 后果也只是这张待执行卡片被执行——本就是要执行的动作，
-    // 远好过误判为「不存在」导致卡片永远无法执行。
-    for (let i = 0; i < messages.length; i++) {
-      const blocks = window.AIMirrorDomUtils.toArray(messages[i] && messages[i].blocks);
-      for (let j = 0; j < blocks.length; j++) {
-        const b = blocks[j];
-        if (!b || b.type !== 'code') continue;
-        const call = this.parseToolCall(b);
-        if (!call || call.tool !== card.tool) continue;
-        if (JSON.stringify(call.parameters || {}) === want) return true;
-      }
-    }
-    return false;
-  };
-
   M._makeCard = function (b, call, issue) {
     return {
       id: b.id,

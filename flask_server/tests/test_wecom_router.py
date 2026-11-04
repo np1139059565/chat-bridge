@@ -16,8 +16,9 @@ _SERVER = os.path.dirname(_HERE)
 if _SERVER not in sys.path:
     sys.path.insert(0, _SERVER)
 
-from remote_bridge import wecom_router as router       # noqa: E402
 from remote_bridge import wecom_gateway as gateway     # noqa: E402
+# 图片收集实现在独立的收集模块，按原名导入保持用例可读
+from remote_bridge.wecom_media_collect import collect_images  # noqa: E402
 
 
 # ============ 网关 ============
@@ -93,4 +94,4 @@ class TestRouter:
     def test_image_block_collected(self):
         """图片块能被收集出来（企业微信的核心能力）。"""
         m = {"id": "i1", "blocks": [{"type": "image", "src": ""}]}
-        assert router._collect_images(m) == []
+        assert collect_images(m) == []

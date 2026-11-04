@@ -19,9 +19,9 @@ window.AIDrawer = (function () {
   // 仅保留与调试能力相关的配置；连接地址指向工具服务（chat-bridge）
   // url_mappings：URL 前缀 → 本地工程文件路径，供元素卡片把选中元素对应到源码位置
   const DEFAULT_CFG = {
-    // 后端地址默认值：这是设置页输入框的默认值，用户可手动修改；
-    // 保留它，避免每次都要重新输入。
-    backend_url: 'http://127.0.0.1:5000',
+    // 后端地址默认值：由 shared/backend-default.js 统一提供，
+    // 与内容脚本、后台脚本共用同一来源；换端口只改那一处。
+    backend_url: window.AIStyleBackend.DEFAULT_BACKEND_URL,
     screenshot_enabled: false,
     style_list_enabled: false,
     url_mappings: [],

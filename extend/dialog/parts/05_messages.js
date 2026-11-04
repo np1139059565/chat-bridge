@@ -140,7 +140,7 @@
   };
 
   // 树查询函数（keyOfId / parentIdOf / isTreeTail / assembleBranchKeys）
-  // 已迁至 05h_tree_query.js，挂在同一命名空间 D 上，调用方式不变。
+  // 已迁至 05h_tree_query.js，挂在 D.methods 上，调用方式不变。
 
   /**
    * 把「服务端图片名」挂到对应消息节点上（方案 2 的核心）。

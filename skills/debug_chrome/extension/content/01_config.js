@@ -6,7 +6,8 @@
   A.loadConfig = async function () {
     const stored = await chrome.storage.local.get(['aistyleCfg', 'backendUrl', 'aistyleDrawerSide']);
     const cfg = stored.aistyleCfg || {};
-    A.state.backendUrl = stored.backendUrl || cfg.backend_url || A.DEFAULT_BACKEND_URL;
+    // 解析规则统一走 shared/backend-default.js，与抽屉、后台脚本口径一致
+    A.state.backendUrl = window.AIStyleBackend.resolve(stored.backendUrl, cfg, A.DEFAULT_BACKEND_URL);
     A.state.screenshotEnabled = cfg.screenshot_enabled === true;
     A.state.styleListEnabled = cfg.style_list_enabled === true;
     // 轮询间隔取常量默认值；快速间隔与其窗口同样取默认，不对外暴露配置。

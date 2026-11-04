@@ -119,6 +119,91 @@
    * @param {string} convId 会话 id
    * @param {Function} done 完成回调
    */
+  /**
+   * 安排一次会话加载失败后的重试。
+   *
+   * 网络失败不能当成「后端没有这个会话」：此时内存里的签名库还是空的，
+   * 一旦解除写回禁令，就会用空库覆盖后端存档，刷新一次毁一次。
+   * 故本方法只负责排期重取，不解锁、不置就绪，由重新进入 loadConversation
+   * 成功分支时统一解锁。
+   *
+   * @param {string} convId 会话 id
+   * @param {string} err 失败原因（仅用于日志）
+   * @param {Function} cb 完成回调，先以 false 通知调用方本次未就绪
+   */
+  M._scheduleConvRetry = function (convId, err, cb) {
+    const self = this;
+    // 每会话独立计数，用于算指数退避的等待时长
+    self._convRetry = self._convRetry || {};
+    const n = (self._convRetry[convId] || 0) + 1;
+    self._convRetry[convId] = n;
+    // 3s、6s、12s、24s，之后固定 30s 封顶
+    const wait = Math.min(3000 * Math.pow(2, n - 1), 30000);
+    log('loadConversation 网络失败：' + err
+      + '，第 ' + n + ' 次重试将在 ' + (wait / 1000) + ' 秒后');
+    // 先告知调用方本次未就绪
+    cb(false);
+    setTimeout(function () {
+      // 用户已切走则放弃重试；切回时会重新触发加载
+      if (self.activeConv === convId && self._convLoading && self._convLoading[convId]) {
+        log('loadConversation 重试加载：' + convId);
+        self.loadConversation(convId, cb);
+      }
+    }, wait);
+  };
+
+  /**
+   * 把后端取回的会话存档并入内存里的会话对象。
+   *
+   * 合并口径是「后端为准、只增不减」：
+   *   - 消息树按节点覆盖，保留节点自带卡片状态；
+   *   - 外部卡片按 id 去重追加；
+   *   - 执行签名库只把为真的条目并入，不清掉内存里已有的记录；
+   *   - 可见键、分支键、孤立切片按数组整体替换。
+   *
+   * @param {Object} conv    内存中的会话对象（就地修改）
+   * @param {Object} saved   后端返回的存档
+   * @param {string} convId  会话 id（仅用于诊断日志）
+   */
+  M._mergeSavedConv = function (conv, saved, convId) {
+    // 消息树：并入内存树（后端为准），保留节点自带卡片状态
+    if (saved.msgTree && typeof saved.msgTree === 'object') {
+      Object.keys(saved.msgTree).forEach((k) => {
+        const node = saved.msgTree[k];
+        // 空节点跳过，避免把内存里已有的节点抹成空
+        if (!node) return;
+        conv.msgTree[k] = node;
+      });
+    }
+    // 标题与页面地址只补空，不覆盖内存里已有的值
+    if (saved.title) conv.title = conv.title || saved.title;
+    if (saved.page_url) conv.page_url = conv.page_url || saved.page_url;
+    // 外部卡片：按 id 去重追加，不重复登记同一张卡
+    if (Array.isArray(saved.externalCards)) {
+      const known = new Set((conv.externalCards || []).map((c) => c && c.id));
+      saved.externalCards.forEach((c) => {
+        if (c && c.id && !known.has(c.id)) conv.externalCards.push(c);
+      });
+    }
+    // 恢复执行签名库：与消息树一并并入内存，供建卡时判定「这条调用做过没有」。
+    // 只增不减地合并，避免本次存档缺字段时清掉内存里已有的记录。
+    if (saved.executedSigs && typeof saved.executedSigs === 'object') {
+      conv.executedSigs = conv.executedSigs || {};
+      Object.keys(saved.executedSigs).forEach((sig) => {
+        if (saved.executedSigs[sig]) conv.executedSigs[sig] = true;
+      });
+    }
+    // 诊断：后端取回多少条签名，以及恢复后内存里共多少条
+    log('loadConversation 签名恢复：会话=' + convId
+      + ' 后端=' + Object.keys(saved.executedSigs || {}).length
+      + ' 内存=' + Object.keys(conv.executedSigs || {}).length);
+    // 可见键：后端给了就用后端的，否则保留内存原值
+    conv.visibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : (conv.visibleKeys || []);
+    // 分支键与孤立切片：后端给了就整体替换
+    if (Array.isArray(saved.branchKeys)) conv.branchKeys = saved.branchKeys;
+    if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
+  };
+
   M.loadConversation = function (convId, done) {
     const cb = typeof done === 'function' ? done : function () {};
     const self = this;
@@ -133,6 +218,17 @@
       // 期间可能又切换了会话：不再处理，避免把旧会话历史写进新会话
       if (self.activeConv !== convId) { cb(false); return; }
       const conv = self.ensureConv(convId);
+      // 网络失败：不能当成「后端没有这个会话」。
+      // 若当成空会话，会立即解除写回禁令，随后用内存里的空签名库覆盖后端存档，
+      // 刷新一次毁一次。此处保持锁定并稍后重试，直到真正取到数据。
+      if (saved && saved.ok === false) {
+        // 不解锁、不置就绪：此时内存是空的，任何写回都会覆盖后端存档。
+        // 退避重试的排期细节见 _scheduleConvRetry。
+        self._scheduleConvRetry(convId, saved.error, cb);
+        return;
+      }
+      // 加载成功：清掉该会话的重试计数
+      if (self._convRetry) delete self._convRetry[convId];
       if (!saved) {
         log('loadConversation：后端与本地均无会话 ' + convId);
         self._convReady = self._convReady || {};
@@ -142,41 +238,22 @@
         cb(true);
         return;
       }
-      // 消息树：并入内存树（后端为准），保留节点自带卡片状态
-      if (saved.msgTree && typeof saved.msgTree === 'object') {
-        Object.keys(saved.msgTree).forEach((k) => {
-          const node = saved.msgTree[k];
-          if (!node) return;
-          conv.msgTree[k] = node;
-        });
-      }
-      if (saved.title) conv.title = conv.title || saved.title;
-      if (saved.page_url) conv.page_url = conv.page_url || saved.page_url;
-      if (Array.isArray(saved.externalCards)) {
-        const known = new Set((conv.externalCards || []).map((c) => c && c.id));
-        saved.externalCards.forEach((c) => {
-          if (c && c.id && !known.has(c.id)) conv.externalCards.push(c);
-        });
-      }
-      // 恢复执行签名库：与消息树一并并入内存，供建卡时判定「这条调用做过没有」。
-      // 只增不减地合并，避免本次存档缺字段时清掉内存里已有的记录。
-      if (saved.executedSigs && typeof saved.executedSigs === 'object') {
-        conv.executedSigs = conv.executedSigs || {};
-        Object.keys(saved.executedSigs).forEach((sig) => {
-          if (saved.executedSigs[sig]) conv.executedSigs[sig] = true;
-        });
-      }
-      // 诊断：后端取回多少条签名，以及恢复后内存里共多少条
-      log('loadConversation 签名恢复：会话=' + convId
-        + ' 后端=' + Object.keys(saved.executedSigs || {}).length
-        + ' 内存=' + Object.keys(conv.executedSigs || {}).length);
-      conv.visibleKeys = Array.isArray(saved.visibleKeys) ? saved.visibleKeys : (conv.visibleKeys || []);
-      if (Array.isArray(saved.branchKeys)) conv.branchKeys = saved.branchKeys;
-      if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
+      // 把后端存档并入内存会话（消息树、外部卡片、签名库、可见键等）
+      self._mergeSavedConv(conv, saved, convId);
       self._convReady = self._convReady || {};
       self._convReady[convId] = true;
       // 合并完毕，解除写回禁令：此后内存里的签名库已与后端一致，写回是安全的。
+      // 这一步必须无条件执行：若被下方重判逻辑的异常打断，_convLoading 会永久为真，
+      // 此后该会话的所有落盘都被跳过，签名再也存不回后端，刷新后卡片必然退回待执行。
       if (self._convLoading) delete self._convLoading[convId];
+      // 签名库已合并进内存，回头把消息树里那些「建卡时签名库还是空的」卡片重判一次。
+      // 卡片可能早于存档加载就已建好，那时查签名必然落空，卡片被建成待执行态。
+      // 包裹 try：重判只是状态修正，失败不应影响会话就绪与后续落盘。
+      try {
+        if (self._restoreExecutedCards) self._restoreExecutedCards.call(self, conv, convId);
+      } catch (e) {
+        log('重判已执行卡片失败（不影响加载）：' + e);
+      }
       log('loadConversation：会话 ' + convId + ' 就绪（后端），节点=' + Object.keys(conv.msgTree).length);
       cb(true);
     });

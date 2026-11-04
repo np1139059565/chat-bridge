@@ -12,7 +12,8 @@ Secret 只显示一次，保存后页面只回显是否已填，不回传明文�
 from flask import Blueprint, jsonify, request
 
 import remote_bridge
-from remote_bridge import bridge, bridge_store, wecom_router
+from remote_bridge import bridge, bridge_store
+from remote_bridge.channel import wecom_chats
 import app_log
 
 bp = Blueprint("bridge_wecom", __name__)
@@ -28,7 +29,7 @@ def _status_payload():
     """
     st = bridge.status().get("wecom") or {}
     cfg = bridge_store.get_config().get("wecom") or {}
-    chatid, chat_type = wecom_router.last_chat()
+    chatid, chat_type = wecom_chats.last()
     return {
         "channel": st,
         "botId": cfg.get("bot_id") or "",

@@ -107,7 +107,9 @@ def _isolate_bridge_state(tmp_path):
     @param tmp_path pytest 为每个用例生成的独立临时目录
     """
     from remote_bridge import bridge_store as bs
-    from remote_bridge import weixin_router as router
+    from remote_bridge.channel import quota as quota_store
+    from remote_bridge.channel import target as target_store
+    from remote_bridge.channel import wecom_chats
 
     # 保存原路径，用例结束还原，避免影响其它测试文件
     old_path = bs.BRIDGE_STATE_PATH
@@ -116,13 +118,20 @@ def _isolate_bridge_state(tmp_path):
     # 重定向到临时文件：该文件初始不存在，等价于「干净状态」
     bs.BRIDGE_STATE_PATH = tmp_path / "bridge_state.json"
     bs._pushed = None
-    router._quota.clear()
-    router._last_user = ""
+    # 配额与「最近用户」都是进程内单例，必须逐用例清空：
+    # 上一个用例登记的回复池会渗到下一个，使「从未发过消息」的断言失败
+    quota_store.weixin._usage.clear()
+    target_store.weixin._user = ""
+    # 企业微信的「最近用户」兜底同样要清：回退类用例会写它
+    target_store.wecom._user = ""
+    # 企业微信会话表同理，惰性加载还会把磁盘上的旧值读回来
+    wecom_chats.clear()
 
     yield
 
     # 还原：模块级变量改了必须改回，否则后续用例仍指向临时目录
     bs.BRIDGE_STATE_PATH = old_path
     bs._pushed = old_pushed
-    router._quota.clear()
-    router._last_user = ""
+    quota_store.weixin._usage.clear()
+    target_store.weixin._user = ""
+    wecom_chats.clear()

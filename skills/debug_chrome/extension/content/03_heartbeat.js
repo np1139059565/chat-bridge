@@ -109,7 +109,10 @@
       }
       for (const cmd of cmdCommands) {
         try {
-          await A.withTimeout(A.handleTask(cmd), A.TASK_TIMEOUT_MS);
+          // 必须指定指令通道地址：指令入的是 command_hub，结果回 /api/ext/ 会
+          // 让指令等待方永远收不到结果，只能超时报「未在时限内执行」。
+          await A.withTimeout(
+            A.handleTask(cmd, `/api/command-ext/${A.PROVIDER}`), A.TASK_TIMEOUT_MS);
         } catch (err) {
           console.error('[AI-Style-Debug] 指令命令处理失败：', err);
         }
@@ -119,6 +122,12 @@
       // 连续失败达到阈值才判定离线：单次失败可能来自瞬时抖动或页面切换，
       // 立刻翻状态会让界面频繁闪断。未达阈值时保持上一次的连接状态。
       if (state.pollFailCount >= A.POLL_FAIL_THRESHOLD) {
+        // 由在线翻转为离线时给出排查提示：最常见的原因是工具服务换了端口，
+        // 而本地存储里仍是旧地址。只在状态真正翻转时提示一次，避免刷屏。
+        if (state.connected) {
+          A.warn('已连续 ' + state.pollFailCount + ' 次无法连通工具服务：' + state.backendUrl +
+            '。若工具服务已改端口，请到抽屉设置页「连接配置」改为新地址。');
+        }
         A.setConnected(false);
       }
     } finally {

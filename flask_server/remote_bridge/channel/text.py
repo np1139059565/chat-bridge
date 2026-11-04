@@ -86,44 +86,125 @@ def _assemble_ordered(m, push, use_md):
     @param use_md 是否优先采用 Markdown 原文
     @returns 正文文本
     """
-    if use_md:
-        raw = str(m.get("md") or "").strip()
-        # md 原文只含正文，不含思考与工具调用，故仅在无这两类块时直接采用
-        cats = {_block_category(b) for b in (m.get("blocks") or []) if b}
-        if raw and "thinking" not in cats and "tool" not in cats:
-            return raw
+    # 快捷路径：Markdown 原文干净时直接用，保住标题、粗体、列表等格式
+    raw = _md_shortcut(m, use_md)
+    if raw:
+        return raw
+    # 完整路径：分类收集四类内容，再按固定顺序拼接
+    groups = _collect_groups(m, push)
+    return _render_groups(groups)
+
+
+def _md_shortcut(m, use_md):
+    """尝试直接采用 Markdown 原文。
+
+    原文只含正文，不含思考与工具调用。因此只有在块里也没有这两类内容时
+    才能直接采用——否则工具痕迹与思考过程会被整段绕过。
+
+    @param m      消息对象
+    @param use_md 是否允许采用原文
+    @returns 原文文本；不可采用时为空串
+    """
+    if not use_md:
+        return ""
+    raw = str(m.get("md") or "").strip()
+    if not raw:
+        return ""
+    # 检查块里是否存在原文装不下的内容
+    cats = {_block_category(b) for b in (m.get("blocks") or []) if b}
+    # 有思考或工具调用：原文会丢内容，必须走完整组装
+    if "thinking" in cats or "tool" in cats:
+        return ""
+    return raw
+
+
+def _collect_groups(m, push):
+    """把消息的内容块按展示类别归入四组。
+
+    @param m    消息对象
+    @param push 推送开关
+    @returns {thinking: [], text: [], tool: [], voice: []}
+    """
     groups = {"thinking": [], "text": [], "tool": [], "voice": []}
+    # 类别 → 取文本函数。四类各有自己的取法，新增类别时在此登记
+    takers = {
+        "thinking": lambda b: _take_thinking(b, push),
+        "voice": _take_voice,
+        "tool": _take_tool,
+    }
     for b in (m.get("blocks") or []):
         if not b:
             continue
         cat = _block_category(b)
-        if cat == "thinking":
-            # 思考受开关控制：关闭时整类不产出
-            if push.get("thinking"):
-                t = str(b.get("text") or "").strip()
-                if t:
-                    groups["thinking"].append(t)
-            continue
-        if cat == "voice":
-            obj = mp._load_json_block(b) or {}
-            t = str(obj.get("text") or "").strip()
-            if t:
-                groups["voice"].append(t)
-            continue
-        if cat == "tool":
-            # 工具调用只报工具名，不带参数：参数是 JSON，手机上占满一屏且无阅读价值。
-            # 用户需要知道「AI 调了什么工具」，不需要看具体入参。
-            obj = mp._load_json_block(b) or {}
-            groups["tool"].append("[工具调用] " + str(obj.get("tool") or ""))
-            continue
-        fn = mp._BLOCK_HANDLERS.get(b.get("type"))
-        if not fn:
-            continue
-        t = fn(b, bool(push.get("thinking")))
+        # 命中已登记的类别就用它的取法，其余一律按正文处理
+        taker = takers.get(cat)
+        t = taker(b) if taker else _take_body(b, push)
         if t:
             groups[cat].append(t)
-    # 纯工具调用消息不产出正文：没有可读内容，推出去只是一屏花括号。
-    # 顺序调整只作用于「已进正文的内容」，不改变「什么内容进正文」。
+    return groups
+
+
+def _take_thinking(b, push):
+    """取思考块的文本。
+
+    @param b    思考块
+    @param push 推送开关
+    @returns 文本；开关关闭或内容为空时为空串
+    """
+    # 思考受开关控制：关闭时整类不产出
+    if not push.get("thinking"):
+        return ""
+    return str(b.get("text") or "").strip()
+
+
+def _take_voice(b):
+    """取语音块里的朗读文本。
+
+    @param b 语音块（内容是带 bridge-voice 标记的 JSON）
+    @returns 朗读文本；无则空串
+    """
+    obj = mp._load_json_block(b) or {}
+    return str(obj.get("text") or "").strip()
+
+
+def _take_tool(b):
+    """取工具调用块的工具名。
+
+    只报工具名，不带参数：参数是 JSON，手机上占满一屏且无阅读价值。
+    用户需要知道「AI 调了什么工具」，不需要看具体入参。
+
+    @param b 工具调用块
+    @returns 带前缀的工具名
+    """
+    obj = mp._load_json_block(b) or {}
+    return "[工具调用] " + str(obj.get("tool") or "")
+
+
+def _take_body(b, push):
+    """取正文类块的文本；未登记的块类型返回空串。
+
+    段落 / 标题 / 引用 / 列表 / 表格 / 代码块都在这里处理，
+    具体取法由 message_parse 的处理器表决定。
+
+    @param b    内容块
+    @param push 推送开关（代码块处理需要知道是否展示思考）
+    @returns 文本；无则空串
+    """
+    fn = mp._BLOCK_HANDLERS.get(b.get("type"))
+    if not fn:
+        return ""
+    return fn(b, bool(push.get("thinking")))
+
+
+def _render_groups(groups):
+    """把四组内容按固定顺序拼接成正文。
+
+    纯工具调用消息不产出正文：没有可读内容，推出去只是一屏花括号。
+    顺序调整只作用于「已进正文的内容」，不改变「什么内容进正文」。
+
+    @param groups 四类内容的文本列表
+    @returns 正文文本；无可读内容时为空串
+    """
     if not groups["text"] and not groups["thinking"] and not groups["voice"]:
         return ""
     parts = []

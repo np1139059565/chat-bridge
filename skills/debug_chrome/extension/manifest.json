@@ -24,6 +24,7 @@
       "js": [
         "shared/url-utils.js",
         "shared/host_theme.js",
+        "shared/backend-default.js",
         "content/00_namespace.js",
         "content/01_config.js",
         "content/02_drawer.js",
@@ -44,6 +45,7 @@
         "drawer.html",
         "content/08_injected_main.js",
         "shared/url-utils.js",
+        "shared/backend-default.js",
         "drawer-styles/00_tokens.css",
         "drawer-styles/01_base.css",
         "drawer-styles/02_messages.css",

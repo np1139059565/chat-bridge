@@ -143,6 +143,9 @@ PATH_REF_PATTERN = re.compile(r"`([A-Za-z0-9_\-./]+\.(?:py|js|md|yaml|json|css|h
 HISTORY_DOCS = (
     "refactor-plan.md",      # 重构执行计划与批次记录
     "code-review-report.md", # 走查当时的结论快照
+    # 多通道通用化清单：按当时文件行数记录各项改造过程，
+    # 其中旧 router 已随清理删除，但行数变化属史实，不随代码同步。
+    "channel-genericization.md",
 )
 
 
@@ -206,6 +209,8 @@ def collect_path_refs():
 REF_BASES = (
     "",                      # 工程根
     "flask_server",          # 服务端模块内相对
+    # 远程桥接子包内的文档以该包根为基准书写（如 channel/media.py）
+    "flask_server/remote_bridge",
     "flask_server/routes",   # 路由文件常以同目录名引用
     "extend",                # 插件内相对
     "extend/content",

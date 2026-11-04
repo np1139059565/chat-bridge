@@ -134,7 +134,35 @@ class WeixinQuota(QuotaPolicy):
         @param user_id 用户标识
         """
         with self._lock:
+            # 写入一条「零消耗」记录作为池子起点：它的时间戳就是池子的起始时刻，
+            # 后续 record 追加的消耗记录都排在它之后。
             self._usage[user_id] = [(time.time(), 0)]
+
+    def status(self, user_id):
+        """返回某用户回复池的对外状态，供设置页展示。
+
+        与 used() 的区别：used() 只回答「用了多少」，本方法还要回答
+        「池子是否有效」——从未发过消息和池子已过期，两种情况都已用为 0，
+        但对用户而言是两回事：前者是还没开始对话，后者是额度已作废。
+
+        @param user_id 用户标识
+        @returns {used, limit, remaining, active}
+            active 表示当前是否存在有效回复池
+        """
+        now = time.time()
+        with self._lock:
+            # 取该用户的全部记录；没有记录即「从未发过消息」
+            rows = self._usage.get(user_id) or []
+            # 列表首条是 reset 写入的池子起点，它的时间决定池子何时过期
+            started = rows[0][0] if rows else 0
+            # 起点缺失或已超出窗口：池子无效
+            pool_alive = bool(rows) and (now - started) < self.window_seconds
+        # 过期池子的已用条数按 0 计：额度已作废，不再占用展示位
+        used = self.used(user_id) if pool_alive else 0
+        # 剩余条数 = 上限 - 已用，最小为 0
+        remaining = max(0, self.limit - used)
+        return {"used": used, "limit": self.limit,
+                "remaining": remaining, "active": pool_alive}
 
 
 class QQWindowQuota(QuotaPolicy):

@@ -18,7 +18,6 @@ _SERVER = os.path.dirname(_HERE)
 if _SERVER not in sys.path:
     sys.path.insert(0, _SERVER)
 
-from remote_bridge import weixin_router as router                  # noqa: E402
 from remote_bridge.weixin_client import WeixinClient               # noqa: E402
 
 

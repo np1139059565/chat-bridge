@@ -5,9 +5,13 @@
 
   // 经提供方通道回传某次工具调用的结果。
   // 走 service worker 代发，原因同心跳：内容脚本在页面源下直连本机地址会被拦截。
-  A.postResult = async function (requestId, result) {
+  A.postResult = async function (requestId, result, channelPath) {
     try {
-      await A.proxyFetch(`${state.backendUrl}/api/ext/${A.PROVIDER}`, {
+      // channelPath：命令来源通道的地址。AI 工具命令回 /api/ext/，
+      // 用户指令命令回 /api/command-ext/。两条通道在服务端各有独立的
+      // 等待表，回错地址会让对应池子的等待方永远收不到结果而超时。
+      const path = channelPath || `/api/ext/${A.PROVIDER}`;
+      await A.proxyFetch(`${state.backendUrl}${path}`, {
         method: 'POST',
         body: { action: 'result', request_id: requestId, result: result },
       });
@@ -20,7 +24,10 @@
   // 普通工具：执行前后向抽屉推送卡片信息，展示工具调用细节。
   // silent 工具（如 push_message）：不生成抽屉卡片；执行结果仍照常回传，
   // 否则调用方只能拿到入队确认，无法得知动作是否真正生效。
-  A.handleTask = async function (task) {
+  // channelPath：命令来源通道地址。AI 工具命令省略（默认回 /api/ext/），
+  // 用户指令命令必须传 /api/command-ext/，否则结果会回错池子，
+  // 指令等待方收不到结果只能超时报「未在时限内执行」。
+  A.handleTask = async function (task, channelPath) {
     if (!task || !task.request_id) return;
     const silent = !!task.silent;
     const cardId = task.request_id;
@@ -38,7 +45,7 @@
     // 结果一律回传（含 silent 工具），让调用方拿到真实执行状态；
     // silent 仅表示不在抽屉生成工具卡片。
     // 是否把结果再发回网页 AI，由调用方（插件侧 no_reply 参数）决定，不在此处理。
-    await A.postResult(task.request_id, outcome);
+    await A.postResult(task.request_id, outcome, channelPath);
     if (silent) return;
     A.postToDrawer({
       type: 'tool-card',

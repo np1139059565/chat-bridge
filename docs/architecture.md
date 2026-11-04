@@ -59,7 +59,9 @@ chat-bridge/
 │   │   └── runtime.yaml          # 全部运行时与密钥，不入库
 │   ├── core/                     # 核心支撑（37 个模块，见下表）
 │   ├── routes/                   # 各功能域蓝图（13 个，见下表）
-│   ├── remote_bridge/            # 远程桥接（QQ ↔ 网页 AI，25 个模块，见下表）
+│   ├── remote_bridge/            # 远程桥接（QQ / 微信 / 企业微信 ↔ 网页 AI，见下表）
+│   │   ├── channel/              # 通道公共层：推送管线、去重、配额、目标兜底、媒体
+│   │   └── adapters/             # 各通道适配器：只写协议差异
 │   ├── web_bridge/               # 网页版机器人（5 个模块，见下表）
 │   ├── custom_tools/             # 标准 skill 的解析 / 注册 / 执行（包）
 │   ├── tools/                    # 内置工具实现与元数据
@@ -129,7 +131,9 @@ chat-bridge/
 | 分组 | 文件 | 职责 |
 |---|---|---|
 | QQ 协议 | `qq_gateway.py` / `qq_client.py` / `qq_event_parse.py` / `qq_media.py` | 事件分发、机器人协议层、事件解析与下载、富媒体发送 |
-| 消息 | `message_router.py` / `message_flow.py` / `message_parse.py` / `outbound.py` | 分流与推送、上报推送流程、解析与块文本组装、出站正文组装 |
+| 公共层 | `channel/push_pipeline.py` / `channel/adapter.py` / `channel/dedupe.py` / `channel/quota.py` / `channel/target.py` / `channel/media.py` / `channel/delivery.py` / `channel/wecom_chats.py` | 统一推送流程、适配器协议、已推集合、配额策略、最近用户兜底、出向媒体骨架、入向卡片投递、企业微信会话表 |
+| 适配器 | `adapters/qq.py` / `adapters/weixin.py` / `adapters/wecom.py` | 各通道只实现发送、合并、来源过滤等协议差异 |
+| 消息 | `message_router.py` / `message_flow.py` / `message_parse.py` / `outbound.py` | QQ 被动回复窗口与推送原语、上报推送流程、解析与块文本组装、出站正文组装 |
 | 语音 | `voice_tts.py` / `voice_voices.py` / `voice_cache.py` / `voice_mp3.py` | 多引擎合成、音色清单、成品缓存、WAV 转 MP3 |
 | 语音（其他） | `pyttsx3_worker.py` / `voice_sapi_runner.py` / `voice_asr.py` / `voice_pending.py` / `message_voice.py` | 合成子进程与父进程调度、语音识别、待确认文字暂存、出向语音提取与推送 |
 | 指令 | `command_registry.py` / `command_dispatch.py` / `command_external.py` / `command_panel.py` | 指令表与校验、抽屉命令下发、外部指令、QQ 指令执行 |

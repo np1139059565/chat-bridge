@@ -87,8 +87,8 @@ class WecomAdapter(ChannelAdapter):
             ct = int(payload.get("wecom_chat_type") or 1)
             self._chat_type[cid] = ct
             return cid
-        from .. import wecom_router
-        cid, ct = wecom_router.last_chat()
+        from ..channel import wecom_chats
+        cid, ct = wecom_chats.last()
         if cid:
             self._chat_type[cid] = ct
         return cid
@@ -122,29 +122,21 @@ class WecomAdapter(ChannelAdapter):
         """
         if not self.client:
             return 0
-        from ..wecom_media_collect import collect_images, collect_files, collect_voice
+        from ..channel import media as media_store
         chat_type = self._chat_type.get(recipient, 1)
         voice_map = (ctx or {}).get("voice_map") or {}
-        images, files, voices = [], [], []
-        for m in items:
-            images.extend(collect_images(m))
-            files.extend(collect_files(m))
-            # 语音只在 AI 消息上推：用户与工具消息没有朗读文本
-            if push.get("voice"):
-                vpath, vtext = collect_voice(m, voice_map)
-                if vpath and vtext:
-                    from ..message_parse import _classify
-                    if _classify(m) == "ai":
-                        voices.append(vpath)
-        sent = 0
-        # 三类媒体共用同一个发送骨架：取凭证 → 有则回复、无则主动推送
-        for path in images:
-            sent += self._send_media(recipient, chat_type, path, "image")
-        for path in files:
-            sent += self._send_media(recipient, chat_type, path, "file")
-        for path in voices:
-            sent += self._send_media(recipient, chat_type, path, "voice")
-        return sent
+
+        def _send_one(path, kind):
+            """把一件媒体交给本通道的发送实现。
+
+            @param path 本地文件路径
+            @param kind image / file / voice
+            @returns 成功返回 True
+            """
+            return bool(self._send_media(recipient, chat_type, path, kind))
+
+        # 收集与计数的骨架在公共层，本通道只提供「怎么发」
+        return media_store.push_collected(items, push, voice_map, _send_one)
 
     def _send_media(self, recipient, chat_type, path, kind):
         """发一件媒体：走主动推送。
@@ -252,5 +244,5 @@ class WecomAdapter(ChannelAdapter):
         """
         target_store.wecom.note(chatid)
         self._chat_type[chatid] = int(chat_type or 1)
-        from .. import wecom_router
-        wecom_router.note_chat(chatid, chat_type, user)
+        from ..channel import wecom_chats
+        wecom_chats.note(chatid, chat_type, user)

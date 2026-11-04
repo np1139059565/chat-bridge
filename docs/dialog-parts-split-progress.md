@@ -1,0 +1,164 @@
+# 对话框分片二次拆分进度与质量现状
+
+## 一、文档定位
+
+本文件记录 `extend/dialog/parts/` 在首批重构（见 `docs/archive/refactor-plan.md`）之后的**二次拆分**结果、
+期间发生的一次线上故障及其修复，以及当前质量检查的真实状态。
+
+首批重构文档把 `05_messages.js` 记为 294 行、分片合计 10 个，该记录反映的是当时状态。
+二次拆分把其中的大文件继续按职责切分，分片增至 43 个，`05_messages.js` 现为 417 行。
+
+## 二、加载顺序
+
+`extend/dialog/dialog.html` 以 `<script>` 按序加载全部分片。分片之间只通过
+`window.AIMirrorDialog`（下称 `D`）通信，加载顺序不影响依赖解析，但影响同名方法的最终覆盖结果。
+
+## 三、分片清单
+
+### 3.1 命名空间与基础设施
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `00_data.js` | 449 | 共享命名空间 D、常量、data/computed/mounted |
+| `00a_api.js` | 48 | 统一后端请求辅助 `D.apiFetch` |
+| `00a_weixin_data.js` | 47 | 微信通道前端初始状态字段 |
+| `00b_wecom_data.js` | 41 | 企业微信通道前端初始状态字段 |
+| `00b_lifecycle.js` | 71 | 卡片倒计时状态机与 mounted 生命周期 |
+| `00c_sendqueue.js` | 121 | 回传网页 AI 的统一发送队列 |
+| `00d_toast.js` | 37 | 轻提示 |
+
+### 3.2 后端交互与远程桥接
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `01_backend.js` | 256 | 本地 Flask 服务交互：地址发现、配置读写、工具上下线 |
+| `01b_bridge.js` | 378 | 远程桥接（QQ ↔ 网页 AI）前端逻辑 |
+| `01c_bridge_cmd.js` | 133 | 桥接自定义指令管理与元素选择入口 |
+| `01d_bridge_md.js` | 152 | Markdown 原文采集与桥接动作辅助 |
+| `01e_bridge_actions.js` | 440 | 抽屉命令执行与桥接消息处理 |
+| `01f_port.js` | 94 | 端口修改流程 |
+| `01f_bridge_weixin.js` | 174 | 微信通道前端逻辑 |
+| `01g_external_cards.js` | 296 | 外部卡片轮询与投递 |
+| `01h_bridge_wecom.js` | 109 | 企业微信通道前端逻辑 |
+
+### 3.3 规则、工具与会话
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `02_rules.js` | 113 | 规则文件读取与增删改、优先级 |
+| `03_custom_tools.js` | 159 | 自定义工具读取、上下线、编辑 |
+| `04_sessions.js` | 304 | 多会话状态管理：创建、切换、恢复、持久化 |
+| `04b_sessions.js` | 211 | 会话条目操作：勾选、删除、清空 |
+
+### 3.4 消息接收与消息树
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `05_messages.js` | 417 | 消息接收与消息树编排：工具列表、消息接收解析、灌入切片 |
+| `05b_tree.js` | 318 | 消息树写入口 `upsertTree` |
+| `05c_prompt.js` | 305 | System Prompt 生成、对话重新解析、会话导出 |
+| `05d_memory.js` | 244 | 记忆「先检索、后抽检」提醒 |
+| `05e_quality.js` | 125 | 助手回复质量检测 |
+| `05f_parse.js` | 223 | 消息与代码块解析判定、消息 id 生成 |
+| `05g_cards.js` | 408 | 建卡与自动执行候选收集 |
+| `05h_tree_query.js` | 98 | 消息树只读查询：取键、取父 id、判末条、组装分支 |
+| `05h_memory_bridge.js` | 132 | 抽屉与后端记忆系统的桥接 |
+| `05i_files.js` | 107 | 消息附带文件相关逻辑 |
+
+### 3.5 执行、渲染与设置
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `06_execute.js` | 427 | 工具卡片执行与自动回传 |
+| `06b_execute_ui.js` | 45 | 卡片「执行」与「复制结果」入口 |
+| `06c_file_attach.js` | 110 | read_file 返回项转 File 并粘贴 |
+| `07_cards.js` | 442 | 卡片与消息渲染 |
+| `07b_params.js` | 96 | 卡片可编辑参数的渲染与保存 |
+| `07_render.js` | 90 | 组件渲染装配 |
+| `08_settings.js` | 292 | 设置面板（一）：Prompt、工具行、安装块 |
+| `08b_settings.js` | 347 | 设置面板（二）：会话记录、条目展开体、外部卡片 |
+| `08c_bridge.js` | 428 | 设置面板远程桥接区块 |
+| `08d_bridge_weixin.js` | 165 | 设置面板微信通道区块 |
+| `08e_bridge_wecom.js` | 78 | 设置面板企业微信通道区块 |
+| `08e_toolconf.js` | 102 | 工具配置通用渲染 |
+| `09_skills.js` | 213 | 设置页技能区块 |
+
+## 四、方法挂载约定
+
+分片向 `D.methods` 注册的方法，经 `app.js` 装配后成为 Vue 实例方法，调用方一律写 `this.xxx(...)`。
+
+挂在 `D` 上（而非 `D.methods`）的函数不会成为实例方法。渲染类函数按 `D.renderXxx(ctx, ...)` 调用，
+显式传入 `ctx`（即 Vue 实例），属另一套约定。两套约定不可混用：
+
+- 需要 `this.xxx(...)` 调用的：定义在 `D.methods` 上。
+- 需要 `D.xxx(...)` 调用的：定义在 `D` 上，首参传 `ctx`。
+
+## 五、故障记录：keyOfId is not a function
+
+### 5.1 现象
+
+接收网页消息时报 `Uncaught (in promise) TypeError: this.keyOfId is not a function`，
+位置 `05_messages.js:247`，调用链 `04_sessions.js applyConversation → 05_messages.js ingestMessages`。
+消息无法入树，界面功能中断。
+
+### 5.2 根因
+
+二次拆分把 `keyOfId`、`parentIdOf`、`isTreeTail`、`assembleBranchKeys` 移入 `05h_tree_query.js`，
+迁移时挂到了 `D` 上，而全部调用点写的是 `this.xxx(...)`。`this` 是 Vue 实例，实例方法只来自 `D.methods`，
+`D` 上的同名属性不会成为实例方法，故运行时报错。
+
+四个函数同时失效，`keyOfId` 因调用最早而先报错。
+
+### 5.3 修复
+
+- `05h_tree_query.js`：声明 `const M = D.methods`，四个函数改为 `M.xxx = function`。
+- `05_messages.js`：更正迁移说明注释，指明挂载点是 `D.methods`。
+
+### 5.4 验证
+
+- `node --check` 两文件通过。
+- 全分片静态比对：以 `this.xxx(` 调用而无对应定义的，仅剩 `$forceUpdate`（Vue 内置）与 `_persist`（mounted 内动态挂载），均正常。
+
+## 六、质量检查现状
+
+`scripts/check_quality.py` 当前结论为「存在超标项」，退出码 1。分项如下：
+
+| 检查项 | 结论 |
+|---|---|
+| 超大文件（>450 行） | 无 |
+| 高复杂度函数（函数体 >30 行 或 cc ≥10） | 160 处 |
+| 重复代码块 | 102 处 |
+
+已拆解的超标项（拆分前均先补行为测试，拆分后测试全通过）：
+
+| 函数 | 拆分前 | 拆分后 |
+|---|---|---|
+| `channel/media.py` `push_collected` | 34 行 / cc=12 | 收集、取语音、发送三段 |
+| `channel/push_pipeline.py` `_push_locked` | 101 行 / cc=29 | 筛选、配额、合并、逐条四段 |
+| `channel/text.py` `_assemble_ordered` | 61 行 / cc=31 | Markdown 快捷、分组收集、渲染三段 |
+
+存量欠账的分布：
+
+- 高复杂度函数集中在 `flask_server/remote_bridge/`（企微、微信、QQ 通道）、`flask_server/core/memory_*`、
+  `scripts/hooks/`、`skills/anatomy/`、`flask_server/routes/tools.py`。
+- 重复块主要集中在 `flask_server/tests/js/test_dialog_boot.test.js` 与 `test_dialog_contracts.test.js` 之间，
+  以及 `flask_server/tools/file_image_impl.py` 与 `file_read_impl.py` 之间。
+
+上述欠账来自首批重构之后新增的代码，未纳入过拆分治理。首批重构文档中「cc≥10 清零」的结论
+适用于当时的代码范围，不代表当前全工程状态。
+
+`extend/dialog/parts/` 下的分片：超大文件为 0，高复杂度函数为 0，
+仅 `05_messages.js` 等文件因与相邻分片存在重复块被列出。
+
+## 七、后续可选方向
+
+1. 拆分高复杂度函数（存量 160 处，集中在 `remote_bridge/`、`core/memory_*`、
+   `routes/tools.py`），单独立项、分批推进。每拆一个函数前先补行为测试。
+   本轮已拆 3 处，见第六节。
+2. 合并对话框 JS 测试中 `test_dialog_boot` 与 `test_dialog_contracts` 的重复用例。
+3. 合并 `file_image_impl.py` 与 `file_read_impl.py` 的重复片段。
+4. 为 `scripts/check_quality.py` 增加基线文件，把存量欠账登记为已知项，使新增超标项能被单独识别。
+   没有基线时脚本永远返回 1，红着的闸门等于没有闸门。
+
+优先级建议：先做第 4 项。基线一旦建立，后续拆解才有可验证的进展度量，
+否则每轮都只能报「还剩 157 处」，看不出是否真的在减少。

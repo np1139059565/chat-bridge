@@ -24,7 +24,7 @@ _TESTS_DIR = os.path.dirname(os.path.abspath(__file__))
 if _TESTS_DIR not in sys.path:
     sys.path.insert(0, _TESTS_DIR)
 
-from remote_bridge import weixin_router as router       # noqa: E402
+from remote_bridge.channel import quota as quota_store   # noqa: E402
 
 from weixin_test_helpers import FakeWeixinClient, make_msg   # noqa: E402
 
@@ -36,7 +36,7 @@ class TestQuota:
 
     def test_no_pool_means_inactive(self):
         """用户没发过消息时没有有效回复池。"""
-        st = router.quota_status("never-sent")
+        st = quota_store.weixin.status("never-sent")
         assert st["active"] is False
         assert st["remaining"] == 10
 

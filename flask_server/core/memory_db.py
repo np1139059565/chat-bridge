@@ -72,7 +72,11 @@ _SCHEMA = [
         tool        TEXT,
         status      TEXT,
         result      TEXT,
-        finished_at INTEGER
+        finished_at INTEGER,
+        is_tool     INTEGER,
+        msg_id      TEXT,
+        parameters  TEXT,
+        executed    INTEGER
     )""",
     # 计划暂存表：双接口 A 专用
     """CREATE TABLE IF NOT EXISTS plans (
@@ -296,6 +300,13 @@ def _migrate_columns(conn):
         # 已执行调用的签名库：前端据此在刷新后恢复卡片的「已执行」状态。
         # 缺这一列时后端会静默丢弃该字段，刷新后所有卡片退回待执行。
         ("conversations", "executed_sigs", "TEXT"),
+        # 卡片的工具身份与执行凭据。缺这几列时，从库里恢复的卡片只是一个
+        # 没有工具身份的壳：前端拿不到 isTool 就不渲染成工具卡片，
+        # 拿不到 msgId/parameters 就拼不出执行签名，卡片全部退化为普通代码块。
+        ("cards", "is_tool", "INTEGER"),        # 是否工具卡片（渲染依据）
+        ("cards", "msg_id", "TEXT"),            # 归属消息指纹（签名要素）
+        ("cards", "parameters", "TEXT"),        # 调用参数 JSON（重跑依据）
+        ("cards", "executed", "INTEGER"),       # 是否已执行
     ]
     for table, col, decl in migrations:
         cols = [r[1] for r in conn.execute("PRAGMA table_info(%s)" % table).fetchall()]

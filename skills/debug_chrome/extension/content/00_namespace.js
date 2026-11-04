@@ -6,9 +6,9 @@ window.AIStyleDebug = (function () {
   const MAX_ELEMENTS = 5;
   const MAX_SHOT_WIDTH = 1280;
   // 后端指向工具服务（chat-bridge）；端口与工具服务 runtime.yaml 的 flask.port 一致
-  // 后端地址默认值：与抽屉设置页输入框默认值一致，用户可手动修改；
-  // 保留它，避免每次都要重新输入。
-  const DEFAULT_BACKEND_URL = 'http://127.0.0.1:5000';
+  // 后端地址默认值：由 shared/backend-default.js 统一提供，
+  // 与抽屉、后台脚本共用同一来源；换端口只改那一处。
+  const DEFAULT_BACKEND_URL = window.AIStyleBackend.DEFAULT_BACKEND_URL;
   const DRAWER_READY_TIMEOUT_MS = 5000;
 
   // get_element_style 默认返回的常用 CSS 属性。全量样式有数百条，默认只回传

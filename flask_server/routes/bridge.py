@@ -175,8 +175,8 @@ def _is_wecom_openid(openid):
     if not openid or str(openid) in (_WEB_OPENID,):
         return False
     try:
-        from remote_bridge import wecom_router
-        return str(openid) in (wecom_router._load_chats() or {})
+        from remote_bridge.channel import wecom_chats
+        return str(openid) in wecom_chats.snapshot()
     except Exception:
         return False
 
@@ -280,7 +280,9 @@ def bridge_help():
     from remote_bridge import command_registry
     return jsonify(success=True,
                    help=command_panel.help_text(),
-                   groups=command_registry.builtin_groups())
+                   # 三类指令都在这里：内置、外部、自定义。
+                   # 只取内置时，设置页的外部指令与自定义指令无从显示。
+                   groups=command_registry.help_groups())
 
 
 @bp.route("/api/bridge/run-command", methods=["POST", "OPTIONS"])

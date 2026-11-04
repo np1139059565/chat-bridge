@@ -48,10 +48,14 @@
       const url = '/memory/conversation?conv_id=' + encodeURIComponent(convId)
         + '&site_key=' + encodeURIComponent(this.siteKey || '');
       const r = await D.apiFetch(this, url, { headers: { 'Accept': 'application/json' } });
+      // 成功响应但不含 conv：后端确实没有这个会话，返回 null 是准确的
       return (r && r.conv) ? r.conv : null;
     } catch (e) {
       log('memLoadConv 失败：' + e);
-      return null;
+      // 网络失败不能返回 null：上层会把 null 当成「后端没有这个会话」，
+      // 进而解除写回禁令，用内存里的空签名库覆盖后端存档。
+      // 返回带失败标记的对象，让上层能区分「没有」与「取不到」。
+      return { ok: false, error: String(e && e.message || e) };
     }
   };
 

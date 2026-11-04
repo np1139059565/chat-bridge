@@ -16,7 +16,7 @@ from collections import namedtuple
 
 import card_bus
 
-from . import wecom_router, bridge_log
+from . import bridge_log
 
 
 def log(*args):
@@ -116,11 +116,12 @@ class WecomGateway:
             log("消息缺少 chatid 与 userid，忽略")
             return
         log("收到消息 chatid=" + chatid[:12] + " type=" + str(chat_type))
-        # 记住会话：主动推送依赖 chatid 定位收件人
-        wecom_router.note_chat(chatid, chat_type, user)
-        # 同步登记到公共层：统一推送管线从 channel.target 读「最近会话」。
-        # 两处并写，切换前后行为一致；旧链路停用后可只留公共层。
+        # 记住会话：主动推送依赖 chatid 定位收件人。
+        # 会话表与「最近用户」兜底都在公共层，前者记 chatid 与会话类型，
+        # 后者在没有会话记录时兜底。
         from .channel import target as target_store
+        from .channel import wecom_chats
+        wecom_chats.note(chatid, chat_type, user)
         target_store.wecom.note(chatid)
 
         # 登记最近活跃渠道为企业微信：用户刚在企业微信侧发了消息（含指令）。

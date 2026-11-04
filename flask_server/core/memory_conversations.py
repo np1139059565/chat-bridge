@@ -31,10 +31,16 @@ from memory_db import get_conn, maybe_commit, begin_batch, end_batch
 import memory_nodes
 from memory_nodes import upsert_node, get_by_msg_id, set_parent
 from memory_edges import add_edge
+import memory_cards
 from memory_cards import upsert_card
 import app_log
 import json_utils
 import serial_worker
+# 读取侧（重建会话对象、列会话、引用键解析）已拆到独立模块，
+# 此处重导出，保持 routes 等既有调用点的引用不变。
+from memory_conversation_read import (
+    _key_child, load_conversation, list_conversations,
+)
 
 
 def _now():
@@ -236,8 +242,19 @@ def _write_edges_and_cards(edges_raw, id_map, changed, child_count, node_by_msg)
         n_written += 1
         for bid, card in (node_by_msg.get(cid, {}).get("cards") or {}).items():
             if card:
-                upsert_card(nid, bid, card.get("tool"), card.get("status"),
-                            card.get("result"), card.get("finishedAt"))
+                # 前端卡片的完整字段都要落库：缺 isTool 会让卡片退化成普通代码块，
+                # 缺 msgId / parameters 会让执行签名算不出来、也无法重跑。
+                # 字段以字典传入：新增卡片字段时此处无需改动签名
+                upsert_card(nid, bid, {
+                    "tool": card.get("tool"),
+                    "status": card.get("status"),
+                    "result": card.get("result"),
+                    "finished_at": card.get("finishedAt"),
+                    "is_tool": card.get("isTool"),
+                    "msg_id": card.get("msgId"),
+                    "parameters": card.get("parameters"),
+                    "executed": card.get("executed"),
+                })
     return n_written
 
 
@@ -277,18 +294,6 @@ def _save_conversation_inner(conn, conv_id, site_key, conv):
     return n_written
 
 
-def _key_child(key):
-    """从会话引用键里取出「子消息指纹」。
-
-    会话的 visible_keys / branch_keys 存的是树键「父指纹-子指纹」
-    （根节点为「0-子指纹」），引用的是子节点。判定悬空须取子段比对，
-    不可拿整条树键去比对 msg_id（否则会全部误判为悬空）。
-    @param key 树键字符串
-    @return 子消息指纹
-    """
-    return key.split("-", 1)[1] if "-" in key else key
-
-
 def prune_dangling_refs():
     """清理会话表里指向已删节点的悬空引用。
 
@@ -320,93 +325,6 @@ def prune_dangling_refs():
             )
     maybe_commit(conn)
     return removed
-
-
-def _conv_key(id_to_msg, r):
-    """按节点行与其父节点拼出前端 msgTree 的 key：'父msg_id-子msg_id'。"""
-    pid_db = r["parent_id"] or 0
-    pid_msg = id_to_msg.get(pid_db, "0")
-    return pid_msg + "-" + r["msg_id"]
-
-
-def _build_tree(rows):
-    """由节点行重建 msgTree（key = '父msg_id-子msg_id'），卡片位先留空。"""
-    tree = {}
-    id_to_msg = {r["id"]: r["msg_id"] for r in rows}
-    for r in rows:
-        tree[_conv_key(id_to_msg, r)] = {
-            "role": r["role"], "name": r["name"],
-            "blocks": _loads(r["blocks"], []),
-            "source": r["source"], "deleted": bool(r["deleted"]), "cards": {},
-        }
-    return tree, id_to_msg
-
-
-def _attach_cards(conn, rows, tree, id_to_msg):
-    """把各节点的卡片挂到 msgTree 对应节点上。"""
-    for r in rows:
-        key = _conv_key(id_to_msg, r)
-        if key not in tree:
-            continue
-        for c in conn.execute("SELECT * FROM cards WHERE node_id=?", (r["id"],)).fetchall():
-            tree[key]["cards"][c["block_id"]] = {
-                "tool": c["tool"], "status": c["status"],
-                "result": _loads(c["result"], None), "finishedAt": c["finished_at"],
-            }
-
-
-def _conv_meta_fields(meta):
-    """从 conversations 行取出会话级字段（meta 为空时全用兜底值）。"""
-    if not meta:
-        return {"title": "", "page_url": "", "visibleKeys": [], "branchKeys": [],
-                "externalCards": [], "orphanSlice": [], "executedSigs": {}}
-    # 旧库可能还没迁出该列：用 keys() 判断，缺列时返回空字典而非报错
-    sigs = _loads(meta["executed_sigs"], {}) if "executed_sigs" in meta.keys() else {}
-    return {
-        "title": meta["title"] or "",
-        "page_url": meta["page_url"] or "",
-        "visibleKeys": _loads(meta["visible_keys"], []),
-        "branchKeys": _loads(meta["branch_keys"], []),
-        "externalCards": _loads(meta["external_cards"], []),
-        "orphanSlice": _loads(meta["orphan_slice"], []),
-        "executedSigs": sigs,   # 已执行签名库：刷新后据此恢复卡片状态
-    }
-
-
-def load_conversation(conv_id, site_key):
-    """从库重建前端会话对象；不存在返回 None。"""
-    conn = get_conn()
-    meta = conn.execute(
-        "SELECT * FROM conversations WHERE conv_id=? AND site_key=?", (conv_id, site_key)
-    ).fetchone()
-    # 取该会话全部节点
-    rows = conn.execute(
-        "SELECT * FROM nodes WHERE conv_id=? AND site_key=? ORDER BY created_at, id",
-        (conv_id, site_key),
-    ).fetchall()
-    if not rows and not meta:
-        return None
-    tree, id_to_msg = _build_tree(rows)
-    _attach_cards(conn, rows, tree, id_to_msg)
-    result = _conv_meta_fields(meta)
-    result["msgTree"] = tree
-    return result
-
-
-def list_conversations(site_key=None):
-    """列出会话摘要（不切会话也能看列表）。"""
-    conn = get_conn()
-    if site_key:
-        rows = conn.execute(
-            "SELECT conv_id, site_key, title, page_url, updated_at FROM conversations"
-            " WHERE site_key=? ORDER BY updated_at DESC", (site_key,)
-        ).fetchall()
-    else:
-        rows = conn.execute(
-            "SELECT conv_id, site_key, title, page_url, updated_at FROM conversations"
-            " ORDER BY updated_at DESC"
-        ).fetchall()
-    return [dict(r) for r in rows]
 
 
 def delete_conversation(conv_id, site_key):

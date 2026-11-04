@@ -75,6 +75,14 @@
   D.renderCodeCard = function (ctx, block, opts) {
     const readonly = !!(opts && opts.readonly);
     const card = ctx.cardMap[block.id];
+    // 诊断：取不到卡片时记录 block.id 与 cardMap 的样本键。
+    // 卡片退化为普通代码块正是从这里开始——isTool 为假，按钮全部不渲染。
+    // 只在实际落空时打日志，避免正常渲染刷屏。
+    if (!card) {
+      const keys = Object.keys(ctx.cardMap || {});
+      log('[卡片诊断] 渲染取不到卡 block.id=' + block.id
+        + ' cardMap条数=' + keys.length + ' 样本=' + keys.slice(0, 3).join(','));
+    }
     const isTool = !!(card && card.isTool);
     // 是否正处于「回传倒计时」：是则把倒计时显示在「复制结果」按钮上，
     // 且该按钮此时点击 = 跳过等待、立即回传。
