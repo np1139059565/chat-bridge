@@ -19,7 +19,7 @@
 
 | 文件 | 行数 | 职责 |
 |---|---|---|
-| `00_data.js` | 449 | 共享命名空间 D、常量、data/computed/mounted |
+| `00_data.js` | 450 | 共享命名空间 D、常量、data/computed/mounted |
 | `00a_api.js` | 48 | 统一后端请求辅助 `D.apiFetch` |
 | `00a_weixin_data.js` | 47 | 微信通道前端初始状态字段 |
 | `00b_wecom_data.js` | 41 | 企业微信通道前端初始状态字段 |
@@ -32,13 +32,13 @@
 | 文件 | 行数 | 职责 |
 |---|---|---|
 | `01_backend.js` | 256 | 本地 Flask 服务交互：地址发现、配置读写、工具上下线 |
-| `01b_bridge.js` | 378 | 远程桥接（QQ ↔ 网页 AI）前端逻辑 |
+| `01b_bridge.js` | 391 | 远程桥接（QQ ↔ 网页 AI）前端逻辑 |
 | `01c_bridge_cmd.js` | 133 | 桥接自定义指令管理与元素选择入口 |
-| `01d_bridge_md.js` | 152 | Markdown 原文采集与桥接动作辅助 |
-| `01e_bridge_actions.js` | 440 | 抽屉命令执行与桥接消息处理 |
+| `01d_bridge_md.js` | 167 | Markdown 原文采集与桥接动作辅助 |
+| `01e_bridge_actions.js` | 450 | 抽屉命令执行与桥接消息处理 |
 | `01f_port.js` | 94 | 端口修改流程 |
 | `01f_bridge_weixin.js` | 174 | 微信通道前端逻辑 |
-| `01g_external_cards.js` | 296 | 外部卡片轮询与投递 |
+| `01g_external_cards.js` | 305 | 外部卡片轮询与投递 |
 | `01h_bridge_wecom.js` | 109 | 企业微信通道前端逻辑 |
 
 ### 3.3 规则、工具与会话
@@ -63,7 +63,7 @@
 | `05g_cards.js` | 335 | 建卡、质量检测与自动执行候选收集 |
 | `05j_card_sig.js` | 164 | 执行签名存取、卡片状态重判、按签名匹配镜像 |
 | `05h_tree_query.js` | 98 | 消息树只读查询：取键、取父 id、判末条、组装分支 |
-| `05h_memory_bridge.js` | 132 | 抽屉与后端记忆系统的桥接 |
+| `05h_memory_bridge.js` | 136 | 抽屉与后端记忆系统的桥接 |
 | `05i_files.js` | 107 | 消息附带文件相关逻辑 |
 
 ### 3.5 执行、渲染与设置
@@ -73,15 +73,16 @@
 | `06_execute.js` | 427 | 工具卡片执行与自动回传 |
 | `06b_execute_ui.js` | 45 | 卡片「执行」与「复制结果」入口 |
 | `06c_file_attach.js` | 110 | read_file 返回项转 File 并粘贴 |
-| `07_cards.js` | 442 | 卡片与消息渲染 |
+| `07_cards.js` | 450 | 卡片与消息渲染 |
 | `07b_params.js` | 96 | 卡片可编辑参数的渲染与保存 |
 | `07_render.js` | 90 | 组件渲染装配 |
-| `08_settings.js` | 292 | 设置面板（一）：Prompt、工具行、安装块 |
-| `08b_settings.js` | 347 | 设置面板（二）：会话记录、条目展开体、外部卡片 |
-| `08c_bridge.js` | 428 | 设置面板远程桥接区块 |
+| `08_settings.js` | 289 | 设置面板（一）：Prompt、工具行、安装块 |
+| `08b_settings.js` | 357 | 设置面板（二）：会话记录、条目展开体、外部卡片 |
+| `08c_bridge.js` | 235 | 设置面板远程桥接区块 |
 | `08d_bridge_weixin.js` | 165 | 设置面板微信通道区块 |
 | `08e_bridge_wecom.js` | 78 | 设置面板企业微信通道区块 |
 | `08e_toolconf.js` | 102 | 工具配置通用渲染 |
+| `08f_commands.js` | 243 | 设置页「指令」区块：自定义指令编辑、内置参数、可点击指令按钮 |
 | `09_skills.js` | 213 | 设置页技能区块 |
 
 ## 四、方法挂载约定
