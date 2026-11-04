@@ -39,18 +39,19 @@
 
 ### 提交钩子：结构质量剩余三项未清
 
-**状态**：阻塞提交，待处理。
+**状态**：已处理，钩子放行。
 
-提交时 `hygiene` 与 `quality` 两个钩子会拦截以下三项，导致提交失败：
+三项超标项已按职责拆分，`hygiene` 与 `quality` 两个钩子均通过：
 
-| 项 | 位置 | 实测 | 上限 |
+| 项 | 位置 | 处理方式 | 拆分后 |
 |---|---|---|---|
-| 超大文件 | `extend/dialog/parts/05g_cards.js` | 470 行 | 450 行 |
-| 超大文件 | `flask_server/remote_bridge/command_registry.py` | 469 行 | 450 行 |
-| JS 函数体过长 | `extend/dialog/parts/04_sessions.js` `loadConversation` | 97 行 | 80 行 |
+| 超大文件 | `extend/dialog/parts/05g_cards.js` | 签名存取四个函数迁入 `05j_card_sig.js` | 335 行 |
+| 超大文件 | `flask_server/remote_bridge/command_registry.py` | 分组与展示层迁入 `command_groups.py` | 294 行 |
+| JS 函数体过长 | `extend/dialog/parts/04_sessions.js` `loadConversation` | 抽出 `_scheduleConvRetry` 与 `_mergeSavedConv` | 低于 80 行 |
 
-**注意**：拆分 `command_registry.py` 前，须先确认不影响 `help_groups()`
-的输出结构——该函数是「设置页可用指令分组」的依据（对应已关闭的 S5）。
+拆分只移动职责位置，方法挂载点与调用方式不变。`help_groups()` 的输出结构由
+`test_command_groups.py` 五条用例覆盖，拆分后全部通过；测试的补丁目标同步改到
+`command_groups`，避免打在已迁走的旧位置而落空。
 
 **同批已完成（供核对）**：
 
@@ -64,16 +65,17 @@
 
 ### S3 幽灵卡片：执行时被判不在镜像中而拒绝
 
-**状态**：待复现。
+**状态**：已验证，已关闭。
 
 **现象**：偶发执行卡片时被判定不在镜像中而拒绝执行。
 
-**取证方向**：在拒绝分支打印镜像键集合与待执行卡片键，
-对比两者差异，确认是建卡时机差还是键生成规则不一致。
+**结论**：用户确认修复后实机验证通过。判定链路改用「工具名 + 参数」组成的执行签名
+匹配镜像（`cardMatchesBySig`），不再依赖随网页重渲染而变化的代码块 id；
+镜像匹配与签名存取现位于 `extend/dialog/parts/05j_card_sig.js`。
 
 **影响面**：卡片执行链路。
 
-**优先级**：P1。详见 `docs/card-state-issue-tracker.md`。
+**优先级**：已关闭。详见 `docs/card-state-issue-tracker.md`。
 
 ### 合并对话框 JS 测试与文件工具的重复块
 
@@ -142,6 +144,8 @@
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
+| S3 幽灵卡片：执行时被判不在镜像中而拒绝 | 已解决 | 判定改用工具名与参数组成的执行签名匹配镜像，用户确认实机验证通过 |
+| 提交钩子：三项结构质量超标 | 已解决 | 三个文件按职责拆分，`hygiene` 与 `quality` 钩子放行，见「一、待验证」同名条目 |
 | S5 设置页「可用指令」缺外部指令与自定义指令 | 已解决 | `command_registry.help_groups()` 在内置分组后追加两组，设置页可见 |
 | S1 刷新后已执行卡片退回待执行 | 已解决 | `memLoadConv` 网络失败返回 `{ok:false}` 而非 null，加载锁按指数退避重试，实机连续刷新状态稳定 |
 | S2 非末条卡片抢占自动执行 | 已解决 | 候选判据改为「末位 + isFreshReply」，实机不再复现 |

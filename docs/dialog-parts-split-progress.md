@@ -47,7 +47,7 @@
 |---|---|---|
 | `02_rules.js` | 113 | 规则文件读取与增删改、优先级 |
 | `03_custom_tools.js` | 159 | 自定义工具读取、上下线、编辑 |
-| `04_sessions.js` | 304 | 多会话状态管理：创建、切换、恢复、持久化 |
+| `04_sessions.js` | 381 | 多会话状态管理：创建、切换、恢复、持久化；失败退避重试与存档合并各抽为独立方法 |
 | `04b_sessions.js` | 211 | 会话条目操作：勾选、删除、清空 |
 
 ### 3.4 消息接收与消息树
@@ -60,7 +60,8 @@
 | `05d_memory.js` | 244 | 记忆「先检索、后抽检」提醒 |
 | `05e_quality.js` | 125 | 助手回复质量检测 |
 | `05f_parse.js` | 223 | 消息与代码块解析判定、消息 id 生成 |
-| `05g_cards.js` | 408 | 建卡与自动执行候选收集 |
+| `05g_cards.js` | 335 | 建卡、质量检测与自动执行候选收集 |
+| `05j_card_sig.js` | 164 | 执行签名存取、卡片状态重判、按签名匹配镜像 |
 | `05h_tree_query.js` | 98 | 消息树只读查询：取键、取父 id、判末条、组装分支 |
 | `05h_memory_bridge.js` | 132 | 抽屉与后端记忆系统的桥接 |
 | `05i_files.js` | 107 | 消息附带文件相关逻辑 |
@@ -136,6 +137,13 @@
 | `channel/media.py` `push_collected` | 34 行 / cc=12 | 收集、取语音、发送三段 |
 | `channel/push_pipeline.py` `_push_locked` | 101 行 / cc=29 | 筛选、配额、合并、逐条四段 |
 | `channel/text.py` `_assemble_ordered` | 61 行 / cc=31 | Markdown 快捷、分组收集、渲染三段 |
+| `05g_cards.js` | 470 行 | 335 行，签名存取四个函数迁入 `05j_card_sig.js` |
+| `command_registry.py` | 469 行 | 294 行，分组与展示层迁入 `command_groups.py` |
+| `04_sessions.js` `loadConversation` | 97 行 | 抽出 `_scheduleConvRetry` 与 `_mergeSavedConv` 两个方法 |
+
+上述三项拆分只移动职责位置，不改行为：方法仍挂在 `D.methods` 上，调用方按 `this.xxx(...)` 调用不受影响；
+`command_registry` 在文件末尾重新导出 `command_groups` 的公开函数，调用方仍按 `command_registry.xxx` 访问。
+拆分后 python 测试 622 项、前端测试 157 项全部通过。
 
 存量欠账的分布：
 
