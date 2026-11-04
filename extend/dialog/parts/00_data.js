@@ -199,8 +199,9 @@ window.AIMirrorDialog = (function () {
       skillDocEdit: Vue.reactive({}),
       skillDocEditing: Vue.reactive({}),
       customTools: [],
-      // 远程桥接（QQ ↔ 网页 AI）
-      bridgeOpen: false,
+      bridgeOpen: false,     // 远程桥接（QQ）区块是否展开
+      deliveryOpen: false,   // 投递策略区块（三通道共用）是否展开，与 bridgeOpen 独立
+      cmdOpen: false,        // 指令区块是否展开
       bridgeEnabled: true,   // 默认开启：远程功能开箱即用
       bridgeConnected: false,
       bridgeAppId: '', bridgeAppSecret: '',
