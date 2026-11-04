@@ -230,8 +230,10 @@ def _h_md(qq_client, openid, arg, msg_id):
     sel = params.get("selector") or ""
     if not sel:
         _reply(qq_client, openid, "未配置 Markdown 选择器（设置页「内置指令参数」可填）"); return
-    _dispatch("collect_md", {"selector": sel})
-    _reply(qq_client, openid, "已下发：采集 Markdown")
+    # 带回传下发：采集到的 Markdown 要真正送回用户手里。
+    # 此前用的是不带回传的下发，内容只挂在前端消息节点上，手机端只收到一句「已下发」，
+    # 等于这条指令没有产出。
+    _dispatch_with_result("collect_md", {"selector": sel}, openid)
 
 
 def _h_refush(qq_client, openid, arg, msg_id):

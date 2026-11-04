@@ -24,9 +24,17 @@
       type: 'bridge_copy_md',
       selector: sel
     }, '*');
-    // 兜底：3 秒没等到回传就清掉目标，避免内容误挂到别的消息上
+    // 兜底：3 秒没等到回传就清掉目标，避免内容误挂到别的消息上。
+    // 指令发起的采集还要回传超时说明——否则用户敲完指令只收到「已下发」，再无下文。
     clearTimeout(this._mdCaptureTimer);
-    this._mdCaptureTimer = setTimeout(() => { this._mdCaptureTarget = ''; }, 3000);
+    this._mdCaptureTimer = setTimeout(() => {
+      this._mdCaptureTarget = '';
+      if (this._mdResultRequestId) {
+        const rid = this._mdResultRequestId;
+        this._mdResultRequestId = '';
+        this._postBridgeResult(rid, '采集超时：选择器可能无效，或页面上没有对应的复制按钮');
+      }
+    }, 3000);
   };
 
   /**
@@ -70,6 +78,13 @@
     // 挂到节点上，供推送时优先使用
     tree[key].md = text;
     if (this._persist) this._persist();
+    // 指令发起的采集：把内容回传给发起者。
+    // 与上面「挂节点」是两件事：挂节点供后续推送复用，回传则是让敲指令的人当场拿到内容。
+    if (this._mdResultRequestId) {
+      const rid = this._mdResultRequestId;
+      this._mdResultRequestId = '';
+      this._postBridgeResult(rid, text);
+    }
     // 采集完成：若正等它再上报，立即触发
     if (this._afterMd) { const f = this._afterMd; this._afterMd = null; f(); }
   };

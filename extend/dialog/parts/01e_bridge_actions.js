@@ -194,7 +194,7 @@
       copy_conversation_json: () => this._bridgeCopyJson(requestId),
       skip_latest: () => this._bridgeSkipLatest(),
       refresh_page: () => this._bridgeRefreshPage(),
-      collect_md: () => this._bridgeCollectMd(params.selector || ''),
+      collect_md: () => this._bridgeCollectMd(params.selector || '', requestId),  // 带回传
     };
     const fn = table[action];
     if (fn) fn();
@@ -264,20 +264,31 @@
   };
 
   /**
-   * 手动采集 Markdown：点复制按钮，内容挂到最新 AI 消息上。
-   * @param {string} selector 复制按钮选择器
+   * 手动采集 Markdown：点复制按钮，内容挂到最新 AI 消息上；带 requestId 时一并回传给发起者。
+   * 失败与超时也回传，否则用户只看到「已下发」却不知为何没有下文。
+   * @param {string} selector  复制按钮选择器
+   * @param {string} requestId 待回传请求 id（无则不回传）
    */
-  M._bridgeCollectMd = function (selector) {
-    if (!selector) { this.toast('该采集指令没有绑定选择器'); return; }
+  M._bridgeCollectMd = function (selector, requestId) {
+    if (!selector) {
+      this._postBridgeResult(requestId, '采集失败：该采集指令没有绑定选择器');
+      this.toast('该采集指令没有绑定选择器');
+      return;
+    }
     const lastId = this._lastAssistantId();
-    if (!lastId) { this.toast('没有可采集的 AI 回复'); return; }
+    if (!lastId) {
+      this._postBridgeResult(requestId, '采集失败：当前会话没有可采集的 AI 回复');
+      this.toast('没有可采集的 AI 回复');
+      return;
+    }
+    // 暂存本次回传目标，采集完成时在 _onClipCopied 里消费
+    this._mdResultRequestId = requestId || '';
     // 手动采集用指令自带的选择器，显式传给采集函数，不污染内置指令参数
     this.captureMarkdown(lastId, selector);
   };
 
   /**
-   * 取当前可见切片里最后一条 assistant 消息的 id（即最新回复）。
-   * 供「自动上报前采集 Markdown」与「手动采集 Markdown」共用，避免两处各写一份循环。
+   * 取当前可见切片里最后一条 assistant 消息的 id（即最新回复）；两处采集共用。
    * @returns {string} 消息指纹；没有 assistant 消息返回空串
    */
   M._lastAssistantId = function () {
@@ -358,8 +369,7 @@
   /**
    * 处理桥接相关的窗口消息（元素选择 / 点击 / 截屏结果）。
    *
-   * 从 05_messages.js 的 onPageMessage 中抽出来，避免该文件过长，
-   * 也让「桥接的消息」集中在一处。
+   * 从 05_messages.js 的 onPageMessage 抽出，让「桥接的消息」集中一处。
    * @param {Object} d 消息体
    * @returns {boolean} 是否已处理（true 则调用方直接返回）
    */
