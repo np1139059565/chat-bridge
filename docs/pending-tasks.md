@@ -24,6 +24,21 @@
 
 **优先级**：P1（待数据）。
 
+### 01e_bridge_actions.js 已顶满行数上限
+
+**位置**：`extend/dialog/parts/01e_bridge_actions.js`
+
+**现状**：450 行，正好等于上限。本次为容纳 `/md` 回传逻辑，前后三次压缩该文件内的注释才腾出空间。
+
+**为什么必须处理**：文件已无余量，下次任何改动都只能靠删注释或删代码换行数。
+压缩注释的代价是可读性下降——注释被压成一行长句后，原本的约束说明（如隔离铁律）容易被后续改动删掉。
+
+**处理方向**：按职责拆分，候选切分点是「桥接消息处理」（`handleBridgeMessage` 及各类 `_bridge*` 动作）
+与「卡片消费」（`consumeBridgeCommand`）两块，后者带隔离铁律，独立成文件更利于保护。
+拆分时保持方法挂载点不变（仍为 `D.methods`），调用方无需改动。
+
+**优先级**：P2（不阻塞，但越早越好）。
+
 ## 二、暂缓
 
 ### 高复杂度函数与重复块清理
@@ -57,6 +72,7 @@
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
+| `/md` 采集结果不回传 | 已解决 | 改用 `_dispatch_with_result` 带 `request_id` 下发，采集完成经 `/api/bridge/result` 把 Markdown 原文送回；超时与失败也回传说明，不再是只回「已下发」 |
 | 设置页 QQ AppID/AppSecret 输入框为空 | 已解决 | 前端全量提交 + 后端见键就写，导致内存里的空串覆盖了已存凭证。后端改为「凭证空串不覆盖」，前端改为「未加载完成且无手填内容时不提交凭证」；回归用例 `tests/test_bridge_store_secrets.py` |
 | 对话框 JS 测试与文件工具的重复块 | 已解决 | 两份抽屉测试改用 `_dialog_fixture` 提供的加载顺序与沙箱，boot 183→75 行、contracts 195→126 行；`file_image_impl` 与 `file_read_impl` 的重复经查为导入区相似，改由 `check_quality` 识别多行导入续行，不强行合并；跨文件重复组 142→79 |
 | G13 旧推送链路双轨清理 | 已解决 | `use_pipeline` 开关与回退分支已移除，`weixin_router.py`、`wecom_router.py` 整体删除，`report()` 只剩管线一条路径；详见 `docs/channel-genericization.md` G13 |
