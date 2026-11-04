@@ -178,16 +178,29 @@
       // 若把 bridgeCommands 一起提交，抽屉重建时它先为空数组，
       // 用户一旦在配置读回前碰了开关，就会用空数组覆盖掉已存的指令。
       // 指令的增删改走 /api/bridge/commands 独立接口（见下）。
+      const body = {
+        enabled: this.bridgeEnabled,
+        // 内置指令参数：通用字段，不针对某条指令特殊化
+        command_params: this.bridgeCmdParams,
+        push: this.bridgePush
+      };
+      // 凭证只在「已从后端成功读回」时才提交。
+      // 为什么：本函数是全量提交，若配置尚未加载（首屏加载未完成或加载失败），
+      // 内存里的凭证是空串，一提交就会把后端已存的凭证覆盖掉。
+      // 后端虽有「空串不覆盖」兜底，这里少发一次也更干净：
+      // 开关类变更本就不需要带上凭证。
+      // 凭证的提交条件：配置已成功加载（值可信），或用户确实填了内容（主动输入）。
+      // 排除的正是危险情形——加载失败导致内存里是空串，此时提交会覆盖后端已存值。
+      // 加载失败但用户手填了凭证时仍要提交，否则用户填了也存不上。
+      const appId = this.bridgeAppId || '';
+      const appSecret = this.bridgeAppSecret || '';
+      if (this._bridgePushLoaded || appId || appSecret) {
+        body.app_id = appId;
+        body.app_secret = appSecret;
+      }
       const data = await D.apiFetch(this, '/api/bridge/config', {
         method: 'POST',
-        body: {
-          enabled: this.bridgeEnabled,
-          app_id: this.bridgeAppId,
-          app_secret: this.bridgeAppSecret,
-          // 内置指令参数：通用字段，不针对某条指令特殊化
-          command_params: this.bridgeCmdParams,
-          push: this.bridgePush
-        }
+        body: body
       });
       const st = data.status || {};
       this.bridgeConnected = !!st.connected;
