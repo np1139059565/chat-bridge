@@ -260,42 +260,7 @@
     }
   };
 
-  /** 点击执行：跳过倒计时立即执行。 */
-  M.onExecuteClick = function (card) {
-    if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-    card.countdown = 0;
-    card.phase = '';
-    this.executeCard(card);
-  };
-
-  /**
-   * 点击「复制结果」按钮：
-   *  · 正处于回传倒计时 → 跳过等待，立即把结果回传到网页 AI；
-   *  · 否则 → 照常复制结果文本到剪贴板。
-   * @param {Object} card 工具卡片
-   */
-  M.onResultClick = function (card) {
-    if (card.phase === 'send' && card.countdown > 0) {
-      // 跳过倒计时立即回传：先清掉计时器，再手动触发一次回传
-      if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-      card.countdown = 0;
-      card.phase = '';
-      this.postCardResult(card);
-      this.toast('已回传结果到网页 AI');
-      return;
-    }
-    // 结果是图片时复制图片；文本附件与普通结果照常复制结果文本。
-    const shot = D.extractScreenshot(card.result);
-    if (shot) {
-      this._getImageDataUrl(shot).then((dataUrl) => {
-        this.copyImage(dataUrl);
-      }).catch((e) => {
-        this.toast('获取图片失败：' + e.message);
-      });
-      return;
-    }
-    this.copy(this.resultText(card));
-  };
+  // onExecuteClick / onResultClick 已迁至 06b_execute_ui.js，调用方式不变。
 
   /**
    * 把卡片结果回传到网页 AI：结果是截图时发图片，否则发文本。
@@ -432,6 +397,18 @@
    * @param {boolean} [fromCommand] 本次执行是否由指令触发（结果不回传 AI）
    */
   M.scheduleExecute = function (card, fromCommand) {
+    // 最终防线：自动流程（非指令触发）一律要求卡片属于会话树末条。
+    // 放在这里是因为所有自动执行最终都汇聚到本函数，前面各路径的判定
+    // 若有遗漏或将来新增调用方，都能在这里被拦住。
+    // 指令触发（fromCommand）代表用户主动点按，不受此限。
+    if (!fromCommand && card && card.msgId) {
+      const conv = this.ensureConv(this.activeConv);
+      if (this.isTreeTail && !this.isTreeTail(conv, card.msgId)) {
+        log('自动执行拦截：卡片不属于会话末条 id=' + (card.id || '')
+          + ' 工具=' + (card.tool || '') + ' msgId=' + card.msgId);
+        return;
+      }
+    }
     // 倒计时状态机由 D.startCountdown 统一提供（工具卡片与外部卡片共用）
     // 自动流程：isAuto=true，执行完会按开关回传结果；
     // fromCommand 一路透传到 executeCard，确保「指令触发」标记不被冲掉。

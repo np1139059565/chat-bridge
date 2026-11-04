@@ -139,22 +139,8 @@
     };
   };
 
-  /** 取某消息 id 在树中的 key（形如 '父id-子id'）；不存在返回空串。 */
-  M.keyOfId = function (tree, id) {
-    if (!tree || !id) return '';
-    const keys = Object.keys(tree);
-    for (let i = 0; i < keys.length; i++) {
-      const cut = keys[i].indexOf('-');
-      if (cut >= 0 && keys[i].slice(cut + 1) === id) return keys[i];
-    }
-    return '';
-  };
-
-  /** 取某消息 id 在树中的父 id；不存在返回空串。 */
-  M.parentIdOf = function (tree, id) {
-    const k = this.keyOfId(tree, id);
-    return k ? k.slice(0, k.indexOf('-')) : '';
-  };
+  // 树查询函数（keyOfId / parentIdOf / isTreeTail / assembleBranchKeys）
+  // 已迁至 05h_tree_query.js，挂在同一命名空间 D 上，调用方式不变。
 
   /**
    * 把「服务端图片名」挂到对应消息节点上（方案 2 的核心）。
@@ -218,33 +204,6 @@
     if (used.length) {
       conv.pendingImages = pend.filter(function (_, i) { return used.indexOf(i) < 0; });
     }
-  };
-
-  M.assembleBranchKeys = function (conv, slice) {
-    const tree = conv.msgTree || {};
-    const list = slice || [];
-    if (!list.length) return [];
-    const ids = list.map((m) => this.msgId(m));
-    // 切片内「当前 id → 前一条 id」映射：回溯时优先走本轮真实边。
-    const prevInSlice = {};
-    for (let i = 1; i < ids.length; i++) prevInSlice[ids[i]] = ids[i - 1];
-    const path = [];
-    const seen = {};
-    let cur = ids[ids.length - 1];
-    while (cur && !seen[cur]) {
-      seen[cur] = true;
-      let key = '';
-      // 优先用切片内相邻边；碰撞时 keyOfId 会返回旧 key 致回溯变浅。
-      const prev = prevInSlice[cur];
-      if (prev && tree[prev + '-' + cur]) key = prev + '-' + cur;
-      if (!key) key = this.keyOfId(tree, cur);
-      if (!key) break;
-      path.unshift(key);
-      const pid = key.slice(0, key.indexOf('-'));
-      if (pid === '0') break;
-      cur = pid;
-    }
-    return path;
   };
 
   /**
@@ -396,9 +355,20 @@
     } else if (!scrollOnly && runnable.length) {
       // 非滚动轮次：候选按本轮建卡顺序追加，末位即最新
       const newest = runnable[runnable.length - 1];
-      log('自动执行决策：执行最新卡片 id=' + (newest.id || '(无)')
-        + ' 工具=' + (newest.tool || '(非工具)') + '（候选=' + runnable.length + '）');
-      if (newest && !newest.skipped) this.scheduleExecute(newest);
+      // 硬门槛：卡片必须属于「会话树末条」消息。
+      // 切片末条不等于会话末条——刷新后切片可能被截断或混入历史消息，
+      // 末位看似最新、实则是旧消息，此时执行等于让历史卡片重跑。
+      const conv = this.ensureConv(this.activeConv);
+      const isTail = newest && this.isTreeTail(conv, newest.msgId);
+      if (!isTail) {
+        // 不 return：后面还要清 autoArmed 残留标记，中途退出会让标记留到下一轮。
+        log('自动执行决策：卡片不属于会话末条，拒绝执行 id=' + (newest && newest.id)
+          + ' 工具=' + (newest && newest.tool) + ' msgId=' + (newest && newest.msgId));
+      } else {
+        log('自动执行决策：执行最新卡片 id=' + (newest.id || '(无)')
+          + ' 工具=' + (newest.tool || '(非工具)') + '（候选=' + runnable.length + '）');
+        if (newest && !newest.skipped) this.scheduleExecute(newest);
+      }
     } else if (scrollOnly) {
       this._maybeAutoExecOnScroll(collected.armedLast, atBottom);
     } else {
@@ -421,7 +391,14 @@
   M._maybeAutoExecOnScroll = function (armedLast, atBottom) {
     const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
       && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
-    const pass = atBottom && armedOk;
+    // 硬门槛：上膛卡片必须属于会话树末条，否则任何滚动场景都不放行。
+    // 与「切片末条」无关——切片末位在向上滚动加载历史时可能是旧消息。
+    const conv = this.ensureConv(this.activeConv);
+    const tailOk = !!(armedLast && this.isTreeTail(conv, armedLast.msgId));
+    if (armedLast && !tailOk) {
+      log('自动执行复检（滚动）：卡片不属于会话末条，拒绝 msgId=' + (armedLast.msgId || '(空)'));
+    }
+    const pass = atBottom && armedOk && tailOk;
     // 自动流程是否放行的关键判定：记录三个条件与结论，便于排查「自动流程停止」。
     log('自动执行复检（滚动）：自动开关=' + this.autoSendEnabled
       + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
