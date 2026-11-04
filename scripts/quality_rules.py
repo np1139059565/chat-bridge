@@ -21,6 +21,8 @@ import re
 import sys
 
 import qcommon
+# 存量基线的读写与拆分（避免本文件超行数上限）
+import quality_baseline
 # JS 函数体检查已抽到独立模块 quality_js（避免本文件超行数上限）
 from quality_js import check_js_functions, JS_FUNC_LINE_LIMIT
 
@@ -357,33 +359,73 @@ def run_all(root, keys=None):
     return result
 
 
-def report(root, keys=None):
-    """打印九项检查报告；存在任一违规返回 True。"""
+def report(root, keys=None, baseline=None):
+    """打印九项检查报告；超出基线的「新增」违规存在时返回 True。
+
+    命中基线的存量违规照常打印并标注「已知」，但不计入失败；
+    只有超出基线登记条数的部分才算新增。基线为 None 时按空基线处理，
+    等价于全部违规都算新增。
+
+    @param root     工程根目录
+    @param keys     只跑指定检查项；缺省跑全部
+    @param baseline {(检查项, 文件): 已知条数} 字典
+    @returns 存在新增违规返回 True
+    """
+    if baseline is None:
+        baseline = {}
     failed = False
     for key, fn, title, fmt in CHECKS:
         if keys and key not in keys:
             continue
         items = fn(root)
+        known, fresh = quality_baseline.split(key, items, baseline)
         print("=" * 70)
         print(title)
+        # 无违规：直接报「无」
         if not items:
             print("  无")
             continue
-        failed = True
-        for it in items:
-            print(fmt(it))
+        # 存量部分照常列出，标注为已知，便于随时查看欠账全貌
+        for it in known:
+            print(fmt(it) + "  [已知]")
+        # 新增部分单独标注，并计入失败
+        for it in fresh:
+            print(fmt(it) + "  [新增]")
+            failed = True
     return failed
 
 
+def write_baseline(root):
+    """把当前全量扫描结果写为基线文件。
+
+    用于首次登记存量，或债务还清后重新收敛基线。
+
+    @param root 工程根目录
+    @returns 登记的条目数
+    """
+    keys = [k for k, _f, _t, _x in CHECKS]
+    results = run_all(root, keys)
+    baseline = quality_baseline.build(root, results)
+    quality_baseline.save(root, baseline)
+    return len(baseline)
+
+
 def main(argv):
-    """钩子入口：全量扫描工程，输出违规明细，有违规返回 1。
+    """钩子入口：全量扫描工程，输出违规明细，有新增违规返回 1。
 
     传入文件仅用于定位工程根；结构类问题需看整体，单文件扫描会漏跨文件关系。
+    带 --update-baseline 时把当前扫描结果写为基线并返回 0。
     """
     # __file__ = <root>/scripts/quality_rules.py，上两级即工程根
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # 生成基线：登记当前存量后直接返回成功
+    if "--update-baseline" in argv:
+        n = write_baseline(root)
+        print("已写入基线：%d 个条目 -> %s" % (n, quality_baseline.BASELINE_REL))
+        return 0
     keys = [k for k, _f, _t, _x in CHECKS]
-    failed = report(root, keys)
+    # 读取存量基线；命中部分不计入失败
+    failed = report(root, keys, quality_baseline.load(root))
     return 1 if failed else 0
 
 
