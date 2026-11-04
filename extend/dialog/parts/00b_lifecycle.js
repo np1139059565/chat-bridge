@@ -48,6 +48,12 @@
     this._persistTimers = {};
     this._persist = function (convId) {
       const id = convId || this.activeConv;
+      // 该会话仍在从后端加载：此刻内存是空的，写回会用空数据覆盖后端存档。
+      // 直接丢弃本次请求；加载完成后的正常流程自会重新触发写回。
+      if (this._convLoading && this._convLoading[id]) {
+        log('persist 跳过：会话 ' + id + ' 仍在加载');
+        return;
+      }
       const timers = this._persistTimers;
       if (timers[id]) clearTimeout(timers[id]);
       timers[id] = setTimeout(function () {

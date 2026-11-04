@@ -122,6 +122,11 @@
   M.loadConversation = function (convId, done) {
     const cb = typeof done === 'function' ? done : function () {};
     const self = this;
+    // 加载期标记：从发起请求到合并完成之间，禁止写回后端。
+    // 否则内存里还是空的签名库，500ms 防抖一到就把后端已有的签名整表覆盖掉，
+    // 刷新后卡片会全部退回待执行。
+    this._convLoading = this._convLoading || {};
+    this._convLoading[convId] = true;
     // 后端唯一权威：历史从后端取；后端无此会话时，memFetchConv 内部会
     // 尝试迁移补丁从本地读一次（临时代码，迁移完成后可删）。
     this.memFetchConv(convId).then(function (saved) {
@@ -132,6 +137,8 @@
         log('loadConversation：后端与本地均无会话 ' + convId);
         self._convReady = self._convReady || {};
         self._convReady[convId] = true;
+        // 后端无此会话也属「加载结束」：必须解禁，否则该会话此后永远无法写回。
+        if (self._convLoading) delete self._convLoading[convId];
         cb(true);
         return;
       }
@@ -168,6 +175,8 @@
       if (Array.isArray(saved.orphanSlice)) conv.orphanSlice = saved.orphanSlice;
       self._convReady = self._convReady || {};
       self._convReady[convId] = true;
+      // 合并完毕，解除写回禁令：此后内存里的签名库已与后端一致，写回是安全的。
+      if (self._convLoading) delete self._convLoading[convId];
       log('loadConversation：会话 ' + convId + ' 就绪（后端），节点=' + Object.keys(conv.msgTree).length);
       cb(true);
     });

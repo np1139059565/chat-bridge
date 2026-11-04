@@ -381,9 +381,15 @@
     }
 
     // 5) 自动执行：仅本轮最新的一张；不入树切片绝不自动执行。
-    const runnable = autoCandidates.filter((c) => c && !c.skipped);
+    // 已执行过的卡片不再进候选：自动执行只针对「尚未执行」的新卡片。
+    // 缺这一条时，刷新后重建的卡片若签名命中失败就会把历史卡片重跑一遍。
+    const runnable = autoCandidates.filter((c) => c && !c.skipped && !c.executed);
     // 自动执行决策留痕：这是排查「自动流程停止」的核心断点，逐条件说明为何执行/不执行。
-    if (notInTree) {
+    if (this._convLoading && this._convLoading[this.activeConv]) {
+      // 会话仍在加载：签名库尚未恢复，此时判不出「哪些已执行」，
+      // 一律不自动执行，避免把历史卡片当成新卡片重跑。
+      log('自动执行决策：会话仍在加载，跳过（候选=' + runnable.length + '）');
+    } else if (notInTree) {
       log('自动执行决策：本轮不入树，跳过（候选=' + runnable.length + '）');
     } else if (!this.autoSendEnabled) {
       log('自动执行决策：自动开关关，跳过（候选=' + runnable.length + '）');
