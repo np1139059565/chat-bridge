@@ -173,8 +173,12 @@
 1. 拆分高复杂度函数（存量 160 处，集中在 `remote_bridge/`、`core/memory_*`、
    `routes/tools.py`），单独立项、分批推进。每拆一个函数前先补行为测试。
    已拆处见第六节表格。
-2. 合并对话框 JS 测试中 `test_dialog_boot` 与 `test_dialog_contracts` 的重复用例。
-3. 合并 `file_image_impl.py` 与 `file_read_impl.py` 的重复片段。
+2. ~~合并对话框 JS 测试中 `test_dialog_boot` 与 `test_dialog_contracts` 的重复用例~~
+   已完成：两份测试改用 `_dialog_fixture.js` 提供的加载顺序与沙箱替身，
+   boot 183→75 行、contracts 195→126 行，用例数与行为覆盖不变（12 项全过）。
+3. ~~合并 `file_image_impl.py` 与 `file_read_impl.py` 的重复片段~~
+   已查明：两文件的重复位于导入区，属「依赖相同」而非「实现重复」，不做合并。
+   `check_quality` 的重复检测补上多行导入续行识别，跨文件重复组 142→79。
 4. ~~为质量脚本增加基线文件~~ 已完成：`scripts/quality_rules.py` 接入存量基线
    `scripts/quality_baseline.json`，按「检查项 + 文件」记录已知条数，只对新增违规返回失败。
 

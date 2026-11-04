@@ -4,19 +4,7 @@
 > 每条必须写明：现象、根因或取证方向、影响面、优先级。
 > 处理完成后移出本文件，结论记入对应专题文档。
 
-## 一、下一阶段重点
-
-### 合并对话框 JS 测试与文件工具的重复块
-
-**位置**：`flask_server/tests/js/test_dialog_boot.test.js` 与 `test_dialog_contracts.test.js`；
-`flask_server/tools/file_image_impl.py` 与 `file_read_impl.py`。
-
-**处理方向**：先按用例语义归并，再抽公共夹具与公共函数，各调用点改为引用。
-合并后用例总数与行为覆盖不应减少，只减少重复实现；抽函数前先补两条路径的行为测试。
-
-**优先级**：P1。
-
-## 二、暂缓
+## 一、暂缓
 
 ### 高复杂度函数与重复块清理
 
@@ -52,10 +40,11 @@
 **硬前提**：阶段零须先探明网页会话 id 是否在 DOM 上暴露、能否按 id 切换；
 该步不成立则方案需重新设计。详见 `docs/private-relay-progress.md`。
 
-## 四、已关闭
+## 二、已关闭
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
+| 对话框 JS 测试与文件工具的重复块 | 已解决 | 两份抽屉测试改用 `_dialog_fixture` 提供的加载顺序与沙箱，boot 183→75 行、contracts 195→126 行；`file_image_impl` 与 `file_read_impl` 的重复经查为导入区相似，改由 `check_quality` 识别多行导入续行，不强行合并；跨文件重复组 142→79 |
 | G13 旧推送链路双轨清理 | 已解决 | `use_pipeline` 开关与回退分支已移除，`weixin_router.py`、`wecom_router.py` 整体删除，`report()` 只剩管线一条路径；详见 `docs/channel-genericization.md` G13 |
 | S3 幽灵卡片：执行时被判不在镜像中而拒绝 | 已解决 | 镜像判定改用工具名与参数组成的执行签名（`cardMatchesBySig`），不依赖随重渲染变化的代码块 id |
 | 提交钩子：三项结构质量超标 | 已解决 | 三个文件按职责拆分，`hygiene` 与 `quality` 钩子放行，详见 `docs/dialog-parts-split-progress.md` 第六节 |
