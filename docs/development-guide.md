@@ -220,10 +220,8 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 | M2 | `extend/dialog/parts/06_execute.js` | （已修）关闭自动开关后外部卡片曾卡死 |
 | M3 | `flask_server/core/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
 | D1 | `flask_server/routes/ext.py` | （已修）提供方通道按 `page_url` / `is_open` 定向，目标页面工具未开即逸散 |
-| D2 | `skills/debug_chrome/extension/content/03_heartbeat.js` | 抽屉折叠即停轮询 → 10 秒后判离线（仅影响指示灯） |
 | D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |
 | D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 |
-| D5 | `extend/content/00_state.js` | DeepSeek 输入框选择器含哈希类 |
 | D6 | `skills/debug_chrome/tool.json` / `extend/dialog/parts/` | （已修）参数名与 silent 语义边角不一致 |
 
 ---

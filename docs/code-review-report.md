@@ -131,7 +131,6 @@
 
 | 编号 | 位置 | 问题 |
 |---|---|---|
-| D2 | `skills/debug_chrome/extension/content/03_heartbeat.js` | 抽屉折叠即停轮询，10 秒后判离线（仅影响指示灯） |
 | D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 —— **已修**：默认值与解析规则收敛到 `shared/backend-default.js` 单一来源，内容脚本、抽屉、后台脚本三处统一引用；连接连续失败翻转离线时，控制台给出「去设置页改地址」的排查提示 |
 
 ### 4.3 跨文件重复代码：分类与处理
