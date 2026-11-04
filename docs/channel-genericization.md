@@ -148,20 +148,20 @@ QQ 走自己的 `build_body`，本就优先用 md，无需改动。
 **待确认**：企微 markdown 实际支持的语法子集（表格已知不支持，已转为纯文本列表）。
 本次解决的是「有格式却没用上」，语法子集问题若仍存在需单独处理。
 
-### G13 旧推送链路清理
+### G13 旧推送链路清理 —— 已完成
 
 **背景**：`use_pipeline` 开关关闭时可退回三套旧 router。该开关默认开启、从未真正使用，
 保留它等于保留一份没人验证的代码，反而让人误以为有退路。按「只留统一管线」清理。
 
-| 文件 | 变化 |
-|---|---|
-| `flask_server/remote_bridge/__init__.py` | 移除 `_use_pipeline` 与回退分支 |
-| `flask_server/remote_bridge/weixin_router.py` | 436 → 146 行 |
-| `flask_server/remote_bridge/wecom_router.py` | 322 → 107 行 |
-| `tests/test_weixin_router.py` | 332 → 141 行 |
-| `tests/test_wecom_router.py` | 133 → 80 行 |
+**最终状态**：开关与回退分支已移除，`report()` 只剩 `_report_via_pipeline()` 一条路径；
+`weixin_router.py`、`wecom_router.py` 两个文件已整体删除，其职责并入
+`channel/push_pipeline` 与各通道适配器。
 
-企业微信媒体路由测试整文件删除（全部测旧链路）。
+保留下来的 `message_router` 不属于旧链路：它是发送原语与状态层，提供
+`next_seq` 序号分配、被动回复窗口、`note_incoming` 续期补推、`push_image` 等，
+三条通道经管线调用时仍依赖它。
+
+清理分两步落地：先移除回退链路与死常量，再删除两个 router 文件。
 
 ## 四、待处理
 

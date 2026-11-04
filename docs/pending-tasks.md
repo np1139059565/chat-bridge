@@ -16,27 +16,7 @@
 
 **优先级**：P1。
 
-## 二、待排期
-
-### 旧推送链路代码清理
-
-**状态**：待排期。推送链路已全量切到 `channel/push_pipeline`，
-`bridge.use_pipeline` 开关与旧 router 的残留路径构成双轨，需清理为单轨。
-不再保留回退通路。
-
-**处理方向**：
-
-1. 删除 `bridge.use_pipeline` 配置读取与全部分支判断；
-2. 逐个确认旧 router 中的函数是否仍被新链路调用。
-   保留 QQ 被动回复窗口、`next_seq` 序号分配、`note_incoming` 续期补推与发送原语，
-   其余删除；
-3. 删除后跑全量单元测试，并做一次实机推送验证。
-
-**影响面**：`flask_server/remote_bridge/` 的推送路径与配置读取。
-
-**优先级**：P1。
-
-## 三、暂缓
+## 二、暂缓
 
 ### 高复杂度函数与重复块清理
 
@@ -76,6 +56,7 @@
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
+| G13 旧推送链路双轨清理 | 已解决 | `use_pipeline` 开关与回退分支已移除，`weixin_router.py`、`wecom_router.py` 整体删除，`report()` 只剩管线一条路径；详见 `docs/channel-genericization.md` G13 |
 | S3 幽灵卡片：执行时被判不在镜像中而拒绝 | 已解决 | 镜像判定改用工具名与参数组成的执行签名（`cardMatchesBySig`），不依赖随重渲染变化的代码块 id |
 | 提交钩子：三项结构质量超标 | 已解决 | 三个文件按职责拆分，`hygiene` 与 `quality` 钩子放行，详见 `docs/dialog-parts-split-progress.md` 第六节 |
 | S5 设置页「可用指令」缺外部指令与自定义指令 | 已解决 | `command_registry.help_groups()` 在内置分组后追加两组，设置页可见 |
