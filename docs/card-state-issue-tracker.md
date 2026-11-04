@@ -9,7 +9,7 @@
 |---|---|---|---|
 | S1 | 刷新页面（含 `/rall` 重启）后，已执行卡片全部退回待执行 | 严重 | 已修复并实机确认：日志 `loadConversation 签名恢复：后端=142 内存=142`，刷新后无待执行卡片 |
 | S2 | 非末条消息里的卡片抢占自动执行权 | 严重 | 已解决：候选判据改为「末位 + isFreshReply」，实机验证不再复现 |
-| S3 | 偶发「幽灵卡片」：执行时被判不在镜像中而拒绝 | 中 | 已修复并确认：镜像判定改用「工具名 + 参数」组成的执行签名，不再依赖随重渲染变化的代码块 id；用户确认实机验证通过 |
+| S3 | 偶发「幽灵卡片」：执行时被判不在镜像中而拒绝 | 中 | 已修复：镜像判定改用「工具名 + 参数」组成的执行签名，不再依赖随重渲染变化的代码块 id |
 | S4 | 部分卡片退化为普通代码块，没有执行 / 跳过 / 重新执行按钮 | 严重 | 已修复并确认：恢复逻辑补齐渲染所需字段，刷新后执行入口正常显示 |
 
 ## 二、已提交的改动
@@ -40,9 +40,11 @@ conversations 行数: 56
 | 后端写入 | `flask_server/core/memory_conversations.py` | 存档写入 `executed_sigs` 字段 |
 | 后端读取 | 同上 | 读回时解析为 `executedSigs` |
 | 前端存档 | `extend/dialog/parts/04_sessions.js` | `buildConvPayload` 携带 `executedSigs` |
-| 前端恢复 | 同上 | `loadConversation` 合并回内存，打印「签名恢复」日志 |
+| 前端恢复 | `extend/dialog/parts/04_sessions.js` | `_mergeSavedConv` 把签名库并入内存，打印「签名恢复」日志 |
+| 卡片重判 | `extend/dialog/parts/05j_card_sig.js` | `_restoreExecutedCards` 在加载完成后按签名库重判一次 |
+| 镜像匹配 | 同上 | `cardMatchesBySig` 按「工具名 + 参数」判定镜像里是否仍有该调用 |
 | 自动执行判据 | `extend/dialog/parts/05g_cards.js` | 四处均为 `mi === incoming.length - 1 && state.isFreshReply` |
-| 诊断日志 | 同上 | 执行时打印「[签名诊断] 登记 sig=」 |
+| 诊断日志 | `extend/dialog/parts/05j_card_sig.js` | 执行时打印「[签名诊断] 登记 sig=」 |
 
 ## 四、S1 根因（已查明）
 
@@ -57,7 +59,7 @@ conversations 行数: 56
 这解释了为什么后端脚本直连验证「签名可存可取」却依然复现——故障不在存取，
 在「取回之后没人用」。
 
-修复：新增 `05g_cards.js` 的 `_restoreExecutedCards()`，在 `04_sessions.js`
+修复：新增 `_restoreExecutedCards()`（现位于 `05j_card_sig.js`），在 `04_sessions.js`
 的存档加载完成处调用，遍历消息树里的卡片按签名库重判一次，只把「未执行」
 往「已执行」方向纠正，反向不动（避免覆盖本次会话刚跑完的结果）。
 
