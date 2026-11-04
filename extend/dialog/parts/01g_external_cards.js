@@ -169,7 +169,16 @@
    */
   M._pollCardChannel = async function (url) {
     try {
-      const data = await D.apiFetch(this, url, {
+      // 取证用标识：页面地址 + 本页实例随机串。
+      // 同一会话开多个标签页时页面地址相同，只靠地址分不开，故附随机串。
+      // 当前仅用于后端日志取证，不参与任何取件判定。
+      if (!this._cardClientTag) {
+        this._cardClientTag = (this.page_url || 'unknown') + '#'
+          + Math.random().toString(36).slice(2, 8);
+      }
+      const sep = url.indexOf('?') >= 0 ? '&' : '?';
+      const fullUrl = url + sep + 'client=' + encodeURIComponent(this._cardClientTag);
+      const data = await D.apiFetch(this, fullUrl, {
         headers: { 'Accept': 'application/json' }
       });
       const cards = (data && data.cards) || [];

@@ -63,7 +63,23 @@ def pending_cards():
     这种情况指令会静默失效，用户只会觉得「指令没反应」，极难定位，故显式告警。
     """
     _warn_if_stale_client()
-    return _pending_of(bus)
+    # 取证日志：记录「哪个页面取走了哪几张卡」。
+    # 用途是判断多标签页串台的实际形态与频率——卡片机制目前是「谁先取到算谁的」，
+    # 缺少页面归属概念，改之前需先有真实数据，否则容易改错方向。
+    # 仅记录，不影响任何行为。
+    resp = _pending_of(bus)
+    try:
+        import app_log
+        client = (request.args.get("client") or "(未标注)").strip()
+        cards = resp.get_json().get("cards") or []
+        # 只在真取到卡片时记录，避免每 5 秒的轮询刷屏
+        if cards:
+            app_log.info("[cards] 取件 client=%s 条数=%d ids=%s"
+                         % (client, len(cards), ",".join(c["id"][:8] for c in cards)))
+    except Exception:
+        # 取证日志绝不能影响取件
+        pass
+    return resp
 
 
 def _warn_if_stale_client():
