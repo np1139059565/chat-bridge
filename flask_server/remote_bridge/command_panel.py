@@ -124,7 +124,9 @@ def _h_clear_messages(qq_client, openid, arg, msg_id):
 
 def _h_copy_system_prompt(qq_client, openid, arg, msg_id):
     """复制 System Prompt 并发送给 AI。"""
-    _dispatch("copy_system_prompt")
+    # 带 openid 与截图：发送后对话里会出现新内容，用户需要看到实际发生了什么，
+    # 只回一句「已下发」无法确认 prompt 是否真的送出。
+    _dispatch("copy_system_prompt", {}, openid=openid, screenshot=True)
     _reply(qq_client, openid, "已下发：复制 System Prompt 并发送给 AI")
 
 
@@ -194,7 +196,8 @@ def _h_screenshot(qq_client, openid, arg, msg_id):
 
 def _h_copy(qq_client, openid, arg, msg_id):
     """复制最新卡片结果并回传 AI。"""
-    _dispatch("copy_latest", {})
+    # 带 openid 与截图：复制结果后卡片状态会变，用户需要看到界面上确实发生了变化。
+    _dispatch("copy_latest", {}, openid=openid, screenshot=True)
     _reply(qq_client, openid, "已下发：复制最新结果并回传")
 
 
@@ -206,7 +209,8 @@ def _h_reparse(qq_client, openid, arg, msg_id):
 
 def _h_rerun(qq_client, openid, arg, msg_id):
     """重新执行最新卡片并回传。"""
-    _dispatch("rerun_latest", {})
+    # 带 openid 与截图：重跑会改变卡片状态与结果区，用户需要看到实际执行结果。
+    _dispatch("rerun_latest", {}, openid=openid, screenshot=True)
     _reply(qq_client, openid, "已下发：重新执行最新卡片")
 
 
