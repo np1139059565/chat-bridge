@@ -121,19 +121,32 @@ def check_py_functions(root):
 
 
 def _normalize_lines(path):
-    """读取文件并规范化为 (行号, 去空白文本) 列表。
+    """读取文件并规范化为 (行号, 去空白文本, 是否导入区) 列表。
 
     跳过空行、注释行与模块样板行；跳过样板行后窗口仍按剩余代码行的顺序拼接，
     因此跨样板的连续代码块依然可被识别。
+
+    第三个元素标记该行是否属于导入区。多行导入（from x import ( ... )）的续行
+    本身不以 import / from 开头，仅看单行无法识别，故用括号配平跟踪导入区范围。
+    各模块导入同一批依赖是「依赖相同」而非「实现重复」，不应据此要求合并。
     """
     norm = []
+    in_import = False   # 当前是否处于多行导入的括号内
+    depth = 0           # 导入区未闭合的括号层数
     for i, l in enumerate(read_lines(path), 1):
         if is_comment_or_blank(l):
             continue
         text = re.sub(r"\s+", " ", l.strip())
         if is_boilerplate(text):
             continue
-        norm.append((i, text))
+        # 该行是否算导入区：本行是导入语句，或仍在上一条多行导入的括号内
+        head = _is_import_line(text)
+        is_imp = head or in_import
+        # 维护括号配平：只有进入导入区后才需要跟踪续行
+        if head or in_import:
+            depth += text.count("(") - text.count(")")
+            in_import = depth > 0
+        norm.append((i, text, is_imp))
     return norm
 
 
@@ -153,13 +166,15 @@ def _is_import_line(text):
 def _index_windows(index, norm, rel):
     """把文件内每个滑动窗口登记到全局索引。"""
     for i in range(len(norm) - DUP_WINDOW + 1):
-        key = tuple(x[1] for x in norm[i:i + DUP_WINDOW])
+        win = norm[i:i + DUP_WINDOW]
+        key = tuple(x[1] for x in win)
         # 窗口内容过短的不算重复（多为 import、单行赋值等）
         if sum(len(k) for k in key) < 80:
             continue
-        # 整窗都是导入语句的不算重复：各模块的导入区天然相似，
-        # 反映的是「依赖相同」而非「实现重复」，不应据此要求合并
-        if all(_is_import_line(k) for k in key):
+        # 整窗都属导入区的不算重复：各模块的导入区天然相似，
+        # 反映的是「依赖相同」而非「实现重复」，不应据此要求合并。
+        # 判据取规范化时算好的第三项，能覆盖多行导入的续行。
+        if all(x[2] for x in win):
             continue
         index[key].append((rel, norm[i][0]))
 

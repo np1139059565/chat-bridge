@@ -18,84 +18,15 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 
-const DIALOG_DIR = path.join(__dirname, '..', '..', '..', 'extend', 'dialog');
-const PARTS_DIR = path.join(DIALOG_DIR, 'parts');
-const HTML_PATH = path.join(DIALOG_DIR, 'dialog.html');
-
-/**
- * 读出 dialog.html 里的脚本顺序。
- * @returns {string[]} 相对路径列表
- */
-function scriptOrder() {
-  const html = fs.readFileSync(HTML_PATH, 'utf-8');
-  const out = [];
-  const re = /<script src="([^"]+)"/g;
-  let m;
-  while ((m = re.exec(html)) !== null) out.push(m[1]);
-  return out;
-}
-
-/**
- * 构造一个可执行脚本的最小沙箱。
- * @returns {Object} vm 上下文
- */
-function makeSandbox() {
-  const h = (tag, props, children) => ({ tag, props, children });
-  const sandbox = {
-    console,
-    setTimeout: () => 0,
-    clearTimeout: () => {},
-    setInterval: () => 0,
-    clearInterval: () => {},
-    document: {
-      createElement: () => ({ style: {}, appendChild() {}, setAttribute() {}, addEventListener() {} }),
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      addEventListener() {},
-      body: { appendChild() {}, style: {} },
-      documentElement: { style: {} },
-    },
-    navigator: { userAgent: 'node-test' },
-    location: { href: 'http://localhost/' },
-    fetch: () => Promise.resolve({ ok: true, json: () => Promise.resolve({}) }),
-    localStorage: { getItem: () => null, setItem() {}, removeItem() {} },
-    addEventListener() {},
-    postMessage() {},
-    Vue: {
-      h,
-      reactive: (o) => o || {},
-      ref: (v) => ({ value: v }),
-      computed: (fn) => ({ get value() { return fn(); } }),
-      watch: () => {},
-      nextTick: (fn) => (fn ? fn() : Promise.resolve()),
-      createApp: () => ({ use() { return this; }, mount() { return {}; }, component() { return this; } }),
-      defineComponent: (o) => o,
-    },
-    AIMirrorDomUtils: {
-      debounce: (fn) => fn,
-      hashStr: (s) => String(s).length,
-      toArray: (v) => Array.prototype.slice.call(v || []),
-    },
-    chrome: { runtime: { sendMessage() {}, onMessage: { addListener() {} } } },
-  };
-  sandbox.window = sandbox;
-  sandbox.globalThis = sandbox;
-  sandbox.self = sandbox;
-  vm.createContext(sandbox);
-  return sandbox;
-}
-
-/**
- * 在沙箱里执行一个脚本文件。
- * @param {Object} sandbox 上下文
- * @param {string} rel     相对路径
- */
-function runScript(sandbox, rel) {
-  const file = path.join(DIALOG_DIR, rel);
-  vm.runInContext(fs.readFileSync(file, 'utf-8'), sandbox, { filename: rel });
-}
+// 加载顺序、沙箱替身与执行原语统一来自公共夹具，避免与启动测试各存一份
+const {
+  DIALOG_DIR,
+  PARTS_DIR,
+  scriptOrder,
+  makeSandbox,
+  runScript,
+} = require('./_dialog_fixture');
 
 // ---------- 1. 挂载契约 ----------
 test('dialog.html 引用的每个脚本文件都真实存在', () => {
