@@ -200,7 +200,8 @@ def save_config(patch):
     with _lock:
         cfg = get_config()
         for k in ("enabled", "broadcast", "app_id", "app_secret", "intents"):
-            if k in patch:
+            # 凭证空串不覆盖：前端全量提交，内存未取回或只改开关时会回传空串，直接写会清掉已存凭证（输入框变空、连接断开）；传 null 才表示清空。
+            if k in patch and not (k in SECRET_KEYS and patch[k] == ""):
                 cfg[k] = patch[k]
         # 内置指令参数：逐指令、逐键合并（patch 只覆盖给到的键，不整体替换）
         if isinstance(patch.get("command_params"), dict):
