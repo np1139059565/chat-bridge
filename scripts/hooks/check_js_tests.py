@@ -24,23 +24,10 @@ import shutil
 import subprocess
 import sys
 
+# 钩子公共能力：与其它钩子共用同一套「找 node」口径
+from hook_common import find_node as _find_node
 
-def _find_node():
-    """查找可用的 node 可执行文件。
 
-    顺序：环境变量 NODE_BIN → PATH → 本地便携安装目录。
-    与 check_syntax.py 口径一致，允许 node 便携版放 D:\\mydata\\tools 下。
-    """
-    env = os.environ.get("NODE_BIN")
-    if env and os.path.isfile(env):
-        return env
-    found = shutil.which("node")
-    if found:
-        return found
-    candidates = []
-    for base in (r"D:\mydata\tools", os.path.join(os.path.expanduser("~"), "nodejs")):
-        candidates += glob.glob(os.path.join(base, "node-*", "node.exe"))
-    return sorted(candidates)[-1] if candidates else None
 
 
 def _repo_root():

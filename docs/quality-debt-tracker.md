@@ -51,7 +51,7 @@
 | 批次 | 范围 | 组数/条数 | 状态 |
 |---|---|---|---|
 | 1 | 两份 message_router 测试的公共夹具 | 16 组 | 已完成 |
-| 2 | `scripts/hooks/` 两个检查脚本的公共部分 | 5 组 | 待开始 |
+| 2 | `scripts/hooks/` 两个检查脚本的公共部分 | 5 组 | 已完成 |
 | 3 | `qq_client` ↔ `wecom_client` 的公共发送逻辑 | 8 组 | 待开始 |
 | 4 | 三个通道适配器的公共部分 | 9 组 | 待开始 |
 | 5 | 对话框分片的重复段 | 9+3 组 | 待开始 |
@@ -83,3 +83,26 @@
 全量后端 625 项、前端 157 项通过。
 
 **基线变化**：已知条目 314 → 228（净减 86）；跨文件重复组 79 → 63。
+
+### 批次 2：`scripts/hooks/` 的「找 node」重复（2026-11-05）
+
+**问题**：`check_js_tests.py` 与 `check_syntax.py` 各自复制了一份 `_find_node()`，
+逐字相同。任一处调整都要改两遍，漏改会让两个钩子对「有没有 node」判断不一致——
+表现为一个钩子跑、另一个跳过。
+
+**做法**：新建 `scripts/hooks/hook_common.py`，提供 `find_node()`。两个脚本删除本地定义，
+改为 `from hook_common import find_node as _find_node`，调用处一行未改。
+
+**为何不并入 `scripts/qcommon.py`**：那是质量检查脚本（`check_quality` / `quality_rules`）的
+公共层，服务于「扫描全工程」；本模块服务于「提交前钩子」。职责不同，合并会让两边耦合。
+
+| 文件 | 行数变化 |
+|---|---|
+| `check_js_tests.py` | 165 → 152 |
+| `check_syntax.py` | 160 → 145 |
+| `hook_common.py` | 新增 40 |
+
+**验证**：两个钩子实际执行均正常（`check_syntax` 校验通过、`check_js_tests` 157 项通过）；
+`scripts/hooks/` 内的重复组 5 → 0。全量后端 625 项通过。
+
+**基线变化**：已知条目 228 → 223（净减 5）；跨文件重复组 63 → 58。

@@ -24,6 +24,9 @@ import shutil
 import subprocess
 import sys
 
+# 钩子公共能力：与其它钩子共用同一套「找 node」口径
+from hook_common import find_node as _find_node
+
 # 扩展名 → 校验器名称（仅用于错误提示中的可读标签）
 KIND_LABEL = {
     ".json": "JSON",
@@ -70,24 +73,6 @@ def check_python(path):
         return str(e)
 
 
-def _find_node():
-    """查找可用的 node 可执行文件。
-
-    顺序：环境变量 NODE_BIN → PATH → 本地便携安装目录。
-    本工程允许把 node 便携版解压到 D:\\mydata\\tools 下而不进系统 PATH，
-    故补充目录探测，避免「装了 node 却仍被跳过」。
-    """
-    import glob
-    env = os.environ.get("NODE_BIN")
-    if env and os.path.isfile(env):
-        return env
-    found = shutil.which("node")
-    if found:
-        return found
-    candidates = []
-    for base in (r"D:\mydata\tools", os.path.join(os.path.expanduser("~"), "nodejs")):
-        candidates += glob.glob(os.path.join(base, "node-*", "node.exe"))
-    return sorted(candidates)[-1] if candidates else None
 
 
 def _check_js_esprima(path):
