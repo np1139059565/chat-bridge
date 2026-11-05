@@ -129,6 +129,36 @@ window.AIMirrorContent = (function () {
       // 生成中（AI 说话）时按钮换成「停止」方块图标，其 path 以此片段开头；
       // 空闲时为发送箭头。用它直接判定生成中，避免依赖「首帧恰为空闲」这一假设。
       sendButtonStopMark: 'M2 4.88C2 3.68009'
+    },
+    // 文心一言（wenxin.baidu.com）。
+    // 以下选择器均经手机真机实测确认，2026-11-01。
+    wenxin: {
+      label: '文心一言',
+      hosts: ['wenxin.baidu.com'],
+      // 对话区滚动容器
+      container: '.conversation-flow-content',
+      // 问答分处两个容器，不是同一条 item 内，故 split 为 false
+      split: false,
+      // 用户提问容器
+      userContent: '.conversation-flow-question-container',
+      // AI 回答容器：注意它把思考区与正文区包在一起，
+      // 直接取容器文字会把「深度思考完成」等前缀混进正文
+      assistantMark: '.conversation-flow-answer-container',
+      // 正文块：容器内有两个，第一个为空占位，第二个才是正文，
+      // 需取「容器内最后一个非空块」，主工程当前不支持此取法
+      assistantContent: '.cosd-markdown-content',
+      // 思考区
+      thinking: '[class*=ai-thinking-steps]',
+      // 会话 id 在路径 /search/<数字串>
+      convIdUrl: '\\/search\\/([0-9]+)',
+      // 输入框
+      inputSelector: '#chat-input-box, textarea.cs-pc-input-custom',
+      // 发送按钮：仅在输入框有内容时出现，无 SVG 图标，文字为「发送」
+      sendButton: 'div.cs-input-ds-send-btn',
+      // 生成态判据：生成中会出现「停止回答」按钮。
+      // 类名 _stop_89jvm_6 带哈希会随站点更新失效，
+      // 主工程当前只支持类名判据，按文字匹配需另行扩展
+      generatingSelectors: ['[class*="_stop_"]']
     }
   };
 
