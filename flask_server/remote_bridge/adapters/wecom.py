@@ -53,6 +53,30 @@ class WecomAdapter(ChannelAdapter):
         from .. import bridge_store
         return bridge_store.merge_pending(conv_id, items)
 
+    def push_one(self, recipient, conv_id, m, push, ctx):
+        """推送一条消息：正文与媒体。
+
+        为何不走管线默认实现：默认组装器优先采用网页 Markdown 原文，而原文里
+        工具调用是平铺 JSON、思考是裸文本；text_store.body_of 内含判断，块里有
+        这两类内容时改走完整组装，把工具收成「只报工具名」的代码块、思考包成
+        折叠块。另：逐条分支不发媒体，故此处须显式调用 push_media。
+        @param recipient 会话 id
+        @param conv_id   会话标识（本方法不使用，去重由管线外层完成）
+        @param m         单条消息
+        @param push      推送开关
+        @param ctx       锁外预处理结果（含预合成的语音映射）
+        @returns 'sent' / 'fail'
+        """
+        text = text_store.body_of(m, push, "wecom", use_md=True)
+        if text:
+            ok, _err = self.send_text(recipient, text, markdown=True)
+            # 正文失败即整条失败：外层会撤回占用、下轮重试
+            if not ok:
+                return "fail"
+        # 媒体失败不影响正文已送达，故不返回 fail（避免正文被重发）
+        self.push_media(recipient, [m], push, ctx)
+        return "sent"
+
     def send_text(self, target, text, markdown=False):
         """发送文本：走主动推送。
 
