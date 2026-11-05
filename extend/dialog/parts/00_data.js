@@ -199,10 +199,10 @@ window.AIMirrorDialog = (function () {
       skillDocEdit: Vue.reactive({}),
       skillDocEditing: Vue.reactive({}),
       customTools: [],
-      bridgeOpen: false,     // 远程桥接（QQ）区块是否展开
+      bridgeOpen: false, cmdOpen: false,   // 桥接 / 指令区块是否展开
       deliveryOpen: false,   // 投递策略区块（三通道共用）是否展开，与 bridgeOpen 独立
-      cmdOpen: false,        // 指令区块是否展开
       bridgeEnabled: true,   // 默认开启：远程功能开箱即用
+      bridgeBroadcast: false, // 广播：一条上报发所有通道；默认关，独占是常规行为
       bridgeConnected: false,
       bridgeAppId: '', bridgeAppSecret: '',
       // voice：语音识别开关（默认关，关时丢弃语音文件；开后每轮 AI 回复须带 voice 块，见 05e_quality.js）。

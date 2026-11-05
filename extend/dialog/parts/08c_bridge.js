@@ -65,10 +65,33 @@
           ctx.deliveryOpen ? '▾' : '▸')
       ]),
       ctx.deliveryOpen ? h('div', { class: 'bridge-body' }, [
+        // 广播：决定「发给谁」，是投递策略的第一层，故排在推送内容之前
+        renderBroadcastRow(ctx),
+        h('br'),
         renderPushBlock(ctx), h('br'), D.renderCheckBlock(ctx),
       ]) : null
     ]);
   };
+
+  /**
+   * 渲染「广播」开关行。
+   *
+   * 独占（默认）：一条上报只发给最近说话的那条通道，避免多通道重复复读。
+   * 广播：所有已启用通道各收一份，用于「怕漏看」的场景。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 开关行
+   */
+  function renderBroadcastRow(ctx) {
+    const on = !!ctx.bridgeBroadcast;
+    return h('div', { class: 'bridge-push-row', key: 'broadcast' }, [
+      h('span', { class: 'bridge-push-label', title: '关：只发给最近说话的通道；开：所有已启用通道各收一份' },
+        '广播到所有通道'),
+      h('button', {
+        class: 'switch ' + (on ? 'on' : 'off'),
+        onClick: () => { ctx.bridgeBroadcast = !on; ctx.saveBridge(); }
+      }, on ? '开' : '关')
+    ]);
+  }
 
 
   /**

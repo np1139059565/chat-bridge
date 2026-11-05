@@ -77,6 +77,9 @@
       const cfg = data.config || {};
       const st = data.status || {};
       this.bridgeEnabled = !!cfg.enabled;
+      // 广播：一条上报发给所有已启用通道，而不是只给最近说话的那条。
+      // 默认关——独占是常规行为，广播用于「怕漏看」的场景。
+      this.bridgeBroadcast = !!cfg.broadcast;
       this.bridgeAppId = cfg.app_id || '';
       this.bridgeAppSecret = cfg.app_secret || '';
       // 以唯一默认值为基底合并后端配置：后端缺某字段时落到「默认开/默认关」，
@@ -180,6 +183,8 @@
       // 指令的增删改走 /api/bridge/commands 独立接口（见下）。
       const body = {
         enabled: this.bridgeEnabled,
+        // 广播：决定一条上报是发给所有通道还是只给最近活跃的那条
+        broadcast: this.bridgeBroadcast,
         // 内置指令参数：通用字段，不针对某条指令特殊化
         command_params: this.bridgeCmdParams,
         push: this.bridgePush
