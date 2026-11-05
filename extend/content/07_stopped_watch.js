@@ -57,21 +57,27 @@
    */
   A.isStoppedByRisk = function () {
     const P = A.activeProfile();
-    // 站点没配思考区选择器就没有可靠判据，直接放弃检测（不影响其它功能）
-    if (!P || !P.thinking) return false;
-    // 取最后一条 AI 消息：风控只会发生在最新一轮
     const msgs = document.querySelectorAll(P.item || '.ds-message');
     if (!msgs.length) return false;
-    const last = msgs[msgs.length - 1];
-    const think = last.querySelector(P.thinking);
-    if (!think) return false;
-    // 标题栏 = 思考区容器里、排除思考内容本身之后的文字
-    const inner = last.querySelector('.ds-think-content');
-    const full = (think.textContent || '').trim();
-    const body = inner ? (inner.textContent || '').trim() : '';
-    // 用「全文减去正文」近似得到标题栏文字：正文出现在标题之后，故用切片
-    const header = body && full.endsWith(body) ? full.slice(0, full.length - body.length) : full;
-    return header.indexOf('已停止') >= 0;
+    // 往前看最近三条，而不是只看最后一条。
+    //
+    // 为什么：风控停止时正文容器没生成，该消息会被解析成用户消息，
+    // 且「已停止」文字在思考区的标题栏里——它是思考内容的兄弟节点，不在其内部。
+    // 原先只看最后一条、只在思考区里找文字，两处都落空，导致检测永不成立。
+    const start = Math.max(0, msgs.length - 3);
+    for (let i = start; i < msgs.length; i++) {
+      const nodes = msgs[i].querySelectorAll('span, div');
+      for (let j = 0; j < nodes.length; j++) {
+        const n = nodes[j];
+        const txt = (n.textContent || '').trim();
+        // 精确等于该短语，且必须不在正文 / 思考正文里——
+        // 那些地方出现是在描述这个话题，不是状态提示。
+        if (txt === '已停止' && !n.closest('.ds-markdown')) {
+          return true;
+        }
+      }
+    }
+    return false;
   };
 
   /**
@@ -89,19 +95,27 @@
   A.isEmptyByRisk = function () {
     const P = A.activeProfile();
     if (!P || !A.makeAssistant) return false;
-    // 取最后一条 AI 消息：风控只会发生在最新一轮
     const msgs = document.querySelectorAll(P.item || '.ds-message');
     if (!msgs.length) return false;
-    const last = msgs[msgs.length - 1];
-    // 末条不是 AI 消息就谈不上「AI 输出为空」
-    if (P.assistantMark && !last.querySelector(P.assistantMark)) return false;
+    // 往后找最近的 AI 消息，而非死盯最后一条：
+    // 风控截断时最后一条可能被解析成用户消息（正文容器没生成），
+    // 死盯最后一条会直接返回 false，空输出这种形态就永远检不出来。
+    let target = null;
+    const start = Math.max(0, msgs.length - 3);
+    for (let i = msgs.length - 1; i >= start; i--) {
+      if (!P.assistantMark || msgs[i].querySelector(P.assistantMark)) { target = msgs[i]; break; }
+    }
+    if (!target) return false;
     let parsed;
     try {
-      parsed = A.makeAssistant(last, P);
+      parsed = A.makeAssistant(target, P);
     } catch (e) {
       return false;   // 解析异常时宁可不动，也不要误触发重新生成
     }
     const blocks = (parsed && parsed.blocks) || [];
+    // 没有思考块就谈不上「只剩思考、正文为空」，避免对纯空消息误判
+    const hasThinking = blocks.some(function (b) { return b && b.type === 'thinking'; });
+    if (!hasThinking) return false;
     // 只看有没有「实质内容」：thinking 块是过程，不算输出
     return !blocks.some(function (b) { return b && b.type !== 'thinking'; });
   };
@@ -120,16 +134,19 @@
    */
   A.isServerUnavailable = function () {
     const P = A.activeProfile();
-    // 只看最后一条消息附近：风控只会发生在最新一轮，翻旧记录不该触发
     const msgs = document.querySelectorAll(P.item || '.ds-message');
     if (!msgs.length) return false;
-    const last = msgs[msgs.length - 1];
-    const nodes = last.querySelectorAll('span, div');
-    for (let i = 0; i < nodes.length; i++) {
-      const n = nodes[i];
-      // 精确匹配该短语，且必须不在正文里——正文里出现是在描述这个话题，不是状态
-      if (n.textContent.indexOf('服务器暂时不可用') >= 0 && !n.closest('.ds-markdown')) {
-        return true;
+    // 往前看最近三条：风控停止时该提示可能挂在倒数第二条附近，
+    // 且最后一条可能被解析成用户消息。只查最后一条会漏。
+    const start = Math.max(0, msgs.length - 3);
+    for (let i = start; i < msgs.length; i++) {
+      const nodes = msgs[i].querySelectorAll('span, div');
+      for (let j = 0; j < nodes.length; j++) {
+        const n = nodes[j];
+        // 精确匹配该短语，且必须不在正文里——正文里出现是在描述这个话题，不是状态
+        if (n.textContent.indexOf('服务器暂时不可用') >= 0 && !n.closest('.ds-markdown')) {
+          return true;
+        }
       }
     }
     return false;
@@ -144,9 +161,16 @@
    */
   A.recoverIfStopped = function () {
     // 开关关闭时完全不介入：这是侵入性动作，必须由用户显式开启。
-    // 注意：这里不记日志——开关关着时每轮生成结束都会走到这里，
-    // 记一条会变成噪音。开关状态本身可在设置页看到。
-    if (!autoRecoverEnabled) return;
+    //
+    // 曾为「避免噪音」而不在此记日志，结果实机排查时连「函数有没有被调用」
+    // 都无从判断——静默是排查的最大障碍。现改为：只有确实存在停止形态时
+    // 才记一条「因开关关闭跳过」，正常生成结束不留痕，兼顾可查与不刷屏。
+    if (!autoRecoverEnabled) {
+      if (A.isStoppedByRisk() || A.isServerUnavailable() || A.isEmptyByRisk()) {
+        A.log && A.log('[风控恢复] 检测到停止形态，但开关未开启，跳过');
+      }
+      return;
+    }
     if (recovering) {
       A.log && A.log('[风控恢复] 上一轮恢复仍在进行，跳过本轮');
       return;
