@@ -28,19 +28,15 @@
 
 ### 高复杂度函数与重复块清理
 
-**现状**：提交钩子跑 `scripts/quality_rules.py`（九项结构检查），CI 跑
-`scripts/check_quality.py`（三项基础检查）。九项检查当前全部达标，基线为空。
+**现状**：闸门已统一。提交钩子与 CI 跑同一个脚本 `scripts/quality_rules.py`（十二项），
+CI 已去掉 `continue-on-error`。三项基础检查（超大文件 / 超长函数 / 重复块）的实现
+在 `scripts/quality_extra.py`，原 `scripts/check_quality.py` 改为薄转发、只保留入口。
 
-**决定**：批量清理继续暂缓；闸门本身的基线已就位。
+存量违规已登记进 `scripts/quality_baseline.json`（92 组、314 条），命中基线的不计入失败，
+超出部分算新增并返回失败。当前 12 项中 10 项达标，剩余两项为存量：
+超长 / 高复杂度函数 165 条、重复代码块 149 组。
 
-**已就位**：`scripts/quality_rules.py` 接入存量基线 `scripts/quality_baseline.json`，
-按「检查项 + 文件」记录已知条数，命中基线的不计入失败，超出部分算新增并返回失败。
-登记形态见 `scripts/quality_baseline.py` 模块说明。
-
-**尚待处理**：两个脚本口径不一致——硬拦提交的是九项，CI 跑的是三项且设了
-`continue-on-error`，等于不设防。合并口径与取消放行需单独排期。
-
-**处理方向**：存量清理分批推进，每拆一处就从基线里相应调减，使基线成为净减少的度量。
+**决定**：存量清理分批推进；每拆一处就从基线里相应调减，使基线成为净减少的度量。
 
 ### 测试覆盖补充
 
@@ -57,6 +53,7 @@
 
 | 问题 | 结论 | 依据 |
 |---|---|---|
+| 两个质量脚本口径不一致，CI 那道门不设防 | 已解决 | 三项基础检查并入统一闸门（实现迁至 `quality_extra.py`），钩子与 CI 同跑 `quality_rules.py` 十二项；CI 去掉 `continue-on-error`；存量 314 条登记进基线，只拦新增 |
 | `01e_bridge_actions.js` 顶满行数上限 | 已解决 | 卡片消费三个函数迁出至 `01j_card_consume.js`，原文件 450→309 行；方法挂载点不变，6 个方法逐一验证存在；前端 157 项、后端 625 项测试通过 |
 | 通道凭证只能看到圆点，无法查看修改 | 已解决 | QQ 与企微的 Secret 输入框改为明文；企微状态接口回传 `secret` 字段，前端回填。`hasSecret` 保留供只关心「填没填」的调用方使用 |
 | 文档过多，过程性文档与现行文档混杂 | 已解决 | `wecom-refactor-plan.md` 归档（核心铁律先迁入 `channel-genericization.md` 第五节）；`README.md` 索引补全 11 份未登记的根目录文档 |

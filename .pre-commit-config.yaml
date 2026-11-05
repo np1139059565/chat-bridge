@@ -8,8 +8,9 @@
 # 钩子清单：
 #   1. syntax          —— 校验本次改动文件的语法（py / js / json / yaml）
 #   2. hygiene         —— 拦截临时备份文件与超过 450 行的源码（与拆分约定一致）
-#   3. quality         —— 结构质量九项检查（参数 / 嵌套 / 长行 / 文件复杂度 / 函数个数 /
-#                         JS 函数体 / 注释率 / 循环导入 / 命名），全量扫描
+#   3. quality         —— 结构质量十二项检查（超大文件 / 超长函数 / 重复块 /
+#                         参数 / 嵌套 / 长行 / 文件复杂度 / 函数个数 / JS 函数体 /
+#                         注释率 / 循环导入 / 命名），全量扫描，只拦新增违规
 #   4. doc-sync        —— 路由 / 工具是否都已收录进 api-reference.md
 #   5. js-tests        —— 前端纯逻辑测试（node --test）
 #   6. host-theme-sync —— 主题副本与真源一致性校验（单一真源）
@@ -39,8 +40,8 @@ repos:
         pass_filenames: true
 
       - id: quality
-        name: 结构质量（九项检查）
-        description: 函数参数 / 嵌套 / 单行 / 文件复杂度 / 函数个数 / JS 函数体 / 注释率 / 循环导入 / 命名
+        name: 结构质量（十二项检查）
+        description: 超大文件 / 超长函数 / 重复块 / 参数 / 嵌套 / 单行 / 文件复杂度 / 函数个数 / JS 函数体 / 注释率 / 循环导入 / 命名
         entry: python scripts/quality_rules.py
         language: system
         pass_filenames: false

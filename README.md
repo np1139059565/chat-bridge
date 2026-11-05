@@ -74,7 +74,9 @@ chat-bridge-main/
 ├── rules/                     # 用户规则（*.md）+ _meta.json（优先级）
 ├── docs/                      # 文档
 ├── scripts/                   # 根级运维脚本
-│   ├── check_quality.py       # 行数 / 圈复杂度 / 重复块质量扫描
+│   ├── quality_rules.py       # 结构质量闸门（十二项，钩子与 CI 共用）
+│   ├── quality_extra.py       # 其中的超大文件 / 超长函数 / 重复块三项
+│   ├── quality_baseline.py    # 存量基线读写，只拦新增违规
 │   └── hooks/                 # pre-commit 本地钩子
 │       ├── check_syntax.py    # 语法校验（py / js / json / yaml）
 │       └── check_hygiene.py   # 拦截临时备份文件与超 450 行源码
@@ -184,7 +186,8 @@ WAV 转 MP3 默认用 `soundfile` + `lameenc`；两者都不可用时自动回�
 ## 开发
 
 - **冒烟测试**：`python flask_server/scripts/_smoke_ct.py`。
-- **质量扫描**：`python scripts/check_quality.py`（行数 / 圈复杂度 / 重复块）。
+- **质量扫描**：`python scripts/quality_rules.py`（十二项结构检查，只拦新增违规）。
+  存量见 `scripts/quality_baseline.json`；清理后运行 `--update-baseline` 收敛。
 - **提交钩子**：`pre-commit install` 安装一次；提交时自动做语法校验（py / js / json / yaml）
   与仓库卫生检查（拦截 `*.bak` 等临时残留、超过 450 行的源码）。
   手动全量运行：`pre-commit run --all-files`。

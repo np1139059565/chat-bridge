@@ -244,15 +244,20 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 > 代码走查结论与待办清单见 `docs/code-review-report.md`。
 
 - `flask_server/scripts/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
-- `scripts/check_quality.py`：行数 / 圈复杂度 / 重复块质量扫描。
+- `scripts/quality_rules.py`：结构质量闸门，十二项检查，钩子与 CI 共用此入口。
+  存量违规登记在 `scripts/quality_baseline.json`，只对新增违规返回失败；
+  清理存量后运行 `python scripts/quality_rules.py --update-baseline` 收敛基线。
+  `scripts/check_quality.py` 保留为兼容入口，内部转发到这里。
 
 ### pre-commit 钩子
 
-`.pre-commit-config.yaml` 以本地钩子（`repo: local`）挂载两项检查，提交时自动运行：
+`.pre-commit-config.yaml` 以本地钩子（`repo: local`）挂载七项检查，提交时自动运行：
 
 - `scripts/hooks/check_syntax.py`：校验本次改动文件的语法（py / js / json / yaml）。
   PyYAML 或 node 缺失时跳过，不把环境缺失误判为代码错误。
 - `scripts/hooks/check_hygiene.py`：拦截临时备份文件（`*.bak`、`*~` 等）与超过 450 行的源码。
   第三方库（`vendor/`）、压缩产物与锁文件豁免行数检查。
+- `scripts/quality_rules.py`：结构质量十二项（超大文件 / 超长函数 / 重复块 / 参数 / 嵌套 /
+  长行 / 文件复杂度 / 函数个数 / JS 函数体 / 注释率 / 循环导入 / 命名），全量扫描，只拦新增。
 
 安装一次即可：`pre-commit install`；手动全量运行：`pre-commit run --all-files`。
