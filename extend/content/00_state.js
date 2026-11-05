@@ -128,7 +128,10 @@ window.AIMirrorContent = (function () {
       ],
       // 生成中（AI 说话）时按钮换成「停止」方块图标，其 path 以此片段开头；
       // 空闲时为发送箭头。用它直接判定生成中，避免依赖「首帧恰为空闲」这一假设。
-      sendButtonStopMark: 'M2 4.88C2 3.68009'
+      sendButtonStopMark: 'M2 4.88C2 3.68009',
+      // 风控恢复用：点「重新生成」恢复生成。
+      // 表达式沿用 /reai 指令里已在实机验证过的写法，不另造新选择器。
+      regenerateExpr: 'document.querySelector(\'.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child [role="button"][aria-disabled="false"]\')'
     },
     // 文心一言（wenxin.baidu.com）。
     // 以下选择器均经手机真机实测确认，2026-11-01。

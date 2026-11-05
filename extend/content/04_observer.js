@@ -251,7 +251,12 @@
         A.state.isGenerating = nowGen;
         // 由「生成中」回到「空闲」= 生成刚结束 → 触发一次全量解析
         // 面板未打开时不解析：sendPage 内部已有守卫，这里提前返回省掉判断开销
-        if (!nowGen) A.triggerGenerate();
+        if (!nowGen) {
+          A.triggerGenerate();
+          // 风控恢复：这个翻转点也可能是「被风控掐断」而非正常说完（实现见 07_stopped_watch.js）。
+          // 挂在这里而不是轮询特征，是因为特征会随恢复正常而消失，轮询必然漏检或误触发。
+          if (A.recoverIfStopped) A.recoverIfStopped();
+        }
       }
     }, A.BUTTON_POLL_MS);
   };
