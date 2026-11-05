@@ -107,6 +107,35 @@
   };
 
   /**
+   * 判断页面是否显示「服务器暂时不可用」——风控的第三种形态。
+   *
+   * 与另两种的区别：它不是写在消息正文里，而是消息下方的状态提示，
+   * 与按钮组排在一起。故必须排除正文区域（.ds-markdown），
+   * 否则 AI 自己在回答里讲到这个词也会被误判成风控。
+   *
+   * 判定方式：在消息容器内找含该文本、且不在 markdown 正文里的元素。
+   * 文本匹配而非类名匹配，是因为站点的状态类名带哈希、会随版本变化。
+   *
+   * @returns {boolean} 是否显示服务器不可用
+   */
+  A.isServerUnavailable = function () {
+    const P = A.activeProfile();
+    // 只看最后一条消息附近：风控只会发生在最新一轮，翻旧记录不该触发
+    const msgs = document.querySelectorAll(P.item || '.ds-message');
+    if (!msgs.length) return false;
+    const last = msgs[msgs.length - 1];
+    const nodes = last.querySelectorAll('span, div');
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      // 精确匹配该短语，且必须不在正文里——正文里出现是在描述这个话题，不是状态
+      if (n.textContent.indexOf('服务器暂时不可用') >= 0 && !n.closest('.ds-markdown')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  /**
    * 检测到异常停止后延迟点一次「重新生成」。
    *
    * 由生成态轮询在「生成中 → 空闲」翻转时调用（见 04_observer.js）。
@@ -131,10 +160,14 @@
     // 站点未配置 scrollToBottomButton 时 isAtBottom 恒为 false，即永不自动恢复；
     // 这是保守取向：判定缺失时宁可不动作。
     if (!A.isAtBottom || !A.isAtBottom()) return;
-    // 两种形态任一成立都要恢复：显式「已停止」优先判，省掉一次解析
+    // 三种风控形态任一成立都要恢复。按代价从低到高依次判，前一个成立就不再往后算：
+    //   1) 已停止       —— 读标题栏文字，最便宜
+    //   2) 服务器不可用  —— 查状态提示，中等
+    //   3) 输出为空      —— 要跑一次完整解析，最贵，放最后
     const stopped = A.isStoppedByRisk();
-    const empty = stopped ? false : A.isEmptyByRisk();
-    if (!stopped && !empty) return;
+    const unavailable = stopped ? false : A.isServerUnavailable();
+    const empty = (stopped || unavailable) ? false : A.isEmptyByRisk();
+    if (!stopped && !unavailable && !empty) return;
     const P = A.activeProfile();
     const expr = P && P.regenerateExpr;
     if (!expr) {
