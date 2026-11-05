@@ -59,6 +59,10 @@ _PAYLOAD_CATEGORY = (
     ("bridge-voice", "voice"),
 )
 
+# 推送侧自己产出的痕迹前缀。它们出现在 Markdown 原文里，
+# 说明采集时把渲染结果一并抓了进来，原文不可直接采用。
+_TRACE_MARKS = ("[工具调用]", "[工具结果]", "[语音]")
+
 
 def _scan_payload_category(b):
     """从「前缀 + 裸 JSON」的漂移形态里识别载荷类别。
@@ -123,11 +127,37 @@ def _assemble_ordered(m, push, use_md):
     return _render_groups(groups)
 
 
+def _has_block_traces(m):
+    """判断块里是否存在原文装不下的内容。
+
+    原文只含正文，不含思考与工具调用。块里有这两类时用原文会丢内容。
+
+    @param m 消息对象
+    @returns 有返回 True
+    """
+    cats = {_block_category(b) for b in (m.get("blocks") or []) if b}
+    return "thinking" in cats or "tool" in cats
+
+
+def _raw_is_dirty(raw):
+    """判断原文自身是否夹带桥接内容。
+
+    两种形态都要拦：一是裸 JSON 载荷（生成侧直接写进正文，块全是普通段落，
+    只看块类别会漏判）；二是已渲染的工具痕迹（采集时把渲染结果也抓了进来）。
+
+    @param raw 原文
+    @returns 不干净返回 True
+    """
+    if any(mark in raw for mark in _TRACE_MARKS):
+        return True
+    return any(mp._scan_json_by_type(raw, want) for want, _cat in _PAYLOAD_CATEGORY)
+
+
 def _md_shortcut(m, use_md):
     """尝试直接采用 Markdown 原文。
 
-    原文只含正文，不含思考与工具调用。因此只有在块里也没有这两类内容时
-    才能直接采用——否则工具痕迹与思考过程会被整段绕过。
+    原文只含正文，不含思考与工具调用。因此只有在块里也没有这两类内容、
+    且原文本身干净时才能直接采用——否则工具痕迹与思考过程会被整段绕过。
 
     @param m      消息对象
     @param use_md 是否允许采用原文
@@ -136,12 +166,7 @@ def _md_shortcut(m, use_md):
     if not use_md:
         return ""
     raw = str(m.get("md") or "").strip()
-    if not raw:
-        return ""
-    # 检查块里是否存在原文装不下的内容
-    cats = {_block_category(b) for b in (m.get("blocks") or []) if b}
-    # 有思考或工具调用：原文会丢内容，必须走完整组装
-    if "thinking" in cats or "tool" in cats:
+    if not raw or _has_block_traces(m) or _raw_is_dirty(raw):
         return ""
     return raw
 
@@ -187,6 +212,9 @@ def _take_thinking(b, push):
 
 def _take_voice(b):
     """取语音块里的朗读文本。
+
+    语音消息可能合成失败，正文里的这段文字是兜底——用户至少还能读到。
+    这也是它与工具痕迹的区别：工具痕迹是纯噪音，朗读文本是有用内容。
 
     @param b 语音块（内容是带 bridge-voice 标记的 JSON）
     @returns 朗读文本；无则空串

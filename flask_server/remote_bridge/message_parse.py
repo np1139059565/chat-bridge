@@ -178,34 +178,88 @@ def _block_thinking(b, push_thinking):
     return "[思考] " + str(b.get("text") or "")
 
 
+def _payload_summary(obj):
+    """取桥接载荷的展示摘要；不是桥接载荷返回 None。
+
+    三类载荷在手机上的处理原则一致：只留一行摘要，细节一律不推。
+
+      - 工具调用：只报工具名。参数是 JSON，占满一屏且无阅读价值；
+      - 工具结果：只报成败。完整 result 含 nonce、本机路径、命令输出，
+        既是噪音，也可能泄露本机路径；
+      - 语音：照常取朗读文本。语音消息可能合成失败，正文里的文字是兜底，
+        用户至少还能读到这里。
+
+    @param obj 解析出的 JSON 对象
+    @returns 摘要文本；非桥接载荷返回 None
+    """
+    t = obj.get("type")
+    if t == "bridge-chat-call":
+        return "[工具调用] " + str(obj.get("tool") or "")
+    if t == "bridge-chat-res":
+        mark = "成功" if obj.get("success") else "失败"
+        err = obj.get("error") or ""
+        return "[工具结果] " + (mark + ("：" + str(err) if err else ""))
+    if t == "bridge-voice":
+        return "[语音] " + str(obj.get("text") or "").strip()
+    return None
+
+
 def _block_code(b, push_thinking):
-    """代码块：工具调用摘出工具名与参数，语音块渲染成 voice 围栏，其余原样包裹。"""
+    """代码块：桥接载荷摘成一行摘要，其余代码原样包裹。
+
+    摘要统一用代码块包裹：平台没有折叠语法，代码块在手机上默认收起，
+    是等效的「折叠」表达，也让 AI 正文与工具痕迹在视觉上分得开。
+    """
     import json
     code = str(b.get("code") or "")
     try:
         obj = json.loads(code.strip())
-        if obj.get("type") == "bridge-chat-call":
-            return "[工具调用] %s 参数=%s" % (
-                obj.get("tool", ""), json.dumps(obj.get("parameters") or {}, ensure_ascii=False))
-        if obj.get("type") == "bridge-chat-res":
-            # 工具结果：只报成败，不推完整 result。
-            # 完整 JSON 含 nonce、路径、命令输出等内部字段，手机上是一大坨噪音，
-            # 且可能泄露本机路径。用户真正关心的是「成没成」。
-            mark = "成功" if obj.get("success") else "失败"
-            err = obj.get("error") or ""
-            return "[工具结果] %s" % (mark + ("：" + str(err) if err else ""))
+        # 语音文字是正文兜底内容，与工具痕迹不同：不包代码块，按普通段落呈现
         if obj.get("type") == "bridge-voice":
-            # 语音块与工具调用块同为 JSON 结构：原样输出 JSON 文本，
-            # 保持与识别端（_extract_voice_from_blocks）一致，不再包成 voice 围栏。
-            return "[语音] " + str(obj.get("text") or "").strip()
+            return str(obj.get("text") or "").strip()
+        summary = _payload_summary(obj)
+        if summary is not None:
+            return "```\n" + summary + "\n```" if summary else ""
     except Exception:
         pass
     return "```\n" + code + "\n```"
 
 
+def _scrub_traces(text):
+    """清洗正文里混入的桥接痕迹，还原成一行摘要。
+
+    痕迹的来源是采集侧把已渲染的正文又抓了一遍，形态如
+    「[工具调用] search_content 参数={...}」。它出现在正文里会
+    与推送侧的摘要重复，且把一大坨参数摊在手机上。
+
+    处理原则：工具调用只留工具名并包代码块；工具结果只留成败；
+    语音文字整行丢弃（朗读文本已由语音消息单独发出）。
+
+    @param text 原始文本
+    @returns 清洗后的文本
+    """
+    if not any(mark in text for mark in ("[工具调用]", "[工具结果]", "[语音]")):
+        return text
+    out = []
+    for line in text.splitlines():
+        s = line.strip()
+        if s.startswith("[工具调用]"):
+            # 只留工具名：参数是 JSON，手机上占满一屏且无阅读价值
+            name = s[len("[工具调用]"):].split("参数=")[0].strip()
+            out.append("```\n[工具调用] " + name + "\n```")
+        elif s.startswith("[工具结果]"):
+            out.append("```\n" + s + "\n```")
+        elif s.startswith("[语音]"):
+            # 语音文字保留、去掉前缀：语音合成可能失败，正文里的字是兜底
+            out.append(s[len("[语音]"):].strip())
+        else:
+            out.append(line)
+    return "\n".join(out).strip()
+
+
 def _block_text(b, push_thinking):
     """纯文本块：段落 / 标题 / 引用共用同一取文本方式。"""
-    return str(b.get("text") or "")
+    return _scrub_traces(str(b.get("text") or ""))
 
 
 def _block_list(b, push_thinking):

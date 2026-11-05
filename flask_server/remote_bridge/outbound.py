@@ -34,18 +34,46 @@ def build_body(m, push):
     tr = _tool_result_of(m)
     if tr is not None:
         return _tool_result_body(kind, tr)
-    # 正文：优先 md 原文（保格式），退回块拼纯文本（不含思考）
-    raw_md = str(m.get("md") or "").strip()
-    body_text = raw_md or _blocks_to_text(m, False)
+    body_text = _pick_body(m)
     # 思考：md 是复制按钮产物、不含思考，故从 blocks 独立提取；
     # 仅在「思考」开关打开时随正文发出。
     think = _thinking_text_of(m) if push.get("thinking", False) else ""
     if think:
         return _thinking_body(kind, think, body_text)
     return {
-        "kind": kind, "text": body_text, "markdown": bool(raw_md),
+        "kind": kind, "text": body_text, "markdown": bool(str(m.get("md") or "").strip()),
         "is_tool_result": False, "skip": not body_text,
     }
+
+
+def _pick_body(m):
+    """选取正文来源：原文干净时用原文，否则逐块拼接。
+
+    原文保住标题、粗体、列表等格式，优先采用；但采集侧偶尔会把工具痕迹
+    也抓进原文，此时原文里夹着参数与语音文字，直接发出去是一大坨噪音。
+    这类情形退回块拼，由块处理函数逐块摘成摘要。
+
+    @param m 消息对象
+    @returns 正文文本
+    """
+    raw_md = str(m.get("md") or "").strip()
+    if raw_md and not _has_traces(raw_md):
+        return raw_md
+    return _blocks_to_text(m, False)
+
+
+# 推送侧自己产出的痕迹前缀。出现在 Markdown 原文里，
+# 说明采集时把渲染结果一并抓了进来，原文不可直接采用。
+_TRACE_MARKS = ("[工具调用]", "[工具结果]", "[语音]")
+
+
+def _has_traces(text):
+    """判断正文里是否混入了桥接痕迹。
+
+    @param text 待检查文本
+    @returns 含痕迹返回 True
+    """
+    return any(mark in text for mark in _TRACE_MARKS)
 
 
 def _tool_result_body(kind, tr):
