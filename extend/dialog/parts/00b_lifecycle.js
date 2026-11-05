@@ -67,8 +67,13 @@
     window.parent.postMessage({ type: 'request_panel_side' }, '*');
     window.parent.postMessage({ type: 'request_theme' }, '*');
     window.parent.postMessage({ type: 'request_panel_visible' }, '*');
-    // 询问风控自动恢复开关的当前值：面板在 iframe 里读不到扩展存储，
-    // 由内容脚本代读后经 risk_recover_state 回传
-    window.parent.postMessage({ type: 'request_risk_recover' }, '*');
+    // 直读风控自动恢复开关：对话框本身就是扩展页面（chrome-extension:// 协议），
+    // 可直接访问 chrome.storage，无需经内容脚本中转。
+    // 直连避免了两类隐患：消息往返的时序竞争，以及监听器 this 绑定问题。
+    try {
+      chrome.storage.local.get(['aiMirrorRiskRecover'], function (res) {
+        this.riskRecoverEnabled = !!(res && res.aiMirrorRiskRecover);
+      }.bind(this));
+    } catch (e) { /* 存储不可用时保持默认关闭 */ }
   };
 })();

@@ -273,8 +273,9 @@
           onClick: () => {
             const next = !ctx.riskRecoverEnabled;
             ctx.riskRecoverEnabled = next;
-            // 经内容脚本写入扩展存储：面板在 iframe 里访问不到 chrome.storage
-            window.parent.postMessage({ type: 'set_risk_recover', enabled: next }, '*');
+            // 直写扩展存储：对话框本身是扩展页面，可直接访问 chrome.storage。
+            // 与读取走同一条路径，避免读写经不同通道导致状态对不上。
+            try { chrome.storage.local.set({ aiMirrorRiskRecover: next }); } catch (e) {}
           }
         }, ctx.riskRecoverEnabled ? '已开启' : '已关闭')
       ])]),
