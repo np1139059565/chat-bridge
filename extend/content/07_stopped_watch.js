@@ -143,9 +143,14 @@
    * 正常生成结束不受影响——那时末条有正文，两个判定都不成立。
    */
   A.recoverIfStopped = function () {
-    // 开关关闭时完全不介入：这是侵入性动作，必须由用户显式开启
+    // 开关关闭时完全不介入：这是侵入性动作，必须由用户显式开启。
+    // 注意：这里不记日志——开关关着时每轮生成结束都会走到这里，
+    // 记一条会变成噪音。开关状态本身可在设置页看到。
     if (!autoRecoverEnabled) return;
-    if (recovering) return;
+    if (recovering) {
+      A.log && A.log('[风控恢复] 上一轮恢复仍在进行，跳过本轮');
+      return;
+    }
     // 先看用户是否已向上翻看历史：在底部才考虑恢复。
     //
     // 为什么加这一道：用户手动点停止也会出现「已停止」，那种情况绝不能替他重新生成——
@@ -159,7 +164,11 @@
     //
     // 站点未配置 scrollToBottomButton 时 isAtBottom 恒为 false，即永不自动恢复；
     // 这是保守取向：判定缺失时宁可不动作。
-    if (!A.isAtBottom || !A.isAtBottom()) return;
+    if (!A.isAtBottom || !A.isAtBottom()) {
+      // 记下来：这是「该恢复却没恢复」最常见的原因，此前静默返回导致无从排查
+      A.log && A.log('[风控恢复] 判定不在底部，跳过（用户可能正在翻看历史）');
+      return;
+    }
     // 三种风控形态任一成立都要恢复。按代价从低到高依次判，前一个成立就不再往后算：
     //   1) 已停止       —— 读标题栏文字，最便宜
     //   2) 服务器不可用  —— 查状态提示，中等
@@ -167,7 +176,12 @@
     const stopped = A.isStoppedByRisk();
     const unavailable = stopped ? false : A.isServerUnavailable();
     const empty = (stopped || unavailable) ? false : A.isEmptyByRisk();
-    if (!stopped && !unavailable && !empty) return;
+    // 三种都没命中也要记：这说明本次是正常生成结束，或出现了尚未覆盖的第四种形态。
+    // 记成日志后，下次「该恢复却没恢复」时能直接看出是没识别到形态。
+    if (!stopped && !unavailable && !empty) {
+      A.log && A.log('[风控恢复] 未识别到停止形态（已停止/服务器不可用/输出为空 均不成立）');
+      return;
+    }
     const P = A.activeProfile();
     const expr = P && P.regenerateExpr;
     if (!expr) {

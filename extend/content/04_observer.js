@@ -205,8 +205,20 @@
     const sels = P && P.scrollToBottomButton;
     if (!sels || !sels.length) return false;   // 未配置：保守判定为「不在底部」
     for (let i = 0; i < sels.length; i++) {
-      // 任一选择器命中即表示按钮存在 = 用户不在底部
-      if (document.querySelector(sels[i])) return false;
+      // 逐个检查命中项，而不是「有命中就算不在底部」。
+      //
+      // 原因：选择器里有偏宽的一条（div[role=button].ds-button--floating），
+      // 它同时会命中「继续生成」「重新生成」这类带文字的浮动按钮。
+      // 而滚动到底部按钮是纯图标、无文字。故只认无文字的那类：
+      // 命中项带可见文字就跳过，不当作「用户已向上翻看」的证据。
+      //
+      // 若不这样区分，风控停止时页面上同时出现的「继续生成」按钮
+      // 会被误判成滚动标记，进而判定「用户不在底部」，自动恢复永不触发。
+      const nodes = document.querySelectorAll(sels[i]);
+      for (let j = 0; j < nodes.length; j++) {
+        const txt = (nodes[j].textContent || '').trim();
+        if (!txt) return false;   // 无文字 = 真正的滚动按钮 = 不在底部
+      }
     }
     return true;
   };
