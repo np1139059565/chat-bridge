@@ -1,19 +1,16 @@
-"""工程质量检查 —— 九项扩展规则
+"""工程质量检查 —— 统一闸门（十二项结构约束）
 
-在 check_quality.py 的三项基础检查（文件行数 / 函数行数与圈复杂度 / 重复块）
-之外，补充更细的结构约束，全部面向「可维护性」：
+提交钩子与 CI 跑同一套规则。此前两个脚本各自为政（钩子跑九项、CI 跑三项且放行），
+口径不一致导致 CI 那道门形同虚设，现合并为单一入口。
 
-  1. 函数参数个数上限   —— 参数越多，调用越易错、职责越杂
-  2. 嵌套深度上限       —— 深层嵌套是理解成本的主要来源
-  3. 单行长度上限       —— 过长行破坏可读性与并排 diff
-  4. 文件级圈复杂度     —— 单函数之外，整文件的逻辑总量
-  5. 函数个数上限       —— 一个文件函数过多 = 职责过载
-  6. JS 函数级检查      —— 现有检查只覆盖 Python，JS 是盲区
-  7. 注释率下限         —— 呼应「文件/函数加注释」的规范
-  8. 循环导入检测       —— A 引 B、B 引 A 会埋下初始化顺序 bug
-  9. 命名规范           —— Python 函数 snake_case / 类 PascalCase
+三项基础（迁自 check_quality，实现见 quality_extra.py）：
+  1. 超大文件           2. 超长 / 高复杂度函数    3. 重复代码块
 
-每个 check_xxx 返回违规列表；report(root) 打印报告；main(argv) 供钩子调用。
+九项扩展（本文件）：
+  4. 函数参数个数  5. 嵌套深度  6. 单行长度  7. 文件级圈复杂度  8. 函数个数
+  9. JS 函数体     10. 注释率  11. 循环导入  12. 命名规范
+
+每项返回违规列表；report() 打印并按基线区分已知 / 新增；main() 供钩子与 CI 调用。
 """
 import ast
 import os
@@ -25,6 +22,8 @@ import qcommon
 import quality_baseline
 # JS 函数体检查已抽到独立模块 quality_js（避免本文件超行数上限）
 from quality_js import check_js_functions, JS_FUNC_LINE_LIMIT
+# 三项基础检查迁自 check_quality，并入本闸门
+import quality_extra
 
 # ---------- 各检查项的阈值（集中于此，便于统一调参） ----------
 PARAM_LIMIT = 6        # 函数参数个数上限
@@ -346,6 +345,12 @@ CHECKS = [
     ("comment", check_comment_ratio, "注释率低于 %.0f%%" % (COMMENT_RATIO_MIN * 100), lambda r: "  %-46s 注释率=%.1f%%" % (r[0], r[1] * 100)),
     ("cycle", check_import_cycles, "循环导入", lambda r: "  %s <-> %s" % r),
     ("naming", check_py_naming, "命名不规范", lambda r: "  %-46s %s %s L%d" % r),
+    ("largefile", quality_extra.check_large_files, "超大文件（阈值 %d 行）" % quality_extra.FILE_LINE_LIMIT,
+     lambda r: "  %-50s %d 行" % r),
+    ("pyfunc", quality_extra.check_py_functions, "超长 / 高复杂度函数",
+     lambda r: "  %-40s %-28s L%-5d 行数=%-5d cc=%d" % r),
+    ("dup", quality_extra.check_duplicates, "重复代码块（连续 %d 行，跨文件）" % quality_extra.DUP_WINDOW,
+     lambda r: "  出现 %d 处：%s" % (len(r[0]), "  ".join("%s L%d" % (p[0], p[1]) for p in r[0]))),
 ]
 
 

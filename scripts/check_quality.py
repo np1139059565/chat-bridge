@@ -1,247 +1,31 @@
-"""
-工程代码质量扫描脚本
+"""工程质量检查 —— 兼容入口（薄转发）
 
-用途：把本次重构走查使用的三类检查固化为可重复执行的脚本，纳入 CI。
-输出三类问题清单：
-  1. 超大文件（默认阈值 450 行）
-  2. 超长 / 高圈复杂度函数（默认函数体 30 行、圈复杂度 10）
-  3. 重复代码块（连续 5 行规范化后完全相同，且跨文件出现）
+本脚本曾是独立的三项检查（超大文件 / 超长函数 / 重复块）。
+现在这三项已并入统一闸门 quality_rules.py（实现见 quality_extra.py），
+此处只做转发，保证旧调用方与文档里的命令仍能跑通。
 
-退出码：0 = 全部达标；1 = 存在超标项，便于 CI 中断。
-用法：python scripts/check_quality.py [工程根目录]
+为什么不直接删：它是被 README 与多份文档引用的命令名，
+删除会让照着文档敲命令的人扑空；薄转发既保住入口，又只有一份实现。
+
+请改用统一入口：python scripts/quality_rules.py
+（钩子与 CI 均已改跑该脚本，十二项规则 + 存量基线）
 """
-import ast
-import collections
 import os
-import re
 import sys
 
-# 复用公共基础函数（iter_files / read_lines / is_comment_or_blank / cyclomatic），
-# 避免与 qcommon.py 各存一份实现而触发「重复代码」检查。
-import qcommon
-
-# 常量与基础函数统一来自 qcommon，避免两处各存一份实现。
-SKIP_DIRS = qcommon.SKIP_DIRS
-SOURCE_EXTS = qcommon.SOURCE_EXTS
-DUP_EXTS = qcommon.DUP_EXTS
-# 行数阈值：文件超过此值列入清单
-FILE_LINE_LIMIT = 450
-# 函数体行数阈值（不含空行与注释）
-FUNC_LINE_LIMIT = 30
-# 圈复杂度阈值
-FUNC_CC_LIMIT = 10
-# 重复块窗口大小（规范化后的连续行数）
-DUP_WINDOW = 5
-
-# 模块样板行：各分片文件统一采用的 IIFE 引导与命名空间声明。
-# 这些行天然跨文件重复，属于「结构约定」而非「重复实现」，不纳入重复检查。
-BOILERPLATE_LINES = {
-    "(function () {",
-    "'use strict';",
-    'window.AIMirrorDialog = (function () {',
-    'window.AIMirrorContent = (function () {',
-    'const D = window.AIMirrorDialog;',
-    'const A = window.AIMirrorContent;',
-    'const M = D.methods;',
-    'const h = Vue.h;',
-    'const log = D.log;',
-    'const hashStr = D.hashStr;',
-    'const log = A.log;',
-    'const A = window.AIMirrorContent;',
-    'return D;',
-    'return A;',
-    '})();',
-}
-
-
-def is_boilerplate(line):
-    """判断一行是否属于模块样板（用于从重复检查中排除）。"""
-    return line in BOILERPLATE_LINES
-
-
-# 基础函数统一来自 qcommon；此处取局部别名，保持文件内调用写法不变。
-iter_files = qcommon.iter_files
-read_lines = qcommon.read_lines
-is_comment_or_blank = qcommon.is_comment_or_blank
-cyclomatic = qcommon.cyclomatic
-is_exempt = qcommon.is_exempt
-
-
-def _iter_targets(root, exts=None):
-    """遍历参与检查的文件，剔除豁免清单中的第三方产物与生成副本。
-
-    豁免规则由 qcommon.is_exempt 统一维护，此处只负责应用，
-    保证三个检查环节口径一致。
-
-    @param root 工程根目录
-    @param exts 限定扩展名元组；缺省沿用 qcommon 的源码扩展名
-    @returns 逐个产出未被豁免的文件绝对路径
-    """
-    for p in iter_files(root, exts):
-        # 相对路径用于比对豁免前缀
-        rel = os.path.relpath(p, root)
-        if is_exempt(rel):
-            continue
-        yield p
-
-
-def check_large_files(root):
-    """检查一：文件总行数超过阈值。"""
-    out = []
-    for p in _iter_targets(root):
-        lines = read_lines(p)
-        if len(lines) > FILE_LINE_LIMIT:
-            out.append((os.path.relpath(p, root), len(lines)))
-    return sorted(out, key=lambda x: -x[1])
-
-
-def _scan_py_file(p, root, out):
-    """扫描单个 Python 文件，把超标的函数追加到 out。"""
-    try:
-        tree = ast.parse("\n".join(read_lines(p)))
-    except SyntaxError:
-        return
-    rel = os.path.relpath(p, root)
-    for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        span = (node.end_lineno or node.lineno) - node.lineno + 1
-        cc = cyclomatic(node)
-        if span > FUNC_LINE_LIMIT or cc >= FUNC_CC_LIMIT:
-            out.append((rel, node.name, node.lineno, span, cc))
-
-
-def check_py_functions(root):
-    """检查二：Python 函数体长度与圈复杂度超过阈值。"""
-    out = []
-    for p in _iter_targets(root):
-        if p.endswith(".py"):
-            _scan_py_file(p, root, out)
-    return sorted(out, key=lambda x: -x[4])
-
-
-def _normalize_lines(path):
-    """读取文件并规范化为 (行号, 去空白文本, 是否导入区) 列表。
-
-    跳过空行、注释行与模块样板行；跳过样板行后窗口仍按剩余代码行的顺序拼接，
-    因此跨样板的连续代码块依然可被识别。
-
-    第三个元素标记该行是否属于导入区。多行导入（from x import ( ... )）的续行
-    本身不以 import / from 开头，仅看单行无法识别，故用括号配平跟踪导入区范围。
-    各模块导入同一批依赖是「依赖相同」而非「实现重复」，不应据此要求合并。
-    """
-    norm = []
-    in_import = False   # 当前是否处于多行导入的括号内
-    depth = 0           # 导入区未闭合的括号层数
-    for i, l in enumerate(read_lines(path), 1):
-        if is_comment_or_blank(l):
-            continue
-        text = re.sub(r"\s+", " ", l.strip())
-        if is_boilerplate(text):
-            continue
-        # 该行是否算导入区：本行是导入语句，或仍在上一条多行导入的括号内
-        head = _is_import_line(text)
-        is_imp = head or in_import
-        # 维护括号配平：只有进入导入区后才需要跟踪续行
-        if head or in_import:
-            depth += text.count("(") - text.count(")")
-            in_import = depth > 0
-        norm.append((i, text, is_imp))
-    return norm
-
-
-def _is_import_line(text):
-    """判断一行是否属于导入区样板（导入语句或路径引导语句）。
-
-    路径引导（sys.path.insert）与导入语句成对出现、内容固定，
-    各模块的导入区因此天然相似，同样不应计入重复。
-
-    @param text 已规范化的行文本
-    @returns 属导入区样板时返回 True
-    """
-    return (text.startswith("import ") or text.startswith("from ")
-            or text.startswith("sys.path.insert"))
-
-
-def _index_windows(index, norm, rel):
-    """把文件内每个滑动窗口登记到全局索引。"""
-    for i in range(len(norm) - DUP_WINDOW + 1):
-        win = norm[i:i + DUP_WINDOW]
-        key = tuple(x[1] for x in win)
-        # 窗口内容过短的不算重复（多为 import、单行赋值等）
-        if sum(len(k) for k in key) < 80:
-            continue
-        # 整窗都属导入区的不算重复：各模块的导入区天然相似，
-        # 反映的是「依赖相同」而非「实现重复」，不应据此要求合并。
-        # 判据取规范化时算好的第三项，能覆盖多行导入的续行。
-        if all(x[2] for x in win):
-            continue
-        index[key].append((rel, norm[i][0]))
-
-
-def check_duplicates(root):
-    """检查三：规范化后的连续 DUP_WINDOW 行在多处出现（仅针对代码文件）。"""
-    index = collections.defaultdict(list)
-    for p in _iter_targets(root, DUP_EXTS):
-        rel = os.path.relpath(p, root)
-        # 同步生成的副本跳过：内容刻意与真源一致，不参与重复统计
-        if qcommon.is_dup_exempt(rel):
-            continue
-        _index_windows(index, _normalize_lines(p), rel)
-    # 只保留跨文件出现（同一文件内的重复另行评估）
-    return [(places, key) for key, places in index.items()
-            if len(places) >= 2 and len({pl[0] for pl in places}) >= 2]
-
-
-def _report_large_files(root):
-    """打印超大文件清单；有超标项返回 True。"""
-    print("=" * 70)
-    print("超大文件（阈值 %d 行）" % FILE_LINE_LIMIT)
-    large = check_large_files(root)
-    for rel, n in large:
-        print("  %-50s %d 行" % (rel, n))
-    if not large:
-        print("  无")
-    return bool(large)
-
-
-def _report_functions(root):
-    """打印超长 / 高圈复杂度函数清单；有超标项返回 True。"""
-    print("=" * 70)
-    print("超长 / 高圈复杂度函数（函数体 > %d 行 或 cc >= %d）" % (FUNC_LINE_LIMIT, FUNC_CC_LIMIT))
-    funcs = check_py_functions(root)
-    for rel, name, lineno, span, cc in funcs:
-        print("  %-40s %-28s L%-5d 行数=%-5d cc=%d" % (rel, name, lineno, span, cc))
-    if not funcs:
-        print("  无")
-    return bool(funcs)
-
-
-def _report_duplicates(root):
-    """打印重复代码块清单；有超标项返回 True。"""
-    print("=" * 70)
-    print("重复代码块（连续 %d 行，跨文件）" % DUP_WINDOW)
-    dups = check_duplicates(root)
-    for places, _key in dups:
-        print("  出现在 %d 处：" % len(places))
-        for rel, lineno in places:
-            print("     %s  L%d" % (rel, lineno))
-    if not dups:
-        print("  无")
-    return bool(dups)
+# scripts/ 自身在导入路径上：直接导入同级模块
+import quality_rules
 
 
 def main():
-    """入口：依次执行三类检查并输出结论；存在任一超标项时返回 1。"""
-    root = sys.argv[1] if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    # 三类检查都执行完再汇总（避免短路导致报告不完整）
-    has_large = _report_large_files(root)
-    has_funcs = _report_functions(root)
-    has_dups = _report_duplicates(root)
-    failed = has_large or has_funcs or has_dups
-    print("=" * 70)
-    print("结论：" + ("存在超标项" if failed else "全部达标"))
-    return 1 if failed else 0
+    """转发到统一闸门。
+
+    退出码语义与原来一致：0 = 无新增违规；1 = 有新增违规。
+    @returns 进程退出码
+    """
+    print("[提示] check_quality.py 已并入统一闸门，请改用：python scripts/quality_rules.py\n")
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return quality_rules.main([root])
 
 
 if __name__ == "__main__":

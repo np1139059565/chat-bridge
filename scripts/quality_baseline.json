@@ -1,4 +1,465 @@
 {
   "note": "存量欠账基线：命中条目的违规不计入失败，超出部分算新增。",
-  "entries": []
+  "entries": [
+    {
+      "check": "dup",
+      "file": "<duplicates>",
+      "count": 149
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\app.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\config_store.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\envelope.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\error_utils.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\file_prune.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_cards.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_conversations.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_db.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_decay.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_distill.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_edges.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_events.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_keywords.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_loader.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_nodes.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_scheduler.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\memory_search.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\rule_enforce.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\screenshot_store.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\service_control.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\core\\tool_config.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\custom_tools\\commands.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\custom_tools\\loader.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\custom_tools\\meta.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\custom_tools\\scan.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\custom_tools\\skills.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\__init__.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\adapters\\qq.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\bridge_store.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\channel\\delivery.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\channel\\push_pipeline.py",
+      "count": 4
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\command_dispatch.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\command_external.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\command_groups.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\command_registry.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\json_scan.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\message_flow.py",
+      "count": 4
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\message_images.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\message_parse.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\message_router.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\message_voice.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\qq_event_parse.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\qq_files.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\qq_gateway.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\voice_asr.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\voice_cache.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\voice_mp3.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\voice_sapi_runner.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\voice_tts.py",
+      "count": 4
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\voice_voices.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\wecom_client.py",
+      "count": 4
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\wecom_gateway.py",
+      "count": 4
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\wecom_media.py",
+      "count": 5
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\wecom_media_collect.py",
+      "count": 4
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\wecom_proto.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\weixin_client.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\weixin_gateway.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\weixin_login.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\remote_bridge\\window_store.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\bridge.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\bridge_result_delivery.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\bridge_wecom.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\config_route.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\ext.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\memory_graph.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\tool_external.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\tools.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\web.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\web_clientlog.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\routes\\web_file.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\scripts\\redistill_tools.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tests\\conftest.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tests\\test_channel_media.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\command_tasks.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\file_image_impl.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\file_read_impl.py",
+      "count": 6
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\memory_quality_impl.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\push_file_impl.py",
+      "count": 3
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\tools_impl.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\web_bridge\\__init__.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\web_bridge\\audio_prune.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\web_bridge\\web_inbox.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\web_bridge\\web_inbox_store.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\web_bridge\\web_mirror.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "scripts\\hooks\\check_js_tests.py",
+      "count": 2
+    },
+    {
+      "check": "pyfunc",
+      "file": "scripts\\hooks\\check_py_tests.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "scripts\\quality_baseline.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "scripts\\quality_rules.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "scripts\\setup_piper.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "scripts\\setup_weixin.py",
+      "count": 1
+    },
+    {
+      "check": "pyfunc",
+      "file": "skills\\anatomy\\scripts\\anatomy_tool.py",
+      "count": 1
+    }
+  ]
 }

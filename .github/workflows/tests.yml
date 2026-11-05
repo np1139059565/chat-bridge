@@ -32,8 +32,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: 代码质量扫描（行数 / 圈复杂度 / 重复块）
-        # 当前仍有存量超标项（见 docs/refactor-plan.md 批次 3），
-        # 先以「不阻断构建」的方式接入，待批次 3 完成后再去掉 continue-on-error。
-        continue-on-error: true
-        run: python scripts/check_quality.py
+      - name: 结构质量检查（十二项，与提交钩子同一入口）
+        # 与 pre-commit 的 quality 钩子跑同一个脚本，规则只有一份。
+        # 存量违规已登记进 scripts/quality_baseline.json，只有新增违规才会失败——
+        # 因此这里不需要 continue-on-error：绿就是真绿，红就是真有新增问题。
+        run: python scripts/quality_rules.py

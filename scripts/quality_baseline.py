@@ -123,6 +123,11 @@ def _file_of(check, item):
     # 循环导入返回的是 (模块A, 模块B) 两个模块名，不含文件名
     if check == "cycle":
         return "<import-cycle>"
+    # 重复块返回 (出现位置列表, 窗口键)：一组重复横跨多个文件，没有单一的「所属文件」。
+    # 且窗口键随代码移动而变，按它登记会频繁失效。故整体按一组计，只记总数——
+    # 新增一组重复即视为新增违规，符合「债务只能减少」的预期。
+    if check == "dup":
+        return "<duplicates>"
     # 其余检查的首元素都是相对路径
     if isinstance(item, (tuple, list)) and item:
         return str(item[0])
