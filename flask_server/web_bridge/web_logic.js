@@ -53,6 +53,27 @@
   }
 
   /**
+   * 计算「失败后立即重连」还需等待多久。
+   *
+   * 断网时请求会瞬间失败，若每失败就立刻再连会形成高频空转。
+   * 故设最小间隔：距上次重连已超过间隔则返回 0（立即重连），
+   * 否则返回剩余等待时间。始终远小于轮询周期，用户感知仍是「马上」。
+   *
+   * @param {number} now        当前时间戳（毫秒）
+   * @param {number} lastAt     上次重连时刻；0 表示从未重连
+   * @param {number} minGap     最小间隔（毫秒）
+   * @returns {number} 需等待的毫秒数；0 表示可立即重连
+   */
+  function reconnectDelay(now, lastAt, minGap) {
+    // 从未重连、或时间回拨导致差值为负：都按「可立即重连」处理
+    if (!lastAt) return 0;
+    var gap = now - lastAt;
+    if (gap >= minGap) return 0;
+    if (gap < 0) return 0;
+    return minGap - gap;
+  }
+
+  /**
    * 判断轮询响应是否算「慢」，需要记录日志。
    * @param {number} ms        本次响应毫秒数
    * @param {number} threshold 慢阈值（毫秒）
@@ -201,6 +222,7 @@
     classifyFailKind: classifyFailKind,
     offlineSuffix: offlineSuffix,
     shouldShowDisconnected: shouldShowDisconnected,
+    reconnectDelay: reconnectDelay,
     isSlowPoll: isSlowPoll,
     shouldSkipPoll: shouldSkipPoll,
     isAbortError: isAbortError,

@@ -46,7 +46,7 @@ test('离线标记：在线时为空', () => {
   assert.strictEqual(logic.offlineSuffix(true), '');
 });
 
-test('断开判定：未达容差不显示断开', () => {
+test('断开判定：容差大于失败次数时不显示断开', () => {
   assert.strictEqual(logic.shouldShowDisconnected(3, 4), false);
 });
 
@@ -86,6 +86,34 @@ test('中止判定：其它错误不算主动中止', () => {
 
 test('中止判定：未提供错误名时不算主动中止', () => {
   assert.strictEqual(logic.isAbortError(undefined), false);
+});
+
+test('重连间隔：从未重连时立即重连', () => {
+  // lastAt 为 0 表示还没重连过，首次失败应立即重连
+  assert.strictEqual(logic.reconnectDelay(100000, 0, 1000), 0);
+});
+
+test('重连间隔：距上次已超过最小间隔时立即重连', () => {
+  assert.strictEqual(logic.reconnectDelay(105000, 100000, 1000), 0);
+});
+
+test('重连间隔：恰好等于最小间隔时立即重连', () => {
+  assert.strictEqual(logic.reconnectDelay(101000, 100000, 1000), 0);
+});
+
+test('重连间隔：间隔不足时返回剩余等待时间', () => {
+  // 只过了 300ms，还需再等 700ms
+  assert.strictEqual(logic.reconnectDelay(100300, 100000, 1000), 700);
+});
+
+test('重连间隔：时间回拨导致差值为负时立即重连', () => {
+  // 不返回负数，否则 setTimeout 会当成 0 触发，掩盖异常
+  assert.strictEqual(logic.reconnectDelay(99000, 100000, 1000), 0);
+});
+
+test('断开判定：容差为 1 时首次失败即显示断开', () => {
+  // 现行策略：一次失败即判定未连接，不再累计
+  assert.strictEqual(logic.shouldShowDisconnected(1, 1), true);
 });
 
 test('重载判定：停留超过阈值需重载', () => {

@@ -4,8 +4,6 @@
  * ============================================================ */
 (function () {
   'use strict';
-  var renderMarkdown = window.WebRender.renderMarkdown, composeBody = window.WebRender.composeBody;
-
   // ---------- 全局状态 ----------
   var cursor = 0;            // 已拉取到的最大 seq
   var seen = {};             // 已渲染消息 id，防重复
@@ -33,62 +31,23 @@
   }
 
   // ---------- 渲染单条消息并倒序插入到顶部 ----------
-  // @param allowAuto 是否允许该条语音自动播放。
-  //   历史加载（首次铺屏）传 false：已存在的语音不该一进页面就自动播；
-  //   增量拉取传 true：解锁后新到的语音才自动播。
+  // 实现已迁至 web_render_message.js（window.WebMessage），此处仅注入依赖并转调。
+  // 迁移原因：图片单张/多张、图文混排、语音绑定、两种插入位置使该函数分支较多，
+  // 且与轮询、发送等流程无关，单独成文件更易读。
+  if (window.WebMessage) {
+    window.WebMessage.init({ listEl: listEl, seen: seen, fmtTime: fmtTime });
+  }
+
+  /**
+   * 渲染一条消息（转调 WebMessage.render）。
+   *
+   * @param {Object}  m         消息对象
+   * @param {boolean} allowAuto 是否允许该条语音自动播放
+   * @param {boolean} atBottom  为真时插到列表末尾（懒加载更早的消息用）
+   * @returns {boolean} 是否真的渲染了
+   */
   function renderMessage(m, allowAuto, atBottom) {
-    if (!m || seen[m.id]) return false;
-    seen[m.id] = true;
-    // 维护「DOM 中最早一条」的锚点：懒加载据此向前翻页
-    if (window.WebDom) window.WebDom.note(m.seq);
-    var role = m.role || 'ai';
-    // 角色 → 显示名与样式类。system 为指令回执（如 /help 输出），单独配色。
-    var who = role === 'user' ? '我' : (role === 'ai' ? 'AI' : (role === 'system' ? '系统' : '工具'));
-    var cls = role === 'user' ? 'user' : (role === 'ai' ? 'ai' : (role === 'system' ? 'system' : 'tool'));
-    var el = document.createElement('div');
-    el.className = 'msg ' + cls;
-    el.setAttribute('data-seq', m.seq);
-    var body = '';
-    // 带 image 字段：渲染真实图片（网页发图 / 指令结果截图等），点击可看大图。
-    // image 可能是单个文件名（字符串）或多张（数组），统一成数组处理。
-    if (m.image && (!Array.isArray(m.image) || m.image.length)) {
-      var imgs = Array.isArray(m.image) ? m.image : [m.image];
-      body = imgs.map(function (name) {
-        var u = '/api/web/image-file/' + encodeURIComponent(name);
-        // 不套 <a target="_blank">：新开标签页会重新请求图片。
-        // 改为页面内浮层看大图，直接复用已加载的图片（同 src 走缓存，零请求）。
-        return '<img class="msg-img" src="' + u + '" alt="图片">';
-      }).join('');
-      if (m.text && m.text !== '[截图]' && m.text !== '[图片]') body += renderMarkdown(m.text);
-    } else if (m.kind === 'web-image' || m.text === '[图片]') {
-      // 图文消息：图片标记 + 文字一并渲染，不能只画标记把文字吞掉。
-      // 纯图片时 text 是「[图片]」，只显示标记；带文字时把文字正常渲染出来。
-      var label = (m.text && m.text !== '[图片]') ? renderMarkdown(m.text) : '';
-      body = '<span class="img-badge">🖼 图片</span>' + label;
-    } else {
-      body = renderMarkdown(m.text || '');
-    }
-    // 语音：交给独立语音模块渲染（已合成为播放器，未合成为「生成」按钮）
-    var audio = window.WebVoice ? window.WebVoice.renderAudio(m) : '';
-    // 消息 key（pid-id）：显示在角色名旁，供逐条核对消息块是否完整、有无缺块。
-    // 旧数据可能没有该字段，缺省不显示，避免出现空标记。
-    var keyTag = m.key ? '<span class="msg-key" title="消息 key（pid-id）">' + m.key + '</span>' : '';
-    // 语音位置：思考之下、正文之上。组装细节见 WebRender.composeBody。
-    el.innerHTML =
-      '<div class="who">' + who + keyTag + '<span class="time">' + fmtTime(m.ts) + '</span></div>' +
-      '<div class="body">' + composeBody(body, audio) + '</div>';
-    // 倒序：最新插入到列表最前面；懒加载更早的消息时插到末尾
-    if (atBottom) {
-      listEl.appendChild(el);
-    } else if (listEl.firstChild) {
-      listEl.insertBefore(el, listEl.firstChild);
-    } else {
-      listEl.appendChild(el);
-    }
-    // 语音播放器：绑定解锁与自动播放（历史语音不自动播，见 allowAuto）
-    var au = el.querySelector('audio');
-    if (au && window.WebVoice) window.WebVoice.bind(au, !!allowAuto);
-    return true;
+    return window.WebMessage.render(m, allowAuto, atBottom);
   }
 
   // ---------- 图片看大图 ----------
@@ -144,10 +103,75 @@
       try { c.abort(); } catch (e) { /* 已结束或环境不支持：忽略 */ }
     }
   }
-  // 容差：连续失败达到此值才判定断开。原值 2 太小——后端偶发慢一次，
-  // 再叠加一次就显示断开，用户体验为「时不时断十几秒」。放宽到 4，
-  // 并配合更短的超时，让「真断开」也能较快识别、偶发抖动能扛过去。
-  var FAIL_TOLERANCE = 4;
+  // 容差为 1：一次失败即判定未连接。
+  // 此前放宽到 4 是为了扛住偶发抖动，代价是断线后要连续等四个周期才显示、
+  // 期间界面一直停在旧状态，用户看到的就是「要等十几秒」。
+  // 抖动由「失败后立即重连」承担——早判早重连，比晚判后干等更接近真实体验。
+  var FAIL_TOLERANCE = 1;
+
+  /**
+   * 轮询成功的处理：更新连接状态、按需渲染新消息、维护滚动与裁剪。
+   *
+   * @param {Object}  data    接口返回体
+   * @param {boolean} history 是否为首次铺历史（不自动播语音、不裁剪）
+   * @param {number}  t0      本轮发起时刻，用于记慢响应日志
+   */
+  function onPollOk(data, history, t0) {
+    // 正常轮询不记日志（每 2.5 秒一次、量大）；只在响应偏慢时记，
+    // 便于发现「变慢的苗头」而不淹没日志。失败仍照常记录。
+    if (!history && WebLogic.isSlowPoll(Date.now() - t0, 1000)) clientLog('poll', 'slow ' + (Date.now() - t0) + 'ms');
+    failCount = 0;
+    setStatus(true);
+    if (!data || !data.success) return;
+    cursor = data.seq || cursor;
+    var msgs = data.messages || [];
+    // 正序遍历、倒序插入：最终最新在顶部。
+    // 历史加载（history）不自动播语音；增量拉取的新语音在解锁后自动播。
+    var allowAuto = !history;
+    var _rt0 = Date.now();
+    msgs.forEach(function (m) { renderMessage(m, allowAuto); });
+    var _rt = Date.now() - _rt0;
+    // 新消息到达：按 DOM 上限裁剪（实现见 web_dom_limit.js）
+    if (!history && window.WebDom) window.WebDom.afterAppend();
+    // 渲染是主线程同步操作，渲染条数多 / 单条重时会明显占主线程，
+    // 这里记渲染条数与耗时：若耗时大，就是「页面卡住」的嫌疑点。
+    if (!history && (msgs.length || _rt > 200)) {
+      clientLog('render', 'n=' + msgs.length + ' cost=' + _rt + 'ms');
+    }
+    // 新消息渲染后触发一次待合成扫描：把「生成中」的语音自动轮询、就绪即自动连播
+    if (window.WebVoice && window.WebVoice.kick) window.WebVoice.kick();
+    // 保持可见区域是最新消息（列表倒序，最新在顶部）
+    if (listEl.scrollTop < 40) listEl.scrollTop = 0;
+    // 首屏只铺 10 条，不满一屏时主动补更早的消息（否则滚动条不出现、翻不到历史）
+    if (history && window.WebDom && window.WebDom.fillIfNeeded) window.WebDom.fillIfNeeded();
+  }
+
+  /**
+   * 轮询失败的处理：判定未连接并立即重连。
+   *
+   * @param {Error}   err     失败原因
+   * @param {boolean} history 是否为首次铺历史（首次失败不触发重连）
+   * @param {number}  t0      本轮发起时刻，用于记耗时
+   */
+  function onPollFail(err, history, t0) {
+    // 主动中止（切后台 / 回前台补拉前掐断）不算断连：
+    // 它是预期行为，若计入失败会误报「连接断开」，也会污染 failCount。
+    if (WebLogic.isAbortError(err && err.name)) {
+      if (!history) clientLog('poll', 'aborted（主动中止，不计失败）');
+      return;
+    }
+    // 失败分类（区分「发不出去」与「发出去了没回应」）由 WebLogic 统一实现，
+    // 页面不再内联——同一逻辑在发送路径也复用，避免两处各写一份。
+    var kind = WebLogic.classifyFailKind(err && err.name, err && err.message);
+    var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
+    if (!history) clientLog('poll', 'fail ' + (Date.now() - t0) + 'ms kind=' + kind + offline + ' failCount=' + (failCount + 1));
+    failCount += 1;
+    // 一次失败即判定未连接：不让界面停在「看似已连接、实际收不到消息」的假象里。
+    if (WebLogic.shouldShowDisconnected(failCount, FAIL_TOLERANCE)) setStatus(false);
+    // 立即重连：重建定时器并从失败时刻起重新计时，而不是等下一个 2.5 秒周期。
+    // 两者叠加时（定时器到点 + 本轮刚失败）最坏会多打一次请求，由 pollBusy 挡掉。
+    if (!history) reconnectNow();
+  }
 
   function fetchMessages(history) {
     if (WebLogic.shouldSkipPoll(pollBusy)) {
@@ -172,52 +196,8 @@
     inflightTimer = timer;
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) { return r.json(); })
-      .then(function (data) {
-        // 正常轮询不记日志（每 2.5 秒一次、量大）；只在响应偏慢时记，
-        // 便于发现「变慢的苗头」而不淹没日志。失败仍照常记录。
-        var _okms = Date.now() - _t0;
-        if (!history && WebLogic.isSlowPoll(_okms, 1000)) clientLog('poll', 'slow ' + _okms + 'ms');
-        failCount = 0;
-        setStatus(true);
-        if (!data || !data.success) return;
-        cursor = data.seq || cursor;
-        var msgs = data.messages || [];
-        // 正序遍历、倒序插入：最终最新在顶部。
-        // 历史加载（history）不自动播语音；增量拉取的新语音在解锁后自动播。
-        var allowAuto = !history;
-        var _rt0 = Date.now();
-        msgs.forEach(function (m) { renderMessage(m, allowAuto); });
-        var _rt = Date.now() - _rt0;
-        // 新消息到达：按 DOM 上限裁剪（实现见 web_dom_limit.js）
-        if (!history && window.WebDom) window.WebDom.afterAppend();
-        // 渲染是主线程同步操作，渲染条数多 / 单条重时会明显占主线程，
-        // 这里记渲染条数与耗时：若耗时大，就是「页面卡住」的嫌疑点。
-        if (!history && (msgs.length || _rt > 200)) {
-          clientLog('render', 'n=' + msgs.length + ' cost=' + _rt + 'ms');
-        }
-        // 新消息渲染后触发一次待合成扫描：把「生成中」的语音自动轮询、就绪即自动连播
-        if (window.WebVoice && window.WebVoice.kick) window.WebVoice.kick();
-        // 保持可见区域是最新消息（列表倒序，最新在顶部）
-        if (listEl.scrollTop < 40) listEl.scrollTop = 0;
-        // 首屏只铺 10 条，不满一屏时主动补更早的消息（否则滚动条不出现、翻不到历史）
-        if (history && window.WebDom && window.WebDom.fillIfNeeded) window.WebDom.fillIfNeeded();
-      })
-      .catch(function (err) {
-        // 失败分类（区分「发不出去」与「发出去了没回应」）由 WebLogic 统一实现，
-        // 页面不再内联——同一逻辑在发送路径也复用，避免两处各写一份。
-        // 主动中止（切后台 / 回前台补拉前掐断）不算断连：
-        // 它是预期行为，若计入失败会误报「连接断开」，也会污染 failCount。
-        var isAbort = WebLogic.isAbortError(err && err.name);
-        if (isAbort) {
-          if (!history) clientLog('poll', 'aborted（主动中止，不计失败）');
-          return;
-        }
-        var kind = WebLogic.classifyFailKind(err && err.name, err && err.message);
-        var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
-        if (!history) clientLog('poll', 'fail ' + (Date.now() - _t0) + 'ms kind=' + kind + offline + ' failCount=' + (failCount + 1));
-        failCount += 1;   // 连续失败超容差才显示断开，避免抖动就闪断
-        if (WebLogic.shouldShowDisconnected(failCount, FAIL_TOLERANCE)) setStatus(false);
-      })
+      .then(function (data) { onPollOk(data, history, _t0); })
+      .catch(function (err) { onPollFail(err, history, _t0); })
       .then(function () {
         clearTimeout(timer);
         // 只清理「本轮自己的」句柄，避免把后续轮次的句柄误清。
@@ -229,17 +209,18 @@
 
   function setStatus(ok) {
     dotEl.className = 'dot' + (ok ? ' on' : '');
-    statusTextEl.textContent = ok ? '已连接' : '连接断开';
+    statusTextEl.textContent = ok ? '已连接' : '未连接';
   }
 
   // ---------- 发送消息（文字与图片一起发出） ----------
   function sendMessage() {
     var text = inputEl.value.trim();
+    // 待发图片从选图模块取副本：本次发送的快照即此副本，失败时原样恢复
+    var snapshotImgs = window.WebImagePicker.list();
     // 无文字也无图片：不发送（判定口径见 WebLogic.canSend）
-    if (!WebLogic.canSend(text, pendingImages.length)) return;
-    // 快照本次待发内容：失败时可原样恢复，避免消息静默丢失。
+    if (!WebLogic.canSend(text, snapshotImgs.length)) return;
+    // 快照文字：失败时可原样恢复，避免消息静默丢失。
     var snapshotText = text;
-    var snapshotImgs = pendingImages.slice();
     // 只有发送成功才清空输入与图片；失败则恢复现场并提示。
     // 失败时记录原因类型：超时（已发出无响应）/ 网络错（未发出）/ 服务端错误。
     var finish = function (res, err) {
@@ -249,8 +230,7 @@
       var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
       clientLog('send', 'fail kind=' + kind + offline);
       inputEl.value = snapshotText;
-      pendingImages = snapshotImgs;
-      renderPreview();
+      window.WebImagePicker.restore(snapshotImgs);
       // 恢复内容后重算高度：发送前已把输入框清空并压回单行，
       // 不重算的话多行原文会被挤在单行高度里、看不全。
       autoGrow();
@@ -265,10 +245,10 @@
     inputEl.value = '';
     autoGrow();
     var _done = function () { clearTimeout(stimer); };
-    if (pendingImages.length > 0) {
+    if (snapshotImgs.length > 0) {
       // 有图片：图文一次性提交（多张一并），避免图片被丢弃
       _sopts.method = 'POST';
-      _sopts.body = JSON.stringify({ dataUrls: pendingImages.slice(), text: text });
+      _sopts.body = JSON.stringify({ dataUrls: snapshotImgs, text: text });
       fetch('/api/web/image', _sopts)
         .then(function (r) { _done(); finish(r, null); })
         .catch(function (e) { _done(); finish(null, e); });
@@ -291,57 +271,13 @@
   );
 
   // ---------- 图片选择（支持一次多张） ----------
-  var pendingImages = [];   // 已选图片的 dataURL 数组
-  document.getElementById('btnImg').addEventListener('click', function () {
-    document.getElementById('fileInput').click();
-  });
-  document.getElementById('fileInput').addEventListener('change', function (e) {
-    // 多选：逐个读为 dataURL，全部读完再统一渲染预览
-    var files = Array.prototype.slice.call(e.target.files || []);
-    if (!files.length) return;
-    var remain = files.length;
-    files.forEach(function (f) {
-      var reader = new FileReader();
-      reader.onload = function () {
-        pendingImages.push(reader.result);
-        remain--;
-        if (remain === 0) renderPreview();
-      };
-      reader.readAsDataURL(f);
-    });
-    e.target.value = '';
-  });
+  // 实现已迁至 web_image_picker.js（window.WebImagePicker），此处仅注入依赖。
+  // 清空后重算输入框高度：图片被提交或移除时输入框需要按文字重新撑开。
+  window.WebImagePicker.init({ onClear: function () { autoGrow(); } });
 
-  /** 渲染已选图片预览：每张配缩略图与移除按钮。 */
-  function renderPreview() {
-    var box = document.getElementById('preview');
-    var list = document.getElementById('previewList');
-    list.innerHTML = '';
-    pendingImages.forEach(function (url, idx) {
-      var wrap = document.createElement('span');
-      wrap.className = 'thumb';
-      var img = document.createElement('img');
-      img.src = url;
-      var rm = document.createElement('span');
-      rm.className = 'rm';
-      rm.textContent = '×';
-      rm.addEventListener('click', function () {
-        pendingImages.splice(idx, 1);   // 移除该张
-        renderPreview();
-      });
-      wrap.appendChild(img);
-      wrap.appendChild(rm);
-      list.appendChild(wrap);
-    });
-    // 有图才显示预览条
-    if (pendingImages.length) box.classList.add('on');
-    else box.classList.remove('on');
-  }
-
-  /** 清空已选图片与预览。 */
+  /** 清空已选图片与预览（转调 WebImagePicker.clear）。 */
   function clearImages() {
-    pendingImages = [];
-    renderPreview();
+    window.WebImagePicker.clear();
   }
 
   // ---------- 指令展开面板 ----------
@@ -377,6 +313,11 @@
   // 故切后台时主动停表，回前台时显式重建，不依赖浏览器是否恢复。
   var POLL_INTERVAL = 2500;
   var pollTimer = null;
+  // 失败后立即重连的最小间隔（毫秒）：防止断网时「失败-重连」高频空转。
+  // 取得比轮询间隔 2500 小得多，用户感知仍是「马上重连」。
+  var MIN_RECONNECT_GAP = 1000;
+  var lastReconnectAt = 0;   // 上次立即重连的时刻
+  var reconnectTimer = null; // 待执行的延迟重连，避免同一时刻重复排
 
   /** 启动（或重建）轮询定时器。 */
   function startPolling() {
@@ -384,9 +325,44 @@
     pollTimer = setInterval(function () { fetchMessages(false); }, POLL_INTERVAL);
   }
 
-  /** 停止轮询定时器。 */
+  /** 停止轮询定时器，并取消挂起的延迟重连（切后台时不留残余）。 */
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  /**
+   * 失败后立即重连：重置定时器相位并马上补拉一次。
+   *
+   * 为什么需要：setInterval 的相位是固定的，失败若落在周期中段，
+   * 要等满 2.5 秒才轮到下一次尝试；叠加超时后用户感知就是「卡十几秒」。
+   * 这里重建定时器让下一轮从现在起算，并立刻发起一次请求，缩短空窗。
+   *
+   * 立即补拉会与「定时器恰好到点」撞车，由 fetchMessages 入口的 pollBusy 挡掉，
+   * 不会并发堆积。
+   */
+  function reconnectNow() {
+    // 最小间隔保护：断网时请求会「立刻失败」，若每失败就立刻再连，
+    // 会形成每秒数十次的空转，既打后端也耗电。
+    // 首次失败立即重连；与上次重连相隔不足 MIN_RECONNECT_GAP 时，
+    // 推迟到间隔满后再连——仍是「马上」而非等满整个轮询周期。
+    var now = Date.now();
+    // 等待时长由纯函数给出（实现与测试见 web_logic.reconnectDelay）
+    var wait = WebLogic.reconnectDelay(now, lastReconnectAt, MIN_RECONNECT_GAP);
+    if (wait === 0) {
+      lastReconnectAt = now;
+      startPolling();
+      fetchMessages(false);
+      return;
+    }
+    // 距上次重连太近：稍等片刻再连，期间由 pollBusy 保证不会并发。
+    if (reconnectTimer) return;
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      lastReconnectAt = Date.now();
+      startPolling();
+      fetchMessages(false);
+    }, wait);
   }
 
   // ---------- DOM 上限与懒加载初始化 ----------
