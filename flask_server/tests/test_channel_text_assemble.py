@@ -61,22 +61,24 @@ class TestThinking:
 class TestToolCall:
     """工具调用块。"""
 
-    def test_tool_reports_name_only(self):
-        """工具调用只报工具名，不带参数。"""
+    def test_tool_content_kept_in_code_block(self):
+        """工具调用内容原样保留，包在代码块里。"""
         m = {"blocks": [
             _para("让我查一下"),
             _json_block({"type": "bridge-chat-call", "tool": "search_file",
-                         "parameters": {"path": "secret"}}),
+                         "parameters": {"path": "sample_path"}}),
         ]}
         out = text_store._assemble_ordered(m, {}, False)
         assert "search_file" in out
-        # 参数不该出现在正文里
-        assert "secret" not in out
+        # 参数原样保留，不做裁剪
+        assert "sample_path" in out
 
-    def test_pure_tool_call_yields_empty(self):
-        """纯工具调用消息不产出正文。"""
+    def test_pure_tool_call_wrapped_in_code_block(self):
+        """纯工具调用消息内容原样保留，并包进代码块。"""
         m = {"blocks": [_json_block({"type": "bridge-chat-call", "tool": "x"})]}
-        assert text_store._assemble_ordered(m, {}, False) == ""
+        out = text_store._assemble_ordered(m, {}, False)
+        assert "bridge-chat-call" in out
+        assert out.strip().startswith("```")
 
 
 class TestVoice:

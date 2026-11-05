@@ -220,40 +220,26 @@ def _take_thinking(b, push):
 
 
 def _take_voice(b):
-    """取语音块里的朗读文本。
+    """取语音块原文，内容不做任何裁剪。
 
-    语音消息可能合成失败，正文里的这段文字是兜底——用户至少还能读到。
-    这也是它与工具痕迹的区别：工具痕迹是纯噪音，朗读文本是有用内容。
+    按推送标准，语音块的 JSON 原文完整保留，由 _render_groups 统一包裹成代码块。
 
     @param b 语音块（内容是带 bridge-voice 标记的 JSON）
-    @returns 朗读文本；无则空串
+    @returns 原始文本
     """
-    obj = mp._load_json_block(b) or {}
-    return str(obj.get("text") or "").strip()
+    return mp._block_text_of(b)
 
 
 def _take_tool(b):
-    """取工具类块的摘要文本：调用只报工具名，回传只报成败。
+    """取工具类块的原文，内容不做任何裁剪。
 
-    两类都不带正文载荷：参数与结果都是 JSON，手机上占满一屏且无阅读价值，
-    结果里还含 nonce、本机路径、命令输出等内部字段。
-    用户需要知道「调了什么、成没成」，不需要看具体内容。
+    工具调用与回传的载荷都是消息的一部分，原样保留：推什么由网页侧决定，
+    推送侧只负责搬运。
 
     @param b 工具调用块或工具回传块
-    @returns 带前缀的摘要
+    @returns 原始文本
     """
-    # 先按「块整体就是 JSON」取；取不到再扫描「前缀 + JSON」的漂移形态
-    obj = mp._load_json_block(b)
-    if obj is None:
-        src = mp._block_text_of(b)
-        obj = (mp._scan_json_by_type(src, "bridge-chat-res")
-               or mp._scan_json_by_type(src, "bridge-chat-call") or {})
-    if obj.get("type") == "bridge-chat-res":
-        # 回传：只报成败，失败时附一句原因
-        mark = "成功" if obj.get("success") else "失败"
-        err = obj.get("error") or ""
-        return "[工具结果] " + (mark + ("：" + str(err) if err else ""))
-    return "[工具调用] " + str(obj.get("tool") or "")
+    return mp._block_text_of(b)
 
 
 def _take_body(b, push):
@@ -281,17 +267,20 @@ def _render_groups(groups):
     @param groups 四类内容的文本列表
     @returns 正文文本；无可读内容时为空串
     """
-    if not groups["text"] and not groups["thinking"] and not groups["voice"]:
+    if not groups["text"] and not groups["thinking"] and not groups["tool"] and not groups["voice"]:
         return ""
     parts = []
-    # 思考与工具调用用代码块包裹：平台无折叠语法，代码块是等效表达
+    # 思考、工具、语音一律用代码块包裹：平台无折叠语法，代码块是等效表达。
+    # 内容原样保留，只加围栏，不做任何取舍。
     if groups["thinking"]:
         parts.append("```\n" + "\n\n".join(groups["thinking"]) + "\n```")
     parts.extend(groups["text"])
-    if groups["tool"]:
-        parts.append("```\n" + "\n".join(groups["tool"]) + "\n```")
-    if groups["voice"]:
-        parts.extend(groups["voice"])
+    # 每个工具块、语音块各自独立成代码块：合并成一个会让多条内容挤在一起，
+    # 也无法分别折叠展开。
+    for t in groups["tool"]:
+        parts.append("```\n" + t + "\n```")
+    for v in groups["voice"]:
+        parts.append("```\n" + v + "\n```")
     return "\n".join(parts).strip()
 
 
@@ -330,8 +319,4 @@ def body_of(m, push, channel, check_own=True, use_md=False):
     if not text:
         return ""
     kind = mp._classify(m)
-    body = "%s\n%s" % (PREFIX.get(kind, kind), text)
-    # 质检标注放在最前：用户先知道「这条有问题、后面会有修正版」，
-    # 再读正文，避免读完后才被告知内容不可靠。
-    note = mp.quality_note(m)
-    return (note + "\n" + body) if note else body
+    return "%s\n%s" % (PREFIX.get(kind, kind), text)

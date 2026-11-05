@@ -307,10 +307,7 @@
         // source：来源标记（user / assistant / tool），供后端直接读字段定类，
         // 无需再扫字符串反推。缺字段时后端回退到内容判断。
         source: node.source || '',
-        cardResults: extractCardResults(node),
-        // qualityIssue：本条被质检判过的问题。后端据此在正文前加一行标注，
-        // 让用户知道收到的内容有问题、后续会有修正版。
-        qualityIssue: this._qualityFlagOf ? this._qualityFlagOf(id) : null
+        cardResults: extractCardResults(node)
       });
     });
     if (!messages.length) return;

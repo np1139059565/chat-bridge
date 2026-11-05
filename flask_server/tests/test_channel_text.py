@@ -35,12 +35,15 @@ def _call_block(tool="x", params=None):
                                 "parameters": params or {}})}
 
 
-def test_pure_tool_call_yields_empty_body():
-    """只有工具调用、没有正文时，不产出可推文本。"""
+def test_pure_tool_call_kept_in_code_block():
+    """纯工具调用消息：内容原样保留，并包进代码块。"""
     m = {"id": "t1", "role": "assistant",
          "blocks": [_call_block()]}
-    assert text_store.extract_text(m, {}) == ""
-    assert text_store.body_of(m, {}, "wecom") == ""
+    out = text_store.extract_text(m, {})
+    # 载荷完整保留，不裁剪
+    assert "bridge-chat-call" in out
+    # 且被代码块包裹（能被折叠）
+    assert out.strip().startswith("```")
 
 
 def test_text_with_tool_call_still_yields_body():
@@ -52,14 +55,15 @@ def test_text_with_tool_call_still_yields_body():
     assert "我查一下" in body
 
 
-def test_tool_params_excluded_from_body():
-    """工具调用的参数（JSON）不能进正文——手机上是一屏花括号。"""
+def test_tool_params_kept_in_code_block():
+    """工具调用的参数完整保留，并包在代码块里由读者自行展开。"""
     m = {"id": "t3", "role": "assistant",
          "blocks": [{"type": "paragraph", "text": "执行中"},
                     _call_block("run_command", {"command": "import subprocess"})]}
     body = text_store.body_of(m, {}, "wecom")
     assert "执行中" in body
-    assert "subprocess" not in body
+    # 参数原样保留
+    assert "subprocess" in body
 
 
 def test_real_code_block_kept():
@@ -119,17 +123,18 @@ def test_blocks_reordered_by_category():
 
 
 def test_tool_call_reports_name_only():
-    """工具调用只报名字，参数不进正文。"""
+    """工具调用内容原样进正文，且排在自然语言之后。"""
     import json as _json
     m = {"id": "ord2", "role": "assistant", "blocks": [
         {"type": "paragraph", "text": "执行中"},
         {"type": "code", "code": _json.dumps(
             {"type": "bridge-chat-call", "tool": "run_command",
-             "parameters": {"command": "secret_param"}})},
+             "parameters": {"command": "sample_param"}})},
     ]}
     out = text_store.extract_text(m, {})
     assert "run_command" in out
-    assert "secret_param" not in out
+    # 参数原样保留，不做裁剪
+    assert "sample_param" in out
 
 
 def test_md_used_when_supported():

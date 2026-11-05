@@ -178,51 +178,9 @@ def _block_thinking(b, push_thinking):
     return "[思考] " + str(b.get("text") or "")
 
 
-def _payload_summary(obj):
-    """取桥接载荷的展示摘要；不是桥接载荷返回 None。
-
-    三类载荷在手机上的处理原则一致：只留一行摘要，细节一律不推。
-
-      - 工具调用：只报工具名。参数是 JSON，占满一屏且无阅读价值；
-      - 工具结果：只报成败。完整 result 含 nonce、本机路径、命令输出，
-        既是噪音，也可能泄露本机路径；
-      - 语音：照常取朗读文本。语音消息可能合成失败，正文里的文字是兜底，
-        用户至少还能读到这里。
-
-    @param obj 解析出的 JSON 对象
-    @returns 摘要文本；非桥接载荷返回 None
-    """
-    t = obj.get("type")
-    if t == "bridge-chat-call":
-        return "[工具调用] " + str(obj.get("tool") or "")
-    if t == "bridge-chat-res":
-        mark = "成功" if obj.get("success") else "失败"
-        err = obj.get("error") or ""
-        return "[工具结果] " + (mark + ("：" + str(err) if err else ""))
-    if t == "bridge-voice":
-        return "[语音] " + str(obj.get("text") or "").strip()
-    return None
-
-
 def _block_code(b, push_thinking):
-    """代码块：桥接载荷摘成一行摘要，其余代码原样包裹。
-
-    摘要统一用代码块包裹：平台没有折叠语法，代码块在手机上默认收起，
-    是等效的「折叠」表达，也让 AI 正文与工具痕迹在视觉上分得开。
-    """
-    import json
-    code = str(b.get("code") or "")
-    try:
-        obj = json.loads(code.strip())
-        # 语音文字是正文兜底内容，与工具痕迹不同：不包代码块，按普通段落呈现
-        if obj.get("type") == "bridge-voice":
-            return str(obj.get("text") or "").strip()
-        summary = _payload_summary(obj)
-        if summary is not None:
-            return "```\n" + summary + "\n```" if summary else ""
-    except Exception:
-        pass
-    return "```\n" + code + "\n```"
+    """代码块：内容原样包裹成 Markdown 代码块。"""
+    return "```\n" + str(b.get("code") or "") + "\n```"
 
 
 def _scrub_traces(text):
@@ -232,8 +190,8 @@ def _scrub_traces(text):
     「[工具调用] search_content 参数={...}」。它出现在正文里会
     与推送侧的摘要重复，且把一大坨参数摊在手机上。
 
-    处理原则：工具调用只留工具名并包代码块；工具结果只留成败；
-    语音文字整行丢弃（朗读文本已由语音消息单独发出）。
+    处理原则：内容一律原样保留，只给承载桥接载荷的整行套上代码块。
+    不做任何裁剪——参数、结果、朗读文本都是消息的一部分。
 
     @param text 原始文本
     @returns 清洗后的文本
@@ -243,53 +201,12 @@ def _scrub_traces(text):
     out = []
     for line in text.splitlines():
         s = line.strip()
-        if s.startswith("[工具调用]"):
-            # 只留工具名：参数是 JSON，手机上占满一屏且无阅读价值
-            name = s[len("[工具调用]"):].split("参数=")[0].strip()
-            out.append("```\n[工具调用] " + name + "\n```")
-        elif s.startswith("[工具结果]"):
+        if s.startswith(("[工具调用]", "[工具结果]", "[语音]")):
+            # 整行原样包进代码块：手机端默认收起，展开即可看到全部内容
             out.append("```\n" + s + "\n```")
-        elif s.startswith("[语音]"):
-            # 语音文字保留、去掉前缀：语音合成可能失败，正文里的字是兜底
-            out.append(s[len("[语音]"):].strip())
         else:
             out.append(line)
     return "\n".join(out).strip()
-
-
-# 质检错误码 → 给用户看的简短说明。
-# 完整告警文本是写给 AI 的整改指令，含 JSON 格式要求，不适合直接推给用户。
-_ERROR_BRIEF = {
-    "voice_missing": "缺少语音朗读内容",
-    "code_only_reply": "只有代码没有文字说明",
-    "thinking_english": "思考内容以英文为主",
-    "multiple_tool_calls": "一次包含多个工具调用",
-}
-
-
-def quality_note(m):
-    """取质检标注行；无标记返回空串。
-
-    用户要求「被质检拦截的消息也该推过去，才能知道被拦截过」。
-    故此处不拦截，只在正文前加一行说明。
-
-    本函数是这条规则的唯一来源：企微（channel/text.py）与 QQ（outbound.py）
-    都调用它，保证同一条回复在两条通道上的标注文案完全一致。
-
-    @param m 消息对象
-    @returns 标注行；无需标注返回空串
-    """
-    q = m.get("qualityIssue")
-    if not isinstance(q, dict):
-        return ""
-    # 只取说明的第一句：完整说明是给 AI 看的整改指令（含 JSON 格式要求），
-    # 原样推给用户既长又无意义。用户只需知道「哪里不对」。
-    msg = str(q.get("message") or "").strip()
-    reason = msg.split("。")[0].strip() if msg else ""
-    if not reason:
-        # 没有说明时退回错误码对应的中文短句
-        reason = _ERROR_BRIEF.get(str(q.get("error") or ""), "内容不符合要求")
-    return "⚠️ 本条未通过质检，后续将补发修正版。原因：" + reason
 
 
 def _block_text(b, push_thinking):

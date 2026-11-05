@@ -13,7 +13,6 @@
 """
 from .message_parse import (
     _classify, _blocks_to_text, _thinking_text_of, _tool_result_of,
-    quality_note as _quality_note_shared,
 )
 
 
@@ -31,11 +30,12 @@ def build_body(m, push):
     }
     """
     kind = _classify(m)
-    # 工具结果：本体是一段 JSON，包 json 围栏，按 Markdown 发送。
+    # 纯工具结果消息（整条就是一个回传）：包 json 围栏，按 Markdown 发送。
+    # 注意：必须先确认这条消息没有正文，否则会把正文一并跳过。
     tr = _tool_result_of(m)
-    if tr is not None:
+    if tr is not None and not _has_text_blocks(m):
         return _tool_result_body(kind, tr)
-    body_text = _with_quality_note(m, _pick_body(m))
+    body_text = _pick_body(m)
     # 思考：md 是复制按钮产物、不含思考，故从 blocks 独立提取；
     # 仅在「思考」开关打开时随正文发出。
     think = _thinking_text_of(m) if push.get("thinking", False) else ""
@@ -47,32 +47,18 @@ def build_body(m, push):
     }
 
 
-def _quality_note(m):
-    """取质检标注行；无标记返回空串。
-
-    规则与文案的唯一来源是 message_parse.quality_note，此处只做转发，
-    保证企微与 QQ 两条通道对同一条回复给出完全一致的标注。
+def _has_text_blocks(m):
+    """判断消息里是否除工具结果外还有正文类内容。
 
     @param m 消息对象
-    @returns 标注行；无需标注返回空串
+    @returns 有正文返回 True
     """
-    return _quality_note_shared(m)
-
-
-def _with_quality_note(m, body_text):
-    """在正文最前加质检标注；无需标注时原样返回。
-
-    标注放最前而非最后：用户先知道「这条有问题、后面会有修正版」，
-    再读正文，避免读完后才被告知内容不可靠。
-
-    @param m         消息对象
-    @param body_text 正文文本
-    @returns 加过标注的正文
-    """
-    note = _quality_note(m)
-    if not note:
-        return body_text
-    return (note + "\n" + body_text) if body_text else note
+    for b in (m.get("blocks") or []):
+        if not b:
+            continue
+        if b.get("type") in ("paragraph", "heading", "quote", "list", "table", "thinking"):
+            return True
+    return False
 
 
 def _pick_body(m):
