@@ -23,50 +23,28 @@ import unittest
 import unittest.mock as mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 本目录也要在路径上：共享夹具与本文件同级，单跑时靠这一行才能导入
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import paths  # noqa: F401
 from remote_bridge import message_router as mr
+from message_router_fixtures import RouterTestBase
 
 
-class _StoreMock:
-    """模拟 bridge_store：只保留推送链路真正用到的读写。"""
+class _Base(RouterTestBase):
+    """在共享夹具基础上追加状态隔离。
 
-    def __init__(self):
-        self.pushed = {}    # conv_id -> set(keys)
-        self.pending = {}   # conv_id -> list(msg)
+    与锁隔离那份的差异仅此一处：本文件要建立窗口、写最近用户，
+    必须把这些模块级可变状态换成用例专属副本，否则会污染真实运行数据。
+    """
 
-    def get_config(self):
-        return {"push": {"user": True, "tool": True, "ai": True}}
+    def extra_patches(self):
+        """追加模块级状态与存盘路径的隔离补丁。
 
-    def get_pushed_set(self, conv_id):
-        return set(self.pushed.get(conv_id, set()))
-
-    def mark_pushed(self, conv_id, keys):
-        self.pushed.setdefault(conv_id, set()).update(keys)
-
-    def set_pending(self, conv_id, failed):
-        self.pending[conv_id] = list(failed)
-
-    def merge_pending(self, conv_id, msgs):
-        return list(msgs)
-
-
-class _Base(unittest.TestCase):
-    """公共夹具：替换存储读写，并清空模块级窗口状态。"""
-
-    def setUp(self):
-        self.store = _StoreMock()
-        self._patches = [
-            mock.patch.object(mr.bridge_store, "get_config", self.store.get_config),
-            mock.patch.object(mr.bridge_store, "get_pushed_set", self.store.get_pushed_set),
-            mock.patch.object(mr.bridge_store, "mark_pushed", self.store.mark_pushed),
-            mock.patch.object(mr.bridge_store, "set_pending", self.store.set_pending),
-            mock.patch.object(mr.bridge_store, "merge_pending", self.store.merge_pending),
-        ]
-        # 状态隔离：把模块级可变状态整体替换成「本用例专属的空副本」，
-        # 用例结束由 mock 自动还原为原对象。这样测试只会动到副本，
-        # 不会清空真实运行中的窗口与缓存——即使测试与生产同进程也安全。
-        self._patches += [
+        用例结束由 mock 自动还原为原对象，故测试只动副本。
+        @returns 追加的补丁列表
+        """
+        return [
             mock.patch.object(mr, "_windows", {}),
             mock.patch.object(mr, "_last_report", {}),
             mock.patch.object(mr, "_last_openid", ""),
@@ -75,13 +53,7 @@ class _Base(unittest.TestCase):
             mock.patch.object(mr.window_store, "save_windows", lambda *a, **k: True),
             mock.patch.object(mr.window_store, "save", lambda *a, **k: True),
         ]
-        for p in self._patches:
-            p.start()
 
-    def tearDown(self):
-        # 逆序还原：后补的状态副本先还原，避免中途残留半套状态
-        for p in reversed(self._patches):
-            p.stop()
 
 
 class TestNoteIncoming(_Base):

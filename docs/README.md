@@ -22,6 +22,7 @@
 | `memory-system-review.md` | 走查结论 | 改动记忆系统前，了解已知问题与边界 |
 | `test-coverage-tracker.md` | 覆盖追踪 | 补测试前，查哪些模块仍无覆盖、哪些属假覆盖 |
 | `pending-tasks.md` | 待办 | 想知道当前还有哪些未处理项、各自卡在哪 |
+| `quality-debt-tracker.md` | 存量追踪 | 清理结构质量欠账时；含存量分布、批次计划与进度 |
 | `card-state-issue-tracker.md` | 故障追踪 | 卡片状态类问题复现时，查历史根因与验证方法 |
 | `code-review-report.md` | 走查记录 | 查接口核对结论、重复代码分类口径时 |
 | `记忆机制改进方案.md` | 拟议方案 | 记忆系统改造立项前；当前状态为定稿待审批 |

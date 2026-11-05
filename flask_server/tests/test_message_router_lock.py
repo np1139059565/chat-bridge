@@ -25,62 +25,16 @@ import unittest
 import unittest.mock as mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 本目录也要在路径上：共享夹具与本文件同级，单跑时靠这一行才能导入
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import paths  # noqa: F401
 from remote_bridge import message_router as mr
+from message_router_fixtures import RouterTestBase
 
-
-class _StoreMock:
-    """按会话隔离地模拟 bridge_store 的推送相关读写。"""
-
-    def __init__(self):
-        self.pushed = {}   # conv_id -> set(keys)
-        self.pending = {}  # conv_id -> list(msg)
-
-    def get_config(self):
-        return {"push": {"user": True, "tool": True, "ai": True}}
-
-    def get_pushed_set(self, conv_id):
-        return set(self.pushed.get(conv_id, set()))
-
-    def mark_pushed(self, conv_id, keys):
-        self.pushed.setdefault(conv_id, set()).update(keys)
-
-    def set_pending(self, conv_id, failed):
-        self.pending[conv_id] = list(failed)
-
-    def merge_pending(self, conv_id, msgs):
-        return list(msgs)
-
-
-class _Base(unittest.TestCase):
-    """公共夹具：替换 bridge_store 的读写与 push_text。"""
-
-    def setUp(self):
-        self.store = _StoreMock()
-        self._patches = [
-            mock.patch.object(mr.bridge_store, "get_config", self.store.get_config),
-            mock.patch.object(mr.bridge_store, "get_pushed_set", self.store.get_pushed_set),
-            mock.patch.object(mr.bridge_store, "mark_pushed", self.store.mark_pushed),
-            mock.patch.object(mr.bridge_store, "set_pending", self.store.set_pending),
-            mock.patch.object(mr.bridge_store, "merge_pending", self.store.merge_pending),
-        ]
-        for p in self._patches:
-            p.start()
-        self._orig_push_text = mr.push_text
-
-    def tearDown(self):
-        mr.push_text = self._orig_push_text
-        for p in self._patches:
-            p.stop()
-
-    @staticmethod
-    def _payload(conv, mid, body):
-        return {
-            "conversationId": conv,
-            "openid": "user-1",
-            "messages": [{"id": mid, "source": "assistant", "md": body}],
-        }
+# 共享夹具已提供存储模拟与打补丁，本文件只需沿用；
+# 与窗口那份的差异仅在于窗口那份还要隔离模块级状态。
+_Base = RouterTestBase
 
 
 class TestCrossConversationIsolation(_Base):
