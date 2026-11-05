@@ -52,14 +52,50 @@
   };
 
   /**
-   * 检测到「已停止」后延迟点一次「重新生成」。
+   * 判断最后一条 AI 消息是否「输出为空」——风控的另一种表现。
+   *
+   * 与「已停止」的区别：那种页面会明确显示停止字样；这种只是生成中断，
+   * 末条 AI 消息里只剩思考内容，正文一个字都没有。
+   *
+   * 判定复用现有解析（A.makeAssistant），不另写一套 DOM 遍历：
+   * 解析结果里除 thinking 外没有任何内容块，即视为空。
+   * 这样站点结构变化时，只需维护解析那一处，不会出现两套判定各自漂移。
+   *
+   * @returns {boolean} 是否属空输出
+   */
+  A.isEmptyByRisk = function () {
+    const P = A.activeProfile();
+    if (!P || !A.makeAssistant) return false;
+    // 取最后一条 AI 消息：风控只会发生在最新一轮
+    const msgs = document.querySelectorAll(P.item || '.ds-message');
+    if (!msgs.length) return false;
+    const last = msgs[msgs.length - 1];
+    // 末条不是 AI 消息就谈不上「AI 输出为空」
+    if (P.assistantMark && !last.querySelector(P.assistantMark)) return false;
+    let parsed;
+    try {
+      parsed = A.makeAssistant(last, P);
+    } catch (e) {
+      return false;   // 解析异常时宁可不动，也不要误触发重新生成
+    }
+    const blocks = (parsed && parsed.blocks) || [];
+    // 只看有没有「实质内容」：thinking 块是过程，不算输出
+    return !blocks.some(function (b) { return b && b.type !== 'thinking'; });
+  };
+
+  /**
+   * 检测到异常停止后延迟点一次「重新生成」。
    *
    * 由生成态轮询在「生成中 → 空闲」翻转时调用（见 04_observer.js）。
-   * 只在真是风控中断时才动，正常生成结束不受影响。
+   * 覆盖两种风控形态：「已停止」显式提示、输出为空。二者恢复动作相同。
+   * 正常生成结束不受影响——那时末条有正文，两个判定都不成立。
    */
   A.recoverIfStopped = function () {
     if (recovering) return;
-    if (!A.isStoppedByRisk()) return;
+    // 两种形态任一成立都要恢复：显式「已停止」优先判，省掉一次解析
+    const stopped = A.isStoppedByRisk();
+    const empty = stopped ? false : A.isEmptyByRisk();
+    if (!stopped && !empty) return;
     const P = A.activeProfile();
     const expr = P && P.regenerateExpr;
     if (!expr) {

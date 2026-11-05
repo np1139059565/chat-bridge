@@ -19,12 +19,10 @@
 | `wecom-protocol.md` | 协议记录 | 改动企业微信长连接收发时；含已确认与待真机验证的部分 |
 | `channel-genericization.md` | 改造原则 | 新增通道、改动推送链路前；其第五节是各通道必须遵守的等价原则 |
 | `dialog-parts-split-progress.md` | 分片清单 | 改动抽屉分片时；含当前分片职责表、行数与加载顺序 |
-| `memory-system-review.md` | 走查结论 | 改动记忆系统前，了解已知问题与边界 |
 | `test-coverage-tracker.md` | 覆盖追踪 | 补测试前，查哪些模块仍无覆盖、哪些属假覆盖 |
-| `pending-tasks.md` | 待办 | 想知道当前还有哪些未处理项、各自卡在哪 |
-| `quality-debt-tracker.md` | 存量追踪 | 清理结构质量欠账时；含存量分布、批次计划与进度 |
+| `pending-tasks.md` | 待办 | 想知道当前还有哪些未处理项、各自卡在哪。**结构质量与测试覆盖只在本文登记去向，详细数字见各自追踪文档** |
+| `quality-debt-tracker.md` | 存量追踪 | 清理结构质量欠账时；**存量数字以本文为准**，基线文件 `scripts/quality_baseline.json` |
 | `card-state-issue-tracker.md` | 故障追踪 | 卡片状态类问题复现时，查历史根因与验证方法 |
-| `code-review-report.md` | 走查记录 | 查接口核对结论、重复代码分类口径时 |
 | `记忆机制改进方案.md` | 拟议方案 | 记忆系统改造立项前；当前状态为定稿待审批 |
 
 ## archive/：过程记录
@@ -37,5 +35,8 @@
 | `前端测试补充进度.md` | 前端测试覆盖补充那一轮的清单与进度 |
 | `debug_chrome改造进度.md` | 调试扩展改造那一轮的清单与进度 |
 | `wecom-refactor-plan.md` | 企业微信通道重构那一轮的问题清单与改造步骤（核心原则已迁入 `channel-genericization.md`） |
+| `code-review-report.md` | 代码走查那一轮的结论与修复记录（待办项已并入 `pending-tasks.md`） |
+| `memory-system-review.md` | 记忆系统走查那一轮的问题清单与边界结论 |
+| `让AI从“应声虫”变成敢于反驳你的思考伙伴.md` | 提示词模板合集，与工程代码无关；核心内容已落地为规则 `ANTI-FLATTERY_PROTOCOL` |
 
 需要查「某个改动为什么这么做」时，归档文档是线索；判断「现在该怎么做」时，以根目录文档与代码为准。
