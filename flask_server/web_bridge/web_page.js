@@ -21,6 +21,7 @@
   // ---------- 前端日志上报（实现在 web_clientlog.js，暴露为 window.WebLog） ----------
   // 手机上看不到控制台，日志只能打到后端；实现细节见 web_clientlog.js 顶部说明。
   var clientLog = window.WebLog.clientLog;
+  if (window.WebPollTrace) window.WebPollTrace.init(clientLog);   // 临时诊断：注入日志函数
 
   // ---------- 时间格式化 ----------
   function fmtTime(ts) {
@@ -196,9 +197,18 @@
     inflightCtrl = ctrl;
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 6000);
     inflightTimer = timer;
+    // ---------- 临时诊断：分段计时（实现见 web_poll_trace.js，问题定位后删除） ----------
+    // 把一次轮询拆成四段分别计时，定位卡在网络、传输、解析还是渲染。
+    var _p0 = window.WebPollTrace ? window.WebPollTrace.now() : Date.now();
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
-      .then(function (r) { return r.json(); })
-      .then(function (data) { onPollOk(data, history, _t0); })
+      .then(function (r) {
+        return window.WebPollTrace ? window.WebPollTrace.traceResponse(r, _p0, history) : r.json();
+      })
+      .then(function (data) {
+        var _p4 = window.WebPollTrace ? window.WebPollTrace.now() : Date.now();
+        onPollOk(data, history, _t0);
+        if (window.WebPollTrace) window.WebPollTrace.traceBusiness(_p0, _p4, history);
+      })
       .catch(function (err) { onPollFail(err, history, _t0); })
       .then(function () {
         clearTimeout(timer);
