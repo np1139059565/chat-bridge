@@ -179,9 +179,13 @@ def _check_steps_exist(steps, index, customs):
     """
     available = _available_subcommands(index, customs)
     for s in steps:
-        sub = str(s).strip().split(None, 1)[0].lower()
-        if not sub:
+        # 先判空再取首段：空白字符串 split 后是空列表，直接取 [0] 会 IndexError。
+        # 这条路径在用户往组合指令里加空步骤时触发，原本表现为保存接口崩掉，
+        # 而不是给出「子指令不能为空」的提示。
+        parts = str(s).strip().split(None, 1)
+        if not parts:
             continue
+        sub = parts[0].lower()
         if resolve_cmd(sub) not in BUILTIN and sub not in available:
             return "子指令 %s 不存在" % sub
     return ""
