@@ -119,6 +119,10 @@
     conv.branchKeys = [];
     conv.externalCards = [];
     conv.orphanSlice = [];
+    // 执行签名库必须一起清：它是卡片状态的唯一依据，
+    // 残留会导致清空后重新解析时，新卡片凭旧签名被判成「已执行」。
+    // 签名依附于会话记录而存在，会话没了它就没有意义。
+    conv.executedSigs = {};
     Object.keys(this.entryChecked).forEach((k) => { delete this.entryChecked[k]; });
     Object.keys(this.entryOpen).forEach((k) => { delete this.entryOpen[k]; });
     if (this._persist) this._persist();

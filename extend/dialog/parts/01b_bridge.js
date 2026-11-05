@@ -377,6 +377,9 @@
     conv.visibleKeys = [];
     conv.branchKeys = [];
     conv.orphanSlice = [];
+    // 执行签名库一并清空：它是卡片状态的唯一依据，残留会让清空后新建的卡片
+    // 凭旧签名被判为「已执行」，表现为记录清空了、卡片状态还在。
+    conv.executedSigs = {};
     Object.keys(this.entryChecked).forEach((k) => { delete this.entryChecked[k]; });
     Object.keys(this.entryOpen).forEach((k) => { delete this.entryOpen[k]; });
     if (this._persist) this._persist();

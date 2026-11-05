@@ -23,7 +23,6 @@
 | `pending-tasks.md` | 待办 | 想知道当前还有哪些未处理项、各自卡在哪。**结构质量与测试覆盖只在本文登记去向，详细数字见各自追踪文档** |
 | `quality-debt-tracker.md` | 存量追踪 | 清理结构质量欠账时；**存量数字以本文为准**，基线文件 `scripts/quality_baseline.json` |
 | `card-state-issue-tracker.md` | 故障追踪 | 卡片状态类问题复现时，查历史根因与验证方法 |
-| `记忆机制改进方案.md` | 拟议方案 | 记忆系统改造立项前；当前状态为定稿待审批 |
 
 ## archive/：过程记录
 

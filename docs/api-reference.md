@@ -264,7 +264,7 @@ POST 请求体示例：
 ## 七、记忆系统
 
 结构化记忆系统的 HTTP 接口。数据落 `flask_server/data/memory/memory.db`（单文件 SQLite）。
-所有响应统一 `{ success: bool, ... }`。详见 `docs/记忆机制改进方案.md`。
+所有响应统一 `{ success: bool, ... }`。
 
 ### 会话（前端走后端查询）
 
