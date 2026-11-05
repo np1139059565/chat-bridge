@@ -28,13 +28,6 @@ def log(*args):
     """
     bridge_log.write("[bridge][wecom]", *args)
 
-# 合并多条消息时的分隔线
-SEP = "\n\n———\n\n"
-
-# 正文拼装与截断统一走公共层，避免与微信等通道各写一份
-_truncate = text_store.truncate
-
-
 class WecomAdapter(ChannelAdapter):
     """企业微信通道适配器。"""
 
@@ -94,21 +87,25 @@ class WecomAdapter(ChannelAdapter):
         return cid
 
     def merge_batch(self, items, push):
-        """把一批消息合并成一条文本。
+        """不合并：返回 None，让管线逐条推送。
 
-        企微无配额压力，但逐条推会在手机上刷出很多条，故仍合并。
-        @param items 本轮待推消息
-        @param push  推送开关
-        @returns 合并后的文本；全部不可推时返回空串
+        为什么从「合并」改为「不合并」：合并会把整批消息拼成一个大字符串，
+        拼接过程压平了每条消息自身的结构——工具调用的代码块不再独立、
+        平台无从折叠，代码围栏退化为纯文本，且 AI 回复与工具结果被迫融成一条。
+        更直接的代价是时延：必须等整批消息收集齐才能拼出完整字符串再发送，
+        首字延迟等于整批的收集时间。
+
+        改为逐条后，每条消息由 outbound.build_body 单独组装——该组装器会
+        为工具结果包上 json 围栏、把思考内容包进独立折叠块，格式与 QQ 通道一致。
+
+        企业微信主动推送接口没有「每条用户消息仅限 N 条回复」的配额限制，
+        逐条发送不会像微信那样迅速耗尽额度。
+
+        @param items 本轮待推消息（本实现不使用）
+        @param push  推送开关（本实现不使用）
+        @returns 恒为 None，表示不合并
         """
-        bodies = []
-        for m in items:
-            body = self._body_of(m, push)
-            if body:
-                bodies.append(body)
-        if not bodies:
-            return ""
-        return _truncate(SEP.join(bodies))
+        return None
 
     def push_media(self, recipient, items, push, ctx):
         """发送这批消息里的图片、文件、语音，返回成功条数。
@@ -189,21 +186,6 @@ class WecomAdapter(ChannelAdapter):
             self.client, recipient, items, push, (ctx or {}).get("voice_map") or {},
             push_voice_fn=_push_voice)
 
-    def _body_of(self, m, push):
-        """取一条消息的待推正文（含类型前缀）；不可推返回空串。
-
-        拼装细节在公共层 text.py：三条通道此前各写一份，
-        企微与微信两份甚至逐字相同，改一处容易漏另一处。
-        @param m    消息对象
-        @param push 推送开关
-        @returns 正文
-        """
-        if not self._should_push(m, push):
-            return ""
-        # use_md=True：企微 markdown 消息类型支持标题 / 粗体 / 列表等语法，
-        # 优先用前端采集的原文，保住格式；缺失时自动退回按块拼。
-        return text_store.body_of(m, push, "wecom", use_md=True)
-
     def _should_push(self, m, push):
         """判断一条消息是否应当推送：类型开关打开，且不是企微自己发的。
 
@@ -223,16 +205,6 @@ class WecomAdapter(ChannelAdapter):
         @returns 来自企微返回 True
         """
         return text_store.is_own_source(m, "wecom")
-
-    def _extract_text(self, m, push):
-        """提取正文：剔除工具调用与工具结果块（实现见公共层）。
-
-        @param m    消息对象
-        @param push 推送开关
-        @returns 正文文本
-        """
-        # 与 _body_of 保持一致：企微支持 Markdown，优先用原文
-        return text_store.extract_text(m, push, use_md=True)
 
     def record_incoming(self, chatid, chat_type=1, user=""):
         """收到用户消息：登记会话并记下 chat_type。
