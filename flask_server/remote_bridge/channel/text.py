@@ -63,6 +63,15 @@ _PAYLOAD_CATEGORY = (
 # 说明采集时把渲染结果一并抓了进来，原文不可直接采用。
 _TRACE_MARKS = ("[工具调用]", "[工具结果]", "[语音]")
 
+# 质检错误码 → 给用户看的简短说明。
+# 完整告警文本是写给 AI 的整改指令，含 JSON 格式要求，不适合直接推给用户。
+_ERROR_BRIEF = {
+    "voice_missing": "缺少语音朗读内容",
+    "code_only_reply": "只有代码没有文字说明",
+    "thinking_english": "思考内容以英文为主",
+    "multiple_tool_calls": "一次包含多个工具调用",
+}
+
 
 def _scan_payload_category(b):
     """从「前缀 + 裸 JSON」的漂移形态里识别载荷类别。
@@ -321,4 +330,8 @@ def body_of(m, push, channel, check_own=True, use_md=False):
     if not text:
         return ""
     kind = mp._classify(m)
-    return "%s\n%s" % (PREFIX.get(kind, kind), text)
+    body = "%s\n%s" % (PREFIX.get(kind, kind), text)
+    # 质检标注放在最前：用户先知道「这条有问题、后面会有修正版」，
+    # 再读正文，避免读完后才被告知内容不可靠。
+    note = mp.quality_note(m)
+    return (note + "\n" + body) if note else body

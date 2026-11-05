@@ -257,6 +257,41 @@ def _scrub_traces(text):
     return "\n".join(out).strip()
 
 
+# 质检错误码 → 给用户看的简短说明。
+# 完整告警文本是写给 AI 的整改指令，含 JSON 格式要求，不适合直接推给用户。
+_ERROR_BRIEF = {
+    "voice_missing": "缺少语音朗读内容",
+    "code_only_reply": "只有代码没有文字说明",
+    "thinking_english": "思考内容以英文为主",
+    "multiple_tool_calls": "一次包含多个工具调用",
+}
+
+
+def quality_note(m):
+    """取质检标注行；无标记返回空串。
+
+    用户要求「被质检拦截的消息也该推过去，才能知道被拦截过」。
+    故此处不拦截，只在正文前加一行说明。
+
+    本函数是这条规则的唯一来源：企微（channel/text.py）与 QQ（outbound.py）
+    都调用它，保证同一条回复在两条通道上的标注文案完全一致。
+
+    @param m 消息对象
+    @returns 标注行；无需标注返回空串
+    """
+    q = m.get("qualityIssue")
+    if not isinstance(q, dict):
+        return ""
+    # 只取说明的第一句：完整说明是给 AI 看的整改指令（含 JSON 格式要求），
+    # 原样推给用户既长又无意义。用户只需知道「哪里不对」。
+    msg = str(q.get("message") or "").strip()
+    reason = msg.split("。")[0].strip() if msg else ""
+    if not reason:
+        # 没有说明时退回错误码对应的中文短句
+        reason = _ERROR_BRIEF.get(str(q.get("error") or ""), "内容不符合要求")
+    return "⚠️ 本条未通过质检，后续将补发修正版。原因：" + reason
+
+
 def _block_text(b, push_thinking):
     """纯文本块：段落 / 标题 / 引用共用同一取文本方式。"""
     return _scrub_traces(str(b.get("text") or ""))

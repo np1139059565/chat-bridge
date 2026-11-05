@@ -13,6 +13,7 @@
 """
 from .message_parse import (
     _classify, _blocks_to_text, _thinking_text_of, _tool_result_of,
+    quality_note as _quality_note_shared,
 )
 
 
@@ -34,7 +35,7 @@ def build_body(m, push):
     tr = _tool_result_of(m)
     if tr is not None:
         return _tool_result_body(kind, tr)
-    body_text = _pick_body(m)
+    body_text = _with_quality_note(m, _pick_body(m))
     # 思考：md 是复制按钮产物、不含思考，故从 blocks 独立提取；
     # 仅在「思考」开关打开时随正文发出。
     think = _thinking_text_of(m) if push.get("thinking", False) else ""
@@ -44,6 +45,34 @@ def build_body(m, push):
         "kind": kind, "text": body_text, "markdown": bool(str(m.get("md") or "").strip()),
         "is_tool_result": False, "skip": not body_text,
     }
+
+
+def _quality_note(m):
+    """取质检标注行；无标记返回空串。
+
+    规则与文案的唯一来源是 message_parse.quality_note，此处只做转发，
+    保证企微与 QQ 两条通道对同一条回复给出完全一致的标注。
+
+    @param m 消息对象
+    @returns 标注行；无需标注返回空串
+    """
+    return _quality_note_shared(m)
+
+
+def _with_quality_note(m, body_text):
+    """在正文最前加质检标注；无需标注时原样返回。
+
+    标注放最前而非最后：用户先知道「这条有问题、后面会有修正版」，
+    再读正文，避免读完后才被告知内容不可靠。
+
+    @param m         消息对象
+    @param body_text 正文文本
+    @returns 加过标注的正文
+    """
+    note = _quality_note(m)
+    if not note:
+        return body_text
+    return (note + "\n" + body_text) if body_text else note
 
 
 def _pick_body(m):

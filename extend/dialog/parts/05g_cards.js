@@ -52,6 +52,34 @@
   };
 
   /**
+   * 记下某条消息被质检判过的问题，供推送时在正文前标注。
+   *
+   * 为什么要标注而不是拦截：用户明确要求「被拦截过的消息也该推过去，
+   * 才能知道被拦截过」。拦截会让用户彻底收不到，标注则两头兼顾。
+   * 标记按消息指纹存，随该消息上报时一并带给后端。
+   *
+   * @param {string} msgId 消息指纹
+   * @param {Object} issue 质检结论 { error, message }
+   */
+  M._noteQualityFlag = function (msgId, issue) {
+    if (!msgId || !issue) return;
+    this._qualityFlags = this._qualityFlags || {};
+    this._qualityFlags[msgId] = {
+      error: issue.error || '',
+      message: issue.message || ''
+    };
+  };
+
+  /**
+   * 取某条消息的质检标记；没有返回 null。
+   * @param {string} msgId 消息指纹
+   * @returns {Object|null} { error, message }
+   */
+  M._qualityFlagOf = function (msgId) {
+    return ((this._qualityFlags || {})[msgId]) || null;
+  };
+
+  /**
    * 处理单条消息的建卡：定位节点、检测告警、为代码块建卡并收集候选。
    * 状态经 state 对象回写，供主函数汇总与落点决策。
    */
@@ -78,6 +106,9 @@
     // msg_id：把归属消息的指纹写进告警本身，卡片路径与独立回传路径
     // 都用「会话 + msg_id + 问题码」作为去重键，保证同一消息的同一问题只回传一次。
     if (issue) issue.msg_id = this.msgId(m);
+    // 记下「这条消息被质检判过问题」：推送时要在正文前标注，
+    // 让用户知道收到的这条内容有问题、后续会有修正版。
+    if (issue) this._noteQualityFlag(issue.msg_id, issue);
     if (issue && issue.severity !== 'fatal') {
       state.msgIssues.push({ holder: holder, issue: issue });
     }
