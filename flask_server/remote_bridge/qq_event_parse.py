@@ -44,9 +44,11 @@ def extract(d):
 
     @return (openid, content, msg_id)；缺字段时对应值为空串
     """
-    # 单聊事件的用户标识位于 author.user_openid（群聊场景则为 member_openid）
-    author = d.get("author") or {}
-    openid = author.get("user_openid") or ""
+    # 单聊事件的用户标识位于 author.user_openid（群聊场景则为 member_openid）。
+    # 必须判类型：`or {}` 只挡 None 与空值，挡不住字符串等异常形态，
+    # 那样后面调 .get 会抛 AttributeError，整条消息处理中断。
+    author = d.get("author")
+    openid = (author.get("user_openid") if isinstance(author, dict) else "") or ""
     content = d.get("content") or ""
     # 消息 id：被动回复要引用它，事件体顶层字段名为 id
     msg_id = d.get("id") or ""
