@@ -92,6 +92,20 @@
    */
   A.recoverIfStopped = function () {
     if (recovering) return;
+    // 先看用户是否已向上翻看历史：在底部才考虑恢复。
+    //
+    // 为什么加这一道：用户手动点停止也会出现「已停止」，那种情况绝不能替他重新生成——
+    // 他是主动不要这条回复的。而「往上翻看历史」是一个可观测的信号：
+    // 主动停止后用户常会回翻对话找上下文，此刻不打扰他，比替他重跑更稳妥。
+    //
+    // 这道判断的局限要说清楚：滚动位置与「谁点了停止」并无因果关系，
+    // 它只能降低误触发概率，不能精确区分「用户停的」与「风控掐的」。
+    // 代价是用户恰好往上翻时真遇风控，那次不会自动恢复——我们选择宁可漏恢复，
+    // 也不在用户主动停止后擅自重跑。
+    //
+    // 站点未配置 scrollToBottomButton 时 isAtBottom 恒为 false，即永不自动恢复；
+    // 这是保守取向：判定缺失时宁可不动作。
+    if (!A.isAtBottom || !A.isAtBottom()) return;
     // 两种形态任一成立都要恢复：显式「已停止」优先判，省掉一次解析
     const stopped = A.isStoppedByRisk();
     const empty = stopped ? false : A.isEmptyByRisk();
