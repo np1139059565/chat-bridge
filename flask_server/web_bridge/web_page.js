@@ -158,7 +158,9 @@
     pollBusy = true;
     var _t0 = Date.now();
     // 不再记「start」：每次轮询都记一条纯属噪音，结果已由 slow / fail 表达。
-    var url = '/api/web/messages?cursor=' + cursor + '&limit=200';
+    // 首次铺屏只取最新 10 条（后端 history=1 分支），其余滑到底部再懒加载。
+    // 增量轮询仍按 200 拉，避免断开重连后新消息一次拿不全。
+    var url = '/api/web/messages?cursor=' + cursor + '&limit=' + (history ? 10 : 200);
     if (history) url += '&history=1';
     // 加超时：卡住的请求主动中断，否则 pollBusy 会永久为真、轮询停摆。
     // 由 10 秒收紧到 6 秒：轮询每 2.5 秒一次，6 秒足够正常请求完成；
@@ -197,6 +199,8 @@
         if (window.WebVoice && window.WebVoice.kick) window.WebVoice.kick();
         // 保持可见区域是最新消息（列表倒序，最新在顶部）
         if (listEl.scrollTop < 40) listEl.scrollTop = 0;
+        // 首屏只铺 10 条，不满一屏时主动补更早的消息（否则滚动条不出现、翻不到历史）
+        if (history && window.WebDom && window.WebDom.fillIfNeeded) window.WebDom.fillIfNeeded();
       })
       .catch(function (err) {
         // 失败分类（区分「发不出去」与「发出去了没回应」）由 WebLogic 统一实现，

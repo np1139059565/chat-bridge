@@ -124,9 +124,23 @@
         // 翻历史时保留已加载内容：只在超过宽松硬上限时才裁剪
         if (domCount > MAX_DOM * HARD_CAP_FACTOR) trim('oldest');
         log('older', 'loaded=' + list.length + ' has_more=' + (d.has_more ? 1 : 0));
+        // 这批仍没填满一屏就继续补（例如历史消息本身很短）
+        fillIfNeeded();
       })
       .catch(function (e) { log('older', 'fail ' + (e && e.message ? e.message : e)); })
       .then(function () { loading = false; });
+  }
+
+  /**
+   * 内容不足一屏时主动补拉。
+   *
+   * 首屏只铺 10 条，若这 10 条撑不满容器，滚动条不会出现、scroll 事件永远不触发，
+   * 更早的历史就再也取不到。故在铺完与每批加载完各检查一次，不足则继续向前补，
+   * 直到填满一屏或已无更早消息（noMore 由 loadOlder 维护）。
+   */
+  function fillIfNeeded() {
+    if (!listEl || loading || noMore) return;
+    if (listEl.scrollHeight <= listEl.clientHeight + 1) loadOlder();
   }
 
   /** 滚动监听：接近底部时加载更早的消息。 */
@@ -143,6 +157,7 @@
     recompute: recompute,
     afterAppend: afterAppend,
     loadOlder: loadOlder,
+    fillIfNeeded: fillIfNeeded,
     // 只读访问器
     count: function () { return domCount; },
     minSeq: function () { return minSeqInDom; }

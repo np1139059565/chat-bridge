@@ -290,8 +290,13 @@ def web_messages():
     import time as _t
     _t0 = _t.perf_counter()
     if request.args.get("history") == "1":
-        # 首次铺屏只给最近 50 条：其余靠滑到底部懒加载，避免一次渲染过多撑爆手机内存
-        data = web_inbox.recent(50)
+        # 首次铺屏只给最近 10 条：首屏渲染越轻，手机端越快看到内容。
+        # 其余历史靠滑到底部懒加载（before_seq 分批取），避免一次渲染过多撑爆手机内存。
+        try:
+            hlimit = int(request.args.get("limit", "10"))
+        except ValueError:
+            hlimit = 10
+        data = web_inbox.recent(max(1, min(hlimit, 100)))
     else:
         data = web_inbox.list_since(cursor, limit)
     # 读收件箱（含等锁 + 读缓存/解析）耗时：轮询卡顿最常见的嫌疑点

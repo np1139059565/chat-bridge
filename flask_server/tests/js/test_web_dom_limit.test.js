@@ -285,6 +285,59 @@ test('loadOlder：fetch 失败时记录日志且不抛异常', async () => {
   assert.ok(logs.some((l) => l.startsWith('older:fail')));
 });
 
+// ---------------- fillIfNeeded 首屏填充 ----------------
+
+test('fillIfNeeded：内容不满一屏时主动向前加载', async () => {
+  const dom = loadFresh();
+  // 内容总高等于可视高度：没有滚动条，scroll 事件永远不会触发
+  const list = makeList([10]);
+  list.scrollHeight = 500;
+  list.clientHeight = 500;
+  dom.init({ listEl: list, render: () => true });
+  let called = 0;
+  global.fetch = () => {
+    called++;
+    return Promise.resolve({ json: () => Promise.resolve({ success: true, messages: [{ seq: 9 }], has_more: true }) });
+  };
+  dom.fillIfNeeded();
+  await new Promise((r) => setImmediate(r));
+  // 应发起一次向前加载
+  assert.equal(called, 1);
+});
+
+test('fillIfNeeded：内容已满一屏时不加载', () => {
+  const dom = loadFresh();
+  // 内容明显高于可视区：已有滚动条，靠 scroll 事件触发即可
+  const list = makeList([10]);
+  list.scrollHeight = 2000;
+  list.clientHeight = 500;
+  dom.init({ listEl: list, render: () => true });
+  let called = 0;
+  global.fetch = () => { called++; return Promise.resolve({ json: () => Promise.resolve({ success: true, messages: [] }) }); };
+  dom.fillIfNeeded();
+  // 不该主动请求
+  assert.equal(called, 0);
+});
+
+test('fillIfNeeded：已无更早消息时不再补拉', async () => {
+  const dom = loadFresh();
+  const list = makeList([10]);
+  list.scrollHeight = 500;
+  list.clientHeight = 500;
+  dom.init({ listEl: list, render: () => true });
+  let called = 0;
+  global.fetch = () => {
+    called++;
+    // has_more 为假：服务端已没有更早的消息
+    return Promise.resolve({ json: () => Promise.resolve({ success: true, messages: [{ seq: 9 }], has_more: false }) });
+  };
+  dom.fillIfNeeded();
+  await new Promise((r) => setImmediate(r));
+  // 再调一次不应重复请求
+  dom.fillIfNeeded();
+  assert.equal(called, 1);
+});
+
 // ---------------- MAX_DOM 常量 ----------------
 
 test('MAX_DOM 暴露为 50', () => {
