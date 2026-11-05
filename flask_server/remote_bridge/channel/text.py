@@ -51,6 +51,34 @@ def is_own_source(m, channel):
     return bool(obj and obj.get("source") == channel)
 
 
+# 载荷类别映射：JSON 的 type 值 → 展示类别。
+# 工具调用与工具回传同属「工具」，区别只在取文本时报调用还是报成败。
+_PAYLOAD_CATEGORY = (
+    ("bridge-chat-call", "tool"),
+    ("bridge-chat-res", "tool"),
+    ("bridge-voice", "voice"),
+)
+
+
+def _scan_payload_category(b):
+    """从「前缀 + 裸 JSON」的漂移形态里识别载荷类别。
+
+    抓取侧偶尔会在 JSON 前多带「🛠 工具」之类字样，此时块整体不是 JSON，
+    按块解析取不到。只对文本类块扫描；扫描器要求大括号配平且 type 精确
+    匹配，误判风险低。
+
+    @param b 内容块
+    @returns 'tool' / 'voice'；认不出返回 None
+    """
+    if (b or {}).get("type") not in ("paragraph", "text", "heading"):
+        return None
+    src = mp._block_text_of(b)
+    for want, cat in _PAYLOAD_CATEGORY:
+        if mp._scan_json_by_type(src, want):
+            return cat
+    return None
+
+
 def _block_category(b):
     """判断一个块在展示顺序里属于哪一类。
 
@@ -61,18 +89,18 @@ def _block_category(b):
     @param b 内容块
     @returns 'thinking' / 'text' / 'tool' / 'voice'
     """
-    bt = (b or {}).get("type")
-    if bt == "thinking":
+    if (b or {}).get("type") == "thinking":
         return "thinking"
-    if bt == "code":
-        obj = mp._load_json_block(b)
-        if obj:
-            t = obj.get("type")
-            if t == "bridge-chat-call":
-                return "tool"
-            if t == "bridge-voice":
-                return "voice"
-    return "text"
+    # 代码块与纯文本块都可能是带 type 的 JSON 载荷：
+    # 标准形态落在 code 块，生成侧漂移时则是裸 JSON 落在文本块里，
+    # 两者必须同样识别，否则回传整段 JSON 会被当成正文推出去。
+    obj = mp._load_json_block(b)
+    if obj:
+        for want, cat in _PAYLOAD_CATEGORY:
+            if obj.get("type") == want:
+                return cat
+        return "text"
+    return _scan_payload_category(b) or "text"
 
 
 def _assemble_ordered(m, push, use_md):
@@ -168,15 +196,26 @@ def _take_voice(b):
 
 
 def _take_tool(b):
-    """取工具调用块的工具名。
+    """取工具类块的摘要文本：调用只报工具名，回传只报成败。
 
-    只报工具名，不带参数：参数是 JSON，手机上占满一屏且无阅读价值。
-    用户需要知道「AI 调了什么工具」，不需要看具体入参。
+    两类都不带正文载荷：参数与结果都是 JSON，手机上占满一屏且无阅读价值，
+    结果里还含 nonce、本机路径、命令输出等内部字段。
+    用户需要知道「调了什么、成没成」，不需要看具体内容。
 
-    @param b 工具调用块
-    @returns 带前缀的工具名
+    @param b 工具调用块或工具回传块
+    @returns 带前缀的摘要
     """
-    obj = mp._load_json_block(b) or {}
+    # 先按「块整体就是 JSON」取；取不到再扫描「前缀 + JSON」的漂移形态
+    obj = mp._load_json_block(b)
+    if obj is None:
+        src = mp._block_text_of(b)
+        obj = (mp._scan_json_by_type(src, "bridge-chat-res")
+               or mp._scan_json_by_type(src, "bridge-chat-call") or {})
+    if obj.get("type") == "bridge-chat-res":
+        # 回传：只报成败，失败时附一句原因
+        mark = "成功" if obj.get("success") else "失败"
+        err = obj.get("error") or ""
+        return "[工具结果] " + (mark + ("：" + str(err) if err else ""))
     return "[工具调用] " + str(obj.get("tool") or "")
 
 
