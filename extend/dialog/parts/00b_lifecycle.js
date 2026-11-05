@@ -69,11 +69,22 @@
     window.parent.postMessage({ type: 'request_panel_visible' }, '*');
     // 直读风控自动恢复开关：对话框本身就是扩展页面（chrome-extension:// 协议），
     // 可直接访问 chrome.storage，无需经内容脚本中转。
-    // 直连避免了两类隐患：消息往返的时序竞争，以及监听器 this 绑定问题。
+    //
+    // 诊断：读取路径此前完全静默，出问题时无法判断是「没存进去」还是「没读出来」。
+    // 现记录三个关键点：接口是否可用、读到什么值、是否抛错。
     try {
-      chrome.storage.local.get(['aiMirrorRiskRecover'], function (res) {
-        this.riskRecoverEnabled = !!(res && res.aiMirrorRiskRecover);
-      }.bind(this));
-    } catch (e) { /* 存储不可用时保持默认关闭 */ }
+      if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+        log('[风控恢复] chrome.storage 不可用，开关保持默认关闭');
+      } else {
+        log('[风控恢复] 开始读取开关状态');
+        chrome.storage.local.get(['aiMirrorRiskRecover'], function (res) {
+          this.riskRecoverEnabled = !!(res && res.aiMirrorRiskRecover);
+          log('[风控恢复] 读取结果：' + this.riskRecoverEnabled
+            + '（原始值=' + JSON.stringify(res && res.aiMirrorRiskRecover) + '）');
+        }.bind(this));
+      }
+    } catch (e) {
+      log('[风控恢复] 读取开关失败：' + (e && e.message ? e.message : e));
+    }
   };
 })();

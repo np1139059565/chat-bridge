@@ -248,7 +248,65 @@
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 内容节点
    */
-  function renderGeneralBody(ctx) {
+  /**
+ * 切换风控自动恢复开关并持久化。
+ *
+ * 抽成独立函数的原因：写入要走带回调的 chrome.storage 形式（只有回调里才能读到
+ * runtime.lastError），内联到渲染函数里会把行数撑破上限。
+ *
+ * @param {Object} ctx Vue 实例
+ */
+function toggleRiskRecover(ctx) {
+  const next = !ctx.riskRecoverEnabled;
+  ctx.riskRecoverEnabled = next;
+  // 诊断：写入路径此前完全静默，失败了也看不出
+  try {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+      console.error('[风控恢复] chrome.storage 不可用，开关无法持久化');
+      return;
+    }
+    chrome.storage.local.set({ aiMirrorRiskRecover: next }, function () {
+      if (chrome.runtime.lastError) {
+        console.error('[风控恢复] 写入失败：' + chrome.runtime.lastError.message);
+      } else {
+        console.log('[风控恢复] 写入成功：' + next);
+      }
+    });
+  } catch (e) {
+    console.error('[风控恢复] 写入异常：' + (e && e.message ? e.message : e));
+  }
+}
+
+/**
+ * 切换风控自动恢复开关并持久化。
+ *
+ * 抽成独立函数的原因：写入要走带回调的 chrome.storage 形式（只有回调里才能读到
+ * runtime.lastError），内联到渲染函数里会把行数撑破上限。
+ *
+ * @param {Object} ctx Vue 实例
+ */
+function toggleRiskRecover(ctx) {
+  const next = !ctx.riskRecoverEnabled;
+  ctx.riskRecoverEnabled = next;
+  // 诊断：写入路径此前完全静默，失败了也看不出
+  try {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+      console.error('[风控恢复] chrome.storage 不可用，开关无法持久化');
+      return;
+    }
+    chrome.storage.local.set({ aiMirrorRiskRecover: next }, function () {
+      if (chrome.runtime.lastError) {
+        console.error('[风控恢复] 写入失败：' + chrome.runtime.lastError.message);
+      } else {
+        console.log('[风控恢复] 写入成功：' + next);
+      }
+    });
+  } catch (e) {
+    console.error('[风控恢复] 写入异常：' + (e && e.message ? e.message : e));
+  }
+}
+
+function renderGeneralBody(ctx) {
     return h('div', [
       // 自动延迟配置 + 全局自动开关（右侧按钮直接切换）
       h('label', ['自动回传延迟(秒)', h('div', { class: 'inline-row' }, [
@@ -270,13 +328,7 @@
         h('button', {
           class: 'switch ' + (ctx.riskRecoverEnabled ? 'on' : 'off'),
           title: '开启后：检测到网页 AI 因风控停止生成，等待 20 秒自动点一次「重新生成」',
-          onClick: () => {
-            const next = !ctx.riskRecoverEnabled;
-            ctx.riskRecoverEnabled = next;
-            // 直写扩展存储：对话框本身是扩展页面，可直接访问 chrome.storage。
-            // 与读取走同一条路径，避免读写经不同通道导致状态对不上。
-            try { chrome.storage.local.set({ aiMirrorRiskRecover: next }); } catch (e) {}
-          }
+          onClick: () => toggleRiskRecover(ctx)
         }, ctx.riskRecoverEnabled ? '已开启' : '已关闭')
       ])]),
       h('div', { class: 'hint' }, '开启后：检测到 AI 因风控停止（页面显示「已停止」或输出为空），等 20 秒自动点一次重新生成。仅在你停留在对话底部时生效——往上翻看历史时不打扰，避免替你重跑主动停止的回复。'),

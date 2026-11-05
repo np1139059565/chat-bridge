@@ -5,9 +5,14 @@
 (function () {
   'use strict';
   const A = window.AIMirrorContent;
-  // 启动标记：确认页面里跑的是含采集分支的新版内容脚本。
-  // 若控制台没有这行，说明页面未刷新、跑的还是旧版。
-  A.log('内容脚本已加载（含 bridge_copy_md 采集分支）');
+  // 启动标记：带构建标识，用来确认页面里跑的到底是哪一版脚本。
+  //
+  // 为什么需要它：改完内容脚本后，Chrome 必须重新加载扩展（chrome://extensions）
+  // 再刷新页面才生效；只刷新页面不够。此前排查时无法判断「跑的是新版还是旧版」，
+  // 白白多查了几轮。带上标识后，控制台第一行就能确认。
+  // 每次改动内容脚本时把这个标识一起改掉。
+  const BUILD_TAG = '2026-11-06-risk-recover-v3';
+  A.log('内容脚本已加载 build=' + BUILD_TAG + ' 时间=' + new Date().toISOString());
 
   // 来自对话框（iframe）的消息
   window.addEventListener('message', function (e) {
