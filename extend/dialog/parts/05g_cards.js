@@ -127,9 +127,16 @@
     }
     if (!state.firstToolCard) state.firstToolCard = holder.cards[b.id];
     if (scrollOnly) {
-      // 滚动轮次里，只有「真正的新回复」上的新卡片才预备自动执行。
-      // 同样不能用切片末位单独判定：向上滚动加载历史时，末位未必是新消息。
-      if (mi === incoming.length - 1 && state.isFreshReply) {
+      // 滚动轮次：先给「切片末条消息」上的卡片发预备标记，是否真执行由复检决定。
+      //
+      // 这里只看末位，不再要求本轮是新鲜回复：新鲜回复的定义里排除了滚动来源，
+      // 两者互斥，加上它会让整个分支永远进不去（该分支曾因此成为死代码，
+      // 表现为末条卡片有通行证资格却从不执行）。
+      //
+      // 「向上滚动加载历史时末位可能是旧消息」由复检兜住：
+      // _maybeAutoExecOnScroll 要求自动开关已开、视口停在底部、
+      // 且该卡片属于会话树末条（isTreeTail），历史消息上的卡片仍会被拒绝。
+      if (mi === incoming.length - 1) {
         holder.cards[b.id].autoArmed = true;
         state.armedLast = holder.cards[b.id];
       }

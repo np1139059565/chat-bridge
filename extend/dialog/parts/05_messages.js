@@ -398,8 +398,10 @@
     if (armedLast && !tailOk) {
       log('自动执行复检（滚动）：卡片不属于会话末条，拒绝 msgId=' + (armedLast.msgId || '(空)'));
     }
-    const pass = atBottom && armedOk && tailOk;
-    // 自动流程是否放行的关键判定：记录三个条件与结论，便于排查「自动流程停止」。
+    // 自动开关必须纳入判定：原实现只在日志里打印了它，没参与运算，
+    // 导致开关关闭时滚动路径照样执行卡片——日志写着「自动开关=false → 放行执行」，自相矛盾。
+    const pass = this.autoSendEnabled && atBottom && armedOk && tailOk;
+    // 自动流程是否放行的关键判定：记录四个条件与结论，便于排查「自动流程停止」。
     log('自动执行复检（滚动）：自动开关=' + this.autoSendEnabled
       + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
       + ' → ' + (pass ? '放行执行' : '不执行'));
