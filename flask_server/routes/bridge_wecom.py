@@ -22,18 +22,22 @@ bp = Blueprint("bridge_wecom", __name__)
 def _status_payload():
     """组装企业微信通道状态。
 
-    不回传 secret 明文：它只显示一次，页面无需回显，
-    回传反而增加泄露面。只告知「是否已填」。
+    回传 secret 明文：设置页需要能查看并修改它。凭证本就存在本机配置文件里
+    （runtime.yaml，不入库），明文回显不额外增加暴露面，反而避免了
+    「填过之后再也看不到、想改只能重填」的不便。
 
     @returns 状态字典
     """
     st = bridge.status().get("wecom") or {}
     cfg = bridge_store.get_config().get("wecom") or {}
     chatid, chat_type = wecom_chats.last()
+    secret = cfg.get("secret") or ""
     return {
         "channel": st,
         "botId": cfg.get("bot_id") or "",
-        "hasSecret": bool((cfg.get("secret") or "").strip()),
+        "secret": secret,
+        # hasSecret 保留：仍有调用方只关心「填没填」，不必解析明文
+        "hasSecret": bool(secret.strip()),
         "chatid": chatid,
         "chatType": chat_type,
     }

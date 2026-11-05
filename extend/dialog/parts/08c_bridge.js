@@ -103,7 +103,7 @@
         onInput: (e) => { ctx.bridgeAppId = e.target.value; }
       })]),
       h('label', ['QQ 机器人 AppSecret', h('input', {
-        type: 'password',
+        type: 'text',
         value: ctx.bridgeAppSecret,
         placeholder: '开放平台应用的 AppSecret',
         onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }

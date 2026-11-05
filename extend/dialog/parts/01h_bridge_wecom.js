@@ -40,14 +40,17 @@
     this.wecomConnected = !!ch.connected;
     this.wecomHasSecret = !!(data && data.hasSecret);
     this.wecomBotId = (data && data.botId) || '';
+    // 密钥明文回填：设置页需要能直接看到并修改它。
+    // 后端始终回传该字段，故这里无条件覆盖，避免残留上一次的值。
+    this.wecomSecret = (data && data.secret) || '';
     this.wecomChatId = (data && data.chatid) || '';
   };
 
   /**
    * 保存企业微信通道配置。
    *
-   * 密钥留空表示不修改：页面上它是密码框，用户可能只想改开关。
-   * 保存后后端会重建长连接，故再拉一次状态。
+   * 密钥留空表示不修改：用户可能只想改开关。
+   * 保存后后端会重建长连接，故再拉一次状态（回填的密钥随之刷新）。
    */
   M.saveWecomConfig = async function () {
     try {
@@ -63,7 +66,8 @@
         body: JSON.stringify(body)
       });
       if (data && data.success) {
-        this.wecomSecret = '';   // 清空输入框，避免明文留在页面上
+        // 不再清空输入框：密钥以明文常驻显示，用户随时可查看与修改。
+        // _applyWecomStatus 会用后端回传的最新值刷新它。
         this._applyWecomStatus(data);
         this.toast(this.wecomEnabled ? '企业微信通道已保存并重启' : '企业微信通道已关闭');
       } else {

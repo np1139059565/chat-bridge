@@ -56,9 +56,10 @@
           onInput: (e) => { ctx.wecomBotId = e.target.value; }
         })]),
         h('label', ['机器人 Secret', h('input', {
-          type: 'password',
+          type: 'text',
           value: ctx.wecomSecret,
-          placeholder: ctx.wecomHasSecret ? '已保存（留空则不修改）' : '页面只显示一次，请当场复制',
+          // 明文显示：与 QQ 通道一致，用户可随时查看与修改已存密钥
+          placeholder: '如 XPfC7Gxxxxxxxxxxxx',
           onInput: (e) => { ctx.wecomSecret = e.target.value; }
         })]),
         h('div', [
