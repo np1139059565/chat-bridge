@@ -35,11 +35,12 @@
 | `01b_bridge.js` | 391 | 远程桥接（QQ ↔ 网页 AI）前端逻辑 |
 | `01c_bridge_cmd.js` | 133 | 桥接自定义指令管理与元素选择入口 |
 | `01d_bridge_md.js` | 167 | Markdown 原文采集与桥接动作辅助 |
-| `01e_bridge_actions.js` | 450 | 抽屉命令执行与桥接消息处理 |
+| `01e_bridge_actions.js` | 309 | 抽屉命令执行与桥接消息处理 |
+| `01j_card_consume.js` | 154 | 卡片消费：抽屉命令执行、QQ 图片卡片入列与贴图（含隔离铁律） |
 | `01f_port.js` | 94 | 端口修改流程 |
 | `01f_bridge_weixin.js` | 174 | 微信通道前端逻辑 |
 | `01g_external_cards.js` | 305 | 外部卡片轮询与投递 |
-| `01h_bridge_wecom.js` | 109 | 企业微信通道前端逻辑 |
+| `01h_bridge_wecom.js` | 113 | 企业微信通道前端逻辑 |
 
 ### 3.3 规则、工具与会话
 
@@ -80,7 +81,7 @@
 | `08b_settings.js` | 357 | 设置面板（二）：会话记录、条目展开体、外部卡片 |
 | `08c_bridge.js` | 235 | 设置面板远程桥接区块 |
 | `08d_bridge_weixin.js` | 165 | 设置面板微信通道区块 |
-| `08e_bridge_wecom.js` | 78 | 设置面板企业微信通道区块 |
+| `08e_bridge_wecom.js` | 79 | 设置面板企业微信通道区块 |
 | `08e_toolconf.js` | 102 | 工具配置通用渲染 |
 | `08f_commands.js` | 243 | 设置页「指令」区块：自定义指令编辑、内置参数、可点击指令按钮 |
 | `09_skills.js` | 213 | 设置页技能区块 |
