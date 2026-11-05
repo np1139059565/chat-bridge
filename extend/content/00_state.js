@@ -122,9 +122,13 @@ window.AIMirrorContent = (function () {
       // 用途：滚动轮次里判断视口是否停在最新消息处，作为「回滚误触发」的排除条件。
       // 两个选择器均经页面验证有效，逐条匹配、任一命中即算「按钮存在」。
       // 语义约定：按钮存在 = 不在底部；按钮不存在 = 已在底部。
+      // 只保留精确的一条：三条类名同时命中才认，避免误伤其它浮动按钮。
+      // 曾同时配一条宽泛的 div[role=button].ds-button--floating，
+      // 它会把「继续生成」「重新生成」这类按钮一并命中，
+      // 导致风控停止时反而被判成「用户不在底部」。
+      // 收紧选择器是正解，不该在调用处靠文字有无去补救。
       scrollToBottomButton: [
-        'div[role="button"].ds-button--circle.ds-button--outlinedNeutral.ds-button--floating',
-        'div[role="button"].ds-button--floating'
+        'div[role="button"].ds-button--circle.ds-button--outlinedNeutral.ds-button--floating'
       ],
       // 生成中（AI 说话）时按钮换成「停止」方块图标，其 path 以此片段开头；
       // 空闲时为发送箭头。用它直接判定生成中，避免依赖「首帧恰为空闲」这一假设。
