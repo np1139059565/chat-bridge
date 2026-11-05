@@ -199,8 +199,8 @@ window.AIMirrorDialog = (function () {
       skillDocEdit: Vue.reactive({}),
       skillDocEditing: Vue.reactive({}),
       customTools: [],
-      bridgeOpen: false, cmdOpen: false,   // 桥接 / 指令区块是否展开
-      deliveryOpen: false,   // 投递策略区块（三通道共用）是否展开，与 bridgeOpen 独立
+      bridgeOpen: false, cmdOpen: false,    // 桥接 / 指令区块是否展开
+      deliveryOpen: false, generalOpen: false,  // 投递策略 / 通用配置区块是否展开
       bridgeEnabled: true,   // 默认开启：远程功能开箱即用
       bridgeBroadcast: false, // 广播：一条上报发所有通道；默认关，独占是常规行为
       bridgeConnected: false,

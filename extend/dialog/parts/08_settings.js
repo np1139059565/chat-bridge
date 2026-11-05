@@ -231,7 +231,25 @@
    */
   D.renderGeneralSettings = function (ctx) {
     return h('div', { class: 'sp-block' }, [
-      h('div', { class: 'card-head' }, [h('span', '通用配置')]),
+      h('div', { class: 'card-head' }, [
+        h('span', '通用配置'),
+        h('button', { onClick: () => { ctx.generalOpen = !ctx.generalOpen; } },
+          ctx.generalOpen ? '▾' : '▸')
+      ]),
+      ctx.generalOpen ? h('div', [renderGeneralBody(ctx)]) : null
+    ]);
+  };
+
+  /**
+   * 通用配置的内容主体。
+   *
+   * 抽成独立函数是为了让 renderGeneralSettings 只管折叠判断，
+   * 内容再多也不影响折叠逻辑的可读性。
+   * @param {Object} ctx Vue 实例
+   * @returns {VNode} 内容节点
+   */
+  function renderGeneralBody(ctx) {
+    return h('div', [
       // 自动延迟配置 + 全局自动开关（右侧按钮直接切换）
       h('label', ['自动回传延迟(秒)', h('div', { class: 'inline-row' }, [
         h('input', {
@@ -285,5 +303,5 @@
       h('div', { class: 'hint' }, '资源保留上限'),
       D.renderSystemConfig(ctx)
     ]);
-  };
+  }
 })();
