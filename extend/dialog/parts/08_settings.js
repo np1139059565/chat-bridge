@@ -264,6 +264,21 @@
         }, ctx.autoSendEnabled ? '自动：开' : '自动：关')
       ])]),
       h('div', { class: 'hint' }, '开启自动后：只对最新一张待执行卡片倒计时自动执行，执行完再倒计时自动发送到网页 AI（两者共用此时长）；积压的旧卡片需手动执行，卡片上可单独跳过。'),
+      // 风控自动恢复：默认关闭。开启后检测到「已停止」或输出为空，
+      // 等 20 秒自动点一次重新生成。属侵入性动作，故默认不启用。
+      h('label', ['风控自动恢复', h('div', { class: 'inline-row' }, [
+        h('button', {
+          class: 'switch ' + (ctx.riskRecoverEnabled ? 'on' : 'off'),
+          title: '开启后：检测到网页 AI 因风控停止生成，等待 20 秒自动点一次「重新生成」',
+          onClick: () => {
+            const next = !ctx.riskRecoverEnabled;
+            ctx.riskRecoverEnabled = next;
+            // 经内容脚本写入扩展存储：面板在 iframe 里访问不到 chrome.storage
+            window.parent.postMessage({ type: 'set_risk_recover', enabled: next }, '*');
+          }
+        }, ctx.riskRecoverEnabled ? '已开启' : '已关闭')
+      ])]),
+      h('div', { class: 'hint' }, '开启后：检测到 AI 因风控停止（页面显示「已停止」或输出为空），等 20 秒自动点一次重新生成。仅在你停留在对话底部时生效——往上翻看历史时不打扰，避免替你重跑主动停止的回复。'),
       (!ctx.flaskOk) ? h('div', { class: 'flask-warn' }, '⚠ 无法连接 Flask 服务（' + ctx.flaskError + '），当前使用内置工具目录。') : null,
       h('br'),
       // 工具服务地址：唯一输入框，形如 http://127.0.0.1:5000。

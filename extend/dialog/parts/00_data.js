@@ -251,7 +251,7 @@ window.AIMirrorDialog = (function () {
       toolConfig: {}, toolConfOpen: false, systemConfig: [],
       scanRoots: [], flaskOk: false, flaskError: '',
       toastMsg: '',
-      autoSendEnabled: false,
+      autoSendEnabled: false, riskRecoverEnabled: false,   // 后者为风控自动恢复开关：默认关
       autoSendDelay: 3000,
       _toastTimer: null,
       _persist: null,

@@ -67,5 +67,8 @@
     window.parent.postMessage({ type: 'request_panel_side' }, '*');
     window.parent.postMessage({ type: 'request_theme' }, '*');
     window.parent.postMessage({ type: 'request_panel_visible' }, '*');
+    // 询问风控自动恢复开关的当前值：面板在 iframe 里读不到扩展存储，
+    // 由内容脚本代读后经 risk_recover_state 回传
+    window.parent.postMessage({ type: 'request_risk_recover' }, '*');
   };
 })();

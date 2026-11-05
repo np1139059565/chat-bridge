@@ -98,6 +98,11 @@
     if (d.type === 'auto_send_result') {
       return;
     }
+    if (d.type === 'risk_recover_state') {
+      // 内容脚本代读的开关当前值：面板据此回显，避免开关显示与实际状态不符
+      this.riskRecoverEnabled = !!d.enabled;
+      return;
+    }
     // 桥接相关消息（元素选择 / 点击 / 截屏结果）统一交给桥接模块处理，
     // 避免本文件过长，也让桥接的消息集中在一处
     if (this.handleBridgeMessage(d)) return;

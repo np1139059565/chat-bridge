@@ -44,6 +44,19 @@
     else if (d.type === 'close_panel') {
       A.setDialogVisible(false);
     }
+    else if (d.type === 'request_risk_recover') {
+      // 设置面板就绪后询问风控自动恢复开关的当前值。
+      // 面板在 iframe 里访问不到扩展存储，故由内容脚本代读后回传。
+      try {
+        chrome.storage.local.get(['aiMirrorRiskRecover'], function (res) {
+          A.post({ type: 'risk_recover_state', enabled: !!(res && res.aiMirrorRiskRecover) });
+        });
+      } catch (e) { /* 存储不可用时保持面板默认显示 */ }
+    }
+    else if (d.type === 'set_risk_recover') {
+      // 面板切换开关：写入存储。检测模块监听 onChanged 即时生效，无需刷新页面。
+      try { chrome.storage.local.set({ aiMirrorRiskRecover: !!d.enabled }); } catch (e) {}
+    }
     else if (d.type === 'picker_start') {
       // 抽屉发起「选择元素」：进入选择模式，选中后回传 picker_result
       A.pickerStart();

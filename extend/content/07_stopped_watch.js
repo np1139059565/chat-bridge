@@ -17,12 +17,35 @@
   const A = window.AIMirror;
   if (!A) return;
 
-  // 恢复延迟：检测到「已停止」后等这么久再点重新生成。
-  // 留出余量是因为按钮可能晚一两帧才重新可用，点太早会落空。
-  const RECOVER_DELAY_MS = 5000;
+  // 恢复延迟：检测到异常停止后等这么久再点重新生成。
+  //
+  // 由 5 秒放宽到 20 秒，理由是 5 秒不够人反应：
+  // 用户看到生成停住、判断是风控还是自己点错、再决定要不要重试，这个过程往往超过 5 秒。
+  // 自动跑得太早，等于在用户还在犹豫时替他做了决定。20 秒足够人介入——
+  // 不想恢复的话，直接点停止或切走即可，到时检测条件已不成立。
+  const RECOVER_DELAY_MS = 20000;
+
+  // 开关：默认关闭。风控自动恢复会替用户点按钮，属侵入性动作，
+  // 默认不启用，由用户在扩展设置里显式打开才生效。
+  // 存储键与其它界面偏好一致，用 chrome.storage.local。
+  const ENABLED_KEY = 'aiMirrorRiskRecover';
+  let autoRecoverEnabled = false;
 
   // 同一轮只恢复一次：防止按钮点不动时反复重试、把页面刷成请求风暴。
   let recovering = false;
+
+  // 读取开关状态：页面加载时读一次，之后监听变化即时生效。
+  try {
+    chrome.storage.local.get([ENABLED_KEY], function (res) {
+      autoRecoverEnabled = !!(res && res[ENABLED_KEY]);
+    });
+    chrome.storage.onChanged.addListener(function (changes, area) {
+      if (area !== 'local' || !changes[ENABLED_KEY]) return;
+      autoRecoverEnabled = !!changes[ENABLED_KEY].newValue;
+    });
+  } catch (e) {
+    // 存储不可用（如权限受限）时保持默认关闭，不抛错影响其它功能
+  }
 
   /**
    * 判断最后一条 AI 消息的思考区标题栏里是否写着「已停止」。
@@ -91,6 +114,8 @@
    * 正常生成结束不受影响——那时末条有正文，两个判定都不成立。
    */
   A.recoverIfStopped = function () {
+    // 开关关闭时完全不介入：这是侵入性动作，必须由用户显式开启
+    if (!autoRecoverEnabled) return;
     if (recovering) return;
     // 先看用户是否已向上翻看历史：在底部才考虑恢复。
     //
