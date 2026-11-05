@@ -251,6 +251,10 @@
         nowGen = A.isStopButton(btn, P);
       }
       if (nowGen !== A.state.isGenerating) {
+        // 翻转点是风控恢复的唯一入口，必须留痕。
+        // 若日志里连这条都没有，说明生成态判定本身失效（按钮选择器读错等），
+        // 那风控恢复根本不会被触发，排查方向应立即转向生成态判定。
+        A.log && A.log('[生成态] 翻转 ' + A.state.isGenerating + ' → ' + nowGen);
         A.state.isGenerating = nowGen;
         // 由「生成中」回到「空闲」= 生成刚结束 → 触发一次全量解析
         // 面板未打开时不解析：sendPage 内部已有守卫，这里提前返回省掉判断开销
@@ -258,7 +262,20 @@
           A.triggerGenerate();
           // 风控恢复：这个翻转点也可能是「被风控掐断」而非正常说完（实现见 07_stopped_watch.js）。
           // 挂在这里而不是轮询特征，是因为特征会随恢复正常而消失，轮询必然漏检或误触发。
-          if (A.recoverIfStopped) A.recoverIfStopped();
+          //
+          // 必须延迟一小段再检测：按钮翻转的那一刻，「已停止」「服务器暂时不可用」
+          // 这类状态文字往往还没渲染出来。同步调用必然读到空，检测永不成立。
+          // 800ms 是观测到的状态文字出现间隔余量，足够渲染又不会拖太久。
+          setTimeout(function () {
+            if (A.recoverIfStopped) {
+              A.recoverIfStopped();
+            } else {
+              // 恢复函数不存在说明 07_stopped_watch.js 没加载成功。
+              // 这种情况此前完全静默，会让人误以为「检测了但没命中」，
+              // 实际是「函数根本不存在」。记一条以便区分。
+              A.warn && A.warn('[风控恢复] 恢复函数未定义，07_stopped_watch.js 可能未加载');
+            }
+          }, 800);
         }
       }
     }, A.BUTTON_POLL_MS);
