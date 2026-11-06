@@ -59,6 +59,14 @@
       if (!isAuto) this.toast('该卡片已不在当前镜像中，已取消执行');
       return;
     }
+    // 防重入：执行期间卡片状态是 running，但 executed 仍是 false（要等结果返回才置真）。
+    // 而自动执行复检的判据是「未执行、未跳过、无倒计时」——它看不到 running，
+    // 于是同一张卡会被再次放行，第二条倒计时与仍在执行的第一条并行，
+    // 表现为相差几秒执行两次、AI 收到的却是上一张卡的结果。
+    if (card.status === 'running') {
+      log('卡片执行跳过：id=' + cid + ' 原因=上一轮仍在执行中（防重入）');
+      return;
+    }
     card.status = 'running';
     this._resetCardDiagnostics(card);
     await this._callTool(card);
