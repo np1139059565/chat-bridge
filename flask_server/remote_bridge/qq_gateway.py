@@ -238,7 +238,10 @@ class QqGateway:
         import paths
         os.makedirs(str(paths.QQ_IMAGES_DIR), exist_ok=True)
         ts = str(int(time.time() * 1000))
-        low = image_url.lower()
+        # 先去掉查询串再判扩展名：CDN 地址常带 ?sign=... 这类参数，
+        # 直接对整个 URL 做后缀匹配会一律落空、全部回退成 .png，
+        # 导致图片被以错误的扩展名存盘（网页侧按扩展名选渲染方式会出错）。
+        low = image_url.lower().split("?")[0]
         ext = ".png"
         for e in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
             if low.endswith(e):
