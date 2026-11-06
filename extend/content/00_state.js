@@ -38,16 +38,35 @@ window.AIMirrorContent = (function () {
   // 调试日志：统一前缀，便于在网页控制台用 [AI-Mirror] 过滤
   A.DEBUG = true;
 
-  /** 打印调试日志（DEBUG 关闭时不输出）。 */
+  /**
+   * 把日志同时送一份到本地服务（实现见 08_remote_log.js）。
+   *
+   * 惰性引用：本文件加载时远端模块尚未就绪，故每次调用时才查。
+   * 未配置后端地址时该调用是空操作，只打控制台。
+   *
+   * @param {string} tag 分类
+   * @param {Array}  args 原始参数列表
+   */
+  function mirrorToRemote(tag, args) {
+    try {
+      if (A.remoteLog && A.remoteLog.send) {
+        A.remoteLog.send(tag, Array.prototype.slice.call(args).join(' '));
+      }
+    } catch (e) { /* 上报失败不影响打日志 */ }
+  }
+
+  /** 打印调试日志（DEBUG 关闭时不输出），并送一份到后端。 */
   A.log = function () {
     if (!A.DEBUG) return;
     console.log.apply(console, ['[AI-Mirror][content]'].concat(Array.prototype.slice.call(arguments)));
+    mirrorToRemote('log', arguments);
   };
 
-  /** 打印告警日志（DEBUG 关闭时不输出）。 */
+  /** 打印告警日志（DEBUG 关闭时不输出），并送一份到后端。 */
   A.warn = function () {
     if (!A.DEBUG) return;
     console.warn.apply(console, ['[AI-Mirror][content]'].concat(Array.prototype.slice.call(arguments)));
+    mirrorToRemote('warn', arguments);
   };
 
   // 公共工具：由 lib/dom-utils.js 提供，这里做本地别名，调用点写法保持不变
