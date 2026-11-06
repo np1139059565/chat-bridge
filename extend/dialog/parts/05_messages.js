@@ -349,7 +349,8 @@
     //（要等 _callTool 返回才置真）。只看 executed 会让正在执行中的卡片
     // 再次进入候选、再排一次倒计时，几秒后第二次执行开始——
     // 表现为「卡片双执行、AI 收到上一张结果」。
-    const runnable = autoCandidates.filter((c) => c && !c.skipped && !c.executed && c.status !== 'running');
+    const runnable = autoCandidates.filter((c) => c && !c.skipped && !c.executed
+      && !c.duplicate && !c._cdTimer && c.status !== 'running');
     // 自动执行决策留痕：这是排查「自动流程停止」的核心断点，逐条件说明为何执行/不执行。
     if (this._convLoading && this._convLoading[this.activeConv]) {
       // 会话仍在加载：签名库尚未恢复，此时判不出「哪些已执行」，
@@ -399,7 +400,7 @@
     // status === 'pending' 已隐含排除 running（执行中状态为 'running'），
     // 故执行中的卡片不会在此被放行。若将来状态机新增中间态，须同步核对本判据。
     const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
-      && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
+      && !armedLast.skipped && !armedLast.duplicate && !armedLast._cdTimer && armedLast.status === 'pending');
     // 硬门槛：上膛卡片必须属于会话树末条，否则任何滚动场景都不放行。
     // 与「切片末条」无关——切片末位在向上滚动加载历史时可能是旧消息。
     const conv = this.ensureConv(this.activeConv);

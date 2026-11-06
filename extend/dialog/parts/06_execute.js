@@ -237,7 +237,7 @@
       let newest = null;
       Object.keys(cardMap).forEach((id) => {
         const c = cardMap[id];
-        if (!c || !c.isTool || c.executed || c.skipped || c._cdTimer) return;
+        if (!c || !c.isTool || c.executed || c.skipped || c.duplicate || c._cdTimer) return;
         if (!this.cardInMirror(c)) return;
         newest = { card: c, ext: false };
       });

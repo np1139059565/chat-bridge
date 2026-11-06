@@ -29,5 +29,7 @@
     render: D.render
   });
 
-  app.mount('#app');
+  // 把根实例挂到命名空间：D.log 需要借它的 config.flaskUrl 与 pendingExtLogs
+  // 才能把抽屉侧日志镜像到后端（见 parts/00_data.js）。
+  D.instance = app.mount('#app');
 })();

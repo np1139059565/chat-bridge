@@ -9,10 +9,9 @@ window.AIMirrorDialog = (function () {
   const D = window.AIMirrorDialog || {};
   D.methods = D.methods || {};
 
-  // 调试日志：与内容脚本同前缀，便于在网页控制台用 [AI-Mirror] 过滤
-  D.log = function () {
-    console.log.apply(console, ['[AI-Mirror][dialog]'].concat(Array.prototype.slice.call(arguments)));
-  };
+  // 调试日志 D.log 已拆分到 parts/00c_log_mirror.js（含后端镜像与批量上报）。
+  // 拆分原因：镜像逻辑使本文件超过 450 行上限。
+  // 调用点保持不变，本文件内仍以 log 引用它。
   const log = D.log;
 
   // 统一的后端请求辅助 D.apiFetch 已拆分到 parts/00a_api.js（控制本文件行数）。
