@@ -362,7 +362,11 @@
     // 5) 自动执行：仅本轮最新的一张；不入树切片绝不自动执行。
     // 已执行过的卡片不再进候选：自动执行只针对「尚未执行」的新卡片。
     // 缺这一条时，刷新后重建的卡片若签名命中失败就会把历史卡片重跑一遍。
-    const runnable = autoCandidates.filter((c) => c && !c.skipped && !c.executed);
+    // 排除 running：卡片执行期间 status='running' 但 executed 仍为 false
+    //（要等 _callTool 返回才置真）。只看 executed 会让正在执行中的卡片
+    // 再次进入候选、再排一次倒计时，几秒后第二次执行开始——
+    // 表现为「卡片双执行、AI 收到上一张结果」。
+    const runnable = autoCandidates.filter((c) => c && !c.skipped && !c.executed && c.status !== 'running');
     // 自动执行决策留痕：这是排查「自动流程停止」的核心断点，逐条件说明为何执行/不执行。
     if (this._convLoading && this._convLoading[this.activeConv]) {
       // 会话仍在加载：签名库尚未恢复，此时判不出「哪些已执行」，
@@ -409,6 +413,8 @@
    * @param {boolean} atBottom 视口是否在底部
    */
   M._maybeAutoExecOnScroll = function (armedLast, atBottom) {
+    // status === 'pending' 已隐含排除 running（执行中状态为 'running'），
+    // 故执行中的卡片不会在此被放行。若将来状态机新增中间态，须同步核对本判据。
     const armedOk = !!(armedLast && armedLast.isTool && !armedLast.executed
       && !armedLast.skipped && !armedLast._cdTimer && armedLast.status === 'pending');
     // 硬门槛：上膛卡片必须属于会话树末条，否则任何滚动场景都不放行。
