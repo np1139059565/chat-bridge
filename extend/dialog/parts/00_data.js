@@ -252,7 +252,7 @@ window.AIMirrorDialog = (function () {
       scanRoots: [], flaskOk: false, flaskError: '',
       toastMsg: '',
       autoSendEnabled: false, riskRecoverEnabled: false,   // 后者为风控自动恢复开关：默认关
-      autoSendDelay: 3000,
+      pendingExtLogs: [], autoSendDelay: 3000,   // 前者：抽屉未就绪时的日志暂存
       _toastTimer: null,
       _persist: null,
       _persistTimers: null,

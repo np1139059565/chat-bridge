@@ -60,6 +60,23 @@
     await this.fetchTools();   // 内部会刷新技能说明段落并生成 System Prompt
     await this.loadRules();
     // 外部卡片轮询不在此启动，改由面板可见性驱动（见 setPanelVisible）。
+    // 补发抽屉就绪前积压的内容脚本日志：
+    // 页面刷新瞬间内容脚本就开始发日志，那时本抽屉还没探测到后端地址，
+    // 那批日志会被暂存（见 05_messages.js 的 ext_log 分支）。此处统一补发。
+    this.flushPendingExtLogs();
+  };
+
+  /**
+   * 补发抽屉就绪前积压的内容脚本日志。
+   *
+   * 有上限地一次发完；失败静默——日志不能反过来拖累主流程。
+   */
+  M.flushPendingExtLogs = function () {
+    const items = this.pendingExtLogs || [];
+    if (!items.length) return;
+    this.pendingExtLogs = [];
+    D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
+      .catch(function () { /* 静默 */ });
   };
 
   /** 技能数据：说明段落与技能清单，注入 System Prompt。 */

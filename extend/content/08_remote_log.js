@@ -47,19 +47,27 @@
   function flush() {
     timer = null;
     if (!buf.length) return;
+    // 抽屉是否就绪：iframe 存在才可能把消息送进去。
+    //
+    // 页面刷新后的头几秒，内容脚本已经在打日志（模块加载、启动探针等），
+    // 而抽屉往往还没打开。此时若照常发送，A.post 会因 iframe 不存在
+    // 直接丢弃——这批最早、最关键的日志就永远看不到了。
+    // 故未就绪时保留缓冲，稍后重试。
+    if (!A.state || !A.state.iframe) {
+      // 缓冲设上限，避免用户长期不开抽屉时无限增长
+      if (buf.length > MAX_BATCH * 4) buf = buf.slice(buf.length - MAX_BATCH * 4);
+      if (timer === null) timer = setTimeout(flush, FLUSH_MS * 3);
+      return;
+    }
     const batch = buf;
     buf = [];
     // 交给抽屉代发。
     //
-    // 为什么不自己 fetch、也不走后台：
-    //   抽屉（chrome-extension:// 页面）请求本地服务是已被验证可行的通道
-    //   ——工具调用正是经由它到达后端的。内容脚本自己 fetch 会受
-    //   HTTPS 页面的混合内容策略限制，后台转发又平白多一跳、更易出问题。
-    //   直接复用已跑通的通道，最少环节、最少失败点。
+    // 为什么不自己 fetch：内容脚本跑在网页的源里，请求本地 HTTP 服务
+    // 会被混合内容策略拦截。抽屉是扩展页面，不受该限制——
+    // 工具调用正是经这条通道到达后端的，已被验证可行。
     try {
-      if (A.post) {
-        A.post({ type: 'ext_log', batch: batch });
-      }
+      A.post({ type: 'ext_log', batch: batch });
     } catch (e) {
       console.warn('[AI-Mirror][content] [远程日志] 交给抽屉失败：' + (e && e.message ? e.message : e));
     }

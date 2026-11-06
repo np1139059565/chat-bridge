@@ -106,10 +106,16 @@
       // 工具调用正是经由这条通道到达后端的。
       // 失败静默：日志不能反过来拖累主流程。
       const items = d.batch || [];
-      if (items.length && this.config && this.config.flaskUrl) {
-        D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
-          .catch(function () { /* 静默 */ });
+      if (!items.length) return;
+      // 抽屉初始化是异步的（discoverFlask 要探测端口），在此之前 flaskUrl 为空。
+      // 而内容脚本在页面刷新时就立刻开始发日志，这些日志会撞在这个窗口期。
+      // 此时不能丢——先存起来，等 initBackend 完成后统一补发（见 flushPendingExtLogs）。
+      if (!this.config || !this.config.flaskUrl) {
+        this.pendingExtLogs = (this.pendingExtLogs || []).concat(items);
+        return;
       }
+      D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
+        .catch(function () { /* 静默 */ });
       return;
     }
     // 桥接相关消息（元素选择 / 点击 / 截屏结果）统一交给桥接模块处理，
