@@ -76,7 +76,8 @@
       if (!f) return;
       WebUpload.send(f, (getText && getText()) || '', clientLog, function (ok, message) {
         if (ok) { if (onSuccess) onSuccess(); return; }
-        alert('文件未发送：' + message);
+        // 非阻塞提示：alert 会冻结主线程导致页面无响应
+        if (window.WebToast) window.WebToast.show('文件未发送：' + message);
       });
       e.target.value = '';   // 清空，允许再次选同一个文件
     });

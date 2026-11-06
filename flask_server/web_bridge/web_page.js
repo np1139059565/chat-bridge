@@ -247,7 +247,7 @@
       // 不重算的话多行原文会被挤在单行高度里、看不全。
       autoGrow();
       setStatus(false);
-      alert('发送失败，内容已保留在输入框，请检查网络后重试');
+      window.WebToast && window.WebToast.show('发送失败，内容已保留在输入框，请检查网络后重试');
     };
     // 发送超时：8 秒未返回即中断，避免按钮永久无反馈。
     var sctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;

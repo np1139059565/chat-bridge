@@ -63,6 +63,11 @@
       var now = Date.now();
       var gap = now - last;
       last = now;
+      // 页面在后台时浏览器会节流甚至暂停定时器，而 Date.now() 照常走，
+      // 回前台补触发时算出的间隔等于后台停留时长——那不是卡顿，是节流。
+      // 此前未区分二者，把数百秒的后台时间记成「事件循环被卡」，
+      // 直接误导了排查方向（真实卡顿由 longtask 反映，量级为秒）。
+      if (document.hidden) return;
       if (gap >= GAP_WARN_MS) {
         log('tickgap', '间隔=' + gap + 'ms（事件循环被卡）');
       }
