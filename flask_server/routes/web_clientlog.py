@@ -18,10 +18,16 @@ import log_sink
 
 bp = Blueprint("web_clientlog", __name__)
 
-# 前端上报日志的落盘器：client-YYYY-MM-DD.log。
+# 网页版聊天页（/web-bot）的日志：client-YYYY-MM-DD.log。
 # 用同步 sink（非异步）：前端日志是「主线程是否被卡住」的诊断证据，
 # 靠日志的整齐空档判断卡顿，故宁可写入方短暂等盘，也不丢条目。
 _client_sink = log_sink.DayFileSink("client", lambda: paths.LOGS_DIR)
+
+# 扩展内容脚本（注入各网页 AI 站点）的日志：extension-YYYY-MM-DD.log。
+# 单独分文件的原因：内容脚本的日志量远大于网页版（含启动探针、轮询、
+# 风控检测等），混进 client-*.log 会把网页版那点日志淹没，两类日志
+# 的生命周期与排查场景也不同——网页版查「页面卡死」，扩展查「注入是否生效 / 风控恢复」。
+_ext_sink = log_sink.DayFileSink("extension", lambda: paths.LOGS_DIR)
 
 
 @bp.route("/api/web/client_log", methods=["POST", "OPTIONS"])
@@ -55,10 +61,14 @@ def web_client_log():
         # 缺口区间即为「前端产生过但始终未送达」的日志，是定位丢失窗口的关键。
         seq = it.get("seq")
         seq_s = ("#%s" % seq) if seq is not None else ""
+        # 按来源分流：扩展内容脚本的标签以 ext- 开头，落独立文件；
+        # 其余（网页版聊天页）仍落 client-*.log。
+        # 两类日志的量和排查场景都不同，混在一起会互相淹没。
+        sink = _ext_sink if tag.startswith("ext-") else _client_sink
         # 交给公共落盘器：与其它日志共用「按天分文件 + 加锁 + 失败静默」实现，
         # 不再就地 open/write（后者未加锁，并发上报时行可能交错）。
         if ct:
-            _client_sink.append("%s [client@%s]%s[%s] %s" % (now, ct, seq_s, tag, msg))
+            sink.append("%s [client@%s]%s[%s] %s" % (now, ct, seq_s, tag, msg))
         else:
-            _client_sink.append("%s [client]%s[%s] %s" % (now, seq_s, tag, msg))
+            sink.append("%s [client]%s[%s] %s" % (now, seq_s, tag, msg))
     return jsonify(success=True)

@@ -44,6 +44,13 @@ body {
 .topbar .status { margin-left: auto; font-size: 12px; color: var(--text-dim); }
 .topbar .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #666; margin-right: 5px; }
 .topbar .dot.on { background: #35c56a; }
+/* 心跳开关：默认关闭（灰色），开启后高亮。仅调试用，故做得不起眼 */
+.hb-btn {
+  margin-left: 8px; font-size: 11px; padding: 2px 8px;
+  border: 1px solid var(--line, #444); background: transparent;
+  color: var(--text-dim); border-radius: 10px; cursor: pointer;
+}
+.hb-btn.on { color: #35c56a; border-color: #35c56a; }
 /* ============ 消息列表：倒序（新消息在上） ============ */
 .list {
   flex: 1 1 auto;

@@ -331,16 +331,16 @@
   var lastReconnectAt = 0;   // 上次立即重连的时刻
   var reconnectTimer = null; // 待执行的延迟重连，避免同一时刻重复排
 
-  // ---------- 临时诊断心跳（实现见 web_heartbeat.js，问题定位后整块删除） ----------
-  // 每秒向服务端推一条 hb 日志，附带轮询状态摘要，用来区分「定时器被丢」
-  // 「请求发不出去」「页面被冻结」这几种卡住形态。代价是日志量明显变大。
+  // ---------- 临时诊断心跳（实现见 web_heartbeat.js，默认关闭） ----------
+  // 附带轮询状态摘要，区分「定时器被丢」「请求发不出」「页面被冻结」。
   var lastPollOkAt = 0;   // 最后一次轮询成功的时刻，心跳据此报「距上次成功多少秒」
 
   // 状态提供者：心跳模块每秒回调一次，取当前轮询现场
   if (window.WebHeartbeat) {
+    var hbOn = false; try { hbOn = localStorage.getItem('webHeartbeatEnabled') === '1'; } catch (e) {}
     window.WebHeartbeat.init(function () {
       return { pollOn: !!pollTimer, busy: pollBusy, failCount: failCount, lastPollOkAt: lastPollOkAt };
-    });
+    }, hbOn);
   }
 
   /** 启动（或重建）轮询定时器与诊断心跳。 */
