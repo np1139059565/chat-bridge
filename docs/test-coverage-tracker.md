@@ -54,15 +54,22 @@
 ### 3.1 语音链路（本次事故所在）
 
 - [x] `voice_pyttsx3_runner.py` — 父进程侧调度：写文本、拉起子进程、超时处理、产物校验
-- [ ] `pyttsx3_worker.py` — 子进程：读文本、初始化引擎、设音色语速、合成
+- [x] `pyttsx3_worker.py` — 子进程：读文本、初始化引擎、设音色语速、合成。
+  已补（`tests/test_pyttsx3_worker.py`，24 项）：文本读取三分支、音色按名/按 id 命中、
+  语速钳制上下限与非数字回退、产物缺失与 0 字节判失败、旧产物先删、
+  异常路径仍停止引擎、入口四种退出码。全部用假引擎，不依赖系统 SAPI。
 - [x] `voice_tts.py` — 三引擎分发。**执行层已补**（`tests/test_voice_execution.py`，8 项）：
   分发路由、降级循环、错误汇总、失败后半成品清理、信号量释放、空文本短路，
   外加一个真实 SAPI 端到端合成冒烟用例。经变异验证确认有效：
   故意去掉失败后的清理逻辑，对应用例立即失败。
-- [ ] `voice_voices.py` — 音色清单列举
+- [x] `voice_voices.py` — 音色清单列举。已有 `tests/test_voice_voices.py`（11 项）：
+  四引擎路由、current 来源逐一对应、大小写与空白归一、未知引擎返回空、
+  auto 按 fallback 首个引擎、内置清单字段完整性
 - [x] `voice_cache.py` — 成品缓存复用
 - [x] `voice_pending.py` — 待确认语音文字暂存
-- [ ] `voice_asr.py` — SILK 解码与语音识别
+- [x] `voice_asr.py` — SILK 解码与语音识别。已补（`tests/test_voice_asr.py`，21 项）：
+  pilk/vosk 缺失分支、解码成功与异常、WAV 头字段、线性重采样四个方向、
+  模型目录缺失、识别成功与异常、主入口解码失败短路、中间 WAV 清理
 
 ### 3.2 消息链路
 
@@ -74,9 +81,14 @@
 ### 3.3 QQ 协议
 
 - [x] `qq_gateway.py` — 事件分发
-- [ ] `qq_client.py` — 机器人协议层
+- [x] `qq_client.py` — 机器人协议层。已补（`tests/test_qq_client.py`，41 项）：
+  请求体两种形态、token 获取三结果与过期折算、取网关 401 清 token 与普通失败保留、
+  发送四结果与错误详情、七种 op 分派、事件派发序号维护与回调异常吞掉、
+  鉴权包内容、心跳间隔换算与不重复启动、启停幂等与降级
 - [x] `qq_event_parse.py` — 事件解析与下载
-- [ ] `qq_media.py` — 富媒体发送
+- [x] `qq_media.py` — 富媒体发送。已补（`tests/test_qq_media.py`，24 项）：
+  Base64 编码、三种上传的 file_type（1/3/4）与必带 file_name、上传 HTTP 错误与缺 file_info、
+  发送体 msg_type=7 结构、三个入口无 token 短路与读文件失败不上传、全链路成功
 
 ### 3.4 指令
 
