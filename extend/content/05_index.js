@@ -21,6 +21,12 @@
     // 兜底日志：内容脚本收到的每条消息都记一笔，便于确认消息是否真的到达。
     // 若抽屉已发出消息、这里却没有任何输出，说明扩展未重载或消息没到。
     A.log('收到消息 type=' + d.type);
+    // 版本探测：抽屉启动时会问一次，据此确认本页内容脚本是新版还是旧版。
+    // 旧版没有这段代码，不会回复——抽屉端据此判定「需重载扩展 + 刷新页面」。
+    if (d.type === 'ping_content') {
+      A.post({ type: 'pong_content', build: BUILD_TAG });
+      return;
+    }
     if (d.type === 'request_page') A.sendPage(true, 'manual');
     else if (d.type === 'auto_send') A.pasteToWebpageAI(d.text || '');
     // 图文合一：dataUrl 之外可带 text；贴图后把 text 写进同一输入框，只发一次

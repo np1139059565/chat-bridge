@@ -98,26 +98,9 @@
     if (d.type === 'auto_send_result') {
       return;
     }
-    if (d.type === 'ext_log') {
-      // 内容脚本的诊断日志：由本抽屉代发。
-      //
-      // 为什么必须由抽屉发：内容脚本跑在网页的源里，请求本地 HTTP 服务
-      // 会被混合内容策略拦截；而抽屉是扩展页面，不受该限制——
-      // 工具调用正是经由这条通道到达后端的。
-      // 失败静默：日志不能反过来拖累主流程。
-      const items = d.batch || [];
-      if (!items.length) return;
-      // 抽屉初始化是异步的（discoverFlask 要探测端口），在此之前 flaskUrl 为空。
-      // 而内容脚本在页面刷新时就立刻开始发日志，这些日志会撞在这个窗口期。
-      // 此时不能丢——先存起来，等 initBackend 完成后统一补发（见 flushPendingExtLogs）。
-      if (!this.config || !this.config.flaskUrl) {
-        this.pendingExtLogs = (this.pendingExtLogs || []).concat(items);
-        return;
-      }
-      D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
-        .catch(function () { /* 静默 */ });
-      return;
-    }
+    // 日志相关消息（版本应答 / 内容脚本日志）统一交本方法处理
+    if (this._handleLogMessage(d)) return;
+
     // 桥接相关消息（元素选择 / 点击 / 截屏结果）统一交给桥接模块处理，
     // 避免本文件过长，也让桥接的消息集中在一处
     if (this.handleBridgeMessage(d)) return;
@@ -433,6 +416,9 @@
       + ' → ' + (pass ? '放行执行' : '不执行'));
     if (pass) this.scheduleExecute(armedLast);
   };
+
+  // 日志相关方法（_handleLogMessage / _postClientLog）见 05k_log_message.js。
+  // 迁出原因：只服务日志上报，与消息树、卡片无关，内联会把本文件撑破行数上限。
 
   /** 保证卡片拥有唯一标记，供回传与复制共用同一份文本。 */
   M.ensureNonce = function (holder) {

@@ -67,6 +67,12 @@
     window.parent.postMessage({ type: 'request_panel_side' }, '*');
     window.parent.postMessage({ type: 'request_theme' }, '*');
     window.parent.postMessage({ type: 'request_panel_visible' }, '*');
+    // 询问内容脚本版本：本页内容脚本若是旧版，不会回应，据此可判断
+    // 「抽屉已更新但内容脚本未更新」——两者加载机制不同，常见于只刷页面没重载扩展。
+    window.parent.postMessage({ type: 'ping_content' }, '*');
+    // 询问内容脚本版本：本页内容脚本若是旧版，不会回应，据此可判断
+    // 「抽屉已更新但内容脚本未更新」——两者加载机制不同，常见于只刷页面没重载扩展。
+    window.parent.postMessage({ type: 'ping_content' }, '*');
     // 直读风控自动恢复开关：对话框本身就是扩展页面（chrome-extension:// 协议），
     // 可直接访问 chrome.storage，无需经内容脚本中转。
     //
