@@ -98,6 +98,20 @@
     if (d.type === 'auto_send_result') {
       return;
     }
+    if (d.type === 'ext_log') {
+      // 内容脚本的诊断日志：由本抽屉代发。
+      //
+      // 为什么必须由抽屉发：内容脚本跑在网页的源里，请求本地 HTTP 服务
+      // 会被混合内容策略拦截；而抽屉是扩展页面，不受该限制——
+      // 工具调用正是经由这条通道到达后端的。
+      // 失败静默：日志不能反过来拖累主流程。
+      const items = d.batch || [];
+      if (items.length && this.config && this.config.flaskUrl) {
+        D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
+          .catch(function () { /* 静默 */ });
+      }
+      return;
+    }
     // 桥接相关消息（元素选择 / 点击 / 截屏结果）统一交给桥接模块处理，
     // 避免本文件过长，也让桥接的消息集中在一处
     if (this.handleBridgeMessage(d)) return;

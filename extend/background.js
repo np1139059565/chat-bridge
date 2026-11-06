@@ -18,15 +18,6 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 转发内容脚本的诊断日志：内容脚本受混合内容策略限制发不出 HTTP 请求，
   // 交由后台转发（见文件头说明）。不关心结果，失败直接丢弃。
-  if (msg && msg.type === 'ext_remote_log') {
-    fetch(msg.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(msg.body || [])
-    }).catch(() => {});
-    // 不需要回包，直接返回
-    return;
-  }
   if (!msg || msg.type !== 'bridge_capture_tab') return;
   // windowId 取发送方所在窗口，保证抓到的是用户正在看的那个窗口
   const windowId = sender.tab ? sender.tab.windowId : undefined;

@@ -22,10 +22,35 @@
     window.parent.postMessage({ type: 'close_panel' }, '*');
   };
 
+  /**
+   * 把当前扩展版本打到后端日志，供排查「跑的是不是最新版」。
+   *
+   * 为什么由抽屉打：抽屉是扩展页面，请求本地服务不受混合内容策略限制，
+   * 是唯一稳定可达后端的通道。内容脚本的日志也经这里转发。
+   *
+   * 版本号取自 manifest（chrome.runtime.getManifest），不手写，避免与实际不符。
+   * 失败静默：版本上报失败不影响任何功能。
+   */
+  M.reportVersion = function () {
+    let ver = 'unknown';
+    try { ver = chrome.runtime.getManifest().version; } catch (e) { /* 忽略 */ }
+    const items = [{
+      tag: 'ext-版本',
+      msg: '扩展已加载 版本=' + ver + ' 时间=' + new Date().toISOString()
+    }];
+    D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
+      .catch(function () { /* 静默 */ });
+  };
+
   /** 依次完成：发现后端 → 取配置 → 取自定义工具 → 取工具目录 → 取规则。
    *  外部卡片轮询不在这里启动，改由面板可见性驱动（见 setPanelVisible）。 */
   M.initBackend = async function () {
     await this.discoverFlask();
+    // 启动即把版本打到后端日志：
+    // 排查「页面跑的到底是不是最新扩展」时，直接看日志即可，
+    // 不必让人每次都去开浏览器控制台核对。
+    // 放在 discoverFlask 之后：此时地址已确定，请求才发得出去。
+    this.reportVersion();
     await this.loadConfig();
     await this.loadCustomTools();
     // 桥接配置要先读：语音开关决定 prompt 是否注入朗读约定，须在生成前就位。

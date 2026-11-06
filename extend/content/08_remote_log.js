@@ -21,8 +21,6 @@
     return;
   }
 
-  // 后端地址：由 05_index.js 从扩展存储读出后注入
-  let baseUrl = '';
   // 待发缓冲
   let buf = [];
   // 定时器
@@ -33,46 +31,38 @@
   const MAX_BATCH = 50;
 
   /**
-   * 设置后端地址。
-   * @param {string} url 形如 http://127.0.0.1:5000
-   */
-  function setBaseUrl(url) {
-    baseUrl = String(url || '').replace(/\/+$/, '');
-  }
-
-  /**
-   * 冲刷缓冲：把积累的日志交给后台转发。
+   * 冲刷缓冲：把积累的日志交给抽屉代发。
    *
-   * 为什么不在内容脚本里直接 fetch：
-   *   内容脚本跑在网页的源里（如 https://chat.deepseek.com），
-   *   而工具服务是 http://127.0.0.1:5000。HTTPS 页面请求 HTTP 接口
-   *   会被浏览器的混合内容策略直接拦截，请求根本发不出去。
-   *   这解释了「工具接口能通、日志接口不通」——工具请求由抽屉
-   *   （chrome-extension:// 页面）发出，不受该策略限制。
+   * 为什么不由内容脚本自己发：
+   *   内容脚本跑在网页的源里（如 https://chat.deepseek.com），请求
+   *   http://127.0.0.1:5000 会被混合内容策略拦截。而抽屉是扩展页面，
+   *   不受该限制——工具调用正是经这条通道到达后端的，已被验证可行。
    *
-   *   后台 service worker 运行在扩展上下文，无此限制，故交由它转发。
+   * 为什么不走后台 service worker：那是我最初的做法，绕了一圈。
+   *   既然抽屉本来就开着（AI 与用户的对话全靠它转发），直接交给它
+   *   代发即可，最少环节、最少失败点。
    *
    * 失败丢弃，不重试：日志不能反过来拖累主流程。
    */
   function flush() {
     timer = null;
     if (!buf.length) return;
-    if (!baseUrl) {
-      // 地址未知：保留本批，等地址注入后再发。
-      // 地址由抽屉探测后写入，用户打开一次抽屉即会有值。
-      // 但缓冲要有上限，否则长期不开抽屉会无限增长。
-      if (buf.length > MAX_BATCH * 4) buf = buf.slice(buf.length - MAX_BATCH * 4);
-      if (timer === null) timer = setTimeout(flush, FLUSH_MS * 5);
-      return;
-    }
     const batch = buf;
     buf = [];
+    // 交给抽屉代发。
+    //
+    // 为什么不自己 fetch、也不走后台：
+    //   抽屉（chrome-extension:// 页面）请求本地服务是已被验证可行的通道
+    //   ——工具调用正是经由它到达后端的。内容脚本自己 fetch 会受
+    //   HTTPS 页面的混合内容策略限制，后台转发又平白多一跳、更易出问题。
+    //   直接复用已跑通的通道，最少环节、最少失败点。
     try {
-      chrome.runtime.sendMessage(
-        { type: 'ext_remote_log', url: baseUrl + '/api/web/client_log', body: batch },
-        function () { /* 忽略响应与错误：日志不能拖累主流程 */ }
-      );
-    } catch (e) { /* 扩展上下文失效等：忽略 */ }
+      if (A.post) {
+        A.post({ type: 'ext_log', batch: batch });
+      }
+    } catch (e) {
+      console.warn('[AI-Mirror][content] [远程日志] 交给抽屉失败：' + (e && e.message ? e.message : e));
+    }
   }
 
   /**
@@ -86,7 +76,7 @@
     if (timer === null) timer = setTimeout(flush, FLUSH_MS);
   }
 
-  A.remoteLog = { setBaseUrl: setBaseUrl, send: send };
+  A.remoteLog = { send: send };
 
   console.log('[AI-Mirror][content] [远程日志] 模块加载完成');
 })();

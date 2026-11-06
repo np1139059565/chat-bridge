@@ -11,7 +11,7 @@
   // 再刷新页面才生效；只刷新页面不够。此前排查时无法判断「跑的是新版还是旧版」，
   // 白白多查了几轮。带上标识后，控制台第一行就能确认。
   // 每次改动内容脚本时把这个标识一起改掉。
-  const BUILD_TAG = '2026-11-06-risk-recover-v8';
+  const BUILD_TAG = '2026-11-06-risk-recover-v9';
   A.log('内容脚本已加载 build=' + BUILD_TAG + ' 时间=' + new Date().toISOString());
 
   // 来自对话框（iframe）的消息
@@ -153,27 +153,8 @@
 
   // 初始化
   A.getConfig(function (cfg) {
-    // 把后端地址交给远程日志模块：内容脚本不知道端口，地址存在扩展存储里
-    // （由设置页保存）。读不到就保持未配置状态，日志只打控制台。
-    try {
-      if (chrome.storage && chrome.storage.local) {
-        // 地址由抽屉探测后写入（discoverFlask）。抽屉可能还没打开过，
-        // 故除了首次读取，还要监听变化——抽屉探测到地址后自动补上。
-        const applyUrl = function (url) {
-          if (!url || !A.remoteLog) return;
-          A.remoteLog.setBaseUrl(url);
-          A.log('[远程日志] 后端地址：' + url);
-        };
-        chrome.storage.local.get(['aiMirrorFlaskUrl'], function (r) {
-          applyUrl((r && r.aiMirrorFlaskUrl) || '');
-        });
-        chrome.storage.onChanged.addListener(function (changes, area) {
-          if (area === 'local' && changes.aiMirrorFlaskUrl) {
-            applyUrl(changes.aiMirrorFlaskUrl.newValue || '');
-          }
-        });
-      }
-    } catch (e) { /* 存储不可用：保持仅控制台 */ }
+    // 远程日志不再需要地址：日志交给抽屉代发，由抽屉用自己已探明的地址。
+    // 内容脚本无从得知端口，也不该去猜——那是抽屉的职责。
     // 每次页面加载都保持关闭：不依据历史显隐状态，仅在用户主动点击工具栏图标时展开。
     // 这样刷新、切换标签页、新开页面都不会自动弹出。
     chrome.storage.local.get(['aiMirrorPanelSide'], function (res) {
