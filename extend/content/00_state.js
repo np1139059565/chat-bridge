@@ -135,7 +135,13 @@ window.AIMirrorContent = (function () {
       sendButtonStopMark: 'M2 4.88C2 3.68009',
       // 风控恢复用：点「重新生成」恢复生成。
       // 表达式沿用 /reai 指令里已在实机验证过的写法，不另造新选择器。
-      regenerateExpr: 'document.querySelector(\'.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child [role="button"][aria-disabled="false"]\')'
+      regenerateExpr: 'document.querySelector(\'.ds-virtual-list--printable .ds-virtual-list-visible-items > div:last-child [role="button"][aria-disabled="false"]\')',
+      // 限流恢复用：点「重发」按钮，对应 /reai1 指令。
+      // 与重新生成不同——限流是服务端拒绝请求，重发比重新生成更合适。
+      // 表达式沿用 /reai1 的写法：取最后一个橙色警示圆形按钮（那个带重试图标的）。
+      // 用数组取末项而非 reverse：reverse 会就地修改，且末项可能是 undefined，
+      // 求值端拿到非元素会报错。这里显式判空，返回 null 让调用方按「找不到」处理。
+      retrySendExpr: '(function(){var a=document.querySelectorAll("div.ds-button.ds-button--warning:nth-child(3)");return a.length?a[a.length-1]:null;})()'
     },
     // 文心一言（wenxin.baidu.com）。
     // 以下选择器均经手机真机实测确认，2026-11-01。

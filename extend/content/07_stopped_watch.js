@@ -14,8 +14,19 @@
 // 点击由主世界执行（隔离世界受 CSP 限制无法求值），复用 06_picker 的 A.execClick。
 (function () {
   'use strict';
-  const A = window.AIMirror;
-  if (!A) return;
+  // 命名空间名必须与其它内容脚本一致：window.AIMirrorContent。
+  // 曾误写成 window.AIMirror，取到 undefined，下一行守卫直接 return，
+  // 整个模块一个函数都没挂上——表现为「恢复函数未定义」，且没有任何报错。
+  // 加载探针：
+  //   「模块开始加载」没出现 → 文件根本没被注入（manifest 未生效 / 扩展未重新加载）
+   //   出现但无「加载完成」   → 中途抛错，看控制台报错行
+   //   两条都出现却仍报未定义 → 函数挂错了对象
+  console.log('[AI-Mirror][content] [风控恢复] 模块开始加载');
+  const A = window.AIMirrorContent;
+  if (!A) {
+    console.error('[AI-Mirror][content] [风控恢复] 命名空间 AIMirrorContent 不存在，模块中止');
+    return;
+  }
 
   // 恢复延迟：检测到异常停止后等这么久再点重新生成。
   //
@@ -153,6 +164,73 @@
   };
 
   /**
+   * 判断页面是否显示「消息发送过于频繁」——第四种风控形态。
+   *
+   * 与其它三种的区别：它对应的恢复动作是 `/reai1`（消息频繁失败后重发），
+   * 而不是 `/reai`（重新生成）。选错指令会无效。
+   *
+   * 位置特征：与「服务器暂时不可用」一样，是消息下方的状态提示，不在正文里。
+   *
+   * @returns {boolean} 是否显示发送过于频繁
+   */
+  A.isRateLimited = function () {
+    const P = A.activeProfile();
+    if (!P) return false;
+    const msgs = document.querySelectorAll(P.item || '.ds-message');
+    if (!msgs.length) return false;
+    const start = Math.max(0, msgs.length - 3);
+    for (let i = start; i < msgs.length; i++) {
+      const nodes = msgs[i].querySelectorAll('span, div');
+      for (let j = 0; j < nodes.length; j++) {
+        const n = nodes[j];
+        if (n.textContent.indexOf('消息发送过于频繁') >= 0 && !n.closest('.ds-markdown')) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  // 连续限流计数：连续两次限流即停止自动恢复。
+  //
+  // 为什么：限流意味着服务端已经在拒绝请求，此时继续自动重发只会加剧限流、
+  // 甚至延长封禁时间。连续两次说明不是偶发，应立即停手交给人判断。
+  let rateLimitStreak = 0;
+
+  /**
+   * 处理限流形态：连续两次即停手，否则延迟后用重发指令恢复。
+   *
+   * 抽成独立函数的原因：这段逻辑分支较多，内联会把 recoverIfStopped 撑破行数上限。
+   *
+   * 为什么连续两次要停：限流意味着服务端已在拒绝请求，此时继续自动重发
+   * 只会加剧限流、延长封禁时间。连续两次说明不是偶发，应立即停手交给人判断。
+   */
+  function tryRecoverRateLimit() {
+    rateLimitStreak += 1;
+    A.log && A.log('[风控恢复] 检测到限流（消息发送过于频繁），连续第 ' + rateLimitStreak + ' 次');
+    if (rateLimitStreak >= 2) {
+      A.log && A.log('[风控恢复] 连续两次限流，停止自动恢复，等待人工处理');
+      rateLimitStreak = 0;
+      return;
+    }
+    const P = A.activeProfile();
+    const retryExpr = P && P.retrySendExpr;
+    if (!retryExpr) {
+      A.warn('检测到限流，但站点未配置重发表达式，无法自动恢复');
+      return;
+    }
+    recovering = true;
+    A.log && A.log('[风控恢复] ' + (RECOVER_DELAY_MS / 1000) + ' 秒后用重发指令恢复');
+    setTimeout(function () {
+      A.execClick(retryExpr, 'unique', function (ok, reason) {
+        recovering = false;
+        if (ok) A.log && A.log('[风控恢复] 重发已触发');
+        else A.warn('[风控恢复] 重发失败：' + (reason || '未知原因'));
+      });
+    }, RECOVER_DELAY_MS);
+  }
+
+  /**
    * 检测到异常停止后延迟点一次「重新生成」。
    *
    * 由生成态轮询在「生成中 → 空闲」翻转时调用（见 04_observer.js）。
@@ -193,19 +271,26 @@
       A.log && A.log('[风控恢复] 判定不在底部，跳过（用户可能正在翻看历史）');
       return;
     }
-    // 三种风控形态任一成立都要恢复。按代价从低到高依次判，前一个成立就不再往后算。
+    // 先判限流：它走另一条恢复指令，且连续两次要停手。实现见 tryRecoverRateLimit。
+    if (A.isRateLimited()) {
+      tryRecoverRateLimit();
+      return;
+    }
+    // 走到这里说明本轮不是限流，清零连续计数（限流要求「连续」两次）
+    rateLimitStreak = 0;
+
+    // 其余形态任一成立都要恢复。按代价从低到高依次判，前一个成立就不再往后算。
     //
-    // 注意这里的写法约束：三种形态**可能同时出现**（截图实测过「服务器暂时不可用」
-    // 与「已停止」并存）。必须保证无论如何只执行一次恢复动作，不能写成三个独立 if，
-    // 否则同一次停止会被点三次「重新生成」。下面用短路赋值保证只有一个成立，
-    // 末尾统一走一次恢复。
+    // 注意这里的写法约束：形态**可能同时出现**（截图实测过「服务器暂时不可用」
+    // 与「已停止」并存）。必须保证无论如何只执行一次恢复动作，不能写成多个独立 if，
+    // 否则同一次停止会被点多次。下面用短路赋值保证只有一个成立，末尾统一走一次恢复。
     //   1) 已停止       —— 读标题栏文字，最便宜
     //   2) 服务器不可用  —— 查状态提示，中等
     //   3) 输出为空      —— 要跑一次完整解析，最贵，放最后
     const stopped = A.isStoppedByRisk();
     const unavailable = stopped ? false : A.isServerUnavailable();
     const empty = (stopped || unavailable) ? false : A.isEmptyByRisk();
-    // 三种都没命中也要记：这说明本次是正常生成结束，或出现了尚未覆盖的第四种形态。
+    // 都没命中也要记：这说明本次是正常生成结束，或出现了尚未覆盖的形态。
     // 记成日志后，下次「该恢复却没恢复」时能直接看出是没识别到形态。
     if (!stopped && !unavailable && !empty) {
       A.log && A.log('[风控恢复] 未识别到停止形态（已停止/服务器不可用/输出为空 均不成立）');
@@ -231,4 +316,9 @@
       });
     }, RECOVER_DELAY_MS);
   };
+
+  // 加载完成探针：列出实际挂上的函数名，一眼确认有没有挂成。
+  console.log('[AI-Mirror][content] [风控恢复] 模块加载完成，已挂载：'
+    + ['recoverIfStopped', 'isStoppedByRisk', 'isServerUnavailable', 'isRateLimited', 'isEmptyByRisk']
+      .filter(function (n) { return typeof A[n] === 'function'; }).join(','));
 })();
