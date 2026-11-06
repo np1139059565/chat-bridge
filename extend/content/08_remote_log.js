@@ -54,9 +54,14 @@
     // 直接丢弃——这批最早、最关键的日志就永远看不到了。
     // 故未就绪时保留缓冲，稍后重试。
     if (!A.state || !A.state.iframe) {
-      // 缓冲设上限，避免用户长期不开抽屉时无限增长
-      if (buf.length > MAX_BATCH * 4) buf = buf.slice(buf.length - MAX_BATCH * 4);
-      if (timer === null) timer = setTimeout(flush, FLUSH_MS * 3);
+      // 本页没有抽屉：改走后台转发。
+      //
+      // 为什么需要这条兜底：页面刷新后抽屉是关闭的（设计如此），
+      // 而抽屉也可能开在别的标签页。此时本页内容脚本找不到接收方，
+      // 若只等抽屉，这个页面的日志就永远发不出去。
+      // 后台运行在扩展上下文，不受混合内容策略限制，可作为第二条路。
+      fallbackViaBackground(buf);
+      buf = [];
       return;
     }
     const batch = buf;
@@ -71,6 +76,26 @@
     } catch (e) {
       console.warn('[AI-Mirror][content] [远程日志] 交给抽屉失败：' + (e && e.message ? e.message : e));
     }
+  }
+
+  /**
+   * 兜底通道：本页没有抽屉时，改由后台转发。
+   *
+   * 后台 service worker 运行在扩展上下文，不受混合内容策略限制。
+   * 它需要知道后端地址，故一并传过去；地址为空时后台用默认值。
+   *
+   * 失败静默：日志不能反过来拖累主流程。
+   *
+   * @param {Array} batch 日志数组
+   */
+  function fallbackViaBackground(batch) {
+    if (!batch || !batch.length) return;
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'ext_remote_log', baseUrl: '', body: batch },
+        function () { /* 忽略回包 */ }
+      );
+    } catch (e) { /* 扩展上下文失效等：忽略 */ }
   }
 
   /**

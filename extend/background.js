@@ -18,6 +18,40 @@ chrome.action.onClicked.addListener((tab) => {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 转发内容脚本的诊断日志：内容脚本受混合内容策略限制发不出 HTTP 请求，
   // 交由后台转发（见文件头说明）。不关心结果，失败直接丢弃。
+  // 兜底转发：本页没有抽屉时，内容脚本的日志走这里。
+  // 后台运行在扩展上下文，不受混合内容策略限制。
+  // 必须返回 true 保持通道，直到 fetch 完成——MV3 的 worker 没待处理事件会被回收，
+  // 直接 return 会让请求半路中断。
+  if (msg && msg.type === 'ext_remote_log') {
+    /**
+     * 拿到后端地址后转发。
+     *
+     * 地址优先取存储里的 aiMirrorFlaskUrl（抽屉探测后写入），
+     * 取不到才用默认值——端口可能被用户改过，硬编码会打错地方。
+     *
+     * @param {string} saved 存储里的地址，可为空
+     */
+    const send = function (saved) {
+      const base = (msg.baseUrl || saved || 'http://127.0.0.1:5000').replace(/\/+$/, '');
+      fetch(base + '/api/web/client_log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msg.body || [])
+      }).then(function (r) {
+        sendResponse({ ok: r.ok });
+      }).catch(function (e) {
+        sendResponse({ ok: false, error: String((e && e.message) || e) });
+      });
+    };
+    try {
+      chrome.storage.local.get(['aiMirrorFlaskUrl'], function (r) {
+        send((r && r.aiMirrorFlaskUrl) || '');
+      });
+    } catch (e) {
+      send('');
+    }
+    return true;   // 保持通道
+  }
   if (!msg || msg.type !== 'bridge_capture_tab') return;
   // windowId 取发送方所在窗口，保证抓到的是用户正在看的那个窗口
   const windowId = sender.tab ? sender.tab.windowId : undefined;

@@ -32,11 +32,14 @@
    * 失败静默：版本上报失败不影响任何功能。
    */
   M.reportVersion = function () {
-    let ver = 'unknown';
-    try { ver = chrome.runtime.getManifest().version; } catch (e) { /* 忽略 */ }
+    // 抽屉侧只能拿到自身构建标识（内容脚本的常量在页面上下文，读不到）。
+    // 这里同时报清单版本与抽屉侧标识，便于区分「抽屉新、内容脚本旧」的情况。
+    let manifestVer = 'unknown';
+    try { manifestVer = chrome.runtime.getManifest().version; } catch (e) { /* 忽略 */ }
     const items = [{
       tag: 'ext-版本',
-      msg: '扩展已加载 版本=' + ver + ' 时间=' + new Date().toISOString()
+      msg: '抽屉已加载 清单版本=' + manifestVer
+        + ' 时间=' + new Date().toISOString()
     }];
     D.apiFetch(this, '/api/web/client_log', { method: 'POST', body: items })
       .catch(function () { /* 静默 */ });
