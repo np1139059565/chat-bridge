@@ -21,16 +21,8 @@
     return;
   }
 
-  // 候选后端地址：按顺序尝试，第一个成功发出去的即被记住。
-  //
-  // 为什么需要候选：扩展存储里的地址（aiMirrorFlaskUrl）由设置页写入，
-  // 若用户从没在设置页保存过，该项为空，只靠它会导致日志一条都发不出去。
-  // 而内容脚本本来就跑在用户自己电脑上，本地服务默认就在这两个地址。
-  const CANDIDATES = ['http://127.0.0.1:5000', 'http://localhost:5000'];
-  // 当前生效的地址；空表示还没定下来
+  // 后端地址：由 05_index.js 从扩展存储读出后注入
   let baseUrl = '';
-  // 已确认可用的地址（发送成功后固化，避免每次都试错）
-  let confirmedUrl = '';
   // 待发缓冲
   let buf = [];
   // 定时器
@@ -49,59 +41,38 @@
   }
 
   /**
-   * 向指定地址发一批日志。
+   * 冲刷缓冲：把积累的日志交给后台转发。
    *
-   * @param {string} url   后端根地址
-   * @param {Array}  batch 日志数组
-   * @returns {Promise<boolean>} 是否发送成功（拿到 2xx 才算）
-   */
-  function postBatch(url, batch) {
-    return fetch(url + '/api/web/client_log', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(batch),
-      // keepalive：页面跳转 / 关闭时也让请求发完
-      keepalive: true
-    }).then(function (r) { return r.ok; });
-  }
-
-  /**
-   * 冲刷缓冲：把积累的日志一次性发出。
+   * 为什么不在内容脚本里直接 fetch：
+   *   内容脚本跑在网页的源里（如 https://chat.deepseek.com），
+   *   而工具服务是 http://127.0.0.1:5000。HTTPS 页面请求 HTTP 接口
+   *   会被浏览器的混合内容策略直接拦截，请求根本发不出去。
+   *   这解释了「工具接口能通、日志接口不通」——工具请求由抽屉
+   *   （chrome-extension:// 页面）发出，不受该策略限制。
    *
-   * 地址解析顺序：已确认的 > 外部注入的 > 内置候选。
-   * 只靠外部注入不够——用户若从没在设置页保存过地址，该项为空，
-   * 日志会一条都发不出去。内容脚本本就跑在用户自己电脑上，
-   * 本地服务默认就在候选地址里，直接试即可。
+   *   后台 service worker 运行在扩展上下文，无此限制，故交由它转发。
    *
    * 失败丢弃，不重试：日志不能反过来拖累主流程。
    */
   function flush() {
     timer = null;
     if (!buf.length) return;
+    if (!baseUrl) {
+      // 地址未知：保留本批，等地址注入后再发。
+      // 地址由抽屉探测后写入，用户打开一次抽屉即会有值。
+      // 但缓冲要有上限，否则长期不开抽屉会无限增长。
+      if (buf.length > MAX_BATCH * 4) buf = buf.slice(buf.length - MAX_BATCH * 4);
+      if (timer === null) timer = setTimeout(flush, FLUSH_MS * 5);
+      return;
+    }
     const batch = buf;
     buf = [];
-    // 待试地址：已确认的优先，其次外部注入，最后内置候选
-    const tryList = [];
-    if (confirmedUrl) tryList.push(confirmedUrl);
-    if (baseUrl && baseUrl !== confirmedUrl) tryList.push(baseUrl);
-    CANDIDATES.forEach(function (u) { if (tryList.indexOf(u) < 0) tryList.push(u); });
-
-    /** 依次尝试，首个成功即固化地址。 */
-    function attempt(i) {
-      if (i >= tryList.length) return;   // 全部失败：丢弃本批
-      const url = tryList[i];
-      postBatch(url, batch).then(function (ok) {
-        if (ok) {
-          if (confirmedUrl !== url) {
-            confirmedUrl = url;
-            console.log('[AI-Mirror][content] [远程日志] 确认可用地址：' + url);
-          }
-        } else {
-          attempt(i + 1);
-        }
-      }).catch(function () { attempt(i + 1); });
-    }
-    try { attempt(0); } catch (e) { /* 环境不支持 fetch 等：忽略 */ }
+    try {
+      chrome.runtime.sendMessage(
+        { type: 'ext_remote_log', url: baseUrl + '/api/web/client_log', body: batch },
+        function () { /* 忽略响应与错误：日志不能拖累主流程 */ }
+      );
+    } catch (e) { /* 扩展上下文失效等：忽略 */ }
   }
 
   /**
