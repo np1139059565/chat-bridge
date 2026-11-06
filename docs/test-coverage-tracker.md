@@ -55,7 +55,10 @@
 
 - [x] `voice_pyttsx3_runner.py` — 父进程侧调度：写文本、拉起子进程、超时处理、产物校验
 - [ ] `pyttsx3_worker.py` — 子进程：读文本、初始化引擎、设音色语速、合成
-- [ ] `voice_tts.py` — 三引擎分发（现仅测策略层，未测执行层，需补执行层用例）
+- [x] `voice_tts.py` — 三引擎分发。**执行层已补**（`tests/test_voice_execution.py`，8 项）：
+  分发路由、降级循环、错误汇总、失败后半成品清理、信号量释放、空文本短路，
+  外加一个真实 SAPI 端到端合成冒烟用例。经变异验证确认有效：
+  故意去掉失败后的清理逻辑，对应用例立即失败。
 - [ ] `voice_voices.py` — 音色清单列举
 - [x] `voice_cache.py` — 成品缓存复用
 - [x] `voice_pending.py` — 待确认语音文字暂存
