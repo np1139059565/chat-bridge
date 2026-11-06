@@ -359,13 +359,8 @@
 
   /**
    * 失败后立即重连：重置定时器相位并马上补拉一次。
-   *
-   * 为什么需要：setInterval 的相位是固定的，失败若落在周期中段，
-   * 要等满 2.5 秒才轮到下一次尝试；叠加超时后用户感知就是「卡十几秒」。
-   * 这里重建定时器让下一轮从现在起算，并立刻发起一次请求，缩短空窗。
-   *
-   * 立即补拉会与「定时器恰好到点」撞车，由 fetchMessages 入口的 pollBusy 挡掉，
-   * 不会并发堆积。
+   * setInterval 相位固定，失败落在周期中段要干等满 2.5 秒；
+   * 重建定时器让下一轮从现在起算，缩短空窗。并发由 pollBusy 挡掉。
    */
   function reconnectNow() {
     // 最小间隔保护：断网时请求会「立刻失败」，若每失败就立刻再连，
@@ -406,12 +401,16 @@
   clientLog('page', 'load 开始首次铺历史');
   fetchMessages(true);
   startPolling();
-  // 不再单独发心跳：每 3 秒一条纯属噪音。页面是否仍在运行，
-  // 由轮询（slow / fail）与性能监控（tickgap）共同反映——它们异常时才有记录。
-  // 性能监控：长任务（主线程被占）与定时器实时间隔。
-  // 卡顿时若出现 longtask，是代码卡的；若只有 tickgap、无 longtask，
-  // 则更像浏览器/系统冻结了页面 JS。二者日志分不开，靠它区分。
+  // 性能监控：有 longtask 是代码卡的；只有 tickgap 无 longtask，
+  // 更像浏览器冻结了页面（详见 web_perf.js）。
   if (window.WebPerf) window.WebPerf.start();
+  // 看门狗：定时自检轮询是否还活着，死了强制复活（详见 web_watchdog.js）。
+  // 此前轮询停掉后只能靠「切回前台」恢复，事件没触发就永久未连接。
+  if (window.WebWatchdog) {
+    var wdState = function () { return { pollOn: !!pollTimer, busy: pollBusy, lastPollOkAt: lastPollOkAt }; };
+    var wdRevive = function () { startPolling(); pollBusy = false; fetchMessages(false); };
+    window.WebWatchdog.init({ state: wdState, revive: wdRevive }).start();
+  }
   // 页面可见性变化打点：切后台时定时器会被系统暂停，这里记下进出时刻，
   // 便于把「断连空档」与「切后台」对齐——若空档两端正好是 hidden/visible，
   // 就是切后台所致，而非页面卡死。
