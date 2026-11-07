@@ -23,18 +23,11 @@
   var clientLog = window.WebLog.clientLog;
   if (window.WebPollTrace) window.WebPollTrace.init(clientLog);   // 临时诊断：注入日志函数
 
-  // ---------- 时间格式化 ----------
-  function fmtTime(ts) {
-    var d = new Date(ts || Date.now());
-    var hh = ('0' + d.getHours()).slice(-2);
-    var mm = ('0' + d.getMinutes()).slice(-2);
-    return hh + ':' + mm;
-  }
+  // ---------- 时间格式化（实现在 web_time.js） ----------
+  var fmtTime = window.WebTime.fmtTime;
 
   // ---------- 渲染单条消息并倒序插入到顶部 ----------
-  // 实现已迁至 web_render_message.js（window.WebMessage），此处仅注入依赖并转调。
-  // 迁移原因：图片单张/多张、图文混排、语音绑定、两种插入位置使该函数分支较多，
-  // 且与轮询、发送等流程无关，单独成文件更易读。
+  // 实现已迁至 web_render_message.js，此处仅注入依赖并转调。
   if (window.WebMessage) {
     window.WebMessage.init({ listEl: listEl, seen: seen, fmtTime: fmtTime });
   }
@@ -127,6 +120,7 @@
     lastPollOkAt = Date.now();
     if (!data || !data.success) return;
     cursor = data.seq || cursor;
+    var _cursorForCatchUp = cursor;
     var msgs = data.messages || [];
     // 正序遍历、倒序插入：最终最新在顶部。
     // 历史加载（history）不自动播语音；增量拉取的新语音在解锁后自动播。
@@ -136,6 +130,8 @@
     var _rt = Date.now() - _rt0;
     // 新消息到达：按 DOM 上限裁剪（实现见 web_dom_limit.js）
     if (!history && window.WebDom) window.WebDom.afterAppend();
+    // 本批渲染完再补齐：整页重载后游标归零，靠存储里的旧游标把中间段补回来。
+    if (window.WebCursor) window.WebCursor.onPollOk(_cursorForCatchUp, history);
     // 渲染是主线程同步操作，渲染条数多 / 单条重时会明显占主线程，
     // 这里记渲染条数与耗时：若耗时大，就是「页面卡住」的嫌疑点。
     if (!history && (msgs.length || _rt > 200)) {
@@ -217,6 +213,11 @@
         if (inflightTimer === timer) inflightTimer = null;
         pollBusy = false;
       });
+  }
+
+  // ---------- 游标持久化与缺口补齐（web_cursor.js）：重载后补齐中间段 ----------
+  if (window.WebCursor) {
+    window.WebCursor.wirePage({ renderMessage: renderMessage, clientLog: clientLog, WebDom: window.WebDom });
   }
 
   function setStatus(ok) {
