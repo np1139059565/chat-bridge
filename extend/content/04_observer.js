@@ -105,6 +105,7 @@
     A.startScrollWatch(container); // 监听滚动：虚拟列表滚动可能不增删节点，MutationObserver 收不到
     A.watchHistory(); // 同时绑定左侧会话列表监听（随预设切换）
     A.startButtonWatch(); // 启动发送按钮状态轮询（生成结束即解析）
+    A.startRiskIdleWatch(); // 风控恢复的空闲态低频兜底（翻转被错过时补上）
   };
 
   /**
@@ -260,6 +261,8 @@
         // 面板未打开时不解析：sendPage 内部已有守卫，这里提前返回省掉判断开销
         if (!nowGen) {
           A.triggerGenerate();
+          // 记录翻转时刻：空闲兜底据此判断「这一轮是否已被翻转路径处理过」
+          A.state.lastFlipAt = Date.now();
           // 风控恢复：这个翻转点也可能是「被风控掐断」而非正常说完（实现见 07_stopped_watch.js）。
           // 挂在这里而不是轮询特征，是因为特征会随恢复正常而消失，轮询必然漏检或误触发。
           //
@@ -279,6 +282,33 @@
         }
       }
     }, A.BUTTON_POLL_MS);
+  };
+
+  /**
+   * 风控恢复的空闲态兜底检查：低频、仅在空闲时执行。
+   *
+   * 为什么需要它：翻转触发是快路径，但只在那一个瞬间执行一次。
+   * 若生成态判定本身失效（按钮选择器读错、站点改版），isGenerating 可能
+   * 永远不翻转，快路径一次也不会触发。此兜底与翻转并存，负责补上这类缺口。
+   *
+   * 为什么低频：风控恢复不紧急，晚几秒无实际损失；而检查本身要读 DOM、
+   * 跑一遍消息解析，查得越勤越拖慢页面，也让「持续被脚本扫描」的特征更明显。
+   *
+   * 三重跳过，避免无谓开销：
+   *  · 面板未激活（用户没在看）——不介入；
+   *  · 正在生成——那时页面在输出，既没必要也最费资源；
+   *  · 距上次翻转不足一个周期——该轮已由快路径处理过，不重复。
+   */
+  A.startRiskIdleWatch = function () {
+    if (A.state.riskIdleTimer) clearInterval(A.state.riskIdleTimer);
+    A.state.riskIdleTimer = setInterval(function () {
+      if (!A.state.active) return;              // 面板未打开，不介入
+      if (A.state.isGenerating) return;         // 生成中，跳过
+      const since = Date.now() - (A.state.lastFlipAt || 0);
+      // 刚翻转过：快路径已处理，跳过本轮兜底
+      if (A.state.lastFlipAt && since < A.RISK_IDLE_CHECK_MS) return;
+      if (A.recoverIfStopped) A.recoverIfStopped();
+    }, A.RISK_IDLE_CHECK_MS);
   };
 
   /**
@@ -313,6 +343,7 @@
     // 取消待执行的静默扫描，避免清理后仍触发一次解析
     if (A.state.scanTimer) { clearTimeout(A.state.scanTimer); A.state.scanTimer = null; }
     if (A.state.buttonTimer) { clearInterval(A.state.buttonTimer); A.state.buttonTimer = null; }
+    if (A.state.riskIdleTimer) { clearInterval(A.state.riskIdleTimer); A.state.riskIdleTimer = null; }
     if (A.state.observer) { A.state.observer.disconnect(); A.state.observer = null; }
     if (A.state.historyObserver) { A.state.historyObserver.disconnect(); A.state.historyObserver = null; }
     if (A.state.scrollHandler) {

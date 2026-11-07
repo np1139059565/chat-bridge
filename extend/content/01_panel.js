@@ -209,6 +209,8 @@
     }
     // 5) 停止发送按钮状态轮询
     if (A.state.buttonTimer) { clearInterval(A.state.buttonTimer); A.state.buttonTimer = null; }
+    // 风控兜底也随面板停用一并清理：面板关闭后无人需要它
+    if (A.state.riskIdleTimer) { clearInterval(A.state.riskIdleTimer); A.state.riskIdleTimer = null; }
     A.state.isGenerating = false;
     // 6) 停止会话巡检定时器（仅面板打开期间需要）
     if (A.stopConvWatch) A.stopConvWatch();
