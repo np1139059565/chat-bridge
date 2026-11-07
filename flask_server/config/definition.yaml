@@ -272,13 +272,6 @@ bridge:
     label: 开启新对话
     selector: document.querySelector('div._5a8ac7a.a084f19e')
     page_url: ''
-  - name: /new1
-    label: 新建1
-    steps:
-    - /new
-    - /csp
-    - /sa on
-    interval: 5
   - name: /crp
     label: 清空消息记录并重新解析
     steps:

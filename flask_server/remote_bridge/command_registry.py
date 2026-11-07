@@ -40,6 +40,11 @@ BUILTIN = {
     "/switch-session": {"desc": "按序号切换会话（如 /ss 1）", "aliases": ["/ss"], "group": "会话管理"},
     "/clear-sessions": {"desc": "清空所有会话", "aliases": ["/css"], "group": "会话管理"},
     "/clear-messages": {"desc": "清空当前会话的消息列表", "aliases": ["/cms"], "group": "会话管理"},
+    # 组合指令提权为内置：此前只存在于 definition.yaml 的自定义区，
+    # 一旦用户在设置页误删就整条消失。提权后代码里恒定存在，
+    # 各步骤（/new 点击、/csp 复制系统提示词、/sa on 开自动回传）仍按名调用。
+    "/new1": {"desc": "新建会话并接续任务（新建 → 复制系统提示词 → 开自动回传）",
+              "aliases": [], "group": "会话管理"},
     "/copy-json": {"desc": "复制当前会话 JSON", "aliases": ["/cj"], "group": "会话管理"},
     "/reparse": {"desc": "重新解析当前网页对话", "aliases": ["/rp"], "group": "会话管理"},
     # —— 卡片与结果 ——

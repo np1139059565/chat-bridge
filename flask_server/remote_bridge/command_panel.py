@@ -122,6 +122,14 @@ def _h_clear_messages(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, "已下发：清空当前会话的消息列表")
 
 
+# /new1 的步骤定义与处理函数在 command_new1.py（多步指令，单独成文件）。
+# 此处用工厂构造：本文件要在分发表里登记它，它又要调用本文件的 _run_combo，
+# 直接导入会形成循环依赖，故把执行器作为参数传入。
+from .command_new1 import NEW1_ENTRY as _NEW1_ENTRY, make_handler as _make_new1_handler
+
+_h_new1 = _make_new1_handler(_run_combo)
+
+
 def _h_copy_system_prompt(qq_client, openid, arg, msg_id):
     """复制 System Prompt 并发送给 AI。"""
     # 带 openid 与截图：发送后对话里会出现新内容，用户需要看到实际发生了什么，
@@ -331,6 +339,7 @@ def _h_memory(qq_client, openid, arg, msg_id):
 _BUILTIN_HANDLERS = {
     "/clear-sessions": _h_clear_sessions,
     "/clear-messages": _h_clear_messages,
+    "/new1": _h_new1,
     "/copy-system-prompt": _h_copy_system_prompt,
     "/re-time": _h_re_time,
     "/switch-auto": _h_switch_auto,
