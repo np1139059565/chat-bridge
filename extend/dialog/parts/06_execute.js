@@ -67,6 +67,16 @@
       log('卡片执行跳过：id=' + cid + ' 原因=上一轮仍在执行中（防重入）');
       return;
     }
+    // 自动执行与 AI 生成互斥：生成中一律不执行。
+    //
+    // 这里与 _finalizeAutoExec 的门禁是两道，不能合并：那道拦的是「推送时就已在生成」，
+    // 这道拦的是「排上倒计时之后才开始生成」——倒计时通常有几秒，AI 完全可能在此期间重新开写。
+    // 手动点按（isAuto 为假）不受此限：那是用户主动行为，不在自动流程范围内。
+    if (isAuto && this._generatingAtPush) {
+      log('自动执行拦截：AI 仍在生成，放弃本次 id=' + cid);
+      card.status = 'pending';
+      return;
+    }
     card.status = 'running';
     this._resetCardDiagnostics(card);
     await this._callTool(card);

@@ -112,7 +112,11 @@
       this.applyConversation(d.conversationId, d.conversationTitle, d.page_url, (ok) => {
         if (!ok) return;
         // atBottom：内容脚本算好的「视口是否在底部」，供滚动轮次自动执行复检
-        this.ingestMessages(d.messages, d.reason, { atBottom: !!d.atBottom });
+        // isGenerating：推送时刻 AI 是否仍在生成，供自动执行与回传拦截
+        this.ingestMessages(d.messages, d.reason, {
+          atBottom: !!d.atBottom,
+          isGenerating: !!d.isGenerating
+        });
       });
     }
   };
@@ -222,6 +226,10 @@
     const scrollOnly = reason === 'scroll';
     // 滚动轮次是否停在底部：自动执行复检的条件之一，其余来源不看它
     const atBottom = !!(opts && opts.atBottom);
+    // 推送时刻 AI 是否仍在生成：抽屉拿不到实时生成态，只能靠推送携带的采样值。
+    // 同时落进实例状态——倒计时跨越生成期时，执行那一刻要据此再拦一次。
+    const generatingAtPush = !!(opts && opts.isGenerating);
+    this._generatingAtPush = generatingAtPush;
     (messages || []).forEach((m) => {
       if (m && !Array.isArray(m.blocks)) m.blocks = (m.blocks && typeof m.blocks === 'object') ? Object.values(m.blocks) : [];
     });
@@ -230,15 +238,11 @@
     // 记忆检查：出现「新的」真实用户发言则打开计数窗口（工具结果回传不算用户发言，
     // 同一用户发言重复出现不会重复开窗）。窗口内由 memoryIssueForRound 数 AI 生成轮次。
     this.noteUserTurn(incoming);
-    // 打印过滤后各条指纹：与 sendPage 的 ids 同源，便于两边逐条比对。
     log('ingestMessages 收到 ' + incoming.length + ' 条（会话=' + this.activeConv
       + '，来源=' + (reason || 'generate')
       + '，ids=' + JSON.stringify(incoming.map((m) => this.msgId(m))) + '）');
 
-    // 1) 写入消息树
-    //    atBottom 一并传入：末路兜底需要它判断「用户是否正看着最新处」，
-    //    只有 generate 且在底部时，才允许把找不到锚点的整片接到分支末端。
-    //    beforeNodes 用于判断本轮是否真的有新节点入库（供上报解耦用，见末尾）。
+    // 1) 写入消息树。atBottom 一并传入：末路兜底据它判断「用户是否正看着最新处」。
     // 挂载待处理资产（图片 / 文件描述），必须在入树之前
     try { this._attachPendingImages(conv, incoming); } catch (e) { log('挂载图片失败：' + e); }
     try { this._attachPendingFiles(conv, incoming); } catch (e) { log('挂载文件失败：' + e); }
@@ -287,7 +291,7 @@
 
     // 4) 为代码块建卡并收集候选；随后处理重跑与自动执行（见 05g_cards.js 与下方收尾）
     const collected = this._buildCardsForIncoming(conv, incoming, reason, memoryIssue, scrollOnly, isFreshReply);
-    this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom);
+    this._finalizeAutoExec(collected, notInTree, scrollOnly, atBottom, generatingAtPush);
 
     log('本轮处理完成：消息=' + incoming.length
       + '，可见=' + conv.visibleKeys.length
@@ -329,8 +333,11 @@
    * @param {boolean} notInTree 本轮是否不入树（不入树绝不自动执行）
    * @param {boolean} scrollOnly 是否滚动轮次
    * @param {boolean} atBottom 视口是否在底部
+   * @param {boolean} generatingAtPush 推送时刻 AI 是否仍在生成。为真则一律不自动执行——
+   *   此时回传会被插进正在生成的回复里，既打断输出也可能对不上位置。
+   *   按既定规则：准备触发的自动执行停止、准备发出的回传丢弃，不做延迟重试。
    */
-  M._finalizeAutoExec = function (collected, notInTree, scrollOnly, atBottom) {
+  M._finalizeAutoExec = function (collected, notInTree, scrollOnly, atBottom, generatingAtPush) {
     const autoCandidates = collected.autoCandidates;
     // 4.5) 已执行卡片的处置：保持已执行态，不退回待执行。
     // 执行权只属于「本轮最后一条消息里的卡片」；一张卡片执行完成后，
@@ -352,7 +359,9 @@
     const runnable = autoCandidates.filter((c) => c && !c.skipped && !c.executed
       && !c.duplicate && !c._cdTimer && c.status !== 'running');
     // 自动执行决策留痕：这是排查「自动流程停止」的核心断点，逐条件说明为何执行/不执行。
-    if (this._convLoading && this._convLoading[this.activeConv]) {
+    if (generatingAtPush) {
+      log('自动执行决策：推送时 AI 仍在生成，跳过（候选=' + runnable.length + '）');
+    } else if (this._convLoading && this._convLoading[this.activeConv]) {
       // 会话仍在加载：签名库尚未恢复，此时判不出「哪些已执行」，
       // 一律不自动执行，避免把历史卡片当成新卡片重跑。
       log('自动执行决策：会话仍在加载，跳过（候选=' + runnable.length + '）');

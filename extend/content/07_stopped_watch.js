@@ -247,34 +247,27 @@
       if (A.isStoppedByRisk() || A.isServerUnavailable() || A.isEmptyByRisk()) {
         A.log && A.log('[风控恢复] 检测到停止形态，但开关未开启，跳过');
       }
-      return;
+      // 返回 true 表示「本轮到此为止，不必再复查」：
+      // 开关状态是稳定的用户选择，不会在十秒内改变，复查没有意义；
+      // 若返回 undefined 会被调用方当成未命中，白白多跑几次完整解析。
+      return true;
     }
     if (recovering) {
       A.log && A.log('[风控恢复] 上一轮恢复仍在进行，跳过本轮');
-      return;
+      return true;   // 已有恢复在跑，同样不必再复查
     }
-    // 先看用户是否已向上翻看历史：在底部才考虑恢复。
+    // 底部判断刻意不放在这里，而是后移到「点击前那一刻」。
     //
-    // 为什么加这一道：用户手动点停止也会出现「已停止」，那种情况绝不能替他重新生成——
-    // 他是主动不要这条回复的。而「往上翻看历史」是一个可观测的信号：
-    // 主动停止后用户常会回翻对话找上下文，此刻不打扰他，比替他重跑更稳妥。
-    //
-    // 这道判断的局限要说清楚：滚动位置与「谁点了停止」并无因果关系，
-    // 它只能降低误触发概率，不能精确区分「用户停的」与「风控掐的」。
-    // 代价是用户恰好往上翻时真遇风控，那次不会自动恢复——我们选择宁可漏恢复，
-    // 也不在用户主动停止后擅自重跑。
-    //
-    // 站点未配置 scrollToBottomButton 时 isAtBottom 恒为 false，即永不自动恢复；
-    // 这是保守取向：判定缺失时宁可不动作。
-    if (!A.isAtBottom || !A.isAtBottom()) {
-      // 记下来：这是「该恢复却没恢复」最常见的原因，此前静默返回导致无从排查
-      A.log && A.log('[风控恢复] 判定不在底部，跳过（用户可能正在翻看历史）');
-      return;
-    }
+    // 原先在检测阶段就判：检测到动作执行之间有 RECOVER_DELAY_MS 的等待，
+    // 这期间用户可能翻看历史、页面也可能变化，早判必然失效——
+    // 既会拦住「检测时不在底部、等待后已回到底部」的正该恢复场景，
+    // 也会放过「检测时在底部、等待后已翻走」的误点场景。
+    // 判据要用在动作前一刻才有效。
+
     // 先判限流：它走另一条恢复指令，且连续两次要停手。实现见 tryRecoverRateLimit。
     if (A.isRateLimited()) {
       tryRecoverRateLimit();
-      return;
+      return true;
     }
     // 走到这里说明本轮不是限流，清零连续计数（限流要求「连续」两次）
     rateLimitStreak = 0;
@@ -294,18 +287,24 @@
     // 记成日志后，下次「该恢复却没恢复」时能直接看出是没识别到形态。
     if (!stopped && !unavailable && !empty) {
       A.log && A.log('[风控恢复] 未识别到停止形态（已停止/服务器不可用/输出为空 均不成立）');
-      return;
+      return false;   // 未命中：告诉调用方可以继续复查
     }
     const P = A.activeProfile();
     const expr = P && P.regenerateExpr;
     if (!expr) {
       A.warn('检测到已停止，但站点未配置重新生成表达式，无法自动恢复');
-      return;
+      return true;
     }
     recovering = true;
-    A.log && A.log('检测到「已停止」，' + (RECOVER_DELAY_MS / 1000) + ' 秒后自动重新生成');
+    A.log && A.log('检测到「' + (stopped ? '已停止' : (unavailable ? '服务器不可用' : '输出为空'))
+      + '」，' + (RECOVER_DELAY_MS / 1000) + ' 秒后自动重新生成');
     setTimeout(function () {
-      // 点击交给主世界：隔离世界无法求值，且点击需触发页面自己的事件处理
+      // 动作前一刻再判底部：检测到点击之间隔着等待，期间用户可能已翻看历史。
+      if (!A.isAtBottom || !A.isAtBottom()) {
+        recovering = false;
+        A.log && A.log('[风控恢复] 点击前复查：已不在底部，放弃本次恢复');
+        return;
+      }
       A.execClick(expr, 'unique', function (ok, reason) {
         recovering = false;
         if (ok) {
@@ -315,6 +314,7 @@
         }
       });
     }, RECOVER_DELAY_MS);
+    return true;   // 已命中并安排恢复：调用方停止复查
   };
 
   // 加载完成探针：列出实际挂上的函数名，一眼确认有没有挂成。

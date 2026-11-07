@@ -122,7 +122,10 @@
         conversationId: convId,
         conversationTitle: A.getConversationTitle(),
         reason: reason || 'manual',  // 触发来源标签，供消费端分流
-        atBottom: atBottom           // 视口是否在底部（滚动轮次自动执行复检用）
+        atBottom: atBottom,          // 视口是否在底部（滚动轮次自动执行复检用）
+        // 推送时刻 AI 是否仍在生成：抽屉侧据此拦截自动执行与回传。
+        // 抽屉与内容脚本分离，拿不到本页的生成态，只能随推送一并带过去。
+        isGenerating: !!A.state.isGenerating
       });
     });
   };
