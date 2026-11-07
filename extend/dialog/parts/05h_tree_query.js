@@ -38,6 +38,32 @@
   };
 
   /**
+   * 取某条消息在「消息树里」的前一条消息的卡片表。
+   *
+   * 为什么需要它（实机日志 2026-11-07 07:41）：相邻消息去重原先只跟
+   * 「本批上报切片内的前一条」比。但网页会把同一次工具调用拆进两个上报批次，
+   * 重复调用恰是第二批的首条，切片内没有前一条，比对基准为空，去重直接落空，
+   * 于是两张卡各自排倒计时、相隔两秒各执行一次。
+   * 树边 key 形如「父id-子id」，跨批次也能找到真正相邻的上一条，故改用它。
+   *
+   * @param {Object} conv 会话记录
+   * @param {Object} m 当前消息
+   * @returns {Object|null} 前一条消息的卡片表；无前驱或无卡片时返回 null
+   */
+  M._prevCardsInTree = function (conv, m) {
+    const tree = conv && conv.msgTree;
+    const id = this.msgId(m);
+    if (!tree || !id) return null;
+    const key = this.keyOfId(tree, id);
+    if (!key) return null;
+    // 树键前半段即父消息 id；父为根 '0' 时没有上一条
+    const pid = key.slice(0, key.indexOf('-'));
+    if (!pid || pid === '0') return null;
+    const pnode = tree[this.keyOfId(tree, pid)];
+    return (pnode && pnode.cards) || null;
+  };
+
+  /**
    * 判断某条消息是否是「会话树的末条」：树里不存在以它为父的边。
    *
    * 树键格式为「父消息id-子消息id」，因此只要有一条边以该 id 作父，

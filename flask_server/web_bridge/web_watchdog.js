@@ -19,13 +19,16 @@
 (function () {
   'use strict';
 
-  // 自检间隔（毫秒）：5 秒一次，足够快又不至于空转
-  var CHECK_MS = 5000;
-  // 多久没有成功轮询即判定为卡死（毫秒）
-  var STALE_OK_MS = 30000;
-  // 在途标记持续多久即判定为泄漏（毫秒）：正常请求 6 秒超时，
-  // 超过该值说明某次收尾没执行到
-  var BUSY_STALE_MS = 20000;
+  // 自检间隔（毫秒）：1 秒一次。轮询本身 2.5 秒一轮，
+  // 自检必须比它密，才能在断连后一轮之内发现并复活，
+  // 而不是等用户察觉「怎么一直转圈」再修。
+  var CHECK_MS = 1000;
+  // 多久没有成功轮询即判定为卡死（毫秒）。
+  // 取 8 秒：约等于连丢三轮，既不会把偶发慢响应误判，又能快速自愈。
+  var STALE_OK_MS = 8000;
+  // 在途标记持续多久即判定为泄漏（毫秒）。
+  // 单次请求 6 秒必超时，超过 10 秒仍为忙，说明收尾没执行到。
+  var BUSY_STALE_MS = 10000;
 
   var timer = null;        // 自检定时器
   var hooks = null;        // 注入的页面钩子
@@ -100,12 +103,22 @@
   api.start = function () {
     api.stop();
     timer = setInterval(check, CHECK_MS);
+    // 网络恢复的瞬间立即自检一次，不等下一个周期：
+    // 断网期间轮询必然全部失败，恢复后用户最希望「马上好」，
+    // 等满 1 秒虽然短，但叠加请求往返仍可能让人再点一次刷新。
+    if (typeof window !== 'undefined' && window.addEventListener) {
+      window.addEventListener('online', check);
+    }
     return api;
   };
 
   /** 停止自检。 */
   api.stop = function () {
     if (timer) { clearInterval(timer); timer = null; }
+    // 一并解绑：否则重复 start 会叠加多个监听，网络恢复时触发多次复活
+    if (typeof window !== 'undefined' && window.removeEventListener) {
+      window.removeEventListener('online', check);
+    }
   };
 
   // 对外暴露；check 一并暴露便于单测直接驱动一次自检

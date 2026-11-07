@@ -71,6 +71,11 @@
     }
     if (!key) key = this.keyOfId(conv.msgTree, this.msgId(m));
     const node = conv.msgTree[key];
+    // 相邻消息去重的比对基准：改从「消息树里的前一条」取，而不是「本批切片内的前一条」。
+    // 原因（实机日志 2026-11-07 07:41）：同一次工具调用被网页拆进两个上报批次，
+    // 第二批里重复调用恰是批次首条，prevM 为 null，比对基准为空 → 去重落空 → 双执行。
+    // 树边 key 形如「前一条指纹-本条指纹」，据此可跨批次找到真正相邻的上一条。
+    state.prevCards = this._prevCardsInTree(conv, m) || state.prevCards || null;
     const holder = node || m;
     holder.cards = holder.cards || {};
     if (node) m.cards = holder.cards;

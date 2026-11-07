@@ -125,3 +125,19 @@ test('start 与 stop 可重复调用不抛异常', () => {
     wd.stop();
   });
 });
+
+test('断连判定窗口：超过 8 秒无成功即复活（秒级自愈，不等 30 秒）', () => {
+  // 9 秒前成功过一次：已越过 8 秒阈值，应立即复活
+  const h = makeHooks({ pollOn: true, busy: false, lastPollOkAt: Date.now() - 9000 });
+  wd.init(h.hooks);
+  wd.check();
+  assert.strictEqual(h.calls.revive, 1);
+});
+
+test('断连判定窗口：6 秒内无成功不算卡死（避免慢响应误判）', () => {
+  // 单次请求 6 秒才超时，6 秒内的空窗属正常，不该被当成卡死
+  const h = makeHooks({ pollOn: true, busy: false, lastPollOkAt: Date.now() - 6000 });
+  wd.init(h.hooks);
+  wd.check();
+  assert.strictEqual(h.calls.revive, 0);
+});
