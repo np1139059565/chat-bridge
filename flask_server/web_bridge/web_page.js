@@ -167,9 +167,28 @@
     failCount += 1;
     // 一次失败即判定未连接：不让界面停在「看似已连接、实际收不到消息」的假象里。
     if (WebLogic.shouldShowDisconnected(failCount, FAIL_TOLERANCE)) setStatus(false);
-    // 立即重连：重建定时器并从失败时刻起重新计时，而不是等下一个 2.5 秒周期。
-    // 两者叠加时（定时器到点 + 本轮刚失败）最坏会多打一次请求，由 pollBusy 挡掉。
-    if (!history) reconnectNow();
+    // 一次失败即彻底重建：停表、掐断在途、清忙标记、重开定时器、立刻补拉。
+    // 不再设最小重连间隔，也不再依赖「延迟重连」那层判断——
+    // 那层判断的代价是失败后可能迟迟不重建，用户看到的就是「一直未连接」。
+    // 空转风险由「重建后立刻补拉一次」加轮询周期本身兜住：
+    // 断网时每轮 2.5 秒一次，不会形成高频空转。
+    if (!history) hardResetPolling();
+  }
+
+  /**
+   * 彻底重建轮询：停表 → 掐断在途 → 清忙标记 → 重开定时器 → 立即补拉。
+   *
+   * 这是断连恢复的唯一入口。之所以把这几步捆在一起，是因为它们必须同时成立：
+   * 只重建定时器而 pollBusy 仍为真，下一轮仍会在入口被跳过；
+   * 只清忙标记而不重建定时器，则永远不会有下一轮。
+   * 不做整页刷新——刷新会丢掉滚动位置与输入框内容，代价远大于收益。
+   */
+  function hardResetPolling() {
+    stopPolling();
+    abortInflightPoll('reset');
+    pollBusy = false;
+    startPolling();
+    fetchMessages(false);
   }
 
   function fetchMessages(history) {
@@ -326,11 +345,6 @@
   // 故切后台时主动停表，回前台时显式重建，不依赖浏览器是否恢复。
   var POLL_INTERVAL = 2500;
   var pollTimer = null;
-  // 失败后立即重连的最小间隔（毫秒）：防止断网时「失败-重连」高频空转。
-  // 取得比轮询间隔 2500 小得多，用户感知仍是「马上重连」。
-  var MIN_RECONNECT_GAP = 1000;
-  var lastReconnectAt = 0;   // 上次立即重连的时刻
-  var reconnectTimer = null; // 待执行的延迟重连，避免同一时刻重复排
 
   // ---------- 临时诊断心跳（实现见 web_heartbeat.js，默认关闭） ----------
   // 附带轮询状态摘要，区分「定时器被丢」「请求发不出」「页面被冻结」。
@@ -351,40 +365,10 @@
     if (window.WebHeartbeat) window.WebHeartbeat.start();
   }
 
-  /** 停止轮询定时器与诊断心跳，并取消挂起的延迟重连（切后台时不留残余）。 */
+  /** 停止轮询定时器与诊断心跳（切后台时不留残余）。 */
   function stopPolling() {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
-    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
     if (window.WebHeartbeat) window.WebHeartbeat.stop();
-  }
-
-  /**
-   * 失败后立即重连：重置定时器相位并马上补拉一次。
-   * setInterval 相位固定，失败落在周期中段要干等满 2.5 秒；
-   * 重建定时器让下一轮从现在起算，缩短空窗。并发由 pollBusy 挡掉。
-   */
-  function reconnectNow() {
-    // 最小间隔保护：断网时请求会「立刻失败」，若每失败就立刻再连，
-    // 会形成每秒数十次的空转，既打后端也耗电。
-    // 首次失败立即重连；与上次重连相隔不足 MIN_RECONNECT_GAP 时，
-    // 推迟到间隔满后再连——仍是「马上」而非等满整个轮询周期。
-    var now = Date.now();
-    // 等待时长由纯函数给出（实现与测试见 web_logic.reconnectDelay）
-    var wait = WebLogic.reconnectDelay(now, lastReconnectAt, MIN_RECONNECT_GAP);
-    if (wait === 0) {
-      lastReconnectAt = now;
-      startPolling();
-      fetchMessages(false);
-      return;
-    }
-    // 距上次重连太近：稍等片刻再连，期间由 pollBusy 保证不会并发。
-    if (reconnectTimer) return;
-    reconnectTimer = setTimeout(function () {
-      reconnectTimer = null;
-      lastReconnectAt = Date.now();
-      startPolling();
-      fetchMessages(false);
-    }, wait);
   }
 
   // ---------- DOM 上限与懒加载初始化 ----------
@@ -420,10 +404,6 @@
   });
   // 页面重新可见时立即补拉一次：手机切后台会暂停定时器，
   // 回到前台若不主动拉，会等到下一个周期甚至更久才看到新消息。
-  // 切后台超过该阈值（毫秒）时，回前台整页重载。
-  // 依据：手机浏览器在后台会冻结页面、按内存压力回收标签页；停留过久后事件循环
-  // 积压、DOM 陈旧，继续复用旧页面容易出现长时间无响应。重载能拿到干净状态。
-  var RELOAD_AFTER_HIDDEN_MS = 30000;
   var hiddenAt = 0;
 
   document.addEventListener('visibilitychange', function () {
@@ -434,17 +414,13 @@
       abortInflightPoll('hidden');
       return;
     }
-    // 回前台：后台停留超过阈值则整页重载，避免复用陈旧页面
+    // 回前台：一律走彻底重建，不整页刷新。
+    // 刷新会丢滚动位置与输入框内容，且用户已明确要求禁止；
+    // 陈旧页面带来的问题由重建轮询 + 看门狗兜住。
     var away = hiddenAt ? (Date.now() - hiddenAt) : 0;
-    if (WebLogic.shouldReloadAfterHidden(away, RELOAD_AFTER_HIDDEN_MS)) {
-      clientLog('page', 'reload（后台 ' + Math.round(away / 1000) + 's）');
-      setTimeout(function () { location.reload(); }, 200);
-      return;
-    }
-    // 回前台：重建定时器 + 清残留 + 立即补拉。
-    startPolling();
-    abortInflightPoll('visible');
-    fetchMessages(false);
+    clientLog('page', 'visible（回前台，后台 ' + Math.round(away / 1000) + 's）→ 重建轮询');
+    hiddenAt = 0;
+    hardResetPolling();
   });
 })();
 
