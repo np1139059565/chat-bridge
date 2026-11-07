@@ -176,33 +176,39 @@ window.AIMirrorContent = (function () {
       retrySendExpr: '(function(){var a=document.querySelectorAll("div.ds-button.ds-button--warning:nth-child(3)");return a.length?a[a.length-1]:null;})()'
     },
     // 文心一言（wenxin.baidu.com）。
-    // 以下选择器均经手机真机实测确认，2026-11-01。
+    // 结构：每个问答对是一个 .chat-qa-container，内部同时含提问容器与回答容器，
+    // 因此走拆分模式；回答正文可能是多个 markdown 块，用 answerWrap 全部收集，
+    // 避免只取第一个而漏掉代码块等后续块。
     wenxin: {
       label: '文心一言',
       hosts: ['wenxin.baidu.com'],
       // 对话区滚动容器
       container: '.conversation-flow-content',
-      // 问答分处两个容器，不是同一条 item 内，故 split 为 false
-      split: false,
+      // 问答对条目：每个条目内同时含提问与回答
+      item: '.chat-qa-container',
+      // 一个条目内拆分出提问与回答两块
+      split: true,
       // 用户提问容器
-      userContent: '.conversation-flow-question-container',
-      // AI 回答容器：注意它把思考区与正文区包在一起，
-      // 直接取容器文字会把「深度思考完成」等前缀混进正文
-      assistantMark: '.conversation-flow-answer-container',
-      // 正文块：容器内有两个，第一个为空占位，第二个才是正文，
-      // 需取「容器内最后一个非空块」，主工程当前不支持此取法
-      assistantContent: '.cosd-markdown-content',
+      userItem: '.conversation-flow-question-container',
+      // 提问正文：只取纯文本节点，避开复制按钮等操作元素
+      userContent: '.cs-question-pure-text',
+      // AI 回答容器：把思考区与正文区包在一起
+      assistantItem: '.conversation-flow-answer-container',
+      // 回答正文块：一个回答可能拆成多个 markdown 块，逐个收集
+      answerWrap: '.ai-entry-block.ai-markdown',
       // 思考区
       thinking: '[class*=ai-thinking-steps]',
       // 会话 id 在路径 /search/<数字串>
       convIdUrl: '\\/search\\/([0-9]+)',
       // 输入框
-      inputSelector: '#chat-input-box, textarea.cs-pc-input-custom',
-      // 发送按钮：仅在输入框有内容时出现，无 SVG 图标，文字为「发送」
-      sendButton: 'div.cs-input-ds-send-btn',
-      // 生成态判据：生成中会出现「停止回答」按钮。
-      // 类名 _stop_89jvm_6 带哈希会随站点更新失效，
-      // 主工程当前只支持类名判据，按文字匹配需另行扩展
+      inputSelector: '#chat-textarea, textarea.ci-textarea',
+      // 发送按钮
+      sendButton: '#ci-submit-button-ai, .ci-submit-button',
+      // 「滚动到底部」按钮：向上翻看历史时出现，回到最新后消失。
+      // 语义约定：按钮存在 = 不在底部；按钮不存在 = 已在底部。
+      // 类名为站点语义类（非哈希），已实机抓取确认。
+      scrollToBottomButton: ['div.cs-scroll-to-bottom-btn'],
+      // 生成态判据：待实机确认停止按钮的稳定特征
       generatingSelectors: ['[class*="_stop_"]']
     }
   };

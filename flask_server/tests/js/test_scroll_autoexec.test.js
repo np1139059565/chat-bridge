@@ -23,8 +23,9 @@ require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '05h
 require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '05f_parse.js'));
 require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '05j_card_sig.js'));
 require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '05g_cards.js'));
-// _maybeAutoExecOnScroll 定义在消息主文件，复检用例需要它
+// _maybeAutoExecOnScroll 原定义在 05_messages.js、现已迁至 05l_autoexec.js，复检用例需要它
 require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '05_messages.js'));
+require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '05l_autoexec.js'));
 const D = dialog;
 const M = dialog.methods;
 

@@ -97,6 +97,53 @@
   };
 
   /**
+   * 建卡去重：识别被重复输出的同一调用，标记 duplicate（不自动执行）。
+   *
+   * 两种实测形态（ChatGLM 网页端）：
+   *   1. 同消息内：一次调用被输出成两个代码块，msgId 相同、块 id 不同；
+   *   2. 相邻消息：同一次调用在相邻两条消息里各输出一遍，msgId 不同、参数相同。
+   * 两种情况下执行签名判重都会双双放行，各自排倒计时，
+   * 表现为「相差几秒执行两次、AI 收到上一张的结果」。
+   *
+   * 为什么比对范围这么窄：长会话里同参数调用反复出现属正常业务，
+   * 跨消息全局查重会误杀真实调用，故只比同消息与紧邻上一条。
+   * 命中的卡片保留供手动查看，但 collectAutoCandidate 与
+   * _finalizeAutoExec 均拒绝放行 duplicate 卡片。
+   *
+   * @param holder 消息对象，cards 表所在处
+   * @param m      消息
+   * @param b      代码块
+   * @param call   解析出的工具调用
+   * @param state  建卡状态，取 prevCards
+   */
+  M._markDuplicateCard = function (holder, m, b, call, state) {
+    const curSig = (call.tool || '') + '|' + JSON.stringify(call.parameters || {});
+    // 同消息内：先建的块已在 holder.cards 且已带 msgId，只比同 msgId 的卡片
+    const sameMsgId = this.msgId(m);
+    Object.keys(holder.cards).forEach((k) => {
+      if (k === b.id) return;
+      const oc = holder.cards[k];
+      if (!oc || !oc.isTool || oc.msgId !== sameMsgId) return;
+      const oSig = (oc.tool || '') + '|' + JSON.stringify(oc.parameters || {});
+      if (oSig === curSig) {
+        holder.cards[b.id].duplicate = true;
+        log('同消息内去重：工具 ' + call.tool + ' 标记为重复，不自动执行');
+      }
+    });
+    // 相邻消息：只与紧邻的上一条消息的卡片表比
+    const prevCards = state.prevCards || {};
+    Object.keys(prevCards).forEach((k) => {
+      const pc = prevCards[k];
+      if (!pc || !pc.isTool) return;
+      const pSig = (pc.tool || '') + '|' + JSON.stringify(pc.parameters || {});
+      if (pSig === curSig) {
+        holder.cards[b.id].duplicate = true;
+        log('相邻消息去重：工具 ' + call.tool + ' 标记为重复，不自动执行');
+      }
+    });
+  };
+
+  /**
    * 为单个代码块建卡（或复用已存在卡片），并维护候选、上膛、重跑与首发工具卡片状态。
    */
   M._buildCardForBlock = function (holder, m, b, mi, incoming, reason, scrollOnly, blockIssue, autoCandidates, state) {
@@ -123,23 +170,7 @@
     const call = m.role === 'assistant' ? this.parseToolCall(b) : null;
     holder.cards[b.id] = this._makeCard(b, call, blockIssue);
     if (!call) return;
-    // 相邻消息去重：网页偶尔把同一次工具调用在相邻两条消息里各输出一遍，
-    // 两处参数完全相同、msgId 不同，签名判重因此双双放行，各自排倒计时，
-    // 表现为「相差几秒执行两次、AI 收到上一张的结果」。
-    // 只与紧邻的上一条消息比：长会话里同参数调用反复出现属正常业务，
-    // 跨消息全局查重会误杀。命中则标记 duplicate，保留卡片供手动查看，
-    // 但不参与自动执行（见 collectAutoCandidate 与 _finalizeAutoExec）。
-    const prevCards = state.prevCards || {};
-    const curSig = (call.tool || '') + '|' + JSON.stringify(call.parameters || {});
-    Object.keys(prevCards).forEach((k) => {
-      const pc = prevCards[k];
-      if (!pc || !pc.isTool) return;
-      const pSig = (pc.tool || '') + '|' + JSON.stringify(pc.parameters || {});
-      if (pSig === curSig) {
-        holder.cards[b.id].duplicate = true;
-        log('相邻消息去重：工具=' + call.tool + ' 标记为重复，不自动执行');
-      }
-    });
+    this._markDuplicateCard(holder, m, b, call, state);
     // 记录归属消息指纹：刷新后代码块 id 会变，但消息指纹相对稳定，
     // 用它拼「执行签名」判定这次调用是否已执行过（见 executeCard）。
     holder.cards[b.id].msgId = this.msgId(m);

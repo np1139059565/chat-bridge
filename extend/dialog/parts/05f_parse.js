@@ -78,6 +78,21 @@
     if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
       return { tool: String(obj.tool), parameters: obj.parameters || {} };
     }
+    // 原生形态：工具名作唯一顶层键（如 {"run_command": {...}}），不带信封字段。
+    // 实测模型会直接以此形态发起调用，此前整体落在判定之外，被当普通代码块
+    // 跳过：不建卡、不执行、不回传，链路静默中断（详见 docs/pending-tasks.md）。
+    // 守卫：键名必须命中本机工具注册表（this.tools，与 toolSilent 同源），
+    // 普通单键 JSON 示例（如 {"name": "张三"}）不受影响。
+    if (obj && typeof obj === 'object' && !obj.tool && !obj.type) {
+      const keys = Object.keys(obj);
+      if (keys.length === 1 && (this.tools || []).some((t) => t && t.name === keys[0])) {
+        const v = obj[keys[0]];
+        // 普通对象直接作参数包；数组 / 原始值包一层，键名与工具名一致。
+        const parameters = (v && typeof v === 'object' && !Array.isArray(v)) ? v : { [keys[0]]: v };
+        D.log('原生形态工具调用：' + keys[0]);
+        return { tool: keys[0], parameters: parameters };
+      }
+    }
     return null;
   };
 

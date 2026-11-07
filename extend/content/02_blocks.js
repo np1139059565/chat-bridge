@@ -21,6 +21,13 @@
     if (pre) {
       const mm = /language-([a-zA-Z0-9_+#-]+)/.exec(String(pre.className || ''));
       if (mm) return mm[1];
+      // 语言类名常挂在 <pre> 内的 <code> 上（如 language-json），
+      // 只看 <pre> 自身会漏掉，需继续下沉一层。
+      const codeEl = pre.querySelector('code');
+      if (codeEl) {
+        const mc = /language-([a-zA-Z0-9_+#-]+)/.exec(String(codeEl.className || ''));
+        if (mc) return mc[1];
+      }
     }
     const box = host.closest ? host.closest('.code-no-artifacts') : null;
     if (box) {
@@ -87,8 +94,13 @@
 
       const codeHost = A.findCodeRoot(el);
       if (codeHost) {
+        // 取文本的落点优先下沉到 <code> 元素。
+        // 部分站点的 <pre> 内还包着代码头（语言名 + 复制按钮）与行号栏，
+        // 直接取 <pre> 的文本会把「json」这类语言标签混进正文开头，
+        // 导致后续按 JSON 解析的调用失败。
+        // <pre> 内没有 <code> 时仍退回 <pre> 本身。
         const inner = codeHost.matches('pre')
-          ? codeHost
+          ? (codeHost.querySelector('code') || codeHost)
           : (codeHost.querySelector('pre code') || codeHost.querySelector('code') || codeHost);
         const lang = A.codeLangOf(codeHost) || '';
         const code = A.textOf(inner);

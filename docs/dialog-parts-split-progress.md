@@ -19,8 +19,10 @@
 
 | 文件 | 行数 | 职责 |
 |---|---|---|
-| `00_data.js` | 450 | 共享命名空间 D、常量、data/computed/mounted |
+| `00_data.js` | 269 | 共享命名空间 D、常量、data 工厂（computed 见 00e_computed.js） |
+| `00e_computed.js` | 197 | Vue computed 定义（原在 00_data，见第八节） |
 | `00a_api.js` | 48 | 统一后端请求辅助 `D.apiFetch` |
+| `05l_autoexec.js` | 106 | 自动执行决策末段与生成中暂存回捡（原在 05_messages，见第八节） |
 | `00a_weixin_data.js` | 47 | 微信通道前端初始状态字段 |
 | `00b_wecom_data.js` | 41 | 企业微信通道前端初始状态字段 |
 | `00b_lifecycle.js` | 71 | 卡片倒计时状态机与 mounted 生命周期 |
@@ -177,3 +179,27 @@ CI 已去掉 `continue-on-error`。三项基础检查的实现迁至 `scripts/qu
 
 优先级建议：存量清理分批推进，每拆一处同步调减基线，使基线成为净减少的度量。
 合并两个脚本的口径（钩子跑九项、CI 跑三项且放行）需单独排期。
+
+## 八、本次会话拆分记录（2026-11-08）
+
+两次拆分均先落守卫再动刀，拆完以「语法、全量前端测试（249 项）、质量闸门、重复块指纹与 HEAD 差集」四连验证，全部通过。
+
+### 8.1 05_messages.js → 05l_autoexec.js
+
+| 项 | 值 |
+|---|---|
+| 拆出职责 | 自动执行决策末段（_finalizeAutoExec）与「推送时仍在生成」的待执行卡片暂存回捡 |
+| 行数变化 | 05_messages 463 → 406；05l 新增 106 |
+| html 注册 | 紧随 05_messages.js 之后 |
+
+### 8.2 00_data.js → 00e_computed.js
+
+| 项 | 值 |
+|---|---|
+| 拆出职责 | Vue computed 定义（curConv / messages / cardMap / sessionEntries / convList 等） |
+| 行数变化 | 00_data 452 → 269；00e 新增 197 |
+| html 注册 | 紧随 00_data.js 之后 |
+
+另：两份建卡去重测试（相邻消息 / 同消息）逐字相同的桩安装、分片加载与 buildAll / freshState
+辅助抽为 _dup_card_fixture.js（54 行），与 _part_stub / _dialog_fixture 同一惯例；
+抽完后跨文件重复组指纹与 HEAD 差集为零，未新增任何重复。

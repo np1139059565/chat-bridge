@@ -223,3 +223,52 @@ test('silent 判定：未知工具返回假', () => {
   const ctx = { tools: [] };
   assert.strictEqual(M.toolSilent.call(ctx, 'x'), false);
 });
+
+
+// ---------- 原生形态工具调用（工具名作顶层键） ----------
+// 背景：实测模型会直接输出 {"工具名": 参数} 形态（无信封字段），此前整体
+// 落在判定之外，被当普通代码块跳过。守卫：无 tool/type 字段、唯一顶层键、
+// 键名命中调用方注册表。用例统一以 .call(ctx, ...) 注入注册表；M 本身
+// 不带 tools，与既有用例口径一致，普通单键 JSON 不受影响。
+
+test('原生形态：注册表命中的单键对象被识别', () => {
+  const ctx = { tools: [{ name: 'run_command' }, { name: 'read_file' }] };
+  const block = { type: 'code', code: '{"run_command":{"command":"echo hi","language":"powershell"}}' };
+  assert.deepStrictEqual(M.parseToolCall.call(ctx, block),
+    { tool: 'run_command', parameters: { command: 'echo hi', language: 'powershell' } });
+});
+
+test('原生形态：数组值包成以工具名为键的参数', () => {
+  const ctx = { tools: [{ name: 'open' }] };
+  const block = { type: 'code', code: '{"open":["",3]}' };
+  assert.deepStrictEqual(M.parseToolCall.call(ctx, block),
+    { tool: 'open', parameters: { open: ['', 3] } });
+});
+
+test('原生形态：原始值同样包一层', () => {
+  const ctx = { tools: [{ name: 'echo' }] };
+  const got = M.parseToolCall.call(ctx, { type: 'code', code: '{"echo":"hi"}' });
+  assert.deepStrictEqual(got, { tool: 'echo', parameters: { echo: 'hi' } });
+});
+
+test('原生形态：带信封字段时仍按信封优先解析', () => {
+  const ctx = { tools: [{ name: 'run_command' }] };
+  const block = { type: 'code', code: '{"tool":"run_command","type":"bridge-chat-call","parameters":{"command":"x"}}' };
+  assert.deepStrictEqual(M.parseToolCall.call(ctx, block),
+    { tool: 'run_command', parameters: { command: 'x' } });
+});
+
+test('原生形态：键名不在注册表返回 null（普通单键 JSON 不误判）', () => {
+  const ctx = { tools: [{ name: 'run_command' }] };
+  assert.strictEqual(M.parseToolCall.call(ctx, { type: 'code', code: '{"name":"张三"}' }), null);
+  assert.strictEqual(M.parseToolCall.call(ctx, { type: 'code', code: '{"search_file":{"pattern":"x"}}' }), null);
+});
+
+test('原生形态：多顶层键返回 null', () => {
+  const ctx = { tools: [{ name: 'a' }, { name: 'b' }] };
+  assert.strictEqual(M.parseToolCall.call(ctx, { type: 'code', code: '{"a":1,"b":2}' }), null);
+});
+
+test('原生形态：无注册表（this.tools 缺失）时返回 null', () => {
+  assert.strictEqual(M.parseToolCall({ type: 'code', code: '{"run_command":{"command":"x"}}' }), null);
+});
