@@ -847,3 +847,8 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
   2. 08g 输入框样式与设置页其他输入框严重不搭（未复用现有主题输入类）；
   3. 应像其他设置一样输入后自动保存（防抖），去掉「保存全部站点档案」按钮。
   → 三项已修复（同轮提交）：①②同根——02f 重写为零硬编码色值（颜色全令牌，暗色下现值清晰可读）；③ 移除保存按钮，字段输入 800ms 防抖自动写回（成功静默、失败 toast），增删站点/字段即时排队保存。
+- 批 4 实机复验（2026-11-08，用户浏览器实测）新增 3 项，待修复：
+  1. 站点档案卡片内字段行贴死卡片左右边框（tc-row 无水平内边距），标签文字顶边看不清——卡片体内衬留白（02f 布局修）；
+  2. profiles 选择器输入框未复用指令编辑器的 JS 表达式能力（写不了 `Array.from(document.querySelectorAll(...))` 这类精确控制）——对齐指令的表达式求值链路，definition 提示同步；
+  3. 【新情况】消息卡片「执行/重新执行」点击抛 `TypeError: ctx.onExecuteClick is not a function`（07_cards.js onClick）；「复制」按钮无反应、剪贴板无变化——排查 ctx 方法挂载与复制实现（clipboard 激活过期 / iframe 焦点丢失均会静默失败，需 execCommand 兜底）。
+  → 批4·b 定位与修复：③根因 = 06b_execute_ui.js 迁移时把 onExecuteClick/onResultClick 挂到命名空间 D 而非 D.methods（07_cards 经 ctx 调用，ctx 是 Vue 实例），两症状同根（点击即抛 TypeError，「复制无反应」实为同一报错）；已改挂 methods。①已加 .sp-site-card .tc-body 水平内衬。②（采集/定位字段 JS 表达式）取证中：点击类字段已走主世界支持表达式，采集类受隔离世界 CSP 限制，方案 = 主世界求值 + DOM 标记桥接，下轮实施。

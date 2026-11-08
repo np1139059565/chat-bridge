@@ -5,9 +5,10 @@
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
+  const M = D.methods;   // 挂 Vue methods：07_cards 以 ctx.onXxx 调用，ctx 是组件实例，挂命名空间 D 不可见（批4③根因）
 
   /** 点击执行：跳过倒计时立即执行。 */
-  D.onExecuteClick = function (card) {
+  M.onExecuteClick = function (card) {
     if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
     card.countdown = 0;
     card.phase = '';
@@ -20,7 +21,7 @@
    *  · 否则 → 照常复制结果文本到剪贴板。
    * @param {Object} card 工具卡片
    */
-  D.onResultClick = function (card) {
+  M.onResultClick = function (card) {
     if (card.phase === 'send' && card.countdown > 0) {
       // 跳过倒计时立即回传：先清掉计时器，再手动触发一次回传
       if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }

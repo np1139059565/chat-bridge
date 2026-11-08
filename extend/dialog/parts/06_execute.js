@@ -278,7 +278,7 @@
     }
   };
 
-  // onExecuteClick / onResultClick 已迁至 06b_execute_ui.js，调用方式不变。
+  // onExecuteClick / onResultClick 已迁至 06b_execute_ui.js（挂 D.methods，供 07_cards 经 ctx 调用）。
 
   /**
    * 把卡片结果回传到网页 AI：结果是截图时发图片，否则发文本。
