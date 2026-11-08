@@ -913,12 +913,18 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 - 实现事实：粘贴用 insertText=无；派发 Enter=有；KeyboardEvent=有；调用 waitSendReady=有；引用 sendButton=有。
 - GLM 档案（00_state.js L99-L136）：inputSelector=有（#search-input-box textarea, textarea.scroll-display-none）；sendButton=未配置；sendButtonDisabledMark=未配置（该标记仅 DeepSeek 配置，见 00_state.js L199-202 注释——其他站点不配则 waitSendReady 跳过禁用检查）。
 
+批4·e 证据更新（取证回读，2026-11-08）——三项新事实，已据此修订下方假设与修复方向：
+- ① 秒放行实锤：GLM 档案未配置 sendButton → waitSendReady（03_bridge.js L236-237，if (!sel) { done(); return; }）直接放行，连按钮存在性都不检查，回车前唯一缓冲 = pasteToWebpageAI L208 的 500ms 固定延时；原「跳过禁用检查」的表述低估了问题。
+- ② 历史死锁关联：00_state.js L127-135 注释记录 2026-11-08 修复的死锁——粘贴多行文本 → 输入区变高触发 .enter.is-main-chat.m-three-row → 误判生成中 → 回车挂起 → 文本滞留 → 持续误判；修复手段 generatingRequireEmptyInput=true（生成中输入框必为空）。当前症状疑为该链残留或姊妹形态，重点排查守卫二挂起与冲刷链路。
+- ③ 挂起/冲刷与第二条实现：守卫二（03_bridge.js L213-216）回车前查 isGenerating，命中转 enter_only 挂起；03_bridge.js L345/L348 另有 waitSendReady 引用（疑为挂起冲刷或图片粘贴流程）；03b_paste.js L81/L90 另有 pasteToWebpageAI 与 Enter 引用（疑为图文合一第二条粘贴实现）。粘贴写入方式已实锤为原生 value setter + dispatchEvent(input)（03_bridge.js L170-172 writeInputValue）——原假设「粘贴未触发 input 事件」据此排除。
+- 下轮取证补看清单（按序）：03_bridge.js L320-380（_suspendPaste 与冲刷实现）→ 03b_paste.js L55-112（第二条实现）→ 04_observer.js 生成态判定（generatingRequireEmptyInput 消费点与 isGenerating 更新时机）→ 实机复现看控制台 warn 日志（守卫二触发会留痕）与发送按钮禁用态截图。
+
 假设（按可能性排序，待实机证实）：
-1. 就绪竞速（最可能）：GLM 无禁用标记 → waitSendReady 跳过检查 → 粘贴后立即派发回车，GLM 前端（Vue 受控输入）尚未消化输入、发送按钮仍禁用 → Enter 落空；机器/页面繁忙度差异造成「经常但不总是」。
-2. 粘贴未触发 input 事件（直接赋 value 类写法）→ GLM 内部状态不更新、按钮永不激活（若属实应「总是」失败，与「经常」不符，视实现事实降级或排除）。
+1. 就绪竞速（最可能，代码路径已实锤）：GLM 未配置 sendButton → waitSendReady 直接 done() 放行、无任何轮询，回车前全部缓冲仅 500ms 固定延时；GLM 前端消化输入超过 500ms 时 Enter 落空，机器/页面繁忙度与文本长度差异造成「经常但不总是」。
+2. 守卫二误挂起 + 冲刷不及时（与历史死锁同族，新升位）：[TOOL_RESULT] 几乎总是多行文本 → 输入区变高触发 m-three-row → 若回车前 A.state.isGenerating 因陈旧快照/边缘条件为 true，守卫二（03_bridge.js L213-216）把回车转 enter_only 挂起；冲刷依赖生成态结束信号，实际无生成时冲刷时机存疑（L345/L348 疑为冲刷流程，待取证）→ 文本滞留输入框，与用户症状吻合。
 3. 合成 Enter 的 isTrusted=false 被 GLM 忽略，或派发目标/焦点不对（粘贴后焦点丢失）。
 
 下轮首步（取证 → 修复）：
 - 复看 pasteToWebpageAI 与 waitSendReady 全文（本轮已 dump 实现窗口，必要时重取），理清「粘贴 → 就绪等待 → 回车派发」时序；
 - 实机：粘贴完成后立即查发送按钮 disabled / aria-disabled 与输入框 value（成功与失败各采一次，截图留证）；
-- 修复方向（择一或组合）：① GLM 档案补 sendButtonDisabledMark（实机抓禁用态类名；若禁用是属性而非类名，需扩展 waitSendReady 支持属性判定）；② 粘贴后轮询「输入框 value 已含目标文本 + 发送按钮可用」再派发回车（带超时兜底）；③ 回车落空兜底改 click 发送按钮。
+- 修复方向（批4·e 修订，择一或组合）：① GLM 档案补 sendButton + sendButtonDisabledMark（实机抓禁用态特征；若为 aria-disabled 或 disabled 属性，需扩展 waitSendReady L244 的判定）；② 回车落空自检兜底：pressEnter 后 300-500ms 查输入框 value 是否被清空（GLM 发送成功即清空输入框），未清空则重派 Enter 一次或改点发送按钮（带上限与失败回传 auto_send_result）；③ 挂起冲刷健壮化：enter_only 挂起加超时兜底（如 10 秒后无条件冲刷）或巡检发现「非生成中且有挂起」立即冲刷；④ isTrusted 被忽略仅在「总是失败」时升级考虑（改 click 发送按钮可天然绕开）。
