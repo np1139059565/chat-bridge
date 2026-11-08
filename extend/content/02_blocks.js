@@ -244,6 +244,27 @@
    * @param {Element} root 对话容器；缺省为 document
    * @returns {Array} 消息数组
    */
+  /**
+   * 判断一个消息项是否命中角色标记选择器。
+   *
+   * 各站点的角色标记落点不同：DeepSeek 把助手标记放在 item 的后代元素上，
+   * 元宝则直接写在 item 自身的 class 里（agent-chat__bubble--ai）。
+   * 只用 querySelector 查后代，会把「标记在自身」的站点全部判成用户消息——
+   * 元宝首次接入时 6 条消息无一例外被判为用户消息，正是此因。
+   * 故此处同时匹配自身与后代：matches() 判自身，querySelector 判后代。
+   *
+   * @param {Element} item 消息项元素
+   * @param {string} sel 角色标记选择器；为空时直接返回 false
+   * @returns {boolean} 是否命中
+   */
+  A.itemMatchesMark = function (item, sel) {
+    if (!item || !sel) return false;
+    // 自身命中：元宝这类把角色写进 item class 的站点
+    if (item.matches && item.matches(sel)) return true;
+    // 后代命中：DeepSeek 这类标记在子元素上的站点
+    return !!(item.querySelector && item.querySelector(sel));
+  };
+
   A.extractBlocks = function (root) {
     const messages = [];
     const base = root || document;
@@ -253,9 +274,9 @@
     const pushedQ = new Set(); // 本轮提取内去重；不可跨调用保留在 DOM 上，否则用户消息会被永久丢弃
 
     scopes.forEach(function (item) {
-      // —— 模式 A：一个消息项就是一条消息，用标记区分角色（DeepSeek）——
+      // —— 模式 A：一个消息项就是一条消息，用标记区分角色（DeepSeek / 元宝）——
       if (!P.split) {
-        const isAsst = !!(P.assistantMark && item.querySelector(P.assistantMark));
+        const isAsst = A.itemMatchesMark(item, P.assistantMark);
         messages.push(isAsst ? A.makeAssistant(item, P) : A.makeUser(item, P));
         return;
       }
