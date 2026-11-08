@@ -127,7 +127,7 @@ app:
       convIdUrl: '[?&]chatId=([0-9]+)'
       hosts:
       - xinghuo.xfyun.cn
-      inputSelector: textarea[placeholder*="发消息"]
+      inputSelector: div[contenteditable="true"][class*=WorkSkillEditor_editor]
       item: article[class*=turn]
       label: 讯飞星火
       newConversation: '[class*=LeftSideExpand_new_chat_wrap]'
