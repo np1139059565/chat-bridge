@@ -33,6 +33,8 @@ global.window = {
   addEventListener: (type, fn) => { _listeners[type] = fn; }
 };
 global.Vue = { h: (tag, props, children) => ({ tag: tag, props: props, children: children }) };
+// 字段元表已拆到 08h，须先装载（与 dialog.html 的加载顺序一致）
+require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '08h_profile_fields.js'));
 require(path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'parts', '08g_site_profiles.js'));
 
 const D = global.window.AIMirrorDialog;
@@ -134,7 +136,7 @@ test('serializeProfilesDraft：布尔保持布尔，其余转字符串', () => {
 
 test('字段元表：分组都注册，kind 取值合法', () => {
   const groups = new Set(D.PROFILE_FIELD_GROUPS.map((g) => g.id));
-  const kinds = new Set(['click', 'selector', 'list', 'regex', 'hosts', undefined]);
+  const kinds = new Set(['click', 'selector', 'list', 'regex', 'hosts', 'bool', undefined]);
   for (const field of Object.keys(D.PROFILE_FIELD_META)) {
     const meta = D.PROFILE_FIELD_META[field];
     assert.ok(groups.has(meta.group), field + ' 分组未注册：' + meta.group);

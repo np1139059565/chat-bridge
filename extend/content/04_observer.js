@@ -210,6 +210,12 @@
    */
   A.isAtBottom = function () {
     const P = A.activeProfile();
+    // 底部判定开关（档案字段 atBottomCheck，默认开启）：
+    // 某些站点的「滚动到底部」按钮不可靠或根本不存在，判定恒为「不在底部」，
+    // 导致滚动轮次的自动执行与风控恢复被永久拦住。关闭该开关后直接返回 true，
+    // 视为「始终在底部」，不再用底部状态限制自动执行。
+    // 默认开启：字段缺省（undefined / 空串）都按开启处理，只有显式 false 才关闭。
+    if (P && P.atBottomCheck === false) return true;
     const sels = P && P.scrollToBottomButton;
     if (!sels || !sels.length) return false;   // 未配置：保守判定为「不在底部」
     for (let i = 0; i < sels.length; i++) {
