@@ -11,7 +11,7 @@
   // 再刷新页面才生效；只刷新页面不够。此前排查时无法判断「跑的是新版还是旧版」，
   // 白白多查了几轮。带上标识后，控制台第一行就能确认。
   // 每次改动内容脚本时把这个标识一起改掉。
-  const BUILD_TAG = '2026-11-08-yuanbao-role-mark-v16';
+  const BUILD_TAG = '2026-11-09-rich-editor-paste-v17';
   A.log('内容脚本已加载 build=' + BUILD_TAG + ' 时间=' + new Date().toISOString());
 
   /**

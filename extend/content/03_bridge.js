@@ -167,20 +167,36 @@
 
   /**
    * 把文本一次性写入输入框（复制粘贴式写值，非逐字输入）。
-   * 用原生 setter 写整个值，触发框架的响应式更新，再派发 input 事件。
+   * 按输入框类型分流：textarea / input 用原生 setter；富文本编辑器用 paste 事件。
    * 抽成公共函数，供「纯文本」与「图文合一」两条路径复用。
    * @param {Element} ta 输入框
    * @param {string} text 文本
+   * @returns {boolean} 是否已写入
    */
   A.writeInputValue = function (ta, text) {
-    if (!ta) return;
+    if (!ta) return false;
     const value = String(text || '');
     ta.focus();
-    // 用原生 setter 写值，触发框架的响应式更新
-    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
-      .set.call(ta, value);
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
+    // 富文本编辑器（contenteditable）：千问的 Slate、元宝的 Quill 都属此类。
+    // 它们没有 value 属性，原生 setter 会直接抛 Illegal invocation，必须走 paste 事件。
+    if (A.isRichEditor(ta)) return A.writeRichEditor(ta, value);
+    // 传统表单控件：用原生 setter 写值，触发框架的响应式更新
+    try {
+      const desc = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')
+        || Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+      if (!desc || !desc.set) return false;
+      desc.set.call(ta, value);
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    } catch (e) {
+      A.warn('writeInputValue: 原生 setter 写入失败，改走 paste：' + (e && e.message));
+      return A.writeRichEditor(ta, value);
+    }
   };
+
+  // 富文本编辑器相关函数（isRichEditor / writeRichEditor / clearRichEditor）
+  // 已拆至 content/03c_rich_editor.js（原文件超出 450 行上限）。
+  // 同挂 A 命名空间，本文件在运行期按名字调用，不依赖加载先后。
 
   /**
    * 自动回传：把文本写回网页 AI 的输入框并触发发送。
