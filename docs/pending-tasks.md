@@ -766,6 +766,20 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 
 **优先级**：P2。
 
+### 技能重装会重置该技能全部工具的上下线开关（P2，待修）
+
+**现象**（2026-11-08 装 qianwen 工具时实证）：ct.install(skill_dir) 不带 names 过滤时，tool.json 解析条目整体替换注册表同义项，随后 save_tools 以合并字典重算 runtime 开关——实测 11 个既有外部工具开关全部翻转为 false（该次操作已被断言守卫回滚，未落库）。
+
+**根因方向**：install() 对注册表已有同名条目用新解析条目整体替换，未保留其 enabled 字段。
+
+**影响面**：设置页「重装/更新技能」后该技能全部工具掉线，需逐个手动重开。
+
+**方向**：install() 对已有条目仅更新定义字段、保留 enabled；或 save_tools 不重算既有键的开关。
+
+**规避**：重装技能用 names 过滤只装新增工具（本次即此路径）。
+
+**优先级**：P2。
+
 ## 三、已关闭
 
 | 问题 | 结论 | 依据 |

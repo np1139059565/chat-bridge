@@ -63,6 +63,6 @@
 
 - 端到端实机通过：drawer 内 exec_js 卡片完成，适配器 send 成功（sent 全文返回、sendErr null），千问 AI 正常回复。
 - 超时（取走前）根因：命令轮询由宿主页面内容脚本承担（content/03_heartbeat.js，抽屉所在页面轮询取命令），宿主标签页后台化遭 Chrome 定时器节流即停摆——非代码缺陷；已登记 pending-tasks。
-- send_to_qianwen「未知工具」：前轮判定有误，特此更正——「未知工具」文案不在扩展代码内（来自服务侧目录校验），09 按设计作为内容脚本注册（分发在 05_tool-handlers.js），manifest 移除尝试被 JSON 校验正确拦下；真因为服务侧工具目录未声明，已在 skills/debug_chrome/tool.json 补 send_to_qianwen / qianwen_state（executor: external）。
+- send_to_qianwen「未知工具」：前轮判定有误，特此更正——「未知工具」文案不在扩展代码内（来自服务侧目录校验），09 按设计作为内容脚本注册（分发在 05_tool-handlers.js），manifest 移除尝试被 JSON 校验正确拦下；真因为服务侧工具目录未声明，已在 skills/debug_chrome/tool.json 补 send_to_qianwen / qianwen_state（executor: external）。注册表生效（同晚）：install 以 names 过滤仅装入新增两条并启用（13→15 条），绕开裸 install 重装重置既有开关的副作用（已登记 pending-tasks）；load_tools 每次读盘，服务侧无需重启。
 - editorLeftover 返回「间干间搜间」为反爬混淆 placeholder 误报，已登记待修。
 - 运行侧动作（需用户配合）：chrome://extensions 重载 debug_chrome 扩展，确保运行 v1.2.0（旧实例无 09 注册，服务目录放行后仍会报未知）；轮询修复落地前保持宿主页面前台。

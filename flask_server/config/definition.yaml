@@ -261,6 +261,59 @@ custom_tools:
     wakeup: false
     kind: tool
     enabled: true
+  - name: send_to_qianwen
+    description: 向千问页面发送消息并点击发送（该页抽屉在线时执行）。text 必填；wait_done 默认 false，长生成用 qianwen_state
+      轮询。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    script: ''
+    interpreter: ''
+    arg_style: flag
+    fixed_args: []
+    parameters:
+    - name: text
+      type: string
+      required: true
+      description: 消息正文
+    - name: page_url
+      type: string
+      required: false
+      description: 目标页面 URL（顶层文档主世界；缺省为抽屉所在页）
+    - name: wait_done
+      type: boolean
+      required: false
+      description: 是否同步等待生成结束（受 15s 上限，默认 false）
+    executor: external
+    provider: debug_chrome
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: true
+  - name: qianwen_state
+    description: 查询千问页面生成态（idle | generating），供 send_to_qianwen 发送后轮询至完成。
+    skill_name: debug_chrome
+    skill_prompt: 本技能提供页面探查与调试能力（采集元素样式、截图、读取 console 与 network 记录、执行 JS），相关工具通过「外部调试卡片」与调试扩展交互。处理要求：若本次会话尚未阅读过本技能说明，请先用
+      read_skill 工具读取（skill=debug_chrome, file=SKILL.md），再按其规定处理；同一会话内只需读取一次；处理过程中用
+      push_message 工具主动向用户推送进度、方案与结论。
+    skill_dir: skills\debug_chrome
+    script: ''
+    interpreter: ''
+    arg_style: flag
+    fixed_args: []
+    parameters:
+    - name: page_url
+      type: string
+      required: false
+      description: 目标页面 URL
+    executor: external
+    provider: debug_chrome
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: true
 bridge:
   intents: 0
   command_params:
