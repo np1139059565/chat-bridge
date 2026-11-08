@@ -236,8 +236,6 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 | M3 | `flask_server/core/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
 | D1 | `flask_server/routes/ext.py` | （已修）提供方通道按 `page_url` / `is_open` 定向，目标页面工具未开即逸散 |
 | D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |
-| send_to_qianwen | 向千问页面发送消息并点击发送（executor: external） | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |
-| qianwen_state | 查询千问生成态 idle/generating（executor: external） | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |
 | D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 |
 | D6 | `skills/debug_chrome/tool.json` / `extend/dialog/parts/` | （已修）参数名与 silent 语义边角不一致 |
 
