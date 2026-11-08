@@ -1,22 +1,11 @@
 {
   "manifest_version": 3,
   "name": "AI Style Debug Assistant",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "AI-driven web page style debugging and deployment assistant.",
-  "permissions": [
-    "activeTab",
-    "tabs",
-    "scripting",
-    "storage"
-  ],
-  "host_permissions": [
-    "http://127.0.0.1:5000/*",
-    "http://localhost:5000/*",
-    "<all_urls>"
-  ],
-  "background": {
-    "service_worker": "service_worker.js"
-  },
+  "permissions": ["activeTab", "tabs", "scripting", "storage"],
+  "host_permissions": ["http://127.0.0.1:5000/*" , "http://localhost:5000/*" , "<all_urls>"],
+  "background": { "service_worker": "service_worker.js" },
   "devtools_page": "devtools.html",
   "content_scripts": [
     {
@@ -34,7 +23,8 @@
         "content/04c_highlight.js",
         "content/05_tool-handlers.js",
         "content/06_messages.js",
-        "content/07_index.js"
+        "content/07_index.js",
+        "content/09_qianwen-tool.js"
       ],
       "run_at": "document_idle"
     }
@@ -59,12 +49,11 @@
         "drawer/03_ui-chat.js",
         "drawer/04_ui-settings.js",
         "drawer/05_main.js",
-        "vendor/vue.global.prod.js"
+        "vendor/vue.global.prod.js",
+        "adapters/qianwen-adapter.js"
       ],
       "matches": ["<all_urls>"]
     }
   ],
-  "action": {
-    "default_title": "AI Style Debug"
-  }
+  "action": { "default_title": "AI Style Debug" }
 }
