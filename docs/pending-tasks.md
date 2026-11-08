@@ -732,6 +732,18 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 **优先级**：P1。
 
 
+### 桥接卡片重解析触发 quality_report 连环报（P3，桥接产品侧，规避已有）
+
+**现象**（2026-11-08 实机观察）：GLM 页清空会话内容后对已执行卡片点「重新解析」，quality_report（voice_missing）连报 4-5 次；每次 msg_id 均为新值（新建消息而非重放），且每条报告自身会终止当次回音，被重解析的卡片命令始终无机会执行。
+
+**根因方向**：重解析使质量门对历史回复重新体检，凡缺 bridge-voice 块的历史回复各生成一条新报告；报告终止回音的行为叠加形成连环。
+
+**影响面**：仅「清空会话后重解析旧卡片」路径；含语音块的历史回复与正常会话不受影响。
+
+**规避**：含 run_command 的回复一律同时携带 bridge-voice 块；清空后改用重新发起同内容请求。详见 docs/incident-2026-11-08-glm-paste-guard.md 补充观察节。
+
+**优先级**：P3（桥接产品侧跟进）。
+
 ## 三、已关闭
 
 | 问题 | 结论 | 依据 |

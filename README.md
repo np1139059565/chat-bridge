@@ -27,7 +27,8 @@ chat-bridge-main/
 │   │   ├── 00_state.js        # 命名空间、共享 state、站点规则 PROFILES、面板常量
 │   │   ├── 01_panel.js        # 面板注入与外观、post 通道
 │   │   ├── 02_blocks.js       # 代码块解析、消息构造、extractBlocks
-│   │   ├── 03_bridge.js       # 会话识别、sendPage、粘贴发送
+│   │   ├── 03_bridge.js       # 会话识别、sendPage
+│   │   ├── 03b_paste.js       # 回传粘贴守卫：生成期挂起、空闲冲刷、超时如实放弃
 │   │   ├── 04_observer.js     # 观察器与生命周期
 │   │   ├── 06_picker.js       # 元素选择模式：悬停高亮、选择器生成、按选择器点击
 │   │   └── 05_index.js        # 入口：消息监听、巡检、初始化

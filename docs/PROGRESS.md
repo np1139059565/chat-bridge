@@ -36,12 +36,12 @@
 
 ## 适配器交付
 
-- 文件：`skills/debug_chrome/adapters/qianwen-adapter.js`（挂 `window.__qianwenAdapter`，安装幂等）
+- 文件：`skills/debug_chrome/adapters/qianwen-adapter.js`（挂 `window.__qianwenAdapter`，安装幂等）；扩展副本 `skills/debug_chrome/extension/adapters/qianwen-adapter.js` 同笔部署（扩展沙箱仅能加载自身目录内文件，双副本为有意为之）
 - 安装：exec_js 执行该文件全部内容一次；
 - 发送：`return await window.__qianwenAdapter.send('文本')`，返回 `{sent, generating}`；
 - 状态：`return window.__qianwenAdapter.state()` → `idle | generating`；
 - 约束：exec_js 总超时 15s，send 内部等待上限据此收紧（空闲等待默认 8s）；`waitDone` 默认关闭，长生成用两次调用（send 后轮询 state）。
-- 扩展侧事实：扩展（skills/debug_chrome/extension）内无任何 qianwen 专属代码；工具经 TOOL_HANDLERS 表分发，新增工具只需注册处理函数（本次未改扩展）。
+- 扩展侧事实：扩展（skills/debug_chrome/extension）内无任何 qianwen 专属代码；工具经 TOOL_HANDLERS 表分发，新增工具只需注册处理函数；本批已照此新增 09_qianwen-tool.js（注册工具名 send_to_qianwen），扩展 manifest 升至 v1.2.0。
 
 ## 待办路线
 
@@ -49,7 +49,7 @@
 2. ✅ 注入方式 → paste 事件方案已实现并实测（见第 8、12 条）。
 3. ✅ 生成态抓取 → 「停止回答 / 发送消息」双态标志（见第 11 条）。
 4. ✅ 全链路实测通过（见第 12 条）。
-5. 后续可选：把适配器注册为扩展工具（TOOL_HANDLERS 加 send_to_qianwen），免 exec_js 直接调用。
+5. ✅ 已注册为扩展工具（2026-11-08 同笔交付）：09_qianwen-tool.js 进 TOOL_HANDLERS（工具名 send_to_qianwen），扩展 manifest 升至 v1.2.0，适配器双副本随扩展部署——免 exec_js 直接调用。
 
 ## 教训记录
 
