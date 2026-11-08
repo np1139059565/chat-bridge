@@ -105,21 +105,6 @@ app:
       thinking: '[class*=ai-thinking-steps]'
       userContent: .cs-question-pure-text
       userItem: .conversation-flow-question-container
-    yuanbao:
-      assistantContent: .hyc-common-markdown
-      assistantMark: .agent-chat__bubble--ai
-      container: .agent-chat__list__content
-      convIdUrl: /chat/([A-Za-z0-9]+)
-      hosts:
-      - yuanbao.tencent.com
-      inputSelector: .ql-editor
-      item: .agent-chat__bubble
-      label: 腾讯元宝
-      newConversation: .yb-new-chat-entry__item
-      sendButton: '[class*=SendButton_sendButton]'
-      sendButtonDisabledMark: SendButton_disabled
-      split: false
-      userContent: .agent-chat__bubble__content
     xinghuo:
       assistantContent: .new-line-content_result__ptmhL
       assistantItem: '[class*=assistantMessage]'
@@ -136,6 +121,40 @@ app:
       thinking: '[class*=new-line-content_process]'
       userContent: '[class*=requestRow]'
       userItem: '[class*=userMessage]'
+    yuanbao:
+      assistantContent: .hyc-common-markdown
+      assistantMark: .agent-chat__bubble--ai
+      container: .agent-chat__list__content
+      convIdUrl: /chat/([A-Za-z0-9]+)
+      hosts:
+      - yuanbao.tencent.com
+      inputSelector: .ql-editor
+      item: .agent-chat__bubble
+      label: 腾讯元宝
+      newConversation: .yb-new-chat-entry__item
+      sendButton: '[class*=SendButton_sendButton]'
+      sendButtonDisabledMark: SendButton_disabled
+      split: false
+      userContent: .agent-chat__bubble__content
+      scrollToBottomButton:
+      - '#chat-content > div > div.agent-chat__list__content-wrapper > div.agent-chat__scroll-arrow.agent-chat__scroll-arrow--show'
+    kimi:
+      answerWrap: .markdown
+      assistantMark: .chat-content-item-assistant
+      container: .chat-content-list
+      convIdUrl: /chat/([0-9a-zA-Z-]+)
+      hosts:
+      - www.kimi.com
+      - kimi.com
+      inputSelector: .chat-input-editor
+      item: '[class*=chat-content-item]'
+      label: Kimi
+      newConversation: .new-chat-btn
+      sendButton: .send-button-container
+      sendButtonDisabledMark: disabled
+      split: false
+      thinking: '[class*=thinking-container]'
+      userContent: .segment-container
 custom_tools:
   tools:
   - name: json_validate
