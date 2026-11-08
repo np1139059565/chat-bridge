@@ -78,7 +78,7 @@ app:
       item: .chat-round
       label: 通义千问
       newConversation: '#new-nav-tab-wrapper > div > div > div.relative.flex.min-h-0.flex-1.flex-col
-        > div > div.relative.grid.min-h-0.min-w-0.flex-1.grid-cols-\\[minmax\\(0\\,1fr\\)\\].grid-rows-\\[minmax\\(0\\,1fr\\)\\].overflow-hidden
+        > div > div.relative.grid.min-h-0.min-w-0.flex-1.grid-cols-\[minmax\(0\,1fr\)\].grid-rows-\[minmax\(0\,1fr\)\].overflow-hidden
         > div > div.newChatReveal-OikAdB.newChatRevealFlat-hnO8At > div > div > div
         > div'
       sendButton: button[aria-label="发送消息"]
@@ -120,6 +120,22 @@ app:
       sendButtonDisabledMark: SendButton_disabled
       split: false
       userContent: .agent-chat__bubble__content
+    xinghuo:
+      assistantContent: .new-line-content_result__ptmhL
+      assistantItem: '[class*=assistantMessage]'
+      container: '[class*=ChatWindow_chat_content_wrapper]'
+      convIdUrl: '[?&]chatId=([0-9]+)'
+      hosts:
+      - xinghuo.xfyun.cn
+      inputSelector: textarea[placeholder*="发消息"]
+      item: article[class*=turn]
+      label: 讯飞星火
+      newConversation: '[class*=LeftSideExpand_new_chat_wrap]'
+      sendButton: '[class*=AskWindow_send]'
+      split: true
+      thinking: '[class*=new-line-content_process]'
+      userContent: '[class*=requestRow]'
+      userItem: '[class*=userMessage]'
 custom_tools:
   tools:
   - name: json_validate
