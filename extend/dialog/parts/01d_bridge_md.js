@@ -159,6 +159,13 @@
     if (d.reason === 'timeout') {
       return '点击失败：执行超时（主世界脚本未响应）\n' + sel;
     }
+    if (d.reason === 'profile_not_configured') {
+      // 哨兵 @profile:FIELD 在当前站点档案里取到空值：指明站点与字段，
+      // 用户可据此定位到 00_state.js 的 PROFILES 补配置。
+      return '点击失败：当前站点未配置此按钮（站点 ' +
+        (d.profile_label || d.profile || '?') +
+        '，档案字段 ' + (d.field || '?') + '），待实机验证后补齐';
+    }
     if (d.reason === 'empty_selector') {
       return '点击失败：该指令没有绑定选择器';
     }

@@ -244,9 +244,9 @@ A._flushPendingPaste = function (why) {
     // 只写值不发送：交给调用方（图文合一）统一回车
     if (autoSend === false) return;
     // 两步走：先等发送按钮就绪，再延迟 500ms，然后回车发送。
-    // 就绪信号取发送按钮的 disabled 状态：未就绪时按钮带 ds-button--disabled，
-    // 就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱
-    // （值是用原生 setter 直接写进去的，写入即相等，证明不了框架状态已更新）。
+    // 就绪信号见 waitSendReady：档案配了 sendButtonDisabledMark 的站点等类名消失，
+    // 未配置的站点仅确认按钮存在，其余由延时兜底（比读输入框值可靠：值是
+    // 原生 setter 写入的，写入即相等，证明不了框架状态已更新）。
     A.waitSendReady(function () {
       setTimeout(function () {
         // 守卫二：写值与回车之间隔了 waitSendReady（最长 3 秒）+ 500ms，
@@ -263,11 +263,14 @@ A._flushPendingPaste = function (why) {
   };
 
   /**
-   * 轮询等待发送按钮就绪：按钮不再带 disabled 类即回调，超时（3 秒）也回调。
+  /**
+   * 轮询等待发送按钮就绪：就绪即回调，超时（3 秒）也回调。
    *
-   * 就绪信号取站点规则里的 sendButton 元素：未就绪时它带 ds-button--disabled，
-   * 就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱——值是用
-   * 原生 setter 直接写进去的，写入即相等，证明不了框架内部状态已更新。
+   * 就绪信号来自站点档案的 sendButtonDisabledMark：发送按钮未就绪时带的
+   * 类名，就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱
+   * ——值是用原生 setter 直接写进去的，写入即相等，证明不了框架内部状态。
+   * 档案未配置该字段（如 glm / wenxin）时跳过禁用检查，仅检查按钮存在，
+   * 由后续延时兜底，与站点多态原则一致：不再共享代码里写死任何站点类名。
    * @param {Function} done 就绪（或超时）后的回调
    */
   A.waitSendReady = function (done) {
@@ -275,17 +278,17 @@ A._flushPendingPaste = function (why) {
     const sel = profile.sendButton;
     // 站点没配发送按钮选择器：无从判断，直接放行，由后续延时兜底。
     if (!sel) { done(); return; }
+    const mark = profile.sendButtonDisabledMark || '';
     const deadline = Date.now() + 3000;
     (function check() {
       let btn = null;
       try { btn = document.querySelector(sel); } catch (e) { btn = null; }
-      // 按钮不存在，或仍带 disabled 类：都视为未就绪，继续等
-      const disabled = !btn || (btn.className && String(btn.className).indexOf('ds-button--disabled') >= 0);
+      // 按钮不存在，或（站点有禁用标记时）仍带该类：视为未就绪，继续等
+      const disabled = !btn || (mark && btn.className && String(btn.className).indexOf(mark) >= 0);
       if (!disabled || Date.now() > deadline) { done(); return; }
       setTimeout(check, 100);
     })();
   };
-
   /**
    * 派发 Enter 键，触发网页 AI 发送。
    * @param {Element} ta 输入框

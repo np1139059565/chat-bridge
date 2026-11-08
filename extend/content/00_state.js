@@ -114,6 +114,12 @@ window.AIMirrorContent = (function () {
       historyItem: '.history-item',
       historySelectedMark: '.selected',             // 选中项额外带的类
       inputSelector: '#search-input-box textarea, textarea.scroll-display-none',  // 网页 AI 输入框
+      // —— 「开启新对话」按钮 ——
+      // QQ 指令 /new 的选择器：definition.yaml 只存哨兵 @profile:newConversation，
+      // 点击时由 06_picker.js 按当前站点档案取本字段的值（见 clickBySelector）。
+      // glm 未经实机验证，留空走「未配置」失败回传，
+      // 待实测后填入（要求语义类或角色属性，禁用 CSS-Module 哈希）。
+      newConversation: '',
       // GLM 无独立的「发送/停止」按钮，生成态信号写在对话区容器的类名上：
       // 生成中时 .enter.is-main-chat 会带上 m-three-row（多行输出）或 searching（联网搜索），
       // 空闲时这两个类都不出现。命中任一即视为「AI 正在说话」。
@@ -173,7 +179,18 @@ window.AIMirrorContent = (function () {
       // 表达式沿用 /reai1 的写法：取最后一个橙色警示圆形按钮（那个带重试图标的）。
       // 用数组取末项而非 reverse：reverse 会就地修改，且末项可能是 undefined，
       // 求值端拿到非元素会报错。这里显式判空，返回 null 让调用方按「找不到」处理。
-      retrySendExpr: '(function(){var a=document.querySelectorAll("div.ds-button.ds-button--warning:nth-child(3)");return a.length?a[a.length-1]:null;})()'
+      retrySendExpr: '(function(){var a=document.querySelectorAll("div.ds-button.ds-button--warning:nth-child(3)");return a.length?a[a.length-1]:null;})()',
+      // —— 「开启新对话」按钮 ——
+      // QQ 指令 /new 的选择器：definition.yaml 只存哨兵 @profile:newConversation，
+      // 点击时由 06_picker.js 查本字段取值：存裸选择器时包成
+      // document.querySelector('...') 交主世界执行；存完整表达式则原样用。
+      // 值 div._5a8ac7a.a084f19e 是 CSS-Module 哈希（随时会变），沿自旧版
+      // definition.yaml，待改版出现稳定语义类后替换。
+      newConversation: 'div._5a8ac7a.a084f19e',
+      // —— 发送按钮禁用标记 ——
+      // waitSendReady 的就绪信号：发送按钮未就绪时带此类名，就绪后消失。
+      // 仅 DeepSeek 实测有效；其他站点不配，waitSendReady 跳过该检查。
+      sendButtonDisabledMark: 'ds-button--disabled',
     },
     // 文心一言（wenxin.baidu.com）。
     // 结构：每个问答对是一个 .chat-qa-container，内部同时含提问容器与回答容器，
@@ -204,6 +221,11 @@ window.AIMirrorContent = (function () {
       inputSelector: '#chat-textarea, textarea.ci-textarea',
       // 发送按钮
       sendButton: '#ci-submit-button-ai, .ci-submit-button',
+      // —— 「开启新对话」按钮 ——
+      // QQ 指令 /new 的选择器：definition.yaml 只存哨兵 @profile:newConversation，
+      // 点击时由 06_picker.js 按当前站点档案取本字段的值（见 clickBySelector）。
+      // wenxin 未经实机验证，留空走「未配置」失败回传，待实测后填入。
+      newConversation: '',
       // 「滚动到底部」按钮：向上翻看历史时出现，回到最新后消失。
       // 语义约定：按钮存在 = 不在底部；按钮不存在 = 已在底部。
       // 类名为站点语义类（非哈希），已实机抓取确认。

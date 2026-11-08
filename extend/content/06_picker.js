@@ -267,13 +267,45 @@
   /**
    * 点击页面元素（供 QQ 指令「点击元素」调用）。
    * 表达式由用户自由填写；只要求值得到「一个且唯一」的元素即视为生效。
-   * @param {string} selector 选择器或任意 JS 表达式
+   * 哨兵语法 @profile:FIELD：不把它当表达式，改查当前站点档案（00_state.js
+   * 的 PROFILES）的同名字段取值——站点选择器只住档案，配置文件对站点无感知。
+   * definition.yaml 的 /new 就用它隔离各站点「新对话」按钮的选择器。
+   * @param {string} selector 选择器 / 任意 JS 表达式 / @profile:FIELD 哨兵
    * @param {Object} extra 回传抽屉时一并带上的字段（如 selector / request_id）
    */
   A.clickBySelector = function (selector, extra) {
     if (!selector) {
       A.post(Object.assign(
         { type: 'click_result', ok: false, reason: 'empty_selector', count: 0 }, extra || {}));
+      return;
+    }
+    // @profile:FIELD 哨兵：查当前站点档案取值，站点感知只存在于浏览器侧。
+    const m = /^@profile:([A-Za-z0-9_]+)$/.exec(String(selector).trim());
+    if (m) {
+      const prof = A.activeProfile();
+      const val = (prof && prof[m[1]]) ? String(prof[m[1]]).trim() : '';
+      if (!val) {
+        // 档案字段为空（未配置 / 未实机验证）：失败回传标明站点与字段，
+        // 抽屉据此生成明确文案，QQ 端能看清是哪站缺配置而非笼统「找不到」。
+        A.post(Object.assign({
+          type: 'click_result', ok: false, reason: 'profile_not_configured',
+          // 报站点 id 时与 activeProfile 的回退口径一致（profileId 无效 → glm），
+          // 否则会出现「回退到了 glm 却报空站点名」的错位文案。
+          count: 0,
+          profile: (A.PROFILES[A.state.profileId] ? A.state.profileId : 'glm'),
+          profile_label: (prof && prof.label) || '',
+          field: m[1]
+        }, extra || {}));
+        return;
+      }
+      // 档案约定存裸选择器，包成执行端表达式；若已写完整表达式
+      // （含 document. / querySelector，如 regenerateExpr 的写法）则原样用。
+      const isFullExpr = val.indexOf('document.') !== -1 || val.indexOf('querySelector') !== -1;
+      const expr = isFullExpr ? val : A.wrapPickerExpr(val);
+      A.execClick(expr, 'unique', function (ok, reason, count) {
+        A.post(Object.assign(
+          { type: 'click_result', ok: ok, reason: reason, count: count }, extra || {}));
+      });
       return;
     }
     A.execClick(selector, 'unique', function (ok, reason, count) {

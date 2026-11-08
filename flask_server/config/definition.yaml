@@ -41,7 +41,7 @@ custom_tools:
     arg_style: flag
     executor: external
     provider: debug_chrome
-    enabled: true
+    enabled: false
     parameters:
     - name: selector
       type: string
@@ -70,7 +70,7 @@ custom_tools:
     executor: external
     provider: debug_chrome
     silent: true
-    enabled: true
+    enabled: false
     parameters:
     - name: message
       type: string
@@ -94,7 +94,7 @@ custom_tools:
     arg_style: flag
     executor: external
     provider: debug_chrome
-    enabled: true
+    enabled: false
     parameters:
     - name: page_url
       type: string
@@ -110,7 +110,7 @@ custom_tools:
     arg_style: flag
     executor: external
     provider: debug_chrome
-    enabled: true
+    enabled: false
     parameters:
     - name: page_url
       type: string
@@ -134,7 +134,7 @@ custom_tools:
     arg_style: flag
     executor: external
     provider: debug_chrome
-    enabled: true
+    enabled: false
     parameters:
     - name: page_url
       type: string
@@ -155,7 +155,7 @@ custom_tools:
     arg_style: flag
     executor: external
     provider: debug_chrome
-    enabled: true
+    enabled: false
     parameters:
     - name: code
       type: string
@@ -177,7 +177,7 @@ custom_tools:
     provider: debug_chrome
     wakeup: true
     kind: command_action
-    enabled: true
+    enabled: false
   - name: close_drawer
     description: 关闭调试抽屉（已关闭则视为成功）。
     skill_name: debug_chrome
@@ -189,7 +189,7 @@ custom_tools:
     executor: external
     provider: debug_chrome
     kind: command_action
-    enabled: true
+    enabled: false
   - name: switch_drawer_side
     description: 切换调试抽屉的挂靠侧（左/右）；不传 side 则在左右之间切换。
     skill_name: debug_chrome
@@ -201,7 +201,7 @@ custom_tools:
     executor: external
     provider: debug_chrome
     kind: command_action
-    enabled: true
+    enabled: false
     parameters:
     - name: side
       type: string
@@ -218,7 +218,7 @@ custom_tools:
     executor: external
     provider: debug_chrome
     kind: command_action
-    enabled: true
+    enabled: false
   - name: close_settings
     description: 从设置页返回对话视图。
     kind: command_action
@@ -230,7 +230,7 @@ custom_tools:
     arg_style: flag
     executor: external
     provider: debug_chrome
-    enabled: true
+    enabled: false
   - name: anatomy_illustration
     description: 列出或导出 Anatomy 技能的等距插图成品。action=list 返回所有示例及其是否带预构建 HTML；action=export
       把指定示例的 HTML 复制到本地服务静态目录并返回可访问网址，供网页直接展示。
@@ -270,7 +270,7 @@ bridge:
   commands:
   - name: /new
     label: 开启新对话
-    selector: document.querySelector('div._5a8ac7a.a084f19e')
+    selector: '@profile:newConversation'
     page_url: ''
   - name: /crp
     label: 清空消息记录并重新解析

@@ -102,6 +102,8 @@ python flask_server/scripts/_smoke_ct.py
 - 只用稳定类名 / 语义选择器，**不要**用 CSS-Module 哈希类（会随前端发版失效）。
 - 一个消息可能被拆成多个容器（文字 + 代码块），抓取时必须全取，否则会漏掉工具调用代码块。
 
+- 档案字段分两类，缺失行为不同：**可点击元素**（newConversation、sendButton 等）缺失即报错不执行；**辅助状态信号**（sendButtonDisabledMark 等）缺失即跳过该项检查，不阻断主流程。
+- 桥接指令的 `selector` 支持 `@profile:FIELD` 哨兵语法（06_picker.js 的 clickBySelector 解析）：definition.yaml 只写哨兵，执行时查当前站点档案同名字段取值，配置对站点零感知。字段值为裸选择器时自动包成执行端表达式；已是完整表达式（含 `document.` / `querySelector`）则原样使用；为空则失败回执指明站点与字段。
 ### 3.5 System Prompt
 
 由 `extend/dialog/parts/05_messages.js` 的 `generateSystemPrompt()` 拼装，按 tool / rule / skill 三类组织，每类两段：
