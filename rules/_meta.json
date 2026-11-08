@@ -2,5 +2,5 @@
   "Negative-constraint-leakage-problem": "always",
   "user-rule": "always",
   "ANTI-FLATTERY_PROTOCOL": "always",
-  "work-memory": "always"
+  "work-memory": "off"
 }

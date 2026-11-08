@@ -315,6 +315,75 @@
   };
 
   /**
+   * 字段级试运行（设置页「网页 AI 站点配置」）：按模式求值当前编辑值并回执抽屉。
+   *
+   * 三种模式：
+   * - click：与 QQ 指令同一条求值链路（execClick → 主世界求值 + 3 秒看门狗），
+   *   裸选择器先包成执行端表达式（完整表达式判定口径同 clickBySelector）；
+   * - locate：只查不点（无副作用）。多行（list 字段）逐行统计命中并短暂高亮
+   *   首个（pickerShow 建层零尺寸零拦截）；完整表达式在隔离世界无法求值
+   *   （扩展 CSP 禁 new Function），提示改走点击链路验证；
+   * - regex：会话 id 正则，对当前页面 URL 试匹配。
+   * @param {string} value 当前编辑值（未保存也可测）
+   * @param {string} mode click / locate / regex
+   * @param {string} key 回执对号入座键（pid.field），原样带回
+   */
+  A.testProfileField = function (value, mode, key) {
+    const val = String(value == null ? '' : value).trim();
+    const reply = function (ok, text) {
+      A.post({ type: 'profiles_test_result', key: key || '', ok: !!ok, text: String(text || '') });
+    };
+    if (!val) { reply(false, '值为空，测试前请先填写'); return; }
+    if (mode === 'regex') {
+      let m = null;
+      try { m = new RegExp(val).exec(location.href); }
+      catch (e) { reply(false, '正则无效：' + (e && e.message)); return; }
+      reply(!!m, m ? ('匹配成功，会话 id=' + (m[1] || m[0])) : '当前页面 URL 不匹配');
+      return;
+    }
+    const isFullExpr = val.indexOf('document.') !== -1 || val.indexOf('querySelector') !== -1;
+    if (mode === 'click') {
+      const expr = isFullExpr ? val : A.wrapPickerExpr(val);
+      A.execClick(expr, 'unique', function (ok, reason, count) {
+        reply(ok, ok ? ('已点击（匹配 ' + count + ' 个）')
+          : ('点击失败：' + (reason || 'not_found') + (count ? '，命中 ' + count + ' 个' : '')));
+      });
+      return;
+    }
+    // locate：只查不点
+    if (isFullExpr) { reply(false, '完整表达式请用「点击测试」验证'); return; }
+    const lines = val.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!lines.length) { reply(false, '无有效行'); return; }
+    let hit = 0;
+    const miss = [];
+    let firstEl = null;
+    for (let i = 0; i < lines.length; i++) {
+      let nodes = null;
+      try { nodes = document.querySelectorAll(lines[i]); }
+      catch (e) { miss.push(lines[i] + '（无效）'); continue; }
+      if (nodes && nodes.length) {
+        hit++;
+        if (!firstEl) firstEl = nodes[0];
+      } else {
+        miss.push(lines[i]);
+      }
+    }
+    if (firstEl) {
+      // 短暂高亮首个命中：直观看到「匹配到的是哪个元素」；失败不影响回执
+      try {
+        A.pickerShow(firstEl);
+        setTimeout(function () { A.pickerShow(null); }, 2000);
+      } catch (e) { /* 高亮失败忽略 */ }
+      const tag = firstEl.tagName ? firstEl.tagName.toLowerCase() : '元素';
+      reply(hit === lines.length, '命中 ' + hit + '/' + lines.length + '，首个：' + tag
+        + (firstEl.id ? '#' + firstEl.id : '')
+        + (miss.length ? '；未命中：' + miss.join(' / ') : ''));
+      return;
+    }
+    reply(false, '未命中（' + (miss.length ? miss.join(' / ') : '当前页面无此元素') + '）');
+  };
+
+  /**
    * 截取浏览器当前可见区域。
    *
    * 为什么要绕后台：chrome.tabs.captureVisibleTab 只能在后台服务里调用，

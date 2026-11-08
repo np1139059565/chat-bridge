@@ -91,6 +91,10 @@ window.AIMirrorContent = (function () {
 
   // 站点规则表：不同模型的网页结构完全不同，无法用一套选择器通用。
   // 只使用各站点稳定的类名，绝不用 db183363 / _63c77b1 这类 CSS-Module 哈希（随时会变）。
+  // 真源自 2026-11-08 起迁至后端 definition.yaml 的 app.profiles（每站一份完整
+  // 清单，设置页可视化编辑）；本表降级为「后端不可达时的出厂兜底」，拉取成功
+  // 后由 applyProfiles（见 PROFILES 之后）整体替换。前端零缓存：档案不落
+  // chrome.storage，只在内存中使用。
   A.PROFILES = {
     glm: {
       label: '智谱清言 GLM',
@@ -238,6 +242,77 @@ window.AIMirrorContent = (function () {
       // 生成态判据：待实机确认停止按钮的稳定特征
       generatingSelectors: ['[class*="_stop_"]']
     }
+  };
+
+  /**
+   * 应用后端下发的站点档案（每站一份完整清单，整体替换）。
+   *
+   * 真源是后端 definition.yaml 的 app.profiles；本文件内联的 PROFILES 只是
+   * 后端不可达时的出厂兜底。前端零缓存：档案不落 chrome.storage，拉取结果
+   * 只进内存（本函数就地整体替换 A.PROFILES，后端没有的站点即消失，
+   * 与「完整清单」语义一致）。
+   *
+   * 轻防御（后端 sanitize_profiles 已规整一遍，这里只拦传输途中的明显异常，
+   * 双保险）：档案集非对象或无有效档案则整体忽略（保持出厂兜底）；逐档案
+   * 校验 id 字符与字段类型（字符串 / 布尔 / 字符串数组），非法条目丢弃；
+   * hosts 单串转列表、逐项去空。
+   *
+   * 应用后按当前 hostname 重猜 profileId：新增站点的 hosts 立即可被
+   * guessProfile 识别，无需改代码、无需刷新页面。
+   * @param {Object} backendProfiles 后端 /profiles 接口返回的档案集
+   * @returns {boolean} 是否实际应用（false = 输入无效，保持出厂兜底）
+   */
+  A.applyProfiles = function (backendProfiles) {
+    if (!backendProfiles || typeof backendProfiles !== 'object' ||
+        Array.isArray(backendProfiles)) {
+      return false;
+    }
+    var out = {};
+    var ids = Object.keys(backendProfiles);
+    var idRe = /^[A-Za-z0-9_]+$/;
+    for (var i = 0; i < ids.length; i++) {
+      var pid = ids[i];
+      var entry = backendProfiles[pid];
+      if (!idRe.test(pid) || !entry || typeof entry !== 'object' ||
+          Array.isArray(entry)) {
+        continue;
+      }
+      var clean = {};
+      var keys = Object.keys(entry);
+      for (var j = 0; j < keys.length; j++) {
+        var key = keys[j];
+        var val = entry[key];
+        if (key === 'hosts') {
+          var list = Array.isArray(val) ? val : (typeof val === 'string' ? [val] : []);
+          clean.hosts = [];
+          for (var m = 0; m < list.length; m++) {
+            var host = String(list[m] || '').trim();
+            if (host) clean.hosts.push(host);
+          }
+          continue;
+        }
+        if (typeof val === 'string' || typeof val === 'boolean') {
+          clean[key] = val;
+        } else if (Array.isArray(val)) {
+          var allStr = true;
+          for (var n = 0; n < val.length; n++) {
+            if (typeof val[n] !== 'string') { allStr = false; break; }
+          }
+          if (allStr) clean[key] = val;
+        }
+        // 数字 / 嵌套对象等非法类型：丢弃（与后端 sanitize 同口径）
+      }
+      if (clean.label == null) clean.label = pid;
+      if (clean.hosts == null) clean.hosts = [];
+      out[pid] = clean;
+    }
+    if (!Object.keys(out).length) {
+      return false;
+    }
+    A.PROFILES = out;
+    // 档案集变了（可能含新站点 hosts）：按当前页重猜档案，立即生效。
+    A.state.profileId = A.guessProfile(A.currentHost());
+    return true;
   };
 
   /** 按 hostname 猜测站点规则（用户未手动指定时）。 */

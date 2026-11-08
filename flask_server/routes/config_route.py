@@ -9,12 +9,14 @@
 - tools.<name>.enabled           即时生效
 - tools.run_command.languages    即时生效
 - limits.max_json_chars          即时生效
+- GET  /profiles 轻量返回站点档案（内容脚本注入时经后台中转拉取）
+- profiles（站点档案）           每站一份完整清单，整体替换，即时生效
 """
 from flask import Blueprint, jsonify, request
 
 import runtime
 import tool_config
-from config_store import save_config_to_yaml
+from config_store import sanitize_profiles, save_config_to_yaml
 from service_control import rolling_restart
 
 bp = Blueprint("config_route", __name__)
@@ -106,6 +108,20 @@ def _apply_tool_config_section(data, changed):
     return None
 
 
+def _apply_profiles_section(data, changed):
+    """应用 profiles 区块：站点档案整体替换（每站一份完整清单）。
+
+    值先经 sanitize_profiles 规整（非法档案 id、非法类型字段被丢弃）；
+    规整结果与当前不同才写入并记入变更列表；非字典输入整块忽略。
+    """
+    if not isinstance(data.get("profiles"), dict):
+        return
+    profiles = sanitize_profiles(data["profiles"])
+    if profiles != runtime.CONFIG.get("profiles", {}):
+        runtime.CONFIG["profiles"] = profiles
+        changed.append("profiles")
+
+
 def _config_snapshot():
     """构造 GET /config 的完整配置快照。"""
     host = runtime.CONFIG["flask"]["host"]
@@ -115,6 +131,7 @@ def _config_snapshot():
         "limits": runtime.CONFIG.get("limits", {}),
         "default_profile": runtime.CONFIG.get("default_profile", "glm"),
         "site_profiles": runtime.CONFIG.get("site_profiles", {}),
+        "profiles": runtime.CONFIG.get("profiles", {}),
         "tools": runtime.CONFIG.get("tools", {}),
         # 工具配置：声明 + 当前值，设置页按类型通用渲染
         "tool_config": tool_config.all_specs(),
@@ -124,37 +141,53 @@ def _config_snapshot():
     }
 
 
+def _handle_config_post():
+    """POST /config：依次应用各区块，保存配置并返回响应。"""
+    data = request.get_json(force=True, silent=True) or {}
+    changed = []
+    _apply_flask_section(data, changed)
+    _apply_tools_section(data, changed)
+    err = _apply_tool_config_section(data, changed)
+    if err is not None:
+        return err
+    err = _apply_limits_section(data, changed)
+    if err is not None:
+        return err
+    _apply_profiles_section(data, changed)
+    saved = save_config_to_yaml()
+    # 配置已变更：立即让记忆总开关缓存失效，使开关切换马上生效。
+    # 不做这一步的话，开关最长要等缓存过期才起作用，用户会以为没生效。
+    try:
+        import memory_switch
+        memory_switch.invalidate()
+    except Exception:
+        pass
+    # 端口 / host 改动需要重启进程才能重新绑定，单靠写配置无法让正在运行的服务生效
+    require_restart = any(c.startswith("flask.") for c in changed)
+    return jsonify(success=saved, saved=saved, changed=changed, requireRestart=require_restart)
+
+
 @bp.route("/config", methods=["GET", "POST", "OPTIONS"])
 def config():
     """读取（GET）或部分更新（POST）配置。
 
-    POST 支持三个区块：flask（host/port）、tools（开关与语言）、limits（体积上限）。
-    仅 flask 改动需要重启服务才能生效，因此单独标记 requireRestart。
+    POST 支持四个区块：flask（host/port）、tools（开关与语言）、limits（体积上限）、
+    profiles（站点档案整体替换）。仅 flask 改动需要重启服务才能生效。
     """
     if request.method == "POST":
-        data = request.get_json(force=True, silent=True) or {}
-        changed = []
-        _apply_flask_section(data, changed)
-        _apply_tools_section(data, changed)
-        err = _apply_tool_config_section(data, changed)
-        if err is not None:
-            return err
-        err = _apply_limits_section(data, changed)
-        if err is not None:
-            return err
-        saved = save_config_to_yaml()
-        # 配置已变更：立即让记忆总开关缓存失效，使开关切换马上生效。
-        # 不做这一步的话，开关最长要等缓存过期才起作用，用户会以为没生效。
-        try:
-            import memory_switch
-            memory_switch.invalidate()
-        except Exception:
-            pass
-        # 端口 / host 改动需要重启进程才能重新绑定，单靠写配置无法让正在运行的服务生效
-        require_restart = any(c.startswith("flask.") for c in changed)
-        return jsonify(success=saved, saved=saved, changed=changed, requireRestart=require_restart)
+        return _handle_config_post()
     # GET：返回完整配置快照
     return jsonify(_config_snapshot())
+
+
+@bp.route("/profiles", methods=["GET"])
+def profiles_endpoint():
+    """轻量读取站点档案。
+
+    内容脚本注入时经后台中转拉取（HTTPS 页直连本地服务受混合内容策略拦截）；
+    只返回档案本体，不携带工具配置等无关字段，供前端覆盖出厂默认值。
+    """
+    return jsonify({"profiles": runtime.CONFIG.get("profiles", {})})
 
 
 @bp.route("/config/restart-port", methods=["POST", "OPTIONS"])

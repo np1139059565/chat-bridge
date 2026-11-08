@@ -73,7 +73,7 @@ chat-bridge/
 │   ├── background.js             # 工具栏图标切换抽屉显隐
 │   ├── lib/                      # 公共前端模块（vue.global.prod.js / dom-utils.js）
 │   ├── content/                  # 内容脚本（按序号加载）
-│   │   ├── 00_state.js           # 命名空间、共享 state、站点规则 PROFILES、日志
+│   │   ├── 00_state.js           # 命名空间、共享 state、PROFILES 出厂兜底（真源后端 definition.yaml）、日志
 │   │   ├── 01_panel.js           # 面板注入与外观、post 通道
 │   │   ├── 02_blocks.js          # 代码块解析、消息构造、extractBlocks
 │   │   ├── 03_bridge.js          # 会话/历史项识别、sendPage

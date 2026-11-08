@@ -137,3 +137,53 @@ class TestSaveAndLoad(_CfgBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestProfiles(_CfgBase):
+    """profiles：站点档案的载入、规整与回写（真源 definition.yaml）。"""
+
+    def test_roundtrip(self):
+        """档案整体往返：写入定义、init 读出、save 回写保持一致。"""
+        import yaml
+        data = {"app": {
+            "flask": {"host": "127.0.0.1"},
+            "default_profile": "glm",
+            "site_profiles": {},
+            "profiles": {"glm": {
+                "label": "GLM", "hosts": ["chatglm.cn"], "container": ".c",
+                "split": True, "newConversation": "",
+            }},
+        }}
+        config_file.DEFINITION_PATH.write_text(
+            yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+        cfg = config_store.init_config()
+        self.assertEqual(cfg["profiles"]["glm"]["container"], ".c")
+        self.assertEqual(cfg["profiles"]["glm"]["newConversation"], "")
+        runtime.CONFIG.clear()
+        runtime.CONFIG.update(cfg)
+        self.assertTrue(config_store.save_config_to_yaml())
+        loaded = yaml.safe_load(config_file.DEFINITION_PATH.read_text(encoding="utf-8"))
+        self.assertEqual(loaded["app"]["profiles"]["glm"]["hosts"], ["chatglm.cn"])
+        self.assertEqual(loaded["app"]["profiles"]["glm"]["label"], "GLM")
+
+    def test_missing_profiles_defaults_empty(self):
+        """未配置 profiles 时兜底为空字典。"""
+        cfg = config_store.init_config()
+        self.assertEqual(cfg["profiles"], {})
+
+    def test_sanitize_rules(self):
+        """规整：非法 id / 非字典条目丢弃；hosts 单串转列表；split 非布尔与数字丢弃。"""
+        raw = {
+            "glm": {"label": "GLM", "hosts": "chatglm.cn", "split": "yes",
+                    "newConversation": "", "scrollToBottomButton": ["a", "b"],
+                    "maxRetry": 3},
+            "bad id!": {"label": "x"},
+            "notdict": "junk",
+        }
+        out = config_store.sanitize_profiles(raw)
+        self.assertEqual(set(out), {"glm"})
+        self.assertEqual(out["glm"]["hosts"], ["chatglm.cn"])
+        self.assertNotIn("split", out["glm"])
+        self.assertNotIn("maxRetry", out["glm"])
+        self.assertEqual(out["glm"]["newConversation"], "")
+        self.assertEqual(out["glm"]["scrollToBottomButton"], ["a", "b"])

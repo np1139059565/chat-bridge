@@ -53,7 +53,8 @@ python flask_server/scripts/_smoke_ct.py
 | 外部工具转发 | `flask_server/core/external_tools.py` + `routes/ext.py` |
 | 运行期全局状态（工具表 / 配置） | `flask_server/runtime.py` |
 | 路径基准 | `flask_server/paths.py`（唯一来源，文件搬迁时只改这里） |
-| 网页对话抓取、站点规则 | `extend/content/00_state.js`（PROFILES 表）+ `extend/content/02_blocks.js` |
+| 网页对话抓取、站点规则 | `extend/content/00_state.js`（PROFILES 出厂兜底）+ `extend/content/02_blocks.js` |
+| 站点档案读写与可视化编辑 | 后端 `app.profiles`（definition.yaml）+ `extend/dialog/parts/08g_site_profiles.js` （设置页区块）+ `extend/background.js`（拉取中转） |
 | 抽屉 UI、卡片渲染 | `extend/dialog/parts/`（Vue 渲染函数）+ `extend/dialog/styles/` |
 | 调试扩展行为 | `skills/debug_chrome/extension/**` |
 | 技能说明注入 | `skills/<name>/tool.json` 的 `prompt` 字段；技能清单由后端扫描 `skills/` 生成 |

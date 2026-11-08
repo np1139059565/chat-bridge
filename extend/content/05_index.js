@@ -11,8 +11,47 @@
   // 再刷新页面才生效；只刷新页面不够。此前排查时无法判断「跑的是新版还是旧版」，
   // 白白多查了几轮。带上标识后，控制台第一行就能确认。
   // 每次改动内容脚本时把这个标识一起改掉。
-  const BUILD_TAG = '2026-11-08-genstate-fix-v13';
+  const BUILD_TAG = '2026-11-08-profiles-ui-v14';
   A.log('内容脚本已加载 build=' + BUILD_TAG + ' 时间=' + new Date().toISOString());
+
+  /**
+   * 从后端拉取站点档案并应用（applyProfiles）。
+   *
+   * 为什么经 background 中转：内容脚本跑在网页源里（多数为 HTTPS），
+   * 直连 http://127.0.0.1:5000 会被混合内容策略拦截；后台 service worker
+   * 运行在扩展上下文不受限（与日志转发 ext_remote_log 同一通路）。
+   *
+   * 前端零缓存：拉取结果只进内存，不落 chrome.storage；后端不可达或返回
+   * 无效时保持出厂兜底（00_state.js 的内联 PROFILES），功能不中断。
+   * @param {string} reason 拉取原因（inject / refresh），仅用于日志区分
+   */
+  A.fetchProfiles = function (reason) {
+    try {
+      chrome.runtime.sendMessage({ type: 'profiles_fetch' }, function (resp) {
+        if (chrome.runtime.lastError) {
+          A.warn('fetchProfiles(' + reason + ') 通道失败：' + chrome.runtime.lastError.message);
+          return;
+        }
+        if (!resp || !resp.ok) {
+          A.warn('fetchProfiles(' + reason + ') 拉取失败：' + ((resp && resp.error) || '无回执'));
+          return;
+        }
+        var applied = A.applyProfiles(resp.profiles);
+        A.log('fetchProfiles(' + reason + ') ' + (applied
+          ? '后端档案已应用：' + Object.keys(A.PROFILES).join(' / ')
+          : '后端档案无效，保持出厂默认'));
+        // 通知抽屉：档案已刷新（抽屉可用它确认试运行前档案是最新态）。
+        A.post({ type: 'profiles_applied', ok: applied, count: Object.keys(A.PROFILES).length, reason: reason });
+      });
+    } catch (e) {
+      A.warn('fetchProfiles(' + reason + ') 异常：' + (e && e.message));
+    }
+  };
+
+  // 注入即拉一次：新开标签页 / 后端档案变更后的首次打开都能拿到最新档案。
+  // 面板默认关闭，拉取完成前无人消费档案（巡检与解析都随面板启动），时序安全。
+  A.fetchProfiles('inject');
+
 
   // 来自对话框（iframe）的消息
   window.addEventListener('message', function (e) {
@@ -27,6 +66,20 @@
       A.post({ type: 'pong_content', build: BUILD_TAG });
       return;
     }
+    // 抽屉保存站点档案后的通知：重新经后台中转拉取（取数口唯一，仍走 GET /profiles，
+    // 抽屉不直接推送档案数据，避免出现第二条数据通路）。
+    if (d.type === 'profiles_refresh') {
+      A.fetchProfiles('refresh');
+      return;
+    }
+    // 设置页「站点配置」字段级试运行：把当前编辑值（未保存也可测）交 06_picker
+    // 的 testProfileField 按模式求值，结果异步回传 profiles_test_result，
+    // 抽屉按 pid.field 键对号入座。
+    if (d.type === 'profiles_test_field') {
+      A.testProfileField(d.value || '', d.mode || 'locate', d.key || '');
+      return;
+    }
+
     if (d.type === 'request_page') A.sendPage(true, 'manual');
     else if (d.type === 'auto_send') A.pasteToWebpageAI(d.text || '');
     // 图文合一：dataUrl 之外可带 text；贴图后把 text 写进同一输入框，只发一次

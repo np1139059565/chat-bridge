@@ -52,6 +52,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     return true;   // 保持通道
   }
+  // 站点档案拉取中转：内容脚本跑在网页源里（多为 HTTPS），直连本地
+  // http://127.0.0.1:5000 会被混合内容策略拦截；后台运行在扩展上下文不受限。
+  // 档案真源在后端配置文件（GET /profiles 轻量接口），前端零缓存：回传后由
+  // 内容脚本进内存即用，不落任何存储。
+  if (msg && msg.type === 'profiles_fetch') {
+    /**
+     * 拿到后端地址后转发（与日志转发同模式：优先存储里抽屉探测到的实际
+     * 可连通地址，取不到用默认值，避免端口被改后打错地方）。
+     * @param {string} saved 存储里的地址，可为空
+     */
+    const fetchProfiles = function (saved) {
+      const base = (saved || 'http://127.0.0.1:5000').replace(/\/+$/ , '');
+      fetch(base + '/profiles', { headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          sendResponse({ ok: true, profiles: (data && data.profiles) || {} });
+        })
+        .catch(function (e) {
+          sendResponse({ ok: false, error: String((e && e.message) || e) });
+        });
+    };
+    try {
+      chrome.storage.local.get(['aiMirrorFlaskUrl'], function (r) {
+        fetchProfiles((r && r.aiMirrorFlaskUrl) || '');
+      });
+    } catch (e) {
+      fetchProfiles('');
+    }
+    return true;   // 异步回包：保持消息通道开启
+  }
   if (!msg || msg.type !== 'bridge_capture_tab') return;
   // windowId 取发送方所在窗口，保证抓到的是用户正在看的那个窗口
   const windowId = sender.tab ? sender.tab.windowId : undefined;

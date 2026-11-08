@@ -10,6 +10,8 @@ AI 工具调用镜像插件 —— 主配置读写
 - init_config：把解析结果合并成完整 CONFIG，并补齐每个工具的 enabled 开关
 - save_config_to_yaml：定义写 definition、运行时写 runtime
 """
+import re
+
 import runtime
 import config_file
 import yaml_utils
@@ -39,6 +41,60 @@ def _tool_entry_for(name, entry):
     return new_entry
 
 
+# 站点档案 id 的合法字符：与前端 @profile:FIELD 哨兵、PROFILES 键名口径一致。
+_PROFILE_ID_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+
+def sanitize_profiles(raw):
+    """规整站点档案（每站一份完整清单，真源为 definition.yaml 的 app.profiles）。
+
+    规则：
+    - 档案 id 仅允许字母 / 数字 / 下划线，其余整条丢弃；非字典条目整条丢弃；
+    - label：转字符串，缺省取档案 id；
+    - hosts：非空字符串规整为单元素列表；列表逐项转字符串并去空项；
+    - split：仅接受布尔，其它类型丢弃；
+    - 其余字段：仅接受字符串 / 布尔 / 字符串列表——空串与空列表语义为
+      「未配置」（前端按缺失处理：可点击元素报错、状态信号跳过检查），
+      数字与嵌套对象一律丢弃，防脏数据进配置文件。
+
+    @param raw 前端提交或配置文件读出的原始档案
+    @returns 规整后的 {档案 id: 字段表}
+    """
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for pid, entry in raw.items():
+        if not isinstance(pid, str) or not _PROFILE_ID_RE.match(pid):
+            continue
+        if not isinstance(entry, dict):
+            continue
+        item = {}
+        for key, val in entry.items():
+            if not isinstance(key, str) or not key:
+                continue
+            if key == "hosts":
+                if isinstance(val, str):
+                    item["hosts"] = [val] if val.strip() else []
+                elif isinstance(val, list):
+                    item["hosts"] = [str(x).strip() for x in val if str(x or "").strip()]
+                continue
+            if key == "label":
+                item["label"] = str(val)
+                continue
+            if key == "split":
+                if isinstance(val, bool):
+                    item[key] = val
+                continue
+            if isinstance(val, (str, bool)):
+                item[key] = val
+            elif isinstance(val, list) and all(isinstance(x, str) for x in val):
+                item[key] = val
+        item.setdefault("label", pid)
+        item.setdefault("hosts", [])
+        out[pid] = item
+    return out
+
+
 def init_config():
     """把两份配置（或默认）合并成完整 CONFIG，并保证所有工具都有 enabled 开关。"""
     raw = load_yaml_config()
@@ -47,6 +103,7 @@ def init_config():
         "limits": raw.get("limits", {}) or {},
         "default_profile": raw.get("default_profile", "glm"),
         "site_profiles": raw.get("site_profiles", {}) or {},
+        "profiles": sanitize_profiles(raw.get("profiles", {})),
         "tools": raw.get("tools", {}) or {},
     }
     # 关键字段兜底默认值
@@ -60,35 +117,40 @@ def init_config():
     return cfg
 
 
-def save_config_to_yaml():
-    """回写主配置：定义写 definition.yaml 的 app 分区，运行时写 runtime.yaml 的 app 分区。
-
-    定义：host、limits、默认档案、站点映射。
-    运行时：port、每个工具的上下线开关、run_command 的语言清单。
-    """
-    CONFIG = runtime.CONFIG
-    flask = CONFIG.get("flask", {})
-    tools = CONFIG.get("tools", {})
-    # 定义快照：入版本库，跨机器共享
-    definition = {
+def _definition_snapshot(cfg):
+    """定义分区快照：入版本库、跨机器共享的键。"""
+    flask = cfg.get("flask", {})
+    return {
         "flask": {"host": flask.get("host", "127.0.0.1")},
-        "limits": CONFIG.get("limits", {}),
-        "default_profile": CONFIG.get("default_profile", "glm"),
-        "site_profiles": CONFIG.get("site_profiles", {}),
+        "limits": cfg.get("limits", {}),
+        "default_profile": cfg.get("default_profile", "glm"),
+        "site_profiles": cfg.get("site_profiles", {}),
+        "profiles": cfg.get("profiles", {}),
     }
-    # 运行时快照：不入库，随本机状态变
+
+
+def _runtime_snapshot(cfg):
+    """运行时分区快照：不入库、随本机状态变的键。"""
     runtime_tools = {}
-    for name, ent in tools.items():
+    for name, ent in cfg.get("tools", {}).items():
         e = {"enabled": bool(ent.get("enabled", True))}
         if name == "run_command":
             e["languages"] = list(ent.get("languages", []))
         runtime_tools[name] = e
-    runtime_data = {
-        "flask": {"port": flask.get("port", 5000)},
+    return {
+        "flask": {"port": cfg.get("flask", {}).get("port", 5000)},
         "tools": runtime_tools,
         # 工具配置：各工具的可调参数值，随本机状态变，写运行时文件。
-        "tool_config": CONFIG.get("tool_config", {}),
+        "tool_config": cfg.get("tool_config", {}),
     }
-    ok1 = config_file.update_definition_section("app", definition)
-    ok2 = config_file.update_runtime_section("app", runtime_data)
+
+
+def save_config_to_yaml():
+    """回写主配置：定义写 definition.yaml 的 app 分区，运行时写 runtime.yaml 的 app 分区。
+
+    定义：host、limits、默认档案、站点映射、站点档案本体。
+    运行时：port、每个工具的上下线开关、run_command 的语言清单。
+    """
+    ok1 = config_file.update_definition_section("app", _definition_snapshot(runtime.CONFIG))
+    ok2 = config_file.update_runtime_section("app", _runtime_snapshot(runtime.CONFIG))
     return bool(ok1 and ok2)

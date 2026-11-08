@@ -248,6 +248,15 @@ window.AIMirrorDialog = (function () {
       scanOpen: false,
       // 工具配置：{工具名: [声明+当前值]}，toolConfOpen 控制该区块折叠
       toolConfig: {}, toolConfOpen: false, systemConfig: [],
+      // 站点档案（网页 AI 站点配置）：真源在后端 definition.yaml 的 app.profiles。
+      // siteProfiles 是服务端快照；siteProfDraft 是编辑工作副本（保存前不被
+      // 刷新覆盖）；试运行状态与结果按 pid.field 为键。newField 是自定义字段
+      // 录入区。渲染与方法见 parts/08g_site_profiles.js。
+      siteProfiles: {}, siteProfDraft: {}, siteProfOpen: false,
+      siteProfExpanded: Vue.reactive({}),
+      siteProfTesting: Vue.reactive({}), siteProfTestResult: Vue.reactive({}),
+      siteProfDeleting: Vue.reactive({}), newField: Vue.reactive({}),
+      newSiteId: '', newSiteLabel: '', newSiteHosts: '',
       scanRoots: [], flaskOk: false, flaskError: '',
       toastMsg: '',
       autoSendEnabled: false, riskRecoverEnabled: false,   // 后者为风控自动恢复开关：默认关

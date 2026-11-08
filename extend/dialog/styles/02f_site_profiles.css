@@ -1,0 +1,98 @@
+/* 模块：extend/dialog/styles/02f_site_profiles.css
+ * 用途：设置页「网页 AI 站点配置」区块的样式（08g_site_profiles.js 配套）。
+ * 颜色取 00_tokens.css 的令牌（var() 带回退，令牌缺失时降级为字面色）。
+ * 行骨架复用 02e 的 tc-row / tc-label / tc-control / tc-body，只补本区块专属类。
+ */
+.sp-profiles { display: flex; flex-direction: column; gap: 10px; }
+
+/* 站点卡片 */
+.sp-site-card {
+  border: 1px solid var(--cb-border, #d8dce2);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.sp-site-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: var(--cb-bg-card, #ffffff);
+  flex-wrap: wrap;
+}
+.sp-site-head b { font-size: 13px; }
+.sp-site-head .desc { color: var(--cb-text-muted, #8a919c); font-size: 12px; }
+.sp-site-head .caret { width: 1em; }
+.sp-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.sp-chip {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--cb-bg-hover, #eef1f5);
+  color: var(--cb-text-muted, #8a919c);
+}
+.sp-site-del { margin-left: auto; font-size: 11px; padding: 2px 8px;
+  background: transparent; color: #c62828; border: 1px solid #c62828; border-radius: 4px; }
+.sp-site-del.armed { background: #e5484d; color: #fff; border-color: #e5484d; }
+
+/* 字段分组 */
+.sp-group { margin-top: 10px; }
+.sp-group-title {
+  font-size: 12px;
+  color: var(--cb-text-muted, #8a919c);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+/* 字段行控件列 */
+.sp-field-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+.sp-field-control .sp-input,
+.sp-field-control .sp-area,
+.sp-new-site .sp-area,
+.sp-new-row input,
+.sp-add-field input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--cb-border, #d8dce2);
+  border-radius: 4px;
+  background: #ffffff;
+  color: var(--cb-text, #22262c);
+}
+.sp-area { resize: vertical; font-family: Consolas, Menlo, monospace; }
+.sp-btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.sp-test-btn { align-self: flex-start; font-size: 12px; padding: 2px 8px; }
+.sp-del-field { font-size: 11px; padding: 2px 6px;
+  background: transparent; color: #c62828; border: 1px solid #c62828; border-radius: 4px; }
+.sp-test-result { font-size: 12px; word-break: break-all; }
+.sp-test-result.ok { color: #2e7d32; }
+.sp-test-result.err { color: #c62828; }
+
+/* 新增站点表单 */
+.sp-new-site {
+  border: 1px dashed var(--cb-border, #d8dce2);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sp-new-row { display: flex; gap: 6px; }
+
+/* 加字段行 / 保存行 */
+.sp-add-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.sp-add-field input { flex: 1; min-width: 120px; }
+.sp-save-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.sp-save-btn { font-size: 13px; padding: 4px 12px; }

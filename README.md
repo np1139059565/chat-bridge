@@ -24,7 +24,7 @@ chat-bridge-main/
 │   │   ├── vue.global.prod.js # 内联 Vue 3
 │   │   └── dom-utils.js       # debounce / hashStr / textOf
 │   ├── content/               # 内容脚本（按序号加载）
-│   │   ├── 00_state.js        # 命名空间、共享 state、站点规则 PROFILES、面板常量
+│   │   ├── 00_state.js        # 命名空间、共享 state、PROFILES 出厂兜底（真源后端）、面板常量
 │   │   ├── 01_panel.js        # 面板注入与外观、post 通道
 │   │   ├── 02_blocks.js       # 代码块解析、消息构造、extractBlocks
 │   │   ├── 03_bridge.js       # 会话识别、sendPage
@@ -160,7 +160,7 @@ WAV 转 MP3 默认用 `soundfile` + `lameenc`；两者都不可用时自动回�
 
 - **`flask_server/config/definition.yaml` 与 `runtime.yaml`**：后端配置来源（前者存定义、入库，后者存运行时与密钥、不入库）。
   - `flask.host` / `flask.port`：服务地址。
-  - `default_profile` / `site_profiles`：按域名选择站点规则（`glm` / `deepseek`）。
+  - `default_profile` / `site_profiles`：按域名选择站点规则（`glm` / `deepseek`）；`profiles` 为站点档案本体——每站一份完整清单，设置页「网页 AI 站点配置」可视化编辑，保存后当前页即时生效。
   - `tools.<name>.enabled`：工具上下线开关。
   - `tools.run_command.languages`：`run_command` 支持的语言列表。
   - `limits.max_json_chars`：工具结果 JSON 体积上限。

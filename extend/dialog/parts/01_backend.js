@@ -180,6 +180,12 @@
       if (cfg.system_config) this.systemConfig = cfg.system_config;
       if (cfg.limits && cfg.limits.max_json_chars) this.maxJsonChars = cfg.limits.max_json_chars;
       if (cfg.default_profile) this.config.profile = cfg.default_profile;
+      // 站点档案：真源在后端。首载时初始化编辑工作副本；此后刷新只更新
+      // siteProfiles 快照，不覆盖 siteProfDraft，避免编辑到一半被冲掉。
+      if (cfg.profiles) {
+        this.siteProfiles = cfg.profiles;
+        if (!this._siteProfLoaded) { this._siteProfLoaded = true; this.resetSiteProfDraft(); }
+      }
       // 配置端口与实际连通端口不一致 = 端口已改但服务尚未重启（需重启才生效）
       // 从当前实际连通的地址里取端口做比对；取不到就不判不一致，
       // 避免用一个写死的端口去猜。
@@ -211,16 +217,22 @@
   };
 
   /**
-   * 设置某个工具的某项配置，并立即写回后端。
+   * 设置某个工具（或 system 分组）的某项配置，并立即写回后端。
    *
    * 本地先更新（界面立即反映），再提交后端；失败回滚，避免显示已生效但实际未存。
-   * @param {string} tool 工具名
+   * system 分组的声明在 this.systemConfig（GET 的 system_config 数组），与工具分组
+   * （this.toolConfig 对象，键为工具名）形状不同，查找口径必须分开：原实现只查
+   * toolConfig，system 分组查不到 spec、乐观更新失效，spec.value 停留旧值；任何
+   * 重渲染（5 秒状态轮询等触发）都会按旧 spec.value 重设输入框 DOM 值，表现为
+   * 「系统级配置改完立即弹回旧值」（后端保存链其实正常，CONFIG_SCHEMA 含 system）。
+   * @param {string} tool 工具名或 'system'
    * @param {string} key  配置键
    * @param {*} value     新值
    */
   M.setToolConfig = async function (tool, key, value) {
-    const block = this.toolConfig || (this.toolConfig = {});
-    const rows = block[tool] || [];
+    const rows = (tool === 'system')
+      ? (this.systemConfig || [])
+      : ((this.toolConfig || {})[tool] || []);
     const spec = rows.find((r) => r.key === key);
     const before = spec ? spec.value : undefined;
     if (spec) spec.value = value;

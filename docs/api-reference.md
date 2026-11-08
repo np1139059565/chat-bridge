@@ -61,7 +61,7 @@
 
 ### GET/POST /config
 
-- GET：读取配置（flask / limits / default_profile / site_profiles / tools / available_tools）。
+- GET：读取配置（flask / limits / default_profile / site_profiles / profiles / tools / available_tools）。
 - POST：部分更新，写入配置文件（定义写 definition.yaml，运行时写 runtime.yaml）。
 
 POST 请求体示例：
@@ -77,6 +77,15 @@ POST 请求体示例：
 - 其它改动即时生效：POST 会同步更新 `runtime.CONFIG` 内存并写回配置文件；
   `run_command` 的语言列表每次调用现读配置文件。
 
+
+### /profiles（站点档案轻量读取）
+
+- GET：返回站点档案本体（definition.yaml 的 `app.profiles`，每站一份完整字段清单）。
+  - 内容脚本注入时经扩展后台中转拉取（HTTPS 页直连本地服务会被混合内容策略拦截）；
+    前端零缓存：取到即入内存覆盖出厂兜底（00_state.js 的内联 PROFILES），不落任何存储。
+- 写入走 POST /config 的 `profiles` 区块：整体替换（改哪站写哪站、删站同路径），
+  空字段按「未配置」语义保留；设置页「网页 AI 站点配置」区块（08g_site_profiles.js）即此读写界面，
+  保存后通知当前页内容脚本重拉，无需刷新即生效。
 ### GET /prompt_sections
 
 返回各技能注入 System Prompt 的说明段落、本机技能清单与设置页管理视图。

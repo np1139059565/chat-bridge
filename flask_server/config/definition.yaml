@@ -8,6 +8,80 @@ app:
     chatglm.cn: glm
     chatglm.com: glm
     deepseek.com: deepseek
+    wenxin.baidu.com: wenxin
+  profiles:
+    glm:
+      label: 智谱清言 GLM
+      hosts:
+      - chatglm.cn
+      - chatglm.com
+      container: .detail.chatScrollContainer.conversation-list
+      item: .conversation-item
+      split: true
+      userItem: .conversation.question, .question, [id^="row-question"]
+      assistantItem: .answer, [id^="row-answer"]
+      userName: .user-name
+      userContent: .question-txt
+      assistantName: .assistant-name
+      thinking: .advance-thinking
+      thinkingArea: .advance-thinking-area
+      answerContent: .answer-content
+      answerWrap: .answer-content-wrap
+      convIdUrl: '[?&]cid=([^&]+)'
+      historyContainer: aside.aside-container, .aside-container
+      historyItem: .history-item
+      historySelectedMark: .selected
+      inputSelector: '#search-input-box textarea, textarea.scroll-display-none'
+      newConversation: ''
+      generatingSelectors:
+      - .enter.is-main-chat.m-three-row
+      - .enter.is-main-chat.searching
+    deepseek:
+      label: DeepSeek
+      hosts:
+      - deepseek.com
+      container: .ds-virtual-list-visible-items
+      item: .ds-message
+      split: false
+      assistantMark: .ds-assistant-message-main-content
+      userContent: .ds-collapsible-text
+      assistantContent: .ds-markdown.ds-assistant-message-main-content
+      thinking: .ds-think-content
+      convIdUrl: \/a\/chat\/s\/([^/?#]+)
+      historyContainer: .ds-scroll-area
+      historyItem: a[href*="/a/chat/s/"]
+      historySelectedMark: ''
+      inputSelector: textarea._27c9245, textarea[name="search"]
+      sendButton: div[role="button"].ds-button--primary.ds-button--circle
+      scrollToBottomButton:
+      - div[role="button"].ds-button--circle.ds-button--outlinedNeutral.ds-button--floating
+      sendButtonStopMark: M2 4.88C2 3.68009
+      regenerateExpr: document.querySelector('.ds-virtual-list--printable .ds-virtual-list-visible-items
+        > div:last-child [role="button"][aria-disabled="false"]')
+      retrySendExpr: (function(){var a=document.querySelectorAll("div.ds-button.ds-button--warning:nth-child(3)");return
+        a.length?a[a.length-1]:null;})()
+      newConversation: div._5a8ac7a.a084f19e
+      sendButtonDisabledMark: ds-button--disabled
+    wenxin:
+      label: 文心一言
+      hosts:
+      - wenxin.baidu.com
+      container: .conversation-flow-content
+      item: .chat-qa-container
+      split: true
+      userItem: .conversation-flow-question-container
+      userContent: .cs-question-pure-text
+      assistantItem: .conversation-flow-answer-container
+      answerWrap: .ai-entry-block.ai-markdown
+      thinking: '[class*=ai-thinking-steps]'
+      convIdUrl: \/search\/([0-9]+)
+      inputSelector: '#chat-textarea, textarea.ci-textarea'
+      sendButton: '#ci-submit-button-ai, .ci-submit-button'
+      newConversation: ''
+      scrollToBottomButton:
+      - div.cs-scroll-to-bottom-btn
+      generatingSelectors:
+      - '[class*="_stop_"]'
 custom_tools:
   tools:
   - name: json_validate

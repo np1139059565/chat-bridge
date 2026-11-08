@@ -242,3 +242,47 @@ class TestSnapshotAndEndpoint:
         body = resp.get_json()
         assert resp.status_code == 200
         assert body["success"] is True and body["port"] == 5001
+
+
+class TestProfilesSection:
+    """profiles 区块：整体替换、规整与轻量读取。"""
+
+    def test_snapshot_contains_profiles(self, client):
+        """GET /config 快照带 profiles，供设置页渲染。"""
+        runtime.CONFIG["flask"] = {"host": "127.0.0.1", "port": 5000}
+        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM", "hosts": ["chatglm.cn"]}}
+        data = client.get("/config").get_json()
+        assert data["profiles"]["glm"]["label"] == "GLM"
+
+    def test_profiles_endpoint(self, client):
+        """GET /profiles：轻量返回档案本体（内容脚本经后台中转拉取）。"""
+        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM"}}
+        data = client.get("/profiles").get_json()
+        assert data["profiles"]["glm"]["label"] == "GLM"
+
+    def test_post_replaces_profiles(self, client):
+        """POST 整体替换档案（含删除未提交站点）并记入变更列表。"""
+        runtime.CONFIG["profiles"] = {"old": {"label": "old"}}
+        resp = client.post("/config", json={"profiles": {
+            "glm": {"label": "GLM", "hosts": ["chatglm.cn"], "newConversation": ""}}})
+        assert resp.status_code == 200
+        assert set(runtime.CONFIG["profiles"]) == {"glm"}
+        assert "profiles" in resp.get_json()["changed"]
+
+    def test_post_sanitizes_entries(self, client):
+        """非法档案 id 与非法类型字段被规整丢弃，不进运行时配置。"""
+        resp = client.post("/config", json={"profiles": {
+            "bad id!": {"label": "x"},
+            "glm": {"hosts": "chatglm.cn", "split": "yes"},
+        }})
+        assert resp.status_code == 200
+        assert set(runtime.CONFIG["profiles"]) == {"glm"}
+        assert runtime.CONFIG["profiles"]["glm"]["hosts"] == ["chatglm.cn"]
+        assert "split" not in runtime.CONFIG["profiles"]["glm"]
+
+    def test_non_dict_ignored(self, client):
+        """profiles 非字典时整块忽略，不动现有档案。"""
+        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM"}}
+        resp = client.post("/config", json={"profiles": "junk"})
+        assert resp.status_code == 200
+        assert runtime.CONFIG["profiles"] == {"glm": {"label": "GLM"}}

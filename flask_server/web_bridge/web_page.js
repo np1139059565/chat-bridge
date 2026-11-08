@@ -103,6 +103,9 @@
   // 抖动由「失败后立即重连」承担——早判早重连，比晚判后干等更接近真实体验。
   var FAIL_TOLERANCE = 1;
 
+  // 临时诊断开关：定位「切 app 回来发送必失败」；true 时每轮记 begin/end 配对（约 7 万条/天）
+  var POLL_LOG_VERBOSE = true;
+
   /**
    * 轮询成功的处理：更新连接状态、按需渲染新消息、维护滚动与裁剪。
    *
@@ -114,6 +117,7 @@
     // 正常轮询不记日志（每 2.5 秒一次、量大）；只在响应偏慢时记，
     // 便于发现「变慢的苗头」而不淹没日志。失败仍照常记录。
     if (!history && WebLogic.isSlowPoll(Date.now() - t0, 1000)) clientLog('poll', 'slow ' + (Date.now() - t0) + 'ms');
+    if (failCount > 0) clientLog('poll', 'recover failCount=' + failCount + ' -> 0');
     failCount = 0;
     setStatus(true);
     // 诊断用：记录最后一次轮询成功的时刻，心跳据此报「距上次成功多少秒」
@@ -184,22 +188,27 @@
    * 不做整页刷新——刷新会丢掉滚动位置与输入框内容，代价远大于收益。
    */
   function hardResetPolling() {
+    var _r0 = Date.now();
+    clientLog('poll', 'reset.begin timer=' + (pollTimer ? 'on' : 'off') + ' busy=' + (pollBusy ? 1 : 0) + ' failCount=' + failCount);
     stopPolling();
     abortInflightPoll('reset');
     pollBusy = false;
     startPolling();
+    clientLog('poll', 'reset.done cost=' + (Date.now() - _r0) + 'ms');
     fetchMessages(false);
   }
 
-  function fetchMessages(history) {
+  function fetchMessages(history, src) {
+    var _src = src || 'tick';
     if (WebLogic.shouldSkipPoll(pollBusy)) {
       // 上一轮未完成：跳过。记一条，便于看出「请求堆积」。
-      if (!history) clientLog('poll', 'skip(busy)');
+      if (!history) clientLog('poll', 'skip(busy) src=' + _src);
       return;   // 上一轮未完成：跳过本轮，避免并发堆积
     }
     pollBusy = true;
     var _t0 = Date.now();
-    // 不再记「start」：每次轮询都记一条纯属噪音，结果已由 slow / fail 表达。
+    // 诊断：每轮入口打点与末尾 end 配对——有 begin 无 end 即该轮卡死
+    if (!history && POLL_LOG_VERBOSE) clientLog('poll', 'begin src=' + _src + ' cursor=' + cursor + ' hidden=' + (document.hidden ? 1 : 0));
     // 首次铺屏只取最新 10 条（后端 history=1 分支），其余滑到底部再懒加载。
     // 增量轮询仍按 200 拉，避免断开重连后新消息一次拿不全。
     var url = '/api/web/messages?cursor=' + cursor + '&limit=' + (history ? 10 : 200);
@@ -210,27 +219,37 @@
     var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     // 记录本轮控制器与超时器：页面切后台时需要外部主动中止（见 abortInflightPoll）
     inflightCtrl = ctrl;
-    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); }, 6000);
+    // 诊断：区分「6 秒超时中断」与「切后台主动中止」——两者都是 AbortError，
+    // 此前在日志里无法区分，用 _timedOut 标记。
+    var _timedOut = false;
+    var timer = setTimeout(function () { _timedOut = true; if (ctrl) ctrl.abort(); }, 6000);
     inflightTimer = timer;
     // ---------- 临时诊断：分段计时（实现见 web_poll_trace.js，问题定位后删除） ----------
     // 把一次轮询拆成四段分别计时，定位卡在网络、传输、解析还是渲染。
     var _p0 = window.WebPollTrace ? window.WebPollTrace.now() : Date.now();
+    var _outcome = 'unknown';
     fetch(url, { headers: { 'Accept': 'application/json' }, signal: ctrl ? ctrl.signal : undefined })
       .then(function (r) {
         return window.WebPollTrace ? window.WebPollTrace.traceResponse(r, _p0, history) : r.json();
       })
       .then(function (data) {
+        _outcome = 'ok';
         var _p4 = window.WebPollTrace ? window.WebPollTrace.now() : Date.now();
         onPollOk(data, history, _t0);
         if (window.WebPollTrace) window.WebPollTrace.traceBusiness(_p0, _p4, history);
       })
-      .catch(function (err) { onPollFail(err, history, _t0); })
+      .catch(function (err) {
+        _outcome = WebLogic.isAbortError(err && err.name) ? (_timedOut ? 'timeout6s' : 'abort') : 'fail';
+        onPollFail(err, history, _t0);
+      })
       .then(function () {
         clearTimeout(timer);
         // 只清理「本轮自己的」句柄，避免把后续轮次的句柄误清。
         if (inflightCtrl === ctrl) inflightCtrl = null;
         if (inflightTimer === timer) inflightTimer = null;
         pollBusy = false;
+        // 诊断：每轮出口打点，与 begin 配对。正常轮询也记（噪音换配对完整性）。
+        if (!history && POLL_LOG_VERBOSE) clientLog('poll', 'end src=' + _src + ' outcome=' + _outcome + ' cost=' + (Date.now() - _t0) + 'ms');
       });
   }
 
@@ -253,6 +272,8 @@
     if (!WebLogic.canSend(text, snapshotImgs.length)) return;
     // 快照文字：失败时可原样恢复，避免消息静默丢失。
     var snapshotText = text;
+    // 诊断：发送入口打点，与 finish 的 ok / fail 配对——有 begin 无二者即 fetch 无响应
+    clientLog('send', 'begin textLen=' + text.length + ' imgs=' + snapshotImgs.length + ' hidden=' + (document.hidden ? 1 : 0));
     // 只有发送成功才清空输入与图片；失败则恢复现场并提示。
     // 失败时记录原因类型：超时（已发出无响应）/ 网络错（未发出）/ 服务端错误。
     var finish = function (res, err) {
@@ -260,7 +281,9 @@
       // 失败分类与轮询共用 WebLogic，避免两处各写一份分类逻辑。
       var kind = WebLogic.sendFailKind(res, err && err.name, err && err.message);
       var offline = WebLogic.offlineSuffix(typeof navigator !== 'undefined' ? navigator.onLine : true);
-      clientLog('send', 'fail kind=' + kind + offline);
+      var online = (typeof navigator !== 'undefined') && navigator.onLine ? 1 : 0;
+      clientLog('send', 'fail kind=' + kind + offline + ' hidden=' + (document.hidden ? 1 : 0)
+        + ' online=' + online + ' textLen=' + (snapshotText ? snapshotText.length : 0) + ' imgs=' + snapshotImgs.length);
       inputEl.value = snapshotText;
       window.WebImagePicker.restore(snapshotImgs);
       // 恢复内容后重算高度：发送前已把输入框清空并压回单行，
@@ -418,7 +441,7 @@
     // 刷新会丢滚动位置与输入框内容，且用户已明确要求禁止；
     // 陈旧页面带来的问题由重建轮询 + 看门狗兜住。
     var away = hiddenAt ? (Date.now() - hiddenAt) : 0;
-    clientLog('page', 'visible（回前台，后台 ' + Math.round(away / 1000) + 's）→ 重建轮询');
+    clientLog('page', 'visible（回前台，后台 ' + Math.round(away / 1000) + 's）→ 重建轮询 busy=' + (pollBusy ? 1 : 0) + ' failCount=' + failCount);
     hiddenAt = 0;
     hardResetPolling();
   });

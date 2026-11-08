@@ -40,3 +40,5 @@ flask_server/data/
 models/
 # 记忆（工作记忆 + 错题本）：属本地长期沉淀，不入库
 memory/
+# 运行期临时产物（0 字节占位，非交付物）
+flask_server/PATH
