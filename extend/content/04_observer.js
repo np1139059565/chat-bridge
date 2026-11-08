@@ -221,7 +221,7 @@
    */
   A.triggerGenerate = function () {
     if (!A.state.active) return;
-    A.sendPage(true, 'generate');
+    A.sendPage(true, 'generate'); A._flushPendingPaste('flip');
   };
 
   /**

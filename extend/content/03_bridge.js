@@ -5,6 +5,61 @@
   'use strict';
   const A = window.AIMirrorContent;
 
+// ===== 回传粘贴守卫：AI 生成期间挂起回传，空闲后统一冲刷 =====
+// 背景：工具结果回传（文本/图片/文件）与网页 AI 生成之间没有互斥。若 AI 正在逐字
+// 输出，此时写输入框并回车，会把结果插进 AI 的输出流——表现为输出中断、内容错乱。
+// 做法：两道守卫——写值/贴文件前查一次；回车前再查一次（贴文件链路长达数秒，
+// 途中 AI 可能开始生成，只查入口拦不住）。命中即把条目挂入 _pendingPaste，
+// 由按钮翻转回调（'flip'，主路径）或 1 秒轮询（'poll'，兜底）在空闲后统一冲刷；
+// 挂起超过 PASTE_SUSPEND_MAX_MS 放弃并如实上报，不无限拖。
+A._pendingPaste = [];
+A.PASTE_SUSPEND_MAX_MS = 30000;
+
+/** 挂起一条回传。kind：'text'（未写值，冲刷时整体重放）/
+ * 'files'（未贴文件，冲刷时整体重放）/
+ * 'enter_only'（值或附件已就位，只欠回车——冲刷时只补回车，
+ * 整体重放会把附件重复贴一遍）。 */
+A._suspendPaste = function (entry) {
+  entry.suspendAt = entry.suspendAt || Date.now();
+  A._pendingPaste.push(entry);
+  A.log('[回传守卫] AI 生成中，回传挂起：' + entry.label);
+  if (!A._pasteFlushTimer) {
+    A._pasteFlushTimer = setInterval(function () { A._flushPendingPaste('poll'); }, 1000);
+  }
+};
+
+/** 冲刷挂起队列：仍在生成则继续等；空闲则取出全部逐条执行。
+ * 队列空时自清定时器；翻转为主、轮询兜底（防翻转被错过）。 */
+A._flushPendingPaste = function (why) {
+  if (!A._pendingPaste.length) {
+    if (A._pasteFlushTimer) { clearInterval(A._pasteFlushTimer); A._pasteFlushTimer = null; }
+    return;
+  }
+  if (A.state.isGenerating) return; // 仍在生成：继续挂起
+  const list = A._pendingPaste.splice(0); // 空闲：取出全部，逐条执行
+  A.log('[回传守卫] 空闲（' + why + '），冲刷挂起回传 ' + list.length + ' 条');
+  for (let i = 0; i < list.length; i++) {
+    const e = list[i];
+    if (Date.now() - e.suspendAt > A.PASTE_SUSPEND_MAX_MS) {
+      // 超时放弃：如实上报，dialog 侧按失败处理，卡片状态不会被假成功污染
+      A.post({ type: 'auto_send_result', ok: false, msg: '回传放弃：AI 生成持续超过30秒（' + e.label + '）' });
+      continue;
+    }
+    if (e.kind === 'text') {
+      A.pasteToWebpageAI(e.text, e.autoSend);
+    } else if (e.kind === 'files') {
+      A._pasteFilesToWebpageAI(e.files, e.text, e.label);
+    } else { // enter_only：只补回车。输入框可能已被站点/用户清空，此时回车无意义，如实放弃
+      const ta2 = A.findInputBox();
+      if (!ta2 || !ta2.value) {
+        A.post({ type: 'auto_send_result', ok: false, msg: '回传放弃：挂起期间输入框已空，无法补发（' + e.label + '）' });
+      } else {
+        A.pressEnter(ta2);
+      }
+    }
+  }
+};
+
   /**
    * 判断链接是否与当前路径对应。
    * 用 URL 解析把相对 / 绝对 href 统一成 pathname 再比（DeepSeek 的会话项是 <a> 链接）。
@@ -180,6 +235,11 @@
       A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
       return;
     }
+    // 守卫一：AI 生成中不得写输入框——写值本身就会打断输出流。
+    if (A.state.isGenerating) {
+      A._suspendPaste({ kind: 'text', text: text, autoSend: autoSend, label: '文本回传' });
+      return;
+    }
     A.writeInputValue(ta, text);
     // 只写值不发送：交给调用方（图文合一）统一回车
     if (autoSend === false) return;
@@ -188,7 +248,17 @@
     // 就绪后该类消失。这是框架自己给出的可靠信号，比读输入框值靠谱
     // （值是用原生 setter 直接写进去的，写入即相等，证明不了框架状态已更新）。
     A.waitSendReady(function () {
-      setTimeout(function () { A.pressEnter(ta); }, 500);
+      setTimeout(function () {
+        // 守卫二：写值与回车之间隔了 waitSendReady（最长 3 秒）+ 500ms，
+        // 期间 AI 可能已开始生成——此刻回车同样会打断输出。值已在输入框里，
+        // 不能整体重放（会写出两份），故只挂起「补回车」条目（kind='enter_only'），
+        // 冲刷时先确认输入框仍有内容，再重新取输入框引用补一次回车。
+        if (A.state.isGenerating) {
+          A._suspendPaste({ kind: 'enter_only', label: '文本回传（回车前拦截）' });
+          return;
+        }
+        A.pressEnter(ta);
+      }, 500);
     });
   };
 
@@ -272,6 +342,13 @@
    * @param {string} label 日志与提示用的名称（如「图片」「文件」）
    */
   A._pasteFilesToWebpageAI = function (files, text, label) {
+    // 守卫三：AI 生成中不得贴附件——「逐个贴文件（800ms/个）+ 等 1.5 秒 + 写文字 +
+    // 回车」链路长达数秒，全程都会干扰输出。文件尚未贴入，挂起整体重放
+    //（kind='files'，File 数组为内存引用，冲刷时直接重调本函数即可）。
+    if (A.state.isGenerating) {
+      A._suspendPaste({ kind: 'files', files: files, text: text, label: label });
+      return;
+    }
     const ta = A.findInputBox();
     if (!ta) {
       A.warn('_pasteFilesToWebpageAI: 未找到网页 AI 输入框');
@@ -303,7 +380,15 @@
             const taNow = A.findInputBox() || ta;
             if (text) A.writeInputValue(taNow, text);
             A.waitSendReady(function () {
-              setTimeout(function () { A.pressEnter(taNow); }, 300);
+              setTimeout(function () { if (A.state.isGenerating) {
+          // 守卫四：附件逐个贴入（800ms/个）+ 1.5 秒收尾 + waitSendReady，
+          // 链路数秒，途中 AI 可能已开始生成。附件已在输入框预览中，
+          // 整体重放会把同一批附件再贴一遍——只挂起「补回车」条目，
+          // 冲刷时重新取输入框引用、确认仍有内容后补一次回车。
+          A._suspendPaste({ kind: 'enter_only', label: (label || '附件') + '回传（回车前拦截）' });
+          return;
+        }
+        A.pressEnter(taNow); }, 300);
             });
           }, TAIL);
           return;
