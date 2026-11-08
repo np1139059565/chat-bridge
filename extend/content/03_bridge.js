@@ -1,64 +1,13 @@
 // 模块：extend/content/03_bridge.js
 // 用途：会话身份识别、结构化对话推送、以及把文本回传到网页 AI 输入框。
 // 依赖：content/00_state.js、content/02_blocks.js（extractBlocks）
+
 (function () {
   'use strict';
+
+  // 注：回传粘贴守卫（生成期挂起/空闲冲刷）已拆至 content/03b_paste.js
+  //（2026-11-08，原文件 489 行超出仓库 450 行上限，hygiene/quality 拦截）。
   const A = window.AIMirrorContent;
-
-// ===== 回传粘贴守卫：AI 生成期间挂起回传，空闲后统一冲刷 =====
-// 背景：工具结果回传（文本/图片/文件）与网页 AI 生成之间没有互斥。若 AI 正在逐字
-// 输出，此时写输入框并回车，会把结果插进 AI 的输出流——表现为输出中断、内容错乱。
-// 做法：两道守卫——写值/贴文件前查一次；回车前再查一次（贴文件链路长达数秒，
-// 途中 AI 可能开始生成，只查入口拦不住）。命中即把条目挂入 _pendingPaste，
-// 由按钮翻转回调（'flip'，主路径）或 1 秒轮询（'poll'，兜底）在空闲后统一冲刷；
-// 挂起超过 PASTE_SUSPEND_MAX_MS 放弃并如实上报，不无限拖。
-A._pendingPaste = [];
-A.PASTE_SUSPEND_MAX_MS = 30000;
-
-/** 挂起一条回传。kind：'text'（未写值，冲刷时整体重放）/
- * 'files'（未贴文件，冲刷时整体重放）/
- * 'enter_only'（值或附件已就位，只欠回车——冲刷时只补回车，
- * 整体重放会把附件重复贴一遍）。 */
-A._suspendPaste = function (entry) {
-  entry.suspendAt = entry.suspendAt || Date.now();
-  A._pendingPaste.push(entry);
-  A.log('[回传守卫] AI 生成中，回传挂起：' + entry.label);
-  if (!A._pasteFlushTimer) {
-    A._pasteFlushTimer = setInterval(function () { A._flushPendingPaste('poll'); }, 1000);
-  }
-};
-
-/** 冲刷挂起队列：仍在生成则继续等；空闲则取出全部逐条执行。
- * 队列空时自清定时器；翻转为主、轮询兜底（防翻转被错过）。 */
-A._flushPendingPaste = function (why) {
-  if (!A._pendingPaste.length) {
-    if (A._pasteFlushTimer) { clearInterval(A._pasteFlushTimer); A._pasteFlushTimer = null; }
-    return;
-  }
-  if (A.state.isGenerating) return; // 仍在生成：继续挂起
-  const list = A._pendingPaste.splice(0); // 空闲：取出全部，逐条执行
-  A.log('[回传守卫] 空闲（' + why + '），冲刷挂起回传 ' + list.length + ' 条');
-  for (let i = 0; i < list.length; i++) {
-    const e = list[i];
-    if (Date.now() - e.suspendAt > A.PASTE_SUSPEND_MAX_MS) {
-      // 超时放弃：如实上报，dialog 侧按失败处理，卡片状态不会被假成功污染
-      A.post({ type: 'auto_send_result', ok: false, msg: '回传放弃：AI 生成持续超过30秒（' + e.label + '）' });
-      continue;
-    }
-    if (e.kind === 'text') {
-      A.pasteToWebpageAI(e.text, e.autoSend);
-    } else if (e.kind === 'files') {
-      A._pasteFilesToWebpageAI(e.files, e.text, e.label);
-    } else { // enter_only：只补回车。输入框可能已被站点/用户清空，此时回车无意义，如实放弃
-      const ta2 = A.findInputBox();
-      if (!ta2 || !ta2.value) {
-        A.post({ type: 'auto_send_result', ok: false, msg: '回传放弃：挂起期间输入框已空，无法补发（' + e.label + '）' });
-      } else {
-        A.pressEnter(ta2);
-      }
-    }
-  }
-};
 
   /**
    * 判断链接是否与当前路径对应。
@@ -80,8 +29,8 @@ A._flushPendingPaste = function (why) {
   /**
    * 找出左侧会话列表中当前被选中的那一项。
    * 不同站点的「会话 id 来源」与「选中项判定」完全不同，全部由 activeProfile() 驱动：
-   *   - GLM    ：URL 带 ?cid=...；选中项是带 .selected 类的 .history-item
-   *   - DeepSeek：URL 路径为 /a/chat/s/<uuid>；选中项 = href 与当前 location.pathname 一致的 <a>
+   * - GLM ：URL 带 ?cid=...；选中项是带 .selected 类的 .history-item
+   * - DeepSeek：URL 路径为 /a/chat/s/<uuid>；选中项 = href 与当前 location.pathname 一致的 <a>
    * @returns {Element|null} 选中项元素
    */
   A.selectedHistoryItem = function () {
@@ -135,25 +84,27 @@ A._flushPendingPaste = function (why) {
    * 结构化提取当前对话并推送给对话框。
    * 每次推送都重新算会话 id，避免切会话后内容仍被归到上一个会话名下。
    * @param {boolean} force 是否强制推送（忽略内容未变化判断）
-   * @param {string} [reason] 触发来源：'generate'（AI 新增对话）/
-   *   'scroll'（可视区滚动）/ 'switch'（切换会话）/ 'manual'（手动解析）。
-   *   仅作标签透传给消费端，不改变推送内容本身。
+   * @param {string} [reason] 触发来源：'generate'（AI 新增对话）/ 
+   * 'scroll'（可视区滚动）/ 'switch'（切换会话）/ 'manual'（手动解析）。
+   * 仅作标签透传给消费端，不改变推送内容本身。
    */
   A.sendPage = function (force, reason) {
     // 面板未打开：不解析也不推送。打开时会由 activate() 主动补一次全量解析。
     if (!A.state.active) return;
     if (!A.state.containerEl) return;
+
     const convId = A.getConversationId();
     const convChanged = !!convId && convId !== A.state.currentConvId;
     if (convChanged) A.state.currentConvId = convId;
 
     const messages = A.extractBlocks(A.state.containerEl);
+
     // 去重键先按「原始解析结果」算：命中即返回，避免滚动时反复做图片转换这类重活。
     // blob 地址在同一页面会话内稳定，故用它做键是可靠的。
     const key = convId + '|' + JSON.stringify(messages);
-    // 内容未变化且非强制推送时直接返回：滚动期间会反复触发，去重可省下大量解析与消息投递
     if (!force && !convChanged && key === A.state.lastPageKey) return;
     A.state.lastPageKey = key;
+
     // 图片归一化：把 blob: / http(s) 地址转成自包含的 dataURL，
     // 使抽屉镜像、抽屉消息列表、服务端三处都能取到同一张图。
     // 无图片时同步回调，行为与改造前一致。
@@ -165,19 +116,20 @@ A._flushPendingPaste = function (why) {
       });
       // 视口是否停在最新处：仅滚动轮次的自动执行复检需要，其余来源仅作日志
       const atBottom = A.isAtBottom();
-      A.log('sendPage: 推送结构化对话 force=' + !!force, '会话=' + convId,
-        '消息数=' + msgs.length, 'ids=' + JSON.stringify(fpList),
-        'atBottom=' + atBottom);
+      A.log('sendPage: 推送结构化对话 force=' + !!force,
+        '会话=' + convId, '消息数=' + msgs.length,
+        'ids=' + JSON.stringify(fpList), 'atBottom=' + atBottom);
       A.post({
         type: 'page_blocks',
         messages: msgs,
         page_url: location.href,
-        siteKey: A.state.siteKey,                       // 按站点隔离数据与设置
+        siteKey: A.state.siteKey,
+        // 按站点隔离数据与设置
         profileId: A.state.profileId,
         conversationId: convId,
         conversationTitle: A.getConversationTitle(),
-        reason: reason || 'manual',  // 触发来源标签，供消费端分流
-        atBottom: atBottom,          // 视口是否在底部（滚动轮次自动执行复检用）
+        reason: reason || 'manual',            // 触发来源标签，供消费端分流
+        atBottom: atBottom,                    // 视口是否在底部（滚动轮次自动执行复检用）
         // 推送时刻 AI 是否仍在生成：抽屉侧据此拦截自动执行与回传。
         // 抽屉与内容脚本分离，拿不到本页的生成态，只能随推送一并带过去。
         isGenerating: !!A.state.isGenerating
@@ -202,6 +154,7 @@ A._flushPendingPaste = function (why) {
    * 等状态同步后派发 Enter 键事件触发发送。
    * @param {string} text 要回传的文本
    */
+
   /**
    * 把文本一次性写入输入框（复制粘贴式写值，非逐字输入）。
    * 用原生 setter 写整个值，触发框架的响应式更新，再派发 input 事件。
@@ -226,7 +179,7 @@ A._flushPendingPaste = function (why) {
    * 等状态同步后派发 Enter 键事件触发发送。
    * @param {string} text 要回传的文本
    * @param {boolean} [autoSend] 是否写完后自动回车发送；false 表示只写值
-   *   （图文合一流程自行控制发送时机，避免图文各发一条）
+   * （图文合一流程自行控制发送时机，避免图文各发一条）
    */
   A.pasteToWebpageAI = function (text, autoSend) {
     const ta = A.findInputBox();
@@ -235,14 +188,18 @@ A._flushPendingPaste = function (why) {
       A.post({ type: 'auto_send_result', ok: false, msg: '未找到网页 AI 输入框' });
       return;
     }
+
     // 守卫一：AI 生成中不得写输入框——写值本身就会打断输出流。
     if (A.state.isGenerating) {
       A._suspendPaste({ kind: 'text', text: text, autoSend: autoSend, label: '文本回传' });
       return;
     }
+
     A.writeInputValue(ta, text);
+
     // 只写值不发送：交给调用方（图文合一）统一回车
     if (autoSend === false) return;
+
     // 两步走：先等发送按钮就绪，再延迟 500ms，然后回车发送。
     // 就绪信号见 waitSendReady：档案配了 sendButtonDisabledMark 的站点等类名消失，
     // 未配置的站点仅确认按钮存在，其余由延时兜底（比读输入框值可靠：值是
@@ -306,6 +263,7 @@ A._flushPendingPaste = function (why) {
    * 图片写入依赖站点实现，失败时回传提示，由用户手动粘贴。
    * @param {string} dataUrl 图片 dataURL
    */
+
   // MIME → 扩展名映射：决定附件文件名，图片与文本各按真实类型命名
   const MIME_EXT = {
     'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif',
@@ -352,6 +310,7 @@ A._flushPendingPaste = function (why) {
       A._suspendPaste({ kind: 'files', files: files, text: text, label: label });
       return;
     }
+
     const ta = A.findInputBox();
     if (!ta) {
       A.warn('_pasteFilesToWebpageAI: 未找到网页 AI 输入框');
@@ -363,13 +322,14 @@ A._flushPendingPaste = function (why) {
       A.post({ type: 'auto_send_result', ok: false, msg: '没有可粘贴的' + label });
       return;
     }
+
     try {
       // 逐个粘贴，而不是一次全塞。
       // 原因：部分站点（如 DeepSeek）的粘贴处理只取剪贴板里的第一个文件，
       // 一次塞多个最终只会成一个。改成逐个单独派发 paste 事件、留出间隔，
       // 让每个都各自被接收一次，从而累积成多个。
-      const GAP = 800;      // 每个文件之间的间隔（毫秒）
-      const TAIL = 1500;    // 全部贴完后、写文字之前的等待（等预览/上传就绪）
+      const GAP = 800;   // 每个文件之间的间隔（毫秒）
+      const TAIL = 1500; // 全部贴完后、写文字之前的等待（等预览/上传就绪）
       ta.focus();
       let idx = 0;
       const step = function () {
@@ -383,15 +343,17 @@ A._flushPendingPaste = function (why) {
             const taNow = A.findInputBox() || ta;
             if (text) A.writeInputValue(taNow, text);
             A.waitSendReady(function () {
-              setTimeout(function () { if (A.state.isGenerating) {
-          // 守卫四：附件逐个贴入（800ms/个）+ 1.5 秒收尾 + waitSendReady，
-          // 链路数秒，途中 AI 可能已开始生成。附件已在输入框预览中，
-          // 整体重放会把同一批附件再贴一遍——只挂起「补回车」条目，
-          // 冲刷时重新取输入框引用、确认仍有内容后补一次回车。
-          A._suspendPaste({ kind: 'enter_only', label: (label || '附件') + '回传（回车前拦截）' });
-          return;
-        }
-        A.pressEnter(taNow); }, 300);
+              setTimeout(function () {
+                if (A.state.isGenerating) {
+                  // 守卫四：附件逐个贴入（800ms/个）+ 1.5 秒收尾 + waitSendReady，
+                  // 链路数秒，途中 AI 可能已开始生成。附件已在输入框预览中，
+                  // 整体重放会把同一批附件再贴一遍——只挂起「补回车」条目，
+                  // 冲刷时重新取输入框引用、确认仍有内容后补一次回车。
+                  A._suspendPaste({ kind: 'enter_only', label: (label || '附件') + '回传（回车前拦截）' });
+                  return;
+                }
+                A.pressEnter(taNow);
+              }, 300);
             });
           }, TAIL);
           return;
@@ -401,7 +363,9 @@ A._flushPendingPaste = function (why) {
         const dt = new DataTransfer();
         dt.items.add(f);
         ta.focus();
-        ta.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        ta.dispatchEvent(new ClipboardEvent('paste', {
+          clipboardData: dt, bubbles: true, cancelable: true
+        }));
         setTimeout(step, GAP);
       };
       step();

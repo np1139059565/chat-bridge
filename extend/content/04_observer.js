@@ -246,6 +246,15 @@
         for (let i = 0; i < P.generatingSelectors.length; i++) {
           if (document.querySelector(P.generatingSelectors[i])) { nowGen = true; break; }
         }
+        // GLM 专项（2026-11-08 事故修复）：m-three-row 在「输入框有多行内容」时同样出现
+        //（输入区随内容变高），选择器命中≠生成中。站点配了 generatingRequireEmptyInput
+        // 时，命中后还需输入框为空才算生成中——生成中输入框必为空（文本已随发送清空）。
+        // 代价与取舍：生成期间用户手动输入会使判定翻回空闲（假阴性），此时粘贴不挂起；
+        // GLM 生成中本就允许输入排队发送，假阴性危害远小于死锁，可接受。
+        if (nowGen && P.generatingRequireEmptyInput) {
+          const ta = document.querySelector(P.inputSelector);
+          if (ta && String(ta.value || '').trim() !== '') nowGen = false;
+        }
       } else {
         const btn = document.querySelector(P.sendButton);
         if (!btn) return;

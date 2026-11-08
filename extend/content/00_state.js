@@ -123,7 +123,12 @@ window.AIMirrorContent = (function () {
       // GLM 无独立的「发送/停止」按钮，生成态信号写在对话区容器的类名上：
       // 生成中时 .enter.is-main-chat 会带上 m-three-row（多行输出）或 searching（联网搜索），
       // 空闲时这两个类都不出现。命中任一即视为「AI 正在说话」。
-      generatingSelectors: ['.enter.is-main-chat.m-three-row', '.enter.is-main-chat.searching']
+      generatingSelectors: ['.enter.is-main-chat.m-three-row', '.enter.is-main-chat.searching'],
+      // 2026-11-08 事故修复：m-three-row 在「输入框有多行内容」时同样出现（输入区随内容
+      // 变高），选择器命中≠生成中。置 generatingRequireEmptyInput=true：命中时还需输入框
+      // 为空（生成中输入框必为空——文本已随发送清空）才算生成中，拆掉「粘贴多行文本→
+      // 误判生成中→回车挂起→文本滞留→持续误判」死锁。判定逻辑见 04_observer.js。
+      generatingRequireEmptyInput: true
     },
     deepseek: {
       label: 'DeepSeek',

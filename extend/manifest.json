@@ -29,6 +29,7 @@
         "content/01_panel.js",
         "content/02_blocks.js",
         "content/03_bridge.js",
+        "content/03b_paste.js",
         "content/04_observer.js",
         "content/06_picker.js",
         "content/07_stopped_watch.js",

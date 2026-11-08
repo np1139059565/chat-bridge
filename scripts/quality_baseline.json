@@ -4,7 +4,7 @@
     {
       "check": "dup",
       "file": "<duplicates>",
-      "count": 58
+      "count": 103
     },
     {
       "check": "pyfunc",
@@ -199,7 +199,7 @@
     {
       "check": "pyfunc",
       "file": "flask_server\\remote_bridge\\message_parse.py",
-      "count": 2
+      "count": 1
     },
     {
       "check": "pyfunc",
