@@ -879,3 +879,46 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
   2. 08g 输入框样式与设置页其他输入框严重不搭（未复用现有主题输入类）；
   3. 应像其他设置一样输入后自动保存（防抖），去掉「保存全部站点档案」按钮。
   → 三项已修复（同轮提交）：①②同根——02f 重写为零硬编码色值（颜色全令牌，暗色下现值清晰可读）；③ 移除保存按钮，字段输入 800ms 防抖自动写回（成功静默、失败 toast），增删站点/字段即时排队保存。
+- 批 4 实机复验（2026-11-08，用户浏览器实测）新增 3 项，待修复：
+  1. 站点档案卡片内字段行贴死卡片左右边框（tc-row 无水平内边距），标签文字顶边看不清——卡片体内衬留白（02f 布局修）；
+  2. profiles 选择器输入框未复用指令编辑器的 JS 表达式能力（写不了 `Array.from(document.querySelectorAll(...))` 这类精确控制）——对齐指令的表达式求值链路，definition 提示同步；
+  3. 【新情况】消息卡片「执行/重新执行」点击抛 `TypeError: ctx.onExecuteClick is not a function`（07_cards.js onClick）；「复制」按钮无反应、剪贴板无变化——排查 ctx 方法挂载与复制实现（clipboard 激活过期 / iframe 焦点丢失均会静默失败，需 execCommand 兜底）。
+  → 批4·b 定位与修复：③根因 = 06b_execute_ui.js 迁移时把 onExecuteClick/onResultClick 挂到命名空间 D 而非 D.methods（07_cards 经 ctx 调用，ctx 是 Vue 实例），两症状同根（点击即抛 TypeError，「复制无反应」实为同一报错）；已改挂 methods。①已加 .sp-site-card .tc-body 水平内衬。②（采集/定位字段 JS 表达式）取证中：点击类字段已走主世界支持表达式，采集类受隔离世界 CSP 限制，方案 = 主世界求值 + DOM 标记桥接，下轮实施。
+  → 批4·c（2026-11-08）：①③已修复并推送（commit 093e65f，全闸绿）；②按用户指示暂缓，实施蓝图见文末「批 5 准备」。
+
+## 批 5 准备（2026-11-08 收尾登记：下次开工直接照此执行，无需重新取证）
+
+### 任务 A：② 采集/定位字段支持 JS 表达式（主世界求值 + DOM 标记桥接；阶段 1 = 试运行链路）
+
+根因回顾：
+- 点击类字段已支持任意 JS 表达式：06_picker.js testProfileField L344-352 click 分支 → A.execClick（L216 起）→ injected_clipboard.js 主世界 new Function 求值（L69），不受扩展 CSP 限制。
+- 采集/定位类不支持：locate 分支 L353-383 只做逐行 document.querySelectorAll，完整表达式在 L354 被整体拒绝（提示改走点击测试）。根因 = 隔离世界 CSP 禁 new Function（06_picker.js L197-199、injected_clipboard.js L7-11 注释）。
+
+实施步骤（按序执行，完成后走全闸）：
+1. extend/content/injected_clipboard.js：在 click 处理器（L56-93，协议 {source:'ai-mirror-exec', type:'click', reqId, expr, mode}）旁新增 type:'locate' 分支——求值口径同 L69 → collectElements（L43-48）规整 → 命中元素逐个 setAttribute('data-aim-mark', reqId)（先清同 reqId 旧标记）→ 回传 {source:'ai-mirror-exec', type:'locate_result', reqId, ok, reason, count, error}，reason 沿用 invalid / not_found 口径。
+2. extend/content/06_picker.js：仿 execClick（含 _execPending 登记与 EXEC_TIMEOUT=3000 看门狗）新增 A.execLocate(expr, onResult)——发 {type:'locate', reqId, expr}；收到 locate_result 后在隔离世界按标记属性（data-aim-mark=本轮 reqId）querySelectorAll 取回元素（DOM 两世界共享，标记可读）；回调 (ok, reason, count, firstEl)；读完即移除标记；超时看门狗同口径。
+3. testProfileField locate 分支改造（L353-383）：逐行判定——行内含 document. 或 querySelector（口径同 L344）则该行走 A.execLocate（多行串行，逐行计入 hit/miss，首个命中参与高亮）；纯选择器行保持现行 querySelectorAll 路径不动；删除 L354 的整体拒绝。
+4. extend/dialog/parts/08g_site_profiles.js：采集/定位类字段 placeholder 由「每行一条选择器」改为「每行一条选择器，可写完整 JS 表达式」（L196 点击类提示保持）；PROFILE_FIELD_META 相应注释同步。
+5. 测试：新增 flask_server/tests/js/test_picker_locate.test.js（node vm + 假 window/document/postMessage 模拟主世界回执与标记读写；断言：表达式行命中统计、标记写入与清理、看门狗超时、纯选择器行不受影响）。
+6. definition.yaml 与后端 sanitize_profiles：确认表达式字段（含括号/引号/点号）不被长度与字符校验拦截；definition 内字段提示文案同步「支持完整 JS 表达式」。
+
+阶段 2（消费端，改动面大，单独立项再评估，勿混入下轮）：02_blocks.js extractBlocks / makeAssistant（L216-280）以同步 querySelectorAll 消费 P.item 等字段；表达式求值必须经主世界（异步 postMessage 桥接）→ 需把「档案表达式字段解析」前置为异步标记刷新步骤（或 profile 应用时在主世界预解析），observer 巡检链路需 async 化，牵连 04_observer 与 sendPage，先出设计再动手。
+
+### 任务 B（批 4 实机新增问题 4）：GLM 自动执行「粘贴后不回车」
+
+症状：自动回传链路（卡片 auto_send → 05_index.js L84 → A.pasteToWebpageAI）在 GLM 页面经常完成粘贴但发送未触发，间歇复现 → 工具结果停在输入框、GLM 收不到 [TOOL_RESULT]、整条工具调用链中断。
+
+本轮只读取证锚点与实现事实（2026-11-08）：
+- pasteToWebpageAI 定义：extend/content/03_bridge.js L184；waitSendReady 定义：extend/content/03_bridge.js L233。
+- 实现事实：粘贴用 insertText=无；派发 Enter=有；KeyboardEvent=有；调用 waitSendReady=有；引用 sendButton=有。
+- GLM 档案（00_state.js L99-L136）：inputSelector=有（#search-input-box textarea, textarea.scroll-display-none）；sendButton=未配置；sendButtonDisabledMark=未配置（该标记仅 DeepSeek 配置，见 00_state.js L199-202 注释——其他站点不配则 waitSendReady 跳过禁用检查）。
+
+假设（按可能性排序，待实机证实）：
+1. 就绪竞速（最可能）：GLM 无禁用标记 → waitSendReady 跳过检查 → 粘贴后立即派发回车，GLM 前端（Vue 受控输入）尚未消化输入、发送按钮仍禁用 → Enter 落空；机器/页面繁忙度差异造成「经常但不总是」。
+2. 粘贴未触发 input 事件（直接赋 value 类写法）→ GLM 内部状态不更新、按钮永不激活（若属实应「总是」失败，与「经常」不符，视实现事实降级或排除）。
+3. 合成 Enter 的 isTrusted=false 被 GLM 忽略，或派发目标/焦点不对（粘贴后焦点丢失）。
+
+下轮首步（取证 → 修复）：
+- 复看 pasteToWebpageAI 与 waitSendReady 全文（本轮已 dump 实现窗口，必要时重取），理清「粘贴 → 就绪等待 → 回车派发」时序；
+- 实机：粘贴完成后立即查发送按钮 disabled / aria-disabled 与输入框 value（成功与失败各采一次，截图留证）；
+- 修复方向（择一或组合）：① GLM 档案补 sendButtonDisabledMark（实机抓禁用态类名；若禁用是属性而非类名，需扩展 waitSendReady 支持属性判定）；② 粘贴后轮询「输入框 value 已含目标文本 + 发送按钮可用」再派发回车（带超时兜底）；③ 回车落空兜底改 click 发送按钮。

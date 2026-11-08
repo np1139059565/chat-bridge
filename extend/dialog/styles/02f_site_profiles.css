@@ -38,6 +38,9 @@
   background: transparent; color: var(--cb-danger); border: 1px solid var(--cb-danger); border-radius: 4px; }
 .sp-site-del.armed { background: var(--cb-danger); color: var(--cb-on-primary); border-color: var(--cb-danger); }
 
+/* 卡片展开体：给 tc-row 留水平内衬，避免文字贴死卡片边框（实机批4①） */
+.sp-site-card .tc-body { padding: 6px 12px 12px; }
+
 /* 字段分组 */
 .sp-group { margin-top: 10px; }
 .sp-group-title {
