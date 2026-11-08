@@ -906,6 +906,10 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 阶段 2（消费端，改动面大，单独立项再评估，勿混入下轮）：02_blocks.js extractBlocks / makeAssistant（L216-280）以同步 querySelectorAll 消费 P.item 等字段；表达式求值必须经主世界（异步 postMessage 桥接）→ 需把「档案表达式字段解析」前置为异步标记刷新步骤（或 profile 应用时在主世界预解析），observer 巡检链路需 async 化，牵连 04_observer 与 sendPage，先出设计再动手。
 
 ### 任务 B（批 4 实机新增问题 4）：GLM 自动执行「粘贴后不回车」
+> **批4·k 状态更新（2026-11-09 凌晨）**：推送批4·j 时远端又进 7bf1c3f「fix(content): 富文本编辑器输入框改走 paste 事件」——输入框写入从「原生 value setter + input 事件」（批4·d 取证事实，上文「实现事实」中该项据此过时）改为派发 ClipboardEvent paste。若 GLM 输入框实为富文本编辑器，原生 setter 本就写不进或框架不认——这正是「粘贴后不回车」的最大嫌疑根因，且疑似已被该修复覆盖。现盘复核：写入方式已换：现盘 03_bridge 已含 ClipboardEvent（paste 事件路径），原生 setter 仍并存（迁移未彻底或双路径）。
+> **开工顺序调整（覆盖原「下轮首步」）**：先实机验证 7bf1c3f 效果——重载扩展 → 触发一次卡片执行回传，观察粘贴后是否自动发送；若已修复，任务 B 直接关闭，登记验证结果即可；若仍复现，再按原蓝图实机取证定案（控制台三类日志 + 现场截图）与修复方向②（回车落空自检兜底）。
+> **锚点提醒**：03_bridge.js 因 7bf1c3f 行号再漂移，回传链定位一律以函数名 grep 为准（writeInputValue / pasteToWebpageAI / waitSendReady / pressEnter），行号仅参考。
+
 
 症状：自动回传链路（卡片 auto_send → 05_index.js L84 → A.pasteToWebpageAI）在 GLM 页面经常完成粘贴但发送未触发，间歇复现 → 工具结果停在输入框、GLM 收不到 [TOOL_RESULT]、整条工具调用链中断。
 
