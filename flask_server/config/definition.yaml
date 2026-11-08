@@ -62,6 +62,29 @@ app:
       userContent: .question-txt
       userItem: .conversation.question, .question, [id^="row-question"]
       userName: .user-name
+    qianwen:
+      assistantContent: .qk-markdown
+      assistantItem: .chat-answers-card-wrap
+      container: '[class*=message-list-content-container]'
+      convIdUrl: \/chat\/([0-9a-zA-Z]+)
+      generatingSelectors:
+      - button[aria-label="停止回答"]
+      historyContainer: '[class*=sider-scrollbar], aside'
+      historyItem: .sider-scrollbar [class*="cursor-pointer"][class*="rounded-8"]
+      historySelectedMark: ''
+      hosts:
+      - qianwen.com
+      inputSelector: div[contenteditable="true"][role="textbox"]
+      item: .chat-round
+      label: 通义千问
+      newConversation: '#new-nav-tab-wrapper > div > div > div.relative.flex.min-h-0.flex-1.flex-col
+        > div > div.relative.grid.min-h-0.min-w-0.flex-1.grid-cols-\\[minmax\\(0\\,1fr\\)\\].grid-rows-\\[minmax\\(0\\,1fr\\)\\].overflow-hidden
+        > div > div.newChatReveal-OikAdB.newChatRevealFlat-hnO8At > div > div > div
+        > div'
+      sendButton: button[aria-label="发送消息"]
+      split: true
+      userContent: .question-text-card
+      userItem: .chat-question-wrap
     wenxin:
       answerWrap: .ai-entry-block.ai-markdown
       assistantItem: .conversation-flow-answer-container
@@ -82,26 +105,21 @@ app:
       thinking: '[class*=ai-thinking-steps]'
       userContent: .cs-question-pure-text
       userItem: .conversation-flow-question-container
-    qianwen:
-      assistantContent: .qk-markdown
-      assistantItem: .chat-answers-card-wrap
-      container: '[class*=message-list-content-container]'
-      convIdUrl: \/chat\/([0-9a-zA-Z]+)
-      generatingSelectors:
-      - button[aria-label="停止回答"]
-      historyContainer: '[class*=sider-scrollbar], aside'
-      historyItem: '.sider-scrollbar [class*="cursor-pointer"][class*="rounded-8"]'
-      historySelectedMark: ''
+    yuanbao:
+      assistantContent: .hyc-common-markdown
+      assistantMark: .agent-chat__bubble--ai
+      container: .agent-chat__list__content
+      convIdUrl: /chat/([A-Za-z0-9]+)
       hosts:
-      - qianwen.com
-      inputSelector: div[contenteditable="true"][role="textbox"]
-      item: .chat-round
-      label: 通义千问
-      newConversation: .newChatReveal-OikAdB
-      sendButton: button[aria-label="发送消息"]
-      split: true
-      userContent: .question-text-card
-      userItem: .chat-question-wrap
+      - yuanbao.tencent.com
+      inputSelector: .ql-editor
+      item: .agent-chat__bubble
+      label: 腾讯元宝
+      newConversation: .yb-new-chat-entry__item
+      sendButton: '[class*=SendButton_sendButton]'
+      sendButtonDisabledMark: SendButton_disabled
+      split: false
+      userContent: .agent-chat__bubble__content
 custom_tools:
   tools:
   - name: json_validate
