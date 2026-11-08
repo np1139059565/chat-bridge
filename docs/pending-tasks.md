@@ -909,6 +909,8 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 > **批4·k 状态更新（2026-11-09 凌晨）**：推送批4·j 时远端又进 7bf1c3f「fix(content): 富文本编辑器输入框改走 paste 事件」——输入框写入从「原生 value setter + input 事件」（批4·d 取证事实，上文「实现事实」中该项据此过时）改为派发 ClipboardEvent paste。若 GLM 输入框实为富文本编辑器，原生 setter 本就写不进或框架不认——这正是「粘贴后不回车」的最大嫌疑根因，且疑似已被该修复覆盖。现盘复核：写入方式已换：现盘 03_bridge 已含 ClipboardEvent（paste 事件路径），原生 setter 仍并存（迁移未彻底或双路径）。
 > **开工顺序调整（覆盖原「下轮首步」）**：先实机验证 7bf1c3f 效果——重载扩展 → 触发一次卡片执行回传，观察粘贴后是否自动发送；若已修复，任务 B 直接关闭，登记验证结果即可；若仍复现，再按原蓝图实机取证定案（控制台三类日志 + 现场截图）与修复方向②（回车落空自检兜底）。
 > **锚点提醒**：03_bridge.js 因 7bf1c3f 行号再漂移，回传链定位一律以函数名 grep 为准（writeInputValue / pasteToWebpageAI / waitSendReady / pressEnter），行号仅参考。
+> **批4·l 证据更正（2026-11-09，7bf1c3f diff 细读后；上条「疑似已被覆盖」与「现盘复核…迁移未彻底」两表述作废）**：①7bf1c3f 修复对象是千问（Slate）与元宝（Quill）的 contenteditable 编辑器——原症状「setter 抛 Illegal invocation、框里没字、根本没办法输入」；GLM 输入框是 textarea（inputSelector＝「#search-input-box textarea, textarea.scroll-display-none」，isRichEditor 判 false），走原生 setter 分支，该分支 7bf1c3f 仅加 try/catch 兜底（GLM setter 从不抛错，兜底不触发），行为零变化。②用户症状「文本已粘贴进框、仅不发送」与该修复症状不同类——任务 B 未被 7bf1c3f 覆盖；上条「先验证 7bf1c3f、已修复则关闭」顺序作废，恢复原蓝图：实机复现取证定案（控制台三类留痕+现场截图）→ 修复方向②（回车落空自检兜底）首选。③批4·d 实现事实「原生 setter 写入」对 GLM（textarea）仍成立，上条「据此过时」范围收窄为仅富文本站点（现走 paste）。④上条「现盘复核」的「仍并存（迁移未彻底或双路径）」系检测口径误判：ClipboardEvent 在 03_bridge 本就用于附件粘贴，现为按输入框类型分流的既定设计（新增 03c_rich_editor.js：isRichEditor/writeRichEditor/clearRichEditor）。⑤方向② 的「查输入框 value」判据仅对 textarea（GLM）有效，富文本站点需另行判据（参考 03c 的 isRichEditor / clearRichEditor）。
+
 
 
 症状：自动回传链路（卡片 auto_send → 05_index.js L84 → A.pasteToWebpageAI）在 GLM 页面经常完成粘贴但发送未触发，间歇复现 → 工具结果停在输入框、GLM 收不到 [TOOL_RESULT]、整条工具调用链中断。
@@ -979,3 +981,12 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 3. 清偿后再开任务 A（②蓝图施工）与任务 B（GLM 粘贴不回车实机复现定案）。
 
 **本提交口径**：复用批4·d/e 文档轮轻闸判定（本会话新增违规＝0）+ 归因实证豁免；闸债登记在案，批 5 首项清偿。
+
+
+### 批4·l 收尾补正（2026-11-09 凌晨终轮；本会话到此停手——用户指示暂停实施，代码零变更）
+
+- **任务 B 状态最终定版**（详见任务 B 段内「批4·l 证据更正」）：7bf1c3f 修复的是千问（Slate）/元宝（Quill）contenteditable 编辑器「写不进」问题；GLM 输入框为 textarea，走原生 setter 分支零变化——**任务 B 未被覆盖、维持开放**，批4·k「先验证 7bf1c3f、已修复则关闭」作废；原蓝图（实机复现取证定案）与修复方向②（回车落空自检兜底）恢复首选。附带更正：批4·k「迁移未彻底」为检测口径误判（分流为既定设计）；批4·d「实现事实」过时范围收窄为仅富文本站点。
+- 096151c feat(profiles): 讯飞星火站点档案（批4·k 推送被拒 fetch 所得，rebase 集成为 631bf01）：flask_server/config/definition.yaml——未触及 00_state.js，任务 A/B 锚点不受影响。
+- 闸债现值复测（本轮探针，相对批4·j 登记）：quality 新增 3 处（出现 2 处：skills\debug_chrome\extension\content\01_config.js L73  skills\debug_；出现 2 处：skills\debug_chrome\extension\content\01_config.js L74  skills\debug_；出现 2 处：skills\debug_chrome\extension\content\01_config.js L75  skills\debug_；L73 对由「已知」转「新增」，两次运行间 skills/scripts 零变更，L73 转新增机制待下轮复核 quality 基线判定逻辑）；js-tests # tests 287 / # pass 287 / # fail 0；红 13 文件（基线外：extend\content\00_state.js、extend\content\02_blocks.js、extend\content\03_bridge.js）；pytest .............................                                            [100%] / 893 passed in 33.70s。P0 清偿范围不变：01_config.js↔05_tool-handlers.js 重复对以实测清单为准全部收敛 + 00_state/02_blocks（含远端新增代码）覆盖率回基线，勿调基线掩盖。
+- **开工顺序（终版）**：1) 任务 B 实机复现取证——重载扩展 → 触发一次卡片执行 → 观察粘贴后是否自动发送、控制台三类留痕（[生成态] 翻转 / [回传守卫] 冲刷 / 回传放弃），零代码随时可做；2) P0 闸债清偿；3) 任务 A（②表达式桥接蓝图施工，06_picker/injected_clipboard/08g 未受远端影响，锚点以函数名 grep 为准）；4) 任务 B 按实机结果实施（方向②首选；「查 value」判据仅适用 textarea 站点）。
+- 批4·d~l 收尾链全部落档。03_bridge 现锚点（批4·l 实测）：writeInputValue L176、pasteToWebpageAI L210、waitSendReady L259、pressEnter L279；03c_rich_editor：isRichEditor L26、writeRichEditor L43、clearRichEditor L68。
