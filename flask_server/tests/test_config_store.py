@@ -187,3 +187,49 @@ class TestProfiles(_CfgBase):
         self.assertNotIn("maxRetry", out["glm"])
         self.assertEqual(out["glm"]["newConversation"], "")
         self.assertEqual(out["glm"]["scrollToBottomButton"], ["a", "b"])
+
+
+class TestDeriveSiteProfiles(unittest.TestCase):
+    """derive_site_profiles：域名映射一律由档案 hosts 派生。
+
+    背景：site_profiles 是冗余的历史字段，真正被消费的是每个档案自己的 hosts。
+    两处分别维护必然漂移——实际发生过两次：POST /config 只带 profiles 时，
+    内存里的 site_profiles 仍是旧值，写盘把文件里刚补的新站点映射覆盖掉。
+    本测试锁定「映射由档案派生、不再独立维护」这条不变量。
+    """
+
+    def test_多域名档案全部展开(self):
+        """一个档案可声明多个域名，每个都映射到它。"""
+        out = config_store.derive_site_profiles({
+            "glm": {"hosts": ["chatglm.cn", "chatglm.com"]},
+            "deepseek": {"hosts": ["deepseek.com"]},
+        })
+        self.assertEqual(out, {
+            "chatglm.cn": "glm",
+            "chatglm.com": "glm",
+            "deepseek.com": "deepseek",
+        })
+
+    def test_新增站点自动进入映射(self):
+        """新增站点只要写了 hosts，映射自动出现，无需另改 site_profiles。"""
+        out = config_store.derive_site_profiles({
+            "yuanbao": {"hosts": ["yuanbao.tencent.com"]},
+        })
+        self.assertEqual(out.get("yuanbao.tencent.com"), "yuanbao")
+
+    def test_hosts_为字符串时按单元素处理(self):
+        """hosts 容忍字符串写法，不因类型宽松而丢映射。"""
+        out = config_store.derive_site_profiles({"x": {"hosts": "x.com"}})
+        self.assertEqual(out, {"x.com": "x"})
+
+    def test_空与非法输入不抛异常(self):
+        """档案集为空 / 非字典 / 条目非法时安全返回空映射。"""
+        self.assertEqual(config_store.derive_site_profiles(None), {})
+        self.assertEqual(config_store.derive_site_profiles([]), {})
+        self.assertEqual(config_store.derive_site_profiles({"a": "junk"}), {})
+        self.assertEqual(config_store.derive_site_profiles({"a": {}}), {})
+
+    def test_域名大小写与空白被规整(self):
+        """域名统一小写去空白，避免大小写差异导致匹配失败。"""
+        out = config_store.derive_site_profiles({"a": {"hosts": [" A.COM ", ""]}})
+        self.assertEqual(out, {"a.com": "a"})

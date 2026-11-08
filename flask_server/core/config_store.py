@@ -102,7 +102,9 @@ def init_config():
         "flask": raw.get("flask", {}) or {},
         "limits": raw.get("limits", {}) or {},
         "default_profile": raw.get("default_profile", "glm"),
-        "site_profiles": raw.get("site_profiles", {}) or {},
+        # site_profiles 一律由档案 hosts 派生，忽略文件里的同名字段：
+        # 该字段是冗余历史遗留，两处分别维护必然漂移（详见 derive_site_profiles）。
+        "site_profiles": derive_site_profiles(sanitize_profiles(raw.get("profiles", {}))),
         "profiles": sanitize_profiles(raw.get("profiles", {})),
         "tools": raw.get("tools", {}) or {},
     }
@@ -117,15 +119,70 @@ def init_config():
     return cfg
 
 
+def derive_site_profiles(profiles):
+    """由站点档案的 hosts 字段派生「域名 → 档案 id」映射。
+
+    site_profiles 是历史遗留的冗余字段：真正被消费的是每个档案自己的 hosts
+    （前端 guessProfile 遍历 PROFILES[].hosts 匹配当前域名），此映射并不参与解析。
+    既然是冗余，就必须只有一个真源，否则必然漂移——实际发生过两次：
+    后端 POST /config 只带 profiles 时，内存里的 site_profiles 仍是旧值，
+    写盘时把文件里刚补的新站点映射又覆盖掉，配置文件与档案集长期不一致。
+
+    因此写盘前一律从 profiles 重新派生：新增站点只要在档案里写了 hosts，
+    映射自动出现，不再需要两处手工维护。
+
+    @param {dict} profiles 站点档案集
+    @returns {dict} 域名到档案 id 的映射
+    """
+    out = {}
+    if not isinstance(profiles, dict):
+        return out
+    for pid, entry in profiles.items():
+        if not isinstance(entry, dict):
+            continue
+        for h in _normalized_hosts(entry.get("hosts")):
+            # 同一域名被两个档案同时声明时保留先出现的，属配置冲突，由人工裁决
+            if h not in out:
+                out[h] = pid
+    return out
+
+
+def _normalized_hosts(raw):
+    """把档案的 hosts 字段规整为去空白、统一小写的域名列表。
+
+    容忍字符串写法（单域名）与非法类型：非字符串项被丢弃，空串被剔除。
+    抽成独立函数是为了把类型归一化的分支从 derive_site_profiles 里挪出去，
+    让后者只表达「遍历档案、填映射」这一件事。
+
+    @param raw hosts 原始值，可为列表、字符串或其它
+    @returns {list} 规整后的域名列表
+    """
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        host = str(item or "").strip().lower()
+        if host:
+            out.append(host)
+    return out
+
+
 def _definition_snapshot(cfg):
-    """定义分区快照：入版本库、跨机器共享的键。"""
+    """定义分区快照：入版本库、跨机器共享的键。
+
+    site_profiles 不直接取内存值，而是由 profiles 的 hosts 派生，
+    保证「域名映射」与「档案本体」永不脱节（详见 derive_site_profiles）。
+    """
     flask = cfg.get("flask", {})
+    profiles = cfg.get("profiles", {})
     return {
         "flask": {"host": flask.get("host", "127.0.0.1")},
         "limits": cfg.get("limits", {}),
         "default_profile": cfg.get("default_profile", "glm"),
-        "site_profiles": cfg.get("site_profiles", {}),
-        "profiles": cfg.get("profiles", {}),
+        "site_profiles": derive_site_profiles(profiles),
+        "profiles": profiles,
     }
 
 
