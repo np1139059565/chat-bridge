@@ -58,3 +58,10 @@
 - execCommand('insertText') 在受控组件页面已知失效。**修正（v2 实测）**：value setter 方案仅适用 textarea/input；contenteditable 用 paste 事件（ClipboardEvent + DataTransfer）；execCommand delete 亦只改 DOM 不同步 React state（详见第 8-10 条）。
 - ForwardTimeout（外部工具未在时限内被执行）＝扩展侧瞬态离线，请求已入队未取走；原样重试即恢复，无需改载荷。
 - 本地目录搜索 0 命中时先怀疑路径层级猜错（本例实际路径多一层 skills/debug_chrome/），用 search_file 精确文件名先校准路径，再搜内容。
+
+## 链路验证与工具修复（2026-11-08 晚）
+
+- 端到端实机通过：drawer 内 exec_js 卡片完成，适配器 send 成功（sent 全文返回、sendErr null），千问 AI 正常回复。
+- 超时（取走前）根因：执行方轮询随 drawer 后台化停摆（Chrome 节流），非代码缺陷；已登记 pending-tasks。
+- send_to_qianwen「未知工具」：根因为 09 被误配进 content_scripts（页面上下文注册无效），已移出并按轮询证据补挂执行方上下文。
+- editorLeftover 返回「间干间搜间」为反爬混淆 placeholder 误报，已登记待修。

@@ -744,6 +744,28 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 
 **优先级**：P3（桥接产品侧跟进）。
 
+### debug_chrome 执行方轮询随 drawer 后台化停摆（P1，待设计）
+
+**现象**（2026-11-08 实机）：工具调用排队后超时（ForwardTimeout），均发生在「取走前」、无副作用；保持 drawer.html 开启且目标标签页前台后同链路立即恢复（exec_js 卡片完成、千问 AI 正常回复）。
+
+**根因**：任务轮询跑在drawer 页；Chrome 对后台/休眠标签页节流定时器，drawer 后台化或关闭即断链。
+
+**方向**：轮询下沉 service worker 并以 chrome.alarms 兜底（或 offscreen 保活）；drawer 断连时界面显著提示。
+
+**规避**（当下）：保持 drawer 页开启、目标标签页前台。
+
+**优先级**：P1。
+
+### qianwen 适配器 editorLeftover 误报 placeholder（P2，待修）
+
+**现象**（2026-11-08 实机）：send 成功后返回 editorLeftover="间干间搜间"——千问编辑器 placeholder「问千问提问」经反爬字体混淆后的错码点文本（问→间、千→干、提→搜，逐字形近错位），并非真实残留。
+
+**根因方向**：残留判定未排除 placeholder；页面字体混淆使 textContent 与明文不可直接比对。
+
+**方向**：send 前记录编辑器文本，发送完成后仅当残留与发送前文本一致才判残留。
+
+**优先级**：P2。
+
 ## 三、已关闭
 
 | 问题 | 结论 | 依据 |
