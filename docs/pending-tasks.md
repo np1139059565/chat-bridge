@@ -916,15 +916,20 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 批4·e 证据更新（取证回读，2026-11-08）——三项新事实，已据此修订下方假设与修复方向：
 - ① 秒放行实锤：GLM 档案未配置 sendButton → waitSendReady（03_bridge.js L236-237，if (!sel) { done(); return; }）直接放行，连按钮存在性都不检查，回车前唯一缓冲 = pasteToWebpageAI L208 的 500ms 固定延时；原「跳过禁用检查」的表述低估了问题。
 - ② 历史死锁关联：00_state.js L127-135 注释记录 2026-11-08 修复的死锁——粘贴多行文本 → 输入区变高触发 .enter.is-main-chat.m-three-row → 误判生成中 → 回车挂起 → 文本滞留 → 持续误判；修复手段 generatingRequireEmptyInput=true（生成中输入框必为空）。当前症状疑为该链残留或姊妹形态，重点排查守卫二挂起与冲刷链路。
-- ③ 挂起/冲刷与第二条实现：守卫二（03_bridge.js L213-216）回车前查 isGenerating，命中转 enter_only 挂起；03_bridge.js L345/L348 另有 waitSendReady 引用（疑为挂起冲刷或图片粘贴流程）；03b_paste.js L81/L90 另有 pasteToWebpageAI 与 Enter 引用（疑为图文合一第二条粘贴实现）。粘贴写入方式已实锤为原生 value setter + dispatchEvent(input)（03_bridge.js L170-172 writeInputValue）——原假设「粘贴未触发 input 事件」据此排除。
-- 下轮取证补看清单（按序）：03_bridge.js L320-380（_suspendPaste 与冲刷实现）→ 03b_paste.js L55-112（第二条实现）→ 04_observer.js 生成态判定（generatingRequireEmptyInput 消费点与 isGenerating 更新时机）→ 实机复现看控制台 warn 日志（守卫二触发会留痕）与发送按钮禁用态截图。
+- ③ 挂起/冲刷与第二条实现：守卫二（03_bridge.js L213-216）回车前查 isGenerating，命中转 enter_only 挂起；03_bridge.js L345/L348 另有 waitSendReady 引用（批4·f 已证＝附件粘贴流程自身的就绪等待，非冲刷；真正的冲刷在 03b_paste.js）；03b_paste.js L81/L90 另有 pasteToWebpageAI 与 Enter 引用（批4·f 已证＝挂起冲刷模块：L81 冲刷时重放文本粘贴、L90 为 enter_only 补回车）。粘贴写入方式已实锤为原生 value setter + dispatchEvent(input)（03_bridge.js L170-172 writeInputValue）——原假设「粘贴未触发 input 事件」据此排除。
+- 下轮取证补看清单（批4·f 证据落定：代码侧取证至此全部闭环，结论如下）：
+  · 冲刷机制实锤（03b_paste.js）：挂起条目由周期定时器冲刷（setInterval，_pasteFlushTimer），无挂起时清除定时器（L70）；仍在生成则继续挂起（L74）；到期（PASTE_SUSPEND_MAX_MS＝120000ms，extend/content/03b_paste.js:24）逐条如实上报失败「回传放弃」（L57-68）；enter_only 冲刷时重取输入框——有值补回车（L86-90），空则报失败（L87-88）。
+  · 生成态判定实锤（04_observer.js L236-273）：按 BUTTON_POLL_MS＝500ms，extend/content/00_state.js:381 周期轮询生成选择器；generatingRequireEmptyInput（L254-257）：选择器命中且输入框非空 → 判非生成（即死锁修复本身，与多行粘贴场景直接相克）；守卫读的 state.isGenerating 最多陈旧一个轮询周期。
+  · GLM 档案 L127 注释载明「GLM 无独立的发送/停止按钮」——sendButton 未配置的根因；修复方向①实施前必须先实机确认 GLM 是否存在可用 DOM 按钮。
+  · 「已尝试」式成功回执：附件流程链路启动即回 auto_send_result ok:true（03_bridge.js L372），不等也不验证实际发送；文本主流程（L184-220）成功路径无任何回执（批4·f 全量清点：ok 1 处 / fail 7 处）→ 卡片成功态另有来源，方向②的「发送后验空」可统一补齐此洞。
+  · 剩余唯一未取证项＝实机复现观察（控制台日志与现场状态），已并入下方「下轮首步」。
 
 假设（按可能性排序，待实机证实）：
 1. 就绪竞速（最可能，代码路径已实锤）：GLM 未配置 sendButton → waitSendReady 直接 done() 放行、无任何轮询，回车前全部缓冲仅 500ms 固定延时；GLM 前端消化输入超过 500ms 时 Enter 落空，机器/页面繁忙度与文本长度差异造成「经常但不总是」。
-2. 守卫二误挂起 + 冲刷不及时（与历史死锁同族，新升位）：[TOOL_RESULT] 几乎总是多行文本 → 输入区变高触发 m-three-row → 若回车前 A.state.isGenerating 因陈旧快照/边缘条件为 true，守卫二（03_bridge.js L213-216）把回车转 enter_only 挂起；冲刷依赖生成态结束信号，实际无生成时冲刷时机存疑（L345/L348 疑为冲刷流程，待取证）→ 文本滞留输入框，与用户症状吻合。
+2. 守卫二挂起 + 冲刷链（批4·f 后降位为次要候选）：该路径自带完整自愈与如实上报——空闲时定时冲刷、到期报「回传放弃」、冲刷时输入框有值即补回车；结局只有「最终补发成功」或「留下明确失败回执」两种。实机控制台若出现「[回传守卫] 冲刷」或「回传放弃」日志即可锁定此路径；若日志干净而文本滞留，则指向主路径回车落空（假设 1 / isTrusted）。唯一静默滞留形态＝冲刷定时器未运转或 isGenerating 长期陈旧为 true，留实机排除。
 3. 合成 Enter 的 isTrusted=false 被 GLM 忽略，或派发目标/焦点不对（粘贴后焦点丢失）。
 
 下轮首步（取证 → 修复）：
-- 复看 pasteToWebpageAI 与 waitSendReady 全文（本轮已 dump 实现窗口，必要时重取），理清「粘贴 → 就绪等待 → 回车派发」时序；
-- 实机：粘贴完成后立即查发送按钮 disabled / aria-disabled 与输入框 value（成功与失败各采一次，截图留证）；
-- 修复方向（批4·e 修订，择一或组合）：① GLM 档案补 sendButton + sendButtonDisabledMark（实机抓禁用态特征；若为 aria-disabled 或 disabled 属性，需扩展 waitSendReady L244 的判定）；② 回车落空自检兜底：pressEnter 后 300-500ms 查输入框 value 是否被清空（GLM 发送成功即清空输入框），未清空则重派 Enter 一次或改点发送按钮（带上限与失败回传 auto_send_result）；③ 挂起冲刷健壮化：enter_only 挂起加超时兜底（如 10 秒后无条件冲刷）或巡检发现「非生成中且有挂起」立即冲刷；④ isTrusted 被忽略仅在「总是失败」时升级考虑（改 click 发送按钮可天然绕开）。
+- 代码侧取证已闭环（批4·d/e/f 全链路：粘贴→就绪→回车→挂起→冲刷→到期，结论见上方证据块），无需再读代码；
+- 实机复现（唯一剩余取证）：触发一次自动回传，盯控制台三类留痕——「[生成态] 翻转」「[回传守卫] 冲刷」「回传放弃」；滞留现场查输入框 value 与页面有无可用发送按钮（成功/失败各截图一次）——据此在假设 1（回车落空）与守卫链之间定案，并直接选定修复方向；
+- 修复方向（批4·f 终版排序，首选②，①③④可作组合）：② 回车落空自检兜底（首选）：pressEnter 后 300-500ms 查输入框 value 是否被清空（GLM 发送即清空，04_observer.js L251 注释已背书「生成中输入框必为空（文本已随发送清空）」），未清空重派 Enter（上限 1-2 次、间隔递增）仍失败则如实回 auto_send_result ok:false——一并修掉「已尝试」式假成功；站点差异用档案开关控制，GLM 先行。① GLM 档案补 sendButton + 禁用标记：先实机确认 GLM 有无 DOM 发送按钮（档案 L127 注释称无独立按钮，可行性存疑），有则抓禁用特征（类名 / aria-disabled / disabled 属性，需扩展 waitSendReady L244 判定）。③ 到期强补：PASTE_SUSPEND_MAX_MS 到期先「输入框有值则强制补一次回车」再报失败（现行到期直接放弃，03b_paste.js L57-68）。④ isTrusted 合成事件被 GLM 忽略：仅当实机证明重试也总是无效时升级（改点按钮可绕开，依赖①的按钮存在）。
