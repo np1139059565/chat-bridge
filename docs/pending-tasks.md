@@ -24,6 +24,7 @@
 
 
 ### 千问站点档案缺失，页面被当作 GLM 解析导致抓取为空（P1，档案已补，根因待修）
+> 2026-11-09 批4·i 核对：上述「修法」已由 1c0f8aa 落地——00_state.js applyProfiles 末尾重算 A.state.currentSel、容器选择器变化即 reprobe（grep 实证 L321/L322），并新增 test_apply_profiles_container.test.js（111 行）回归。本条目仅剩实机复验，勿重复实现。
 
 **现象**（2026-11-08 实机）：千问页面抽屉「网页对话镜像」恒为 0 条，console 报
 `startObserver: 超时未找到对话容器（.detail.chatScrollContainer...）`——该选择器是 GLM 的容器，
@@ -933,3 +934,44 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 - 代码侧取证已闭环（批4·d/e/f 全链路：粘贴→就绪→回车→挂起→冲刷→到期，结论见上方证据块），无需再读代码；
 - 实机复现（唯一剩余取证）：触发一次自动回传，盯控制台三类留痕——「[生成态] 翻转」「[回传守卫] 冲刷」「回传放弃」；滞留现场查输入框 value 与页面有无可用发送按钮（成功/失败各截图一次）——据此在假设 1（回车落空）与守卫链之间定案，并直接选定修复方向；
 - 修复方向（批4·f 终版排序，首选②，①③④可作组合）：② 回车落空自检兜底（首选）：pressEnter 后 300-500ms 查输入框 value 是否被清空（GLM 发送即清空，04_observer.js L251 注释已背书「生成中输入框必为空（文本已随发送清空）」），未清空重派 Enter（上限 1-2 次、间隔递增）仍失败则如实回 auto_send_result ok:false——一并修掉「已尝试」式假成功；站点差异用档案开关控制，GLM 先行。① GLM 档案补 sendButton + 禁用标记：先实机确认 GLM 有无 DOM 发送按钮（档案 L127 注释称无独立按钮，可行性存疑），有则抓禁用特征（类名 / aria-disabled / disabled 属性，需扩展 waitSendReady L244 判定）。③ 到期强补：PASTE_SUSPEND_MAX_MS 到期先「输入框有值则强制补一次回车」再报失败（现行到期直接放弃，03b_paste.js L57-68）。④ isTrusted 合成事件被 GLM 忽略：仅当实机证明重试也总是无效时升级（改点按钮可绕开，依赖①的按钮存在）。
+
+
+### 批4·h 合并后核对（2026-11-08 深夜：f4d2ab5 推送被拒，干净 rebase 为 6e6faae 已推送；远端并行工作登记与批 5 锚点校准）
+
+背景：批4·f 推送被拒——远端在 be86914 之后进了并行工作（另一实机调试会话）。本地仅一个纯文档提交，干净 rebase 集成、无冲突（远端只加文档头部千问条目，本地只改文末批 5 准备块）。合并后全文「批 5 准备」计数说明：本块加入后为 5 次＝原有 2 处（状态行引用 1 + 章节标题 1）＋本块自身 3 处引用（背景句、本说明句、锚点校准小节）；批4·h 块本身仅 1 个，不存在块级重复
+
+远端并行提交（be86914..25a30b8）：
+- 1c0f8aa fix(debug_chrome): 补千问站点档案，档案热更新同步容器选择器
+- f0ecb43 fix(debug_chrome): 修千问历史项选择器非法导致推送整体中断
+- f188d61 feat(debug_chrome): 新增腾讯元宝站点档案
+- 44f627f fix(debug_chrome): 角色标记支持命中消息项自身（02_blocks.js 改动来源）
+- 2942c99 fix(config): site_profiles 改为由档案 hosts 派生，消除双真源漂移（definition.yaml 结构大改，任务 A 步骤 6 的 definition 语境据此更新：site_profiles 不再手写）
+
+对「批 5 准备」的锚点校准（2026-11-08 实测复核；下轮定位一律以函数名/特征文本 grep 为准，行号仅参考）：
+1. 任务 A 锚点全部有效——06_picker.js / injected_clipboard.js / 08g_site_profiles.js 远端未改动：
+   - 06_picker.js：execClick定义 L216；testProfileField定义 L331；locate整体拒绝行 L354
+   - injected_clipboard.js：ai-mirror-exec协议 L37/40/58/60；collectElements L43/77；newFunction求值 L9/69
+2. 任务 B 行号漂移（远端改了 03_bridge / 04_observer / 05_index / 00_state / 02_blocks；03b_paste.js 未改）：
+   - 03_bridge.js：writeInputValue L175；pasteToWebpageAI定义 L194；waitSendReady调用 L217/355；守卫二 L219；pressEnter调用 L227/365；waitSendReady定义 L243；秒放行if(!sel) L156/247；禁用判定 L248；pressEnter定义 L263；_pasteFilesToWebpageAI L315；守卫四 L358；假成功上报 L382
+   - 03b_paste.js（远端未改，原行号仍准）：_suspendPaste L30；_flushPendingPaste L48；PASTE_SUSPEND_MAX_MS L24
+   - 00_state.js：glm档案块 L99；generatingRequireEmptyInput L135；BUTTON_POLL_MS L393；qianwen档案 未命中；yuanbao档案 未命中
+   - 04_observer.js：startButtonWatch L243；generatingRequireEmptyInput消费 L257/261；翻转日志 L274
+   - 05_index.js：pasteToWebpageAI引用 L84
+   - 02_blocks.js（阶段 2 注记；44f627f 改的是角色标记判定，不碰主链路）：extractBlocks L268；makeAssistant L202
+3. 交叉核对（下轮首查）：远端在文档头部新增「千问站点档案缺失…容器选择器不随档案刷新（P1，根因待修）」条目；但 1c0f8aa 提交信息即「档案热更新同步容器选择器」，且随提交新增 test_apply_profiles_container.test.js（111 行）——修复疑似已落地。本轮实测（批4·i 更正）：首轮取证窗口只截到 applyProfiles 的 L262-307 清洗段，未覆盖其后 L313-327 的刷新段，故误报「未见」——实锤修复已由 1c0f8aa 落地：applyProfiles 末尾按新档案重算 A.state.currentSel、容器选择器变化即 reprobe（远端 diff hunk @@ -313,4 +313,16 @@；现盘 grep 实证 00_state.js L321/L322；配套 test_apply_profiles_container.test.js 111 行回归）。文档头部千问 P1「根因待修」据此过时：勿重复实现，仅剩实机复验
+
+### 批4·j 闸门归因（2026-11-09 凌晨：合并树首次全量闸失败 → 归因远程并行代码；本提交按轻闸+归因豁免放行）
+
+**首次对合并树（6e6faae = 本地批4·f + 远端 1c0f8aa…25a30b8）本地全量闸结果**（mw82nhhz 实测）：
+- quality exit 1：新增违规 2 处——skills\debug_chrome\extension\content\01_config.js L74/L75 与 05_tool-handlers.js L317/L318 重复（另有 L73↔L316 为 [已知] 存量）；
+- js-tests：# tests 279 / # pass 279 / # fail 0（含远端随提交新增 test_apply_profiles_container 与 test_item_marks_mark 系测试文件，266→279），但红 12 文件，基线外新红 = extend/content/00_state.js、extend/content/02_blocks.js（恰为远端并行会话改动的两文件）；
+- pytest 893 全绿（888→893，远端新增 test_config_store 用例）。
+
+**归因结论**：本会话暂存仅 docs/pending-tasks.md，全部失败项所在文件本会话零触碰；quality 另经 stash 实证（暂存收起后在干净 HEAD 复跑，失败一致复现）→ 闸债 100% 来自远端并行合并（1c0f8aa/f0ecb43/f188d61/44f627f/2942c99），非本会话引入；js 项为逻辑归因（.md 不参与覆盖率，红文件零触碰）。
+
+**批 5 首项（P0 闸债，先于任务 A/B 执行）**：
+1. 消重复：skills\debug_chrome\extension\content\01_config.js L73/L74/L75 ↔ 05_tool-handlers.js L316/L317/L318 三对（含已知存量 L73↔L316）一并收敛（提取共享常量或改单处引用），修后 quality_rules.py 应回 exit 0；
+2. 覆盖率回基线：00_state.js（applyProfiles 的 currentSel/reprobe 新段）、02_blocks.js（itemMatchesMark）——先看 check_js_tests 覆盖明细定位未覆盖行再补测（新函数理应带动覆盖，红＝存在未测路径；勿简单调基线掩盖）；
+3. 清偿后再开任务 A（②蓝图施工）与任务 B（GLM 粘贴不回车实机复现定案）。
+
+**本提交口径**：复用批4·d/e 文档轮轻闸判定（本会话新增违规＝0）+ 归因实证豁免；闸债登记在案，批 5 首项清偿。
