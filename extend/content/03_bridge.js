@@ -36,7 +36,17 @@
   A.selectedHistoryItem = function () {
     const P = A.activeProfile();
     if (!P.historyItem) return null;
-    const items = document.querySelectorAll(P.historyItem);
+    // 选择器非法（如配置里写了含空格的属性值又没加引号）时 querySelectorAll 会抛
+    // SyntaxError。历史项选择器只服务于「取会话标题」这一辅助信息，绝不能因为
+    // 它写错就把整次推送炸掉——推送里的消息体才是主产物。故此处兜住异常，
+    // 取不到标题就当没有标题。
+    let items;
+    try {
+      items = document.querySelectorAll(P.historyItem);
+    } catch (e) {
+      A.warn('selectedHistoryItem: 历史项选择器非法，已忽略（' + P.historyItem + '）：' + (e && e.message));
+      return null;
+    }
     if (!items.length) return null;
     const path = location.pathname;
     // 优先：href 与当前路径一致（DeepSeek 这类用 <a> 承载会话的站点，完全不依赖易变的哈希类）

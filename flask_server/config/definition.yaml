@@ -90,7 +90,7 @@ app:
       generatingSelectors:
       - button[aria-label="停止回答"]
       historyContainer: '[class*=sider-scrollbar], aside'
-      historyItem: '[class*=group relative flex justify-between]'
+      historyItem: '.sider-scrollbar [class*="cursor-pointer"][class*="rounded-8"]'
       historySelectedMark: ''
       hosts:
       - qianwen.com
