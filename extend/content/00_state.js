@@ -312,6 +312,18 @@ window.AIMirrorContent = (function () {
     A.PROFILES = out;
     // 档案集变了（可能含新站点 hosts）：按当前页重猜档案，立即生效。
     A.state.profileId = A.guessProfile(A.currentHost());
+    // 容器选择器必须随档案一起刷新。否则「初始化时先拿到出厂兜底档案」的页面
+    // （如新接入站点，出厂表里没有它，guessProfile 兜底成 glm）会把 currentSel
+    // 锁定为兜底档案的容器；档案异步应用成功后也不纠正，观察器一直用错选择器
+    // 重试到超时，表现为「配置看着对、就是抓不到内容」。
+    const applied = A.PROFILES[A.state.profileId] || A.PROFILES.glm;
+    if (applied && applied.container) {
+      const changed = A.state.currentSel !== applied.container;
+      A.state.currentSel = applied.container;
+      // 容器选择器变了且观察器已在运行：立刻按新选择器重新探测，
+      // 不必等用户手动点工具栏图标或刷新页面。
+      if (changed && A.state.containerEl && A.reprobe) A.reprobe();
+    }
     return true;
   };
 

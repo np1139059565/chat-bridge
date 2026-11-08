@@ -23,6 +23,38 @@
 > 穿插：实机验证批量回归（暂缓区九项待验证）；传输管线两端留证比对（依赖实机配合，不定工作量）
 
 
+### 千问站点档案缺失，页面被当作 GLM 解析导致抓取为空（P1，档案已补，根因待修）
+
+**现象**（2026-11-08 实机）：千问页面抽屉「网页对话镜像」恒为 0 条，console 报
+`startObserver: 超时未找到对话容器（.detail.chatScrollContainer...）`——该选择器是 GLM 的容器，
+说明千问页被按 glm 档案解析。
+
+**取证结论**：
+1. `definition.yaml` 的 `app.site_profiles` / `app.profiles` 此前只有 deepseek / glm / wenxin，
+   无千问条目。`git log -S qianwen -- definition.yaml` 仅命中工具注册提交（2726de3），
+   档案从未入库，属遗漏而非被覆盖。
+2. `00_state.js` 的 `guessProfile` 按 host 匹配失败时**兜底返回 glm**，
+   故未登记站点一律按 GLM 选择器解析，必然失配。
+3. 已补千问完整档案（`site_profiles` 加 `qianwen.com → qianwen`；`profiles.qianwen` 含
+   container / item / userItem / userContent / assistantItem / assistantContent /
+   inputSelector / sendButton / generatingSelectors / newConversation / convIdUrl，
+   选择器均经实机 DOM 逐条验证：7 个 `.chat-round` 与 7 组问/答一一对应）。
+   经 `POST /config` 应用后 `/profiles` 已返回 4 档。
+
+**真正的缺陷（待修）**：档案虽已能拉到，但容器选择器不随档案刷新。
+- `A.state.currentSel` 只在初始化 `A.getConfig` 回调与 `pageshow` 里赋值；
+- `A.applyProfiles` 末尾只更新 `A.PROFILES` 与 `state.profileId`，**不更新 currentSel**；
+- 而 `fetchProfiles('inject')` 是异步的，与初始化 `getConfig` 并发。
+  若 `getConfig` 先返回，`currentSel` 就被锁定为出厂兜底（glm）的容器；
+  档案随后应用成功也不会纠正它，`startObserver` 仍用旧选择器重试至超时。
+
+**修法**：`applyProfiles` 应用成功后按新档案重算 `A.state.currentSel`；
+若观察器已在运行且容器选择器变化，重启观察器。
+
+**影响面**：所有未在出厂兜底里的站点首次接入都会踩中，表现为「配置看着对、就是抓不到」。
+
+**优先级**：P1。
+
 ### 原生结构工具调用不被识别（P0，已定位并修复，待实机验证）
 
 **现象**（2026-11-08 ChatGLM 实机截图 + 复现）：`open` / `click` / `find` 等原生格式调用

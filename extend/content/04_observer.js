@@ -69,6 +69,13 @@
    * @param {string} sel 对话容器选择器
    */
   A.startObserver = function (sel) {
+    // 幂等：档案热更新（applyProfiles → reprobe）或抽屉重开都会再次调用本函数。
+    // 先拆掉上一轮观察器与轮询，避免同一个容器挂多份监听导致重复解析、
+    // 同一事件触发多次推送（历史上「卡片双执行」一类问题的温床）。
+    if (A.state.observer) {
+      try { A.state.observer.disconnect(); } catch (e) { /* 已被销毁则忽略 */ }
+      A.state.observer = null;
+    }
     A.state.currentSel = sel;
     const container = document.querySelector(sel);
     if (!container) {
