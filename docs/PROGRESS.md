@@ -62,6 +62,7 @@
 ## 链路验证与工具修复（2026-11-08 晚）
 
 - 端到端实机通过：drawer 内 exec_js 卡片完成，适配器 send 成功（sent 全文返回、sendErr null），千问 AI 正常回复。
-- 超时（取走前）根因：执行方轮询随 drawer 后台化停摆（Chrome 节流），非代码缺陷；已登记 pending-tasks。
-- send_to_qianwen「未知工具」：根因为 09 被误配进 content_scripts（页面上下文注册无效），已移出并按轮询证据补挂执行方上下文。
+- 超时（取走前）根因：命令轮询由宿主页面内容脚本承担（content/03_heartbeat.js，抽屉所在页面轮询取命令），宿主标签页后台化遭 Chrome 定时器节流即停摆——非代码缺陷；已登记 pending-tasks。
+- send_to_qianwen「未知工具」：前轮判定有误，特此更正——「未知工具」文案不在扩展代码内（来自服务侧目录校验），09 按设计作为内容脚本注册（分发在 05_tool-handlers.js），manifest 移除尝试被 JSON 校验正确拦下；真因为服务侧工具目录未声明，已在 skills/debug_chrome/tool.json 补 send_to_qianwen / qianwen_state（executor: external）。
 - editorLeftover 返回「间干间搜间」为反爬混淆 placeholder 误报，已登记待修。
+- 运行侧动作（需用户配合）：chrome://extensions 重载 debug_chrome 扩展，确保运行 v1.2.0（旧实例无 09 注册，服务目录放行后仍会报未知）；轮询修复落地前保持宿主页面前台。

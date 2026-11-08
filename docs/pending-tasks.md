@@ -744,13 +744,13 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
 
 **优先级**：P3（桥接产品侧跟进）。
 
-### debug_chrome 执行方轮询随 drawer 后台化停摆（P1，待设计）
+### debug_chrome 宿主标签页后台化致命令轮询停摆（P1，待设计）
 
 **现象**（2026-11-08 实机）：工具调用排队后超时（ForwardTimeout），均发生在「取走前」、无副作用；保持 drawer.html 开启且目标标签页前台后同链路立即恢复（exec_js 卡片完成、千问 AI 正常回复）。
 
-**根因**：任务轮询跑在drawer 页；Chrome 对后台/休眠标签页节流定时器，drawer 后台化或关闭即断链。
+**根因**：命令轮询由宿主页面内容脚本承担（content/03_heartbeat.js：抽屉存在期间由抽屉所在页面轮询取命令）；Chrome 对后台/休眠标签页节流定时器，宿主标签页后台化即被节流断链（与 drawer iframe 无关；关抽屉停轮询属既有设计）。
 
-**方向**：轮询下沉 service worker 并以 chrome.alarms 兜底（或 offscreen 保活）；drawer 断连时界面显著提示。
+**方向**：轮询下沉 service worker 并以 chrome.alarms 兜底（或 offscreen 保活）；宿主页后台化时在镜像显著提示。
 
 **规避**（当下）：保持 drawer 页开启、目标标签页前台。
 

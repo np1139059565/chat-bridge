@@ -7,10 +7,30 @@
       "description": "按选择器采集元素样式与 DOM 信息。",
       "executor": "external",
       "parameters": [
-        { "name": "selector", "type": "string", "required": true, "description": "CSS 选择器" },
-        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" },
-        { "name": "properties", "type": "array", "required": false, "description": "只采集这些 CSS 属性（如 [\"color\",\"font-size\"]）；省略则返回常用属性集" },
-        { "name": "include_all", "type": "boolean", "required": false, "description": "是否返回全量计算样式（默认 false，返回常用属性）" }
+        {
+          "name": "selector",
+          "type": "string",
+          "required": true,
+          "description": "CSS 选择器"
+        },
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": true,
+          "description": "目标页面的 URL"
+        },
+        {
+          "name": "properties",
+          "type": "array",
+          "required": false,
+          "description": "只采集这些 CSS 属性（如 [\"color\",\"font-size\"]）；省略则返回常用属性集"
+        },
+        {
+          "name": "include_all",
+          "type": "boolean",
+          "required": false,
+          "description": "是否返回全量计算样式（默认 false，返回常用属性）"
+        }
       ]
     },
     {
@@ -18,7 +38,12 @@
       "description": "截取目标页面当前可见区域，返回图片并保存到本地。",
       "executor": "external",
       "parameters": [
-        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" }
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": true,
+          "description": "目标页面的 URL"
+        }
       ]
     },
     {
@@ -26,9 +51,24 @@
       "description": "读取目标页面捕获的 console 记录（log/info/warn/error/debug），供故障分析。",
       "executor": "external",
       "parameters": [
-        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" },
-        { "name": "limit", "type": "number", "required": false, "description": "最多返回最近多少条，默认全部（上限 500）" },
-        { "name": "level", "type": "string", "required": false, "description": "只看某个级别，如 error；省略则全部" }
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": true,
+          "description": "目标页面的 URL"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "最多返回最近多少条，默认全部（上限 500）"
+        },
+        {
+          "name": "level",
+          "type": "string",
+          "required": false,
+          "description": "只看某个级别，如 error；省略则全部"
+        }
       ]
     },
     {
@@ -36,8 +76,18 @@
       "description": "读取目标页面在 DevTools 中捕获的网络请求记录（需该页 DevTools 打开过），供故障分析。",
       "executor": "external",
       "parameters": [
-        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" },
-        { "name": "limit", "type": "number", "required": false, "description": "最多返回最近多少条，默认全部（上限 300）" }
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": true,
+          "description": "目标页面的 URL"
+        },
+        {
+          "name": "limit",
+          "type": "number",
+          "required": false,
+          "description": "最多返回最近多少条，默认全部（上限 300）"
+        }
       ]
     },
     {
@@ -45,8 +95,18 @@
       "description": "在目标页面主世界执行任意 JavaScript，可读写 window / document / localStorage 等，可触发元素点击等操作，支持 await。返回执行结果（复杂对象会做安全序列化）。",
       "executor": "external",
       "parameters": [
-        { "name": "code", "type": "string", "required": true, "description": "要执行的 JavaScript 代码；可写多行，可直接使用 await" },
-        { "name": "page_url", "type": "string", "required": true, "description": "目标页面的 URL" }
+        {
+          "name": "code",
+          "type": "string",
+          "required": true,
+          "description": "要执行的 JavaScript 代码；可写多行，可直接使用 await"
+        },
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": true,
+          "description": "目标页面的 URL"
+        }
       ]
     },
     {
@@ -55,9 +115,62 @@
       "executor": "external",
       "silent": true,
       "parameters": [
-        { "name": "message", "type": "string", "required": true, "description": "推送正文" },
-        { "name": "title", "type": "string", "required": false, "description": "可选标题" },
-        { "name": "no_reply", "type": "boolean", "required": true, "description": "为 true 时不回传执行结果，仅执行推送。用于最后一次总结性推送，避免结果回传再次唤醒 AI" }
+        {
+          "name": "message",
+          "type": "string",
+          "required": true,
+          "description": "推送正文"
+        },
+        {
+          "name": "title",
+          "type": "string",
+          "required": false,
+          "description": "可选标题"
+        },
+        {
+          "name": "no_reply",
+          "type": "boolean",
+          "required": true,
+          "description": "为 true 时不回传执行结果，仅执行推送。用于最后一次总结性推送，避免结果回传再次唤醒 AI"
+        }
+      ]
+    },
+    {
+      "name": "send_to_qianwen",
+      "description": "向千问页面发送消息并点击发送（该页抽屉在线时执行）。text 必填；wait_done 默认 false，长生成用 qianwen_state 轮询。",
+      "executor": "external",
+      "parameters": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "消息正文"
+        },
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": false,
+          "description": "目标页面 URL（顶层文档主世界；缺省为抽屉所在页）"
+        },
+        {
+          "name": "wait_done",
+          "type": "boolean",
+          "required": false,
+          "description": "是否同步等待生成结束（受 15s 上限，默认 false）"
+        }
+      ]
+    },
+    {
+      "name": "qianwen_state",
+      "description": "查询千问页面生成态（idle | generating），供 send_to_qianwen 发送后轮询至完成。",
+      "executor": "external",
+      "parameters": [
+        {
+          "name": "page_url",
+          "type": "string",
+          "required": false,
+          "description": "目标页面 URL"
+        }
       ]
     }
   ],
@@ -80,7 +193,12 @@
       "description": "切换调试抽屉的挂靠侧（左/右）；不传 side 则在左右之间切换。",
       "executor": "external",
       "parameters": [
-        { "name": "side", "type": "string", "required": false, "description": "left 或 right；省略则切换" }
+        {
+          "name": "side",
+          "type": "string",
+          "required": false,
+          "description": "left 或 right；省略则切换"
+        }
       ]
     },
     {
@@ -97,10 +215,40 @@
     }
   ],
   "commands": [
-    { "name": "/dbg-open", "alias": "/do", "desc": "打开调试抽屉", "tool": "open_drawer", "params": {} },
-    { "name": "/dbg-close", "alias": "/dc", "desc": "关闭调试抽屉", "tool": "close_drawer", "params": {} },
-    { "name": "/dbg-side", "alias": "/dl", "desc": "调试抽屉左右切换", "tool": "switch_drawer_side", "params": {} },
-    { "name": "/dbg-settings", "alias": "/dt", "desc": "打开调试抽屉设置页", "tool": "open_settings", "params": {} },
-    { "name": "/dbg-back", "alias": "/db", "desc": "从设置页返回对话", "tool": "close_settings", "params": {} }
+    {
+      "name": "/dbg-open",
+      "alias": "/do",
+      "desc": "打开调试抽屉",
+      "tool": "open_drawer",
+      "params": {}
+    },
+    {
+      "name": "/dbg-close",
+      "alias": "/dc",
+      "desc": "关闭调试抽屉",
+      "tool": "close_drawer",
+      "params": {}
+    },
+    {
+      "name": "/dbg-side",
+      "alias": "/dl",
+      "desc": "调试抽屉左右切换",
+      "tool": "switch_drawer_side",
+      "params": {}
+    },
+    {
+      "name": "/dbg-settings",
+      "alias": "/dt",
+      "desc": "打开调试抽屉设置页",
+      "tool": "open_settings",
+      "params": {}
+    },
+    {
+      "name": "/dbg-back",
+      "alias": "/db",
+      "desc": "从设置页返回对话",
+      "tool": "close_settings",
+      "params": {}
+    }
   ]
 }
