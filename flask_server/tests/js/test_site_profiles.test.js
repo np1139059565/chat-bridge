@@ -79,7 +79,7 @@ function makeCtx(over) {
   };
   // 渲染产物上的内联 handler 按实例口径调用（ctx.addSiteProfile() 等）——
   // 真实组件里 D.methods 会混入实例，这里按同一口径把方法绑到 ctx。
-  for (const name of ['resetSiteProfDraft', 'saveSiteProfiles', 'testProfileField',
+  for (const name of ['resetSiteProfDraft', 'saveSiteProfiles', 'queueSiteProfSave', 'testProfileField',
     'deleteSiteProfile', 'addSiteProfile', 'addProfileField', 'removeProfileField',
     'onProfilesTestResult']) {
     ctx[name] = function (...args) { return D.methods[name].apply(ctx, args); };
@@ -209,7 +209,7 @@ test('saveSiteProfiles：非法 id 拦截；成功写回并通知热更新；失
   assert.strictEqual(posted.url, '/config');
   assert.deepStrictEqual(posted.opts.body.profiles, D.serializeProfilesDraft(ctx.siteProfDraft));
   assert.ok(_sent.some((m) => m && m.type === 'profiles_refresh'));
-  assert.ok(ctx._toasts.some((t) => t.indexOf('已保存') >= 0));
+  // 自动保存语义：成功静默，不再弹「已保存」（失败仍 toast）
 
   D.apiFetch = () => Promise.reject(new Error('boom'));
   const failing = makeCtx();
@@ -261,6 +261,9 @@ test('deleteSiteProfile：两步确认——首击布防，3 秒内二击才删�
 });
 
 test('addSiteProfile：字符集 / 唯一性校验；通过后入编辑区并展开；无显示名回退 id', () => {
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = () => 0;   // 拦截新增后 800ms 自动保存定时器
+  try {
   const ctx = makeCtx();
   ctx.newSiteId = 'bad!';
   D.methods.addSiteProfile.call(ctx);
@@ -281,6 +284,7 @@ test('addSiteProfile：字符集 / 唯一性校验；通过后入编辑区并展
   ctx.newSiteId = 'kimi3';
   D.methods.addSiteProfile.call(ctx);
   assert.strictEqual(ctx.siteProfDraft.kimi3.label, 'kimi3');
+  } finally { global.setTimeout = realSetTimeout; }
 });
 
 test('addProfileField / removeProfileField：校验、去重与自定义字段增删', () => {
@@ -322,3 +326,55 @@ test('消息监听：试运行回执分发到实例；profiles_applied(refresh) 
   // 实例缺席时监听器应静默返回
   fn({ data: { type: 'profiles_test_result', key: 'glm.container', ok: true, text: 'x' } });
 });
+
+// ---------- 5. 自动保存与主题令牌（实机反馈修复守卫） ----------
+
+test('queueSiteProfSave：800ms 防抖合并连续输入，仅最后一定时器触发写回', async () => {
+  const realSetTimeout = global.setTimeout;
+  const realClearTimeout = global.clearTimeout;
+  let posted = null;
+  const timers = [];
+  global.setTimeout = (fn, ms) => { timers.push({ fn: fn, ms: ms }); return timers.length; };
+  global.clearTimeout = () => {};
+  D.apiFetch = (c2, url, opts) => { posted = { url: url, opts: opts }; return Promise.resolve(); };
+  const ctx = makeCtx();
+  try {
+    ctx.queueSiteProfSave();
+    ctx.queueSiteProfSave();
+    ctx.queueSiteProfSave();
+    assert.strictEqual(timers.length, 3);
+    assert.ok(timers.every((x) => x.ms === 800));
+    await timers[timers.length - 1].fn();
+    assert.strictEqual(posted.url, '/config');
+    assert.ok(posted.opts.body && posted.opts.body.profiles);
+    assert.strictEqual(ctx._spSaveTimer, null);
+  } finally {
+    global.setTimeout = realSetTimeout;
+    global.clearTimeout = realClearTimeout;
+  }
+});
+
+test('saveSiteProfiles 失败：toast 报错', async () => {
+  const oldFetch = D.apiFetch;
+  D.apiFetch = () => Promise.reject(new Error('网络断开'));
+  try {
+    const ctx = makeCtx();
+    await ctx.saveSiteProfiles();
+    assert.ok(ctx._toasts.some((x) => x.indexOf('保存失败') >= 0));
+  } finally {
+    D.apiFetch = oldFetch;
+  }
+});
+
+test('02f 零硬编码色值：颜色全部走 00_tokens 令牌', () => {
+  const fs = require('node:fs');
+  const css = fs.readFileSync(path.join(__dirname, '..', '..', '..',
+    'extend', 'dialog', 'styles', '02f_site_profiles.css'), 'utf8');
+  assert.deepStrictEqual(css.match(/#[0-9a-fA-F]{3,8}\b/g) || [], []);
+});
+
+test('手动保存入口已移除：渲染产物不含「保存全部」按钮', () => {
+  const ctx = makeCtx();
+  assert.ok(JSON.stringify(D.renderSiteProfilesBlock(ctx)).indexOf('保存全部') === -1);
+});
+

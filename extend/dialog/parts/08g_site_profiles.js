@@ -116,7 +116,6 @@
     return h('div', { class: 'sp-profiles' }, [
       renderNewSiteForm(ctx),
       ...ids.map((pid) => renderSiteCard(ctx, pid)),
-      renderSaveRow(ctx)
     ]);
   }
 
@@ -130,7 +129,7 @@
           value: ctx.newSiteId, onInput: (e) => { ctx.newSiteId = e.target.value; } }),
         h('input', { type: 'text', placeholder: '显示名（如 Kimi）',
           value: ctx.newSiteLabel, onInput: (e) => { ctx.newSiteLabel = e.target.value; } }),
-        h('button', { onClick: () => ctx.addSiteProfile() }, '添加')
+        h('button', { onClick: () => { ctx.addSiteProfile(); ctx.queueSiteProfSave(); } }, '添加')
       ]),
       h('textarea', { class: 'sp-area', rows: 2, placeholder: '域名，每行一个（如 kimi.com）',
         value: ctx.newSiteHosts, onInput: (e) => { ctx.newSiteHosts = e.target.value; } })
@@ -155,7 +154,7 @@
           hosts.map((x) => h('span', { class: 'sp-chip', key: x }, x))),
         h('button', {
           class: 'sp-site-del' + (delArm ? ' armed' : ''),
-          onClick: (ev) => { ev.stopPropagation(); ctx.deleteSiteProfile(pid); }
+          onClick: (ev) => { ev.stopPropagation(); ctx.deleteSiteProfile(pid); ctx.queueSiteProfSave(); }
         }, delArm ? '确认删除' : '删除')
       ]),
       expanded ? h('div', { class: 'tc-body' }, [
@@ -190,17 +189,17 @@
     let control;
     if (field === 'split') {
       control = h('input', { type: 'checkbox', checked: !!val,
-        onChange: (e) => { ctx.siteProfDraft[pid][field] = e.target.checked; } });
+        onChange: (e) => { ctx.siteProfDraft[pid][field] = e.target.checked; ctx.queueSiteProfSave(); } });
     } else if (field === 'hosts' || kind === 'list' || kind === 'click') {
       control = h('textarea', { class: 'sp-area', rows: kind === 'click' ? 3 : 2,
         placeholder: field === 'hosts' ? '每行一个域名'
           : (kind === 'click' ? '裸选择器或完整 JS 表达式' : '每行一条选择器'),
         value: val == null ? '' : String(val),
-        onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; } });
+        onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } });
     } else {
       control = h('input', { type: 'text', class: 'sp-input', placeholder: '未配置（留空）',
         value: val == null ? '' : String(val),
-        onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; } });
+        onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } });
     }
     const res = ctx.siteProfTestResult[key];
     const testing = !!ctx.siteProfTesting[key];
@@ -250,12 +249,12 @@
       ]),
       h('div', { class: 'tc-control sp-field-control' }, [
         h('input', { type: 'text', class: 'sp-input', value: val == null ? '' : String(val),
-          onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; } }),
+          onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } }),
         h('div', { class: 'sp-btn-row' }, [
           btn('locate', '定位测试'),
           btn('click', '点击测试'),
           h('button', { class: 'sp-del-field',
-            onClick: () => ctx.removeProfileField(pid, field) }, '删字段')
+            onClick: () => { ctx.removeProfileField(pid, field); ctx.queueSiteProfSave(); } }, '删字段')
         ]),
         res ? h('span', { class: 'sp-test-result ' + (res.ok ? 'ok' : 'err') }, res.text) : null
       ])
@@ -278,16 +277,8 @@
           if (!ctx.newField[pid]) ctx.newField[pid] = {};
           ctx.newField[pid].value = e.target.value;
         } }),
-      h('button', { onClick: () => ctx.addProfileField(pid) }, '加字段'),
+      h('button', { onClick: () => { ctx.addProfileField(pid); ctx.queueSiteProfSave(); } }, '加字段'),
       h('span', { class: 'hint' }, '档案支持任意字段；已知字段按元表渲染，其余归入自定义')
-    ]);
-  }
-
-  /** 保存行：整体写回后端并通知内容脚本热更新。 */
-  function renderSaveRow(ctx) {
-    return h('div', { class: 'sp-save-row' }, [
-      h('button', { class: 'sp-save-btn', onClick: () => ctx.saveSiteProfiles() }, '保存全部站点档案'),
-      h('span', { class: 'hint' }, '整体写回后端配置文件；当前页即时生效，无需刷新')
     ]);
   }
 
@@ -313,6 +304,15 @@
     this.siteProfDraft = draft;
   };
 
+  /** 输入防抖自动保存：800ms 合并一次写回；成功静默，失败 toast。 */
+  M.queueSiteProfSave = function () {
+    if (this._spSaveTimer) clearTimeout(this._spSaveTimer);
+    this._spSaveTimer = setTimeout(() => {
+      this._spSaveTimer = null;
+      this.saveSiteProfiles();
+    }, 800);
+  };
+
   /** 保存：序列化工作副本 → POST /config profiles 整体替换 → 通知内容脚本重拉。 */
   M.saveSiteProfiles = async function () {
     const out = D.serializeProfilesDraft(this.siteProfDraft);
@@ -325,7 +325,6 @@
     try {
       await D.apiFetch(this, '/config', { method: 'POST', body: { profiles: out } });
       this.siteProfiles = out;
-      this.toast('站点档案已保存，已通知当前页即时生效');
       // 通知当前页内容脚本重拉（热更新）；其它已开标签页在下次注入 / 刷新时取新值
       window.parent.postMessage({ type: 'profiles_refresh' }, '*');
     } catch (e) {

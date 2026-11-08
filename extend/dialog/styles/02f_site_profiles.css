@@ -1,13 +1,16 @@
-/* 模块：extend/dialog/styles/02f_site_profiles.css
- * 用途：设置页「网页 AI 站点配置」区块的样式（08g_site_profiles.js 配套）。
- * 颜色取 00_tokens.css 的令牌（var() 带回退，令牌缺失时降级为字面色）。
- * 行骨架复用 02e 的 tc-row / tc-label / tc-control / tc-body，只补本区块专属类。
- */
+/* ============================================================
+ * 模块：extend/dialog/styles/02f_site_profiles.css
+ * 用途：设置页「网页 AI 站点配置」区块样式（08g 配套）。
+ * 规约：颜色一律引用 00_tokens 令牌、禁止硬编码色值（含 var 回退）——
+ *       此前输入框写死白底 + var(--cb-text)，暗色主题下白底浅字，
+ *       现值被看成占位符，用户误以为「内容是空的」。
+ * 行骨架复用 02e 的 tc-row / tc-label / tc-control。
+ * ============================================================ */
 .sp-profiles { display: flex; flex-direction: column; gap: 10px; }
 
 /* 站点卡片 */
 .sp-site-card {
-  border: 1px solid var(--cb-border, #d8dce2);
+  border: 1px solid var(--cb-border);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -17,34 +20,34 @@
   gap: 8px;
   padding: 8px 10px;
   cursor: pointer;
-  background: var(--cb-bg-card, #ffffff);
+  background: var(--cb-bg-card);
   flex-wrap: wrap;
 }
 .sp-site-head b { font-size: 13px; }
-.sp-site-head .desc { color: var(--cb-text-muted, #8a919c); font-size: 12px; }
+.sp-site-head .desc { color: var(--cb-text-muted); font-size: 12px; }
 .sp-site-head .caret { width: 1em; }
 .sp-chips { display: flex; gap: 4px; flex-wrap: wrap; }
 .sp-chip {
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 4px;
-  background: var(--cb-bg-hover, #eef1f5);
-  color: var(--cb-text-muted, #8a919c);
+  background: var(--cb-bg-hover);
+  color: var(--cb-text-muted);
 }
 .sp-site-del { margin-left: auto; font-size: 11px; padding: 2px 8px;
-  background: transparent; color: #c62828; border: 1px solid #c62828; border-radius: 4px; }
-.sp-site-del.armed { background: #e5484d; color: #fff; border-color: #e5484d; }
+  background: transparent; color: var(--cb-danger); border: 1px solid var(--cb-danger); border-radius: 4px; }
+.sp-site-del.armed { background: var(--cb-danger); color: var(--cb-on-primary); border-color: var(--cb-danger); }
 
 /* 字段分组 */
 .sp-group { margin-top: 10px; }
 .sp-group-title {
   font-size: 12px;
-  color: var(--cb-text-muted, #8a919c);
+  color: var(--cb-text-muted);
   margin-bottom: 4px;
   font-weight: 600;
 }
 
-/* 字段行控件列 */
+/* 字段行控件列：输入配色交给令牌（与 .settings input 同源），此处只管布局 */
 .sp-field-control {
   display: flex;
   flex-direction: column;
@@ -60,23 +63,23 @@
   box-sizing: border-box;
   font-size: 12px;
   padding: 4px 6px;
-  border: 1px solid var(--cb-border, #d8dce2);
+  border: 1px solid var(--cb-border-strong);
   border-radius: 4px;
-  background: #ffffff;
-  color: var(--cb-text, #22262c);
+  background: var(--cb-bg-card);
+  color: var(--cb-text-body);
 }
 .sp-area { resize: vertical; font-family: Consolas, Menlo, monospace; }
 .sp-btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .sp-test-btn { align-self: flex-start; font-size: 12px; padding: 2px 8px; }
 .sp-del-field { font-size: 11px; padding: 2px 6px;
-  background: transparent; color: #c62828; border: 1px solid #c62828; border-radius: 4px; }
+  background: transparent; color: var(--cb-danger); border: 1px solid var(--cb-danger); border-radius: 4px; }
 .sp-test-result { font-size: 12px; word-break: break-all; }
-.sp-test-result.ok { color: #2e7d32; }
-.sp-test-result.err { color: #c62828; }
+.sp-test-result.ok { color: var(--cb-ok); }
+.sp-test-result.err { color: var(--cb-danger); }
 
 /* 新增站点表单 */
 .sp-new-site {
-  border: 1px dashed var(--cb-border, #d8dce2);
+  border: 1px dashed var(--cb-border-strong);
   border-radius: 8px;
   padding: 8px 10px;
   display: flex;
@@ -85,7 +88,7 @@
 }
 .sp-new-row { display: flex; gap: 6px; }
 
-/* 加字段行 / 保存行 */
+/* 加字段行 */
 .sp-add-field {
   display: flex;
   gap: 6px;
@@ -94,5 +97,3 @@
   flex-wrap: wrap;
 }
 .sp-add-field input { flex: 1; min-width: 120px; }
-.sp-save-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-.sp-save-btn { font-size: 13px; padding: 4px 12px; }
