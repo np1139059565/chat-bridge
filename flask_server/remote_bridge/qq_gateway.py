@@ -3,14 +3,14 @@
 职责：
 1. 接收 QQClient 回调的事件，只处理单聊消息 C2C_MESSAGE_CREATE
 2. 以「/」开头的消息交给指令处理
-3. 其余消息：刷新被动回复窗口，并包装成 external-call 卡片投给卡片总线，
+3. 其余消息：刷新被动回复窗口，并包装成 external-call 卡片投给投递队列，
    由抽屉轮询取走、发送进网页 AI
 
-包装成卡片后，网页 AI 看到的只是一条普通外部卡片，感知不到 QQ 的存在。
+包装成卡片后，网页 AI 看到的只是一条普通投递项，感知不到 QQ 的存在。
 """
 import time
 
-import card_bus
+import delivery_queue
 
 from . import message_router, bridge_log
 
@@ -78,7 +78,7 @@ class QqGateway:
             log("事件缺少 content 且非语音/图片，忽略")
             return
         log("收到单聊消息", "openid=" + openid[:8], "长度=" + str(len(content)))
-        # 文本分两条路：以 / 开头走指令通道，其余投卡片总线
+        # 文本分两条路：以 / 开头走指令通道，其余投投递队列
         self._dispatch_text(openid, content, msg_id)
 
     def _handle_media(self, openid, data, msg_id, content):
@@ -108,7 +108,7 @@ class QqGateway:
         return False
 
     def _dispatch_text(self, openid, content, msg_id):
-        """分派一条纯文本消息：以 / 开头走指令，其余投卡片总线。
+        """分派一条纯文本消息：以 / 开头走指令，其余投投递队列。
 
         @param openid  发消息的用户
         @param content 文本正文
@@ -123,7 +123,7 @@ class QqGateway:
                 # 只回机器人一句提示，绝不当作普通消息投给网页 AI。
                 self._reply_unknown(openid, content)
             return
-        # 普通消息：包装成外部卡片，投给卡片总线
+        # 普通消息：包装成投递项，投给投递队列
         self._deliver_as_card(openid, content, msg_id)
 
     def _handle_voice(self, openid, voice_url, msg_id):
@@ -328,7 +328,7 @@ class QqGateway:
             log("回复未知指令失败：", data)
 
     def _deliver_as_card(self, openid, content, msg_id):
-        """把 QQ 消息包装成 external-call 卡片，登记到卡片总线。
+        """把 QQ 消息包装成 external-call 卡片，登记到投递队列。
 
         卡片内容里带上来源标记，供推送侧去重（不回推用户自己发的话）。
         """

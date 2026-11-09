@@ -18,7 +18,7 @@
 """
 import os
 
-import card_bus
+import delivery_queue
 from .. import bridge_log
 
 
@@ -104,7 +104,7 @@ def deliver_images(source, openid, sources=None, text="", title=None, extra=None
     if extra:
         payload.update(extra)
     try:
-        card = card_bus.bus.create(
+        card = delivery_queue.bus.create(
             source=source,
             card_type="qq-image",
             title=title or (source + " 图片"),
@@ -134,7 +134,7 @@ def deliver_file(source, openid, path, name="", title=None):
     size = os.path.getsize(path) if os.path.exists(path) else 0
     body = "用户从%s发来文件：%s（%d 字节），已保存到 %s" % (source, name, size, path)
     try:
-        card = card_bus.bus.create(
+        card = delivery_queue.bus.create(
             source=source,
             card_type="qq-file",
             title=title or (source + " 文件"),
@@ -176,7 +176,7 @@ def deliver_text(source, openid, text, msg_id="", title=None, from_voice=False):
         "page_url": "",
     }
     try:
-        card = card_bus.bus.create(
+        card = delivery_queue.bus.create(
             source=source,
             card_type="external-call",
             title=title or (source + " 用户"),

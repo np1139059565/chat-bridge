@@ -6,7 +6,7 @@
 
 验证目标：
 1. page_registry 的登记 / 在线列表 / 接管 / 选择器解析；
-2. card_bus 的按页面取件规则（不限页面、指定页面、不匹配时取不到）。
+2. delivery_queue 的按页面取件规则（不限页面、指定页面、不匹配时取不到）。
 """
 import os
 import sys
@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import page_registry
-from card_bus import CardBus
+from delivery_queue import DeliveryQueue
 
 
 class _PageBase(unittest.TestCase):
@@ -131,39 +131,39 @@ class TestPageRegistry(_PageBase):
         self.assertIn("请给出", err)
 
 
-class TestCardBusPageIsolation(unittest.TestCase):
-    """卡片总线的按页面取件规则。"""
+class TestDeliveryQueuePageIsolation(unittest.TestCase):
+    """通用投递队列的按页面取件规则。"""
 
     def _make(self, bus, target=""):
         return bus.create(source="bridge", card_type="drawer-command",
                           title="t", content="{}", payload={}, target_page=target)
 
     def test_不限页面的卡片任何页面都能取(self):
-        bus = CardBus()
+        bus = DeliveryQueue()
         self._make(bus)
         self.assertEqual(len(bus.claim_pending("https://a.com")), 1)
         self.assertEqual(len(bus.claim_pending("https://b.com")), 1)
 
     def test_指定页面的卡片只有该页面能取(self):
-        bus = CardBus()
+        bus = DeliveryQueue()
         self._make(bus, target="https://a.com")
         self.assertEqual(len(bus.claim_pending("https://a.com")), 1)
         self.assertEqual(len(bus.claim_pending("https://b.com")), 0)
 
     def test_未声明页面的取件方取不到指定页面卡片(self):
         """宁可不给，也不串台。"""
-        bus = CardBus()
+        bus = DeliveryQueue()
         self._make(bus, target="https://a.com")
         self.assertEqual(len(bus.claim_pending("")), 0)
 
     def test_确认后不再投递(self):
-        bus = CardBus()
+        bus = DeliveryQueue()
         card = self._make(bus, target="https://a.com")
         bus.confirm_delivered(card.id)
         self.assertEqual(len(bus.claim_pending("https://a.com")), 0)
 
     def test_多页面各取各的(self):
-        bus = CardBus()
+        bus = DeliveryQueue()
         self._make(bus, target="https://a.com")
         self._make(bus, target="https://b.com")
         self._make(bus, target="")
@@ -175,7 +175,7 @@ class TestCardBusPageIsolation(unittest.TestCase):
         self.assertEqual(len(bus.claim_pending("https://c.com")), 1)
 
     def test_卡片字典带出目标页面(self):
-        bus = CardBus()
+        bus = DeliveryQueue()
         self._make(bus, target="https://a.com")
         cards = bus.claim_pending("https://a.com")
         self.assertEqual(cards[0]["target_page"], "https://a.com")

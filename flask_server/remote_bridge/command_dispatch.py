@@ -1,6 +1,6 @@
 """远程桥接 —— 抽屉命令下发通道
 
-职责：把一条抽屉命令（drawer-command）经卡片总线下发到浏览器，并管理
+职责：把一条抽屉命令（drawer-command）经投递队列下发到浏览器，并管理
 「待回传请求」的登记与取出。从 command_panel.py 抽出，使其保持在行数上限内。
 
 调用方是 command_panel.py；本模块不反向引用它，依赖保持单向。
@@ -131,7 +131,7 @@ def _maybe_attach_screenshot(payload, openid, screenshot):
 
 
 def _dispatch(action, params=None, openid="", screenshot=False):
-    """把一条抽屉命令通过卡片总线下发。
+    """把一条抽屉命令通过投递队列下发。
 
     【隔离铁律】本函数是指令的唯一源头。指令面向用户（QQ / 网页），
     其卡片类型固定为 drawer-command、回执走 /api/bridge/result，
@@ -149,7 +149,7 @@ def _dispatch(action, params=None, openid="", screenshot=False):
                       页面操作类指令用它在手机上观察界面结果；
                       组合指令执行期间（_reply_ctx.suppress）强制关闭，避免大量截图刷屏。
     """
-    import card_bus
+    import delivery_queue
     import channel_binding
     payload = {"action": action, "params": params or {}}
     want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
@@ -160,7 +160,7 @@ def _dispatch(action, params=None, openid="", screenshot=False):
     target = channel_binding.get(channel) if channel else ""
     if target:
         payload["target_page"] = target
-    card = card_bus.command_bus.create(
+    card = delivery_queue.command_bus.create(
         source="bridge",
         card_type="drawer-command",
         title="远程指令",
@@ -205,10 +205,10 @@ def _dispatch_with_result(action, params, openid):
     与 _dispatch 的区别：额外带 request_id，浏览器执行完把结果 POST 回来，
     后端据此找回 openid 并转发到 QQ。
     """
-    import card_bus
+    import delivery_queue
     rid = _register_pending(openid)
     payload = {"action": action, "params": params or {}, "request_id": rid}
-    card = card_bus.command_bus.create(
+    card = delivery_queue.command_bus.create(
         source="bridge",
         card_type="drawer-command",
         title="远程指令",

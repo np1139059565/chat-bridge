@@ -3,9 +3,9 @@
 职责：
 1. 接收 WeixinClient 回调的消息，抽出正文
 2. 以「/」开头的消息交给指令处理
-3. 其余消息包装成 external-call 卡片投给卡片总线，由抽屉取走送进网页 AI
+3. 其余消息包装成 external-call 卡片投给投递队列，由抽屉取走送进网页 AI
 
-与 QQ 网关（qq_gateway.py）同构：网页 AI 看到的只是一条普通外部卡片，
+与 QQ 网关（qq_gateway.py）同构：网页 AI 看到的只是一条普通投递项，
 感知不到消息来自 QQ 还是微信。
 
 关键差异（配额约束）：
@@ -15,7 +15,7 @@
 import json
 import time
 
-import card_bus
+import delivery_queue
 
 from . import bridge_log
 
@@ -102,7 +102,7 @@ class WeixinGateway:
         self._dispatch_text(user_id, content, msg)
 
     def _dispatch_text(self, user_id, content, msg):
-        """分派一条文本：以 / 开头走指令，其余投卡片总线。
+        """分派一条文本：以 / 开头走指令，其余投投递队列。
 
         @param user_id 发送者
         @param content 正文

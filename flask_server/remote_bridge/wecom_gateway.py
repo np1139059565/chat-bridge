@@ -3,7 +3,7 @@
 职责：
 1. 接收 WecomClient 回调的消息，抽出正文（文本 / 图片 / 文件 / 语音）
 2. 以「/」开头的消息交给指令处理
-3. 其余消息包装成 external-call 卡片投给卡片总线
+3. 其余消息包装成 external-call 卡片投给投递队列
 4. 记住每个会话的 chatid，供主动推送使用
 
 与微信 ClawBot 网关同构，但多一件事：
@@ -14,7 +14,7 @@ import json
 import time
 from collections import namedtuple
 
-import card_bus
+import delivery_queue
 
 from . import bridge_log
 
@@ -326,7 +326,7 @@ class WecomGateway:
             self._deliver_as_card({}, chatid, 1, "【收到图片】本地路径：%s" % path)
             return
         try:
-            card = card_bus.bus.create(
+            card = delivery_queue.bus.create(
                 source="wecom",
                 card_type="qq-image",
                 title="企业微信图片",

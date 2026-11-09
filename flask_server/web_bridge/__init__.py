@@ -5,7 +5,7 @@
 定位（与 QQ 桥接的关系）：
 - QQ 桥接：消息靠 QQ 被动回复窗口「推」给用户；
 - 网页版：用户打开网页后「主动拉」新消息。
-- 两者共用同一场对话（用户拍板 1A），底层收发都走既有「卡片总线 + 抽屉」。
+- 两者共用同一场对话（用户拍板 1A），底层收发都走既有「投递队列 + 抽屉」。
 
 三条链路：
 1. 入站（网页 → 网页 AI）：网页发的文字/图片/语音，包装成卡片投进总线，
@@ -138,7 +138,7 @@ class WebBridge:
     """网页版桥接总控：入站投卡、出站存箱、语音落盘。"""
 
     def _create_card(self, card_type, title, content, payload, opts=None, target_page=""):
-        """向卡片总线投一张卡，返回卡片 id；失败返回空串。
+        """向投递队列投一张卡，返回卡片 id；失败返回空串。
 
         @param card_type   卡片类型
         @param title       标题
@@ -153,9 +153,9 @@ class WebBridge:
         """
         o = opts or {}
         log_hint = str(o.get("log_hint") or "")
-        import card_bus
+        import delivery_queue
         try:
-            card = card_bus.bus.create(
+            card = delivery_queue.bus.create(
                 source="web", card_type=card_type, title=title,
                 content=content, payload=payload, target_page=target_page,
             )
@@ -166,7 +166,7 @@ class WebBridge:
             return ""
 
     def ingest_text(self, text, site_key=""):
-        """把网页发来的一段文字投进卡片总线，送进网页 AI。
+        """把网页发来的一段文字投进投递队列，送进网页 AI。
 
         复用与 QQ 完全相同的路径：造一张 external-call 卡片，
         由抽屉轮询取走、发送到网页 AI。

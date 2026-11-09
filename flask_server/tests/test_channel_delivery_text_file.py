@@ -14,7 +14,7 @@
   3. msg_id 为空时的容错
   4. deliver_file 的正文包含路径与体积
   5. 文件不存在时体积按 0 记，不抛异常
-  6. 卡片总线抛异常时返回空串，不向上传播
+  6. 投递队列抛异常时返回空串，不向上传播
 
 运行：python -m pytest tests/test_channel_delivery_text_file.py -q
 """
@@ -38,7 +38,7 @@ class FakeCard:
 
 
 class FakeBus:
-    """卡片总线替身：记录调用参数，可预设抛异常。"""
+    """投递队列替身：记录调用参数，可预设抛异常。"""
 
     def __init__(self, raise_exc=False):
         """@param raise_exc 是否在 create 时抛异常"""
@@ -60,14 +60,14 @@ class DeliverTextTest(unittest.TestCase):
     """文本投递：信封结构是前端识别的契约。"""
 
     def setUp(self):
-        """替换卡片总线。"""
-        self._orig = delivery.card_bus.bus
+        """替换投递队列。"""
+        self._orig = delivery.delivery_queue.bus
         self.bus = FakeBus()
-        delivery.card_bus.bus = self.bus
+        delivery.delivery_queue.bus = self.bus
 
     def tearDown(self):
-        """还原总线。"""
-        delivery.card_bus.bus = self._orig
+        """还原队列。"""
+        delivery.delivery_queue.bus = self._orig
 
     def _envelope(self):
         """取最近一次投递的信封（content 是 JSON 文本）。"""
@@ -110,7 +110,7 @@ class DeliverTextTest(unittest.TestCase):
 
     def test_bus_exception_returns_empty(self):
         """总线异常时返回空串，不向上抛。"""
-        delivery.card_bus.bus = FakeBus(raise_exc=True)
+        delivery.delivery_queue.bus = FakeBus(raise_exc=True)
         self.assertEqual(delivery.deliver_text("qq", "u", "文字"), "")
 
 
@@ -118,17 +118,17 @@ class DeliverFileTest(unittest.TestCase):
     """文件投递：正文要让模型知道路径与体积。"""
 
     def setUp(self):
-        """替换卡片总线并建临时文件。"""
+        """替换投递队列并建临时文件。"""
         import tempfile
-        self._orig = delivery.card_bus.bus
+        self._orig = delivery.delivery_queue.bus
         self.bus = FakeBus()
-        delivery.card_bus.bus = self.bus
+        delivery.delivery_queue.bus = self.bus
         self.tmpdir = tempfile.mkdtemp(prefix="deliver_test_")
 
     def tearDown(self):
         """还原总线并清理临时目录。"""
         import shutil
-        delivery.card_bus.bus = self._orig
+        delivery.delivery_queue.bus = self._orig
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def _make_file(self, name="a.txt", size=100):
@@ -175,7 +175,7 @@ class DeliverFileTest(unittest.TestCase):
     def test_bus_exception_returns_empty(self):
         """总线异常时返回空串。"""
         p = self._make_file()
-        delivery.card_bus.bus = FakeBus(raise_exc=True)
+        delivery.delivery_queue.bus = FakeBus(raise_exc=True)
         self.assertEqual(delivery.deliver_file("qq", "u", p), "")
 
 

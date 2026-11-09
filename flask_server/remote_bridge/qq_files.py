@@ -18,7 +18,7 @@ import os
 import threading
 import time
 
-import card_bus
+import delivery_queue
 
 from . import bridge_log
 
