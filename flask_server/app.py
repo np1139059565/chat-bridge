@@ -16,6 +16,7 @@ import tools_impl
 import app_log
 
 # 各功能域蓝图
+from routes.chat_api import bp as chat_api_bp
 from routes.tools import bp as tools_bp
 from routes.prompts import bp as prompts_bp
 from routes.config_route import bp as config_bp
@@ -39,7 +40,8 @@ from routes.voice import bp as voice_bp
 
 
 def _register_blueprints(app):
-    """注册全部蓝图：工具、提示词、配置、自定义工具、规则、卡片、客户端注册、指令清单与外部通道。"""
+    """注册全部蓝图：对话接口、工具、提示词、配置、自定义工具、规则、卡片、客户端注册、指令清单与外部通道。"""
+    app.register_blueprint(chat_api_bp)
     app.register_blueprint(tools_bp)
     app.register_blueprint(prompts_bp)
     app.register_blueprint(config_bp)

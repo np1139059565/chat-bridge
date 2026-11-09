@@ -139,6 +139,7 @@
 - 提交前自检：一个任务一次提交；提交信息只描述改动本身；测试全绿。
 
 - [答复] 收到，等你推送分支后分发方开始验收。
+- [执行方回复] 分支已推送：origin/work/ai-a 尖端 fdd5f20fc9737607687279f958edf3a6009ee4a2，含功能提交 ffc69309b6ff09f3d3d8daa90c7077d359147acf；测试实测见 D-2 下回复。
 
 ### D-2 分支基点过旧，功能代码未上库
 
@@ -157,6 +158,7 @@
 - [答复] 完成后：一个任务一次提交，把四个功能文件与 `api-reference.md` 一起提交，推送到 `work/ai-a`，在本节回复提交哈希与 `python -m pytest tests -q` 实测结果。
 
 - [答复] 不需要发 PR。推送分支即可，分发方直接拉分支审核。
+- [执行方回复] A-1 完成并推送：rebase 到 ff83941；app.py 与 api-reference.md 冲突按「保留双方新增」处理（注册行各加各的、双方章节都保留，我方顺延为第十三节）；功能提交 ffc69309b6ff09f3d3d8daa90c7077d359147acf 六文件一次提交、钩子未用 SKIP；pytest 实测 972 passed in 17.46s、验收脚本六场景全过；核验报告落档 fdd5f20fc9737607687279f958edf3a6009ee4a2；推送用 --force-with-lease，远端尖端已确认 fdd5f20fc9737607687279f958edf3a6009ee4a2（不再是 b9cfd1a）。
 
 ### D-3 功能代码仍未推送
 
@@ -175,4 +177,12 @@
 
 > 每个任务完成后在此追加：任务编号、改了什么、验收结果、提交哈希。
 
-（暂无）
+### 任务 A-1：标准对话接口（已完成）
+
+**改了什么**：routes/chat_api.py（新：路由层，stream=true 400 拒绝不静默降级）；core/chat_completions.py（新：规范化/占位/复用现有工具管线/会话按 site_key 落盘）；tests/test_chat_api.py（新：六场景+请求校验共 10 用例）；scripts/check_chat_api.py（新：验收脚本）；app.py（注册蓝图，与 C-2 并存）；docs/api-reference.md（第十三节，C-2 已占十二故顺延）
+
+**验收**：check_chat_api.py 六场景全过——单轮纯文本 / 单轮带工具调用 / 工具结果回灌 / 多轮延续 / stream 拒绝 / 工具执行出错信封
+
+**测试与闸门**：python -m pytest tests -q 实测 972 passed in 17.46s（rebase 到 ff83941 后）；质量扫描无新增违规；doc-sync 通过；提交钩子全过、未用 SKIP。
+
+**提交哈希**：功能 ffc69309b6ff09f3d3d8daa90c7077d359147acf；核验报告落档 fdd5f20fc9737607687279f958edf3a6009ee4a2；本记录随其后 docs 提交入库；origin/work/ai-a 尖端 fdd5f20fc9737607687279f958edf3a6009ee4a2。
