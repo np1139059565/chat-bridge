@@ -2,9 +2,54 @@
   "note": "存量欠账基线：命中条目的违规不计入失败，超出部分算新增。",
   "entries": [
     {
+      "check": "comment",
+      "file": "extend\\dialog\\parts\\08j_config_actions.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_config_actions.test.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_config_audit.test.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_config_blocks.test.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_config_cache.test.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_config_diff_items.test.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_public_config_ui.test.js",
+      "count": 1
+    },
+    {
+      "check": "comment",
+      "file": "flask_server\\tests\\js\\test_toolconf_swallow.test.js",
+      "count": 1
+    },
+    {
       "check": "dup",
       "file": "<duplicates>",
-      "count": 58
+      "count": 91
+    },
+    {
+      "check": "jsfunc",
+      "file": "extend\\dialog\\parts\\08b_settings.js",
+      "count": 1
     },
     {
       "check": "pyfunc",
@@ -385,6 +430,11 @@
       "check": "pyfunc",
       "file": "flask_server\\tools\\file_read_impl.py",
       "count": 6
+    },
+    {
+      "check": "pyfunc",
+      "file": "flask_server\\tools\\list_tools_impl.py",
+      "count": 1
     },
     {
       "check": "pyfunc",
