@@ -86,18 +86,36 @@ def resolve(selector):
     @returns {tuple} (页面地址, 错误说明)；成功时错误说明为空串
     """
     sel = str(selector or "").strip()
-    pages = online()
     if not sel:
         return "", "请给出页面序号或地址"
     if sel.lower() == "off":
         return "", ""
-    # 纯数字按序号取
+    pages = online()
     if sel.isdigit():
-        idx = int(sel)
-        if idx < 1 or idx > len(pages):
-            return "", "序号超出范围（当前 %d 个页面）" % len(pages)
-        return pages[idx - 1], ""
-    # 按地址子串匹配
+        return _by_index(sel, pages)
+    return _by_fragment(sel, pages)
+
+
+def _by_index(sel, pages):
+    """按序号取页面（1 起）。
+
+    @param sel   纯数字字符串
+    @param pages 在线页面列表
+    @returns {tuple} (页面地址, 错误说明)
+    """
+    idx = int(sel)
+    if idx < 1 or idx > len(pages):
+        return "", "序号超出范围（当前 %d 个页面）" % len(pages)
+    return pages[idx - 1], ""
+
+
+def _by_fragment(sel, pages):
+    """按地址子串匹配页面。有歧义时报错，绝不猜一个。
+
+    @param sel   用户输入的地址片段
+    @param pages 在线页面列表
+    @returns {tuple} (页面地址, 错误说明)
+    """
     hits = [u for u in pages if sel in u]
     if len(hits) == 1:
         return hits[0], ""

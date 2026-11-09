@@ -107,6 +107,8 @@ def init_config():
         "site_profiles": derive_site_profiles(sanitize_profiles(raw.get("profiles", {}))),
         "profiles": sanitize_profiles(raw.get("profiles", {})),
         "tools": raw.get("tools", {}) or {},
+        # 通道绑定：{通道名: 站点 id}，让 QQ 与企微各跟一个站点
+        "channel_bindings": raw.get("channel_bindings", {}) or {},
     }
     # 关键字段兜底默认值
     cfg["flask"].setdefault("host", "127.0.0.1")
@@ -199,6 +201,9 @@ def _runtime_snapshot(cfg):
         "tools": runtime_tools,
         # 工具配置：各工具的可调参数值，随本机状态变，写运行时文件。
         "tool_config": cfg.get("tool_config", {}),
+        # 通道绑定：哪条通道固定跟哪个站点（QQ 跟 DeepSeek、企微跟 GLM）。
+        # 属本机偏好、不入库；必须在此保留，否则任何一次保存配置都会把它抹掉。
+        "channel_bindings": cfg.get("channel_bindings", {}),
     }
 
 

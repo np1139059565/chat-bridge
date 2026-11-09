@@ -34,16 +34,30 @@ class RemoteBridge:
     """桥接层总控：持有 QQ 与微信两条通道的客户端与事件网关。"""
 
     def __init__(self):
+        # 各通道的指令回调都带上通道名：指令层据此查出该通道绑定的站点，
+        # 把命令定向投给对应页面（QQ 跟 DeepSeek、企微跟 GLM 互不干扰）。
+        def _on_command(channel_name):
+            """生成一条「带通道名」的指令回调。
+
+            包装而非改 handle_command 签名：调用点有三处网关 + 两处网页，
+            改签名会波及全部；包装只动这里一处，签名保持不变（默认通道空）。
+            @param channel_name 通道标识（qq / wecom / weixin）
+            @returns {Function} 符合网关预期的 on_command 回调
+            """
+            def handler(qq_client, openid, msg_id, text):
+                return command_panel.handle_command(
+                    qq_client, openid, msg_id, text, channel=channel_name)
+            return handler
         # QQ 通道
         self.client = None
-        self.gateway = qq_gateway.QqGateway(on_command=command_panel.handle_command)
+        self.gateway = qq_gateway.QqGateway(on_command=_on_command("qq"))
         # 微信通道
         self.wx_client = None
-        self.wx_gateway = weixin_gateway.WeixinGateway(on_command=command_panel.handle_command)
+        self.wx_gateway = weixin_gateway.WeixinGateway(on_command=_on_command("weixin"))
         self.wx_login = None
         # 企业微信通道（第三条）：WebSocket 长连接，支持主动推送与图片/文件
         self.wecom_client = None
-        self.wecom_gateway = wecom_gateway.WecomGateway(on_command=command_panel.handle_command)
+        self.wecom_gateway = wecom_gateway.WecomGateway(on_command=_on_command("wecom"))
         # 统一推送管线的通道适配器：client 在各通道启动后再注入，
         # 构造期不持有客户端，避免启动顺序耦合。
         self.qq_adapter = QQAdapter()
@@ -241,32 +255,62 @@ class RemoteBridge:
         @returns 推送条数
         """
         from .channel import push_pipeline
+        import channel_binding
         push = cfg.get("push") or {}
         # 广播开关：打开后所有已启用的通道各收一份，避免单条通道丢消息导致漏看
         broadcast = bool(cfg.get("broadcast"))
         sent = 0
+        # 按通道绑定过滤：某通道若绑定了站点，只推该站点的消息。
+        # 这是「QQ 只跟 DeepSeek、企微只跟 GLM」的推送侧落实——
+        # 未绑定站点的通道照旧接收全部消息（保持旧行为）。
+        site = str(payload.get("siteKey") or "")
         # 三条通道按同一套规则调度，差异全在各自的适配器里
-        if cfg.get("enabled") and self.client and self._wants(target, "qq", broadcast):
+        if cfg.get("enabled") and self.client and self._wants(target, "qq", broadcast) \
+                and self._site_ok("qq", site):
             try:
                 self.qq_adapter.client = self.client
                 sent = push_pipeline.run(self.qq_adapter, payload, push, log)
             except Exception as e:
                 log("QQ 推送异常（管线）：", e)
         wx = cfg.get("weixin") or {}
-        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin", broadcast):
+        if wx.get("enabled") and self.wx_client and self._wants(target, "weixin", broadcast) \
+                and self._site_ok("weixin", site):
             try:
                 self.weixin_adapter.client = self.wx_client
                 push_pipeline.run(self.weixin_adapter, payload, push, log)
             except Exception as e:
                 log("微信推送异常（管线）：", e)
         wc = cfg.get("wecom") or {}
-        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom", broadcast):
+        if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom", broadcast) \
+                and self._site_ok("wecom", site):
             try:
                 self.wecom_adapter.client = self.wecom_client
                 push_pipeline.run(self.wecom_adapter, payload, push, log)
             except Exception as e:
                 log("企业微信推送异常（管线）：", e)
         return sent
+
+    @staticmethod
+    def _site_ok(channel, site):
+        """判断某通道本轮是否该接收这个站点的消息。
+
+        三条通道都是单窗口，同时开多个网页 AI 时若不按站点过滤，
+        各站回复会混进同一个聊天窗口。绑定后各看各的：
+        - 通道未绑定站点 → 全部接收（旧行为，不改变现有用法）；
+        - 通道已绑定 → 只接收该站点的消息；
+        - 消息未带站点（历史数据）→ 绑定通道也接收，避免丢历史。
+
+        @param channel 通道名（qq / wecom / weixin）
+        @param site    本条消息所属站点；空串表示来源未知
+        @returns {boolean} 是否推送
+        """
+        import channel_binding
+        bound = channel_binding.get(channel)
+        if not bound:
+            return True
+        if not site:
+            return True
+        return bound == site
 
     @staticmethod
     def _wants(target, channel, broadcast=False):

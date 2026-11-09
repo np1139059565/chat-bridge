@@ -35,7 +35,23 @@ def log(*args):
 
 
 # 线程局部标记：组合指令执行期间的中间步骤，回复会被抑制，避免刷屏。
+# 同时承载「当前指令来自哪条通道」（qq / wecom / weixin），
+# 供下发时解析该通道绑定的站点用。用线程局部而非改所有处理函数签名：
+# 指令处理函数有二十多个，逐个加参数改动面太大，且它们的签名已统一。
 _reply_ctx = threading.local()
+
+
+def set_channel(name):
+    """标记当前线程正在处理的指令来自哪条通道。
+
+    @param name 通道标识（qq / wecom / weixin）；空串表示来源不明
+    """
+    _reply_ctx.channel = str(name or "")
+
+
+def current_channel():
+    """取当前线程的通道标识；未设置时返回空串。"""
+    return getattr(_reply_ctx, "channel", "")
 
 # 网页版回执出口：{fn(text)}，由网页版路由注册。
 # 指令处理器原本只会把回执发回 QQ；网页版没有 QQ 客户端，
@@ -135,11 +151,19 @@ def _dispatch(action, params=None, openid="", screenshot=False):
     """
     import card_bus
     import page_registry
+    import channel_binding
     payload = {"action": action, "params": params or {}}
     want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
-    # 页面归属：指令只投给当前接管页面。未接管时 target 为空串，
-    # 维持旧行为（任何页面可取），保证不接管时指令仍能送达。
-    target = page_registry.get_active()
+    # 页面归属：两条判据，通道绑定优先于全局接管页。
+    #
+    # 为什么优先通道绑定：QQ 与企微都是单窗口，用户可能要求「QQ 只跟 DeepSeek、
+    # 企微只跟 GLM」。此时全局接管页只能是一个，无法同时满足两条通道，
+    # 必须按通道各自解析目标页面，两者才互不干扰。
+    # 通道未绑定时退回全局接管页；两者都没配则不限页面（旧行为）。
+    channel = current_channel()
+    target = channel_binding.resolve_target_page(channel) if channel else ""
+    if not target:
+        target = page_registry.get_active()
     if target:
         payload["target_page"] = target
     card = card_bus.command_bus.create(

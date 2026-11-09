@@ -101,7 +101,7 @@ def _norm_image(image):
     return str(image or "")
 
 
-def append(role, text, voice="", kind="", image="", voice_text="", site_key=""):
+def append(role, text, voice="", kind="", image="", extra=None):
     """向收件箱追加一条消息，返回该消息对象。
 
     @param role  角色：user（网页/QQ 用户）/ ai（AI 回复）/ tool / system
@@ -109,12 +109,15 @@ def append(role, text, voice="", kind="", image="", voice_text="", site_key=""):
     @param voice 可选，已合成的语音文件名（相对音频目录）；为空表示尚未合成
     @param kind  可选，附加类型标记（如 command-image），供前端区分展示
     @param image 可选，图片文件名（相对网页图片目录），前端据此渲染 <img>
-    @param voice_text 可选，待朗读的文本；点播时据此按需合成，不占用上报链路
-    @param site_key 可选，来源站点（glm / qianwen / yuanbao …）。多网页 AI 并存时，
-                    手机端按此字段分流展示，否则各站消息会混在同一条时间线里。
-                    空串表示来源未知，归入「未知站点」分组。
+    @param extra 可选字典，承载次要字段，避免参数无限增长：
+                 - voice_text：待朗读文本，点播时按需合成
+                 - site_key：来源站点，多网页 AI 并存时手机端据此分流
+                             （空串=来源未知，归入「未知站点」分组）
     @returns 追加后的消息对象（含分配好的 seq 与 id）
     """
+    ex = extra or {}
+    voice_text = str(ex.get("voice_text") or "")
+    site_key = str(ex.get("site_key") or "")
     # 登记最近活跃渠道：仅当这是「用户在网页侧发的消息」时才登记。
     # 本函数也会被 AI 回复、指令回执、系统提示调用，那些不算用户发声，
     # 若一并登记会让「最后谁说话」被系统消息带偏。

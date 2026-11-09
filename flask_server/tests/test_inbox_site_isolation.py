@@ -55,7 +55,7 @@ class TestAppendSiteKey(_InboxBase):
     """写入时站点标签的保留。"""
 
     def test_带站点写入后被保留(self):
-        self.inbox.append("ai", "你好", site_key="glm")
+        self.inbox.append("ai", "你好", extra={"site_key": "glm"})
         data = self.inbox.recent(10, "glm")
         self.assertEqual(len(data["messages"]), 1)
         self.assertEqual(data["messages"][0]["site_key"], "glm")
@@ -73,9 +73,9 @@ class TestListSinceFilter(_InboxBase):
 
     def _seed(self):
         """写入三条不同站点的消息。"""
-        self.inbox.append("ai", "来自 glm", site_key="glm")
-        self.inbox.append("ai", "来自千问", site_key="qianwen")
-        self.inbox.append("ai", "无站点", site_key="")
+        self.inbox.append("ai", "来自 glm", extra={"site_key": "glm"})
+        self.inbox.append("ai", "来自千问", extra={"site_key": "qianwen"})
+        self.inbox.append("ai", "无站点", extra={"site_key": ""})
 
     def test_不传站点时不过滤(self):
         """None 表示不过滤——保持向后兼容。"""
@@ -100,8 +100,8 @@ class TestListSinceFilter(_InboxBase):
         self._seed()
         first = self.inbox.list_since(0, 100, "glm")
         cur = first["seq"]
-        self.inbox.append("ai", "glm 新消息", site_key="glm")
-        self.inbox.append("ai", "千问新消息", site_key="qianwen")
+        self.inbox.append("ai", "glm 新消息", extra={"site_key": "glm"})
+        self.inbox.append("ai", "千问新消息", extra={"site_key": "qianwen"})
         more = self.inbox.list_since(cur, 100, "glm")
         self.assertEqual(len(more["messages"]), 1)
         self.assertEqual(more["messages"][0]["text"], "glm 新消息")
@@ -111,22 +111,22 @@ class TestRecentAndBeforeFilter(_InboxBase):
     """recent / before_seq 的站点过滤。"""
 
     def test_recent_按站点过滤(self):
-        self.inbox.append("ai", "a", site_key="glm")
-        self.inbox.append("ai", "b", site_key="qianwen")
+        self.inbox.append("ai", "a", extra={"site_key": "glm"})
+        self.inbox.append("ai", "b", extra={"site_key": "qianwen"})
         data = self.inbox.recent(10, "qianwen")
         self.assertEqual(len(data["messages"]), 1)
         self.assertEqual(data["messages"][0]["text"], "b")
 
     def test_before_seq_按站点过滤(self):
-        self.inbox.append("ai", "a", site_key="glm")
-        self.inbox.append("ai", "b", site_key="qianwen")
-        self.inbox.append("ai", "c", site_key="glm")
+        self.inbox.append("ai", "a", extra={"site_key": "glm"})
+        self.inbox.append("ai", "b", extra={"site_key": "qianwen"})
+        self.inbox.append("ai", "c", extra={"site_key": "glm"})
         data = self.inbox.before_seq(3, 10, "glm")
         texts = [m["text"] for m in data["messages"]]
         self.assertEqual(texts, ["a"])
 
     def test_无匹配站点时返回空(self):
-        self.inbox.append("ai", "a", site_key="glm")
+        self.inbox.append("ai", "a", extra={"site_key": "glm"})
         data = self.inbox.recent(10, "kimi")
         self.assertEqual(data["messages"], [])
 

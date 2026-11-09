@@ -73,34 +73,91 @@ _SITE_HOST_HINTS = {
 }
 
 
+def _log_card_sent(log_hint, card_id, extra=""):
+    """记录一条「卡片已投递」日志。
+
+    @param log_hint 卡片名（如「文本卡片」）
+    @param card_id  卡片 id
+    @param extra    附加信息（如张数）
+    """
+    seg = ["已投递" + log_hint, card_id[:8]]
+    if extra:
+        seg.append(str(extra))
+    seg.append("等待抽屉取走")
+    log(*seg)
+
+
+def _file_payload(path, name, size, text=""):
+    """构造「网页发文件」的卡片载荷。
+
+    文件是二进制，AI 看不见也不需要看见，它需要的是路径——
+    拿到后自己按需调 read_file。因此正文只写「文件在哪」，不塞内容。
+
+    @param path 服务端落盘的绝对路径
+    @param name 原始文件名
+    @param size 体积（字节）
+    @param text 随文件附带的说明文字；为空则自动生成一句
+    @returns {dict} 卡片载荷
+    """
+    body = str(text or "").strip()
+    # 没写说明时给 AI 一句上下文：谁发来的、什么文件、在哪
+    if not body:
+        body = "用户从网页发来文件：%s（%d 字节），已保存到 %s" % (name, size, path)
+    return {
+        "kind": "web-file",
+        "path": str(path or ""),
+        "name": str(name or ""),
+        "size": int(size or 0),
+        "text": body,
+    }
+
+
+def _text_payload(text, target_page):
+    """构造「网页发文字」的卡片载荷。
+
+    @param text        用户输入的文本
+    @param target_page 目标页面地址；空串表示不限页面
+    @returns {dict} external-call 信封载荷
+    """
+    import time
+    return {
+        "type": "external-call",
+        "nonce": "web-" + str(int(time.time() * 1000)),
+        "request": str(text or ""),
+        "source": "web",          # 来源标记：网页版
+        "openid": "web-user",     # 单用户场景固定标识
+        "msg_id": "",
+        "from_voice": False,
+        "page_url": target_page,
+    }
+
+
 class WebBridge:
     """网页版桥接总控：入站投卡、出站存箱、语音落盘。"""
 
-    def _create_card(self, card_type, title, content, payload, log_hint="", extra="",
-                     target_page=""):
+    def _create_card(self, card_type, title, content, payload, opts=None, target_page=""):
         """向卡片总线投一张卡，返回卡片 id；失败返回空串。
 
         @param card_type   卡片类型
         @param title       标题
         @param content     卡片正文
         @param payload     结构化载荷
-        @param log_hint    日志中的卡片名（如「图片卡片」）
-        @param extra       日志附加信息（如张数）
+        @param opts        可选字典，承载日志相关字段：
+                           - log_hint：日志中的卡片名（如「图片卡片」）
+                           - extra：日志附加信息（如张数）
         @param target_page 目标页面地址；非空时只有该页面的抽屉能取走。
                            多网页 AI 并存时用它把网页发出的消息投给指定站点的页面。
         @returns 卡片 id；失败空串
         """
+        o = opts or {}
+        log_hint = str(o.get("log_hint") or "")
         import card_bus
         try:
             card = card_bus.bus.create(
                 source="web", card_type=card_type, title=title,
                 content=content, payload=payload, target_page=target_page,
             )
-            seg = ["已投递" + log_hint, card.id[:8]]
-            if extra:
-                seg.append(extra)
-            seg.append("等待抽屉取走")
-            log(*seg)
+            _log_card_sent(log_hint, card.id, o.get("extra") or "")
             return card.id
         except Exception as e:
             log("投递" + log_hint + "失败：", e)
@@ -118,25 +175,15 @@ class WebBridge:
         @returns 卡片 id；失败返回空串
         """
         import json
-        import time
         # 目标页面：优先取该站点已登记且在线的那一个
         target = _resolve_target_page(site_key)
-        payload = {
-            "type": "external-call",
-            "nonce": "web-" + str(int(time.time() * 1000)),
-            "request": str(text or ""),
-            "source": "web",          # 来源标记：网页版
-            "openid": "web-user",     # 单用户场景固定标识
-            "msg_id": "",
-            "from_voice": False,
-            "page_url": target,
-        }
+        payload = _text_payload(text, target)
         return self._create_card(
             card_type="external-call",
             title="网页用户",
             content=json.dumps(payload, ensure_ascii=False, indent=2),
             payload={"source": "web", "openid": "web-user"},
-            log_hint="文本卡片",
+            opts={"log_hint": "文本卡片"},
             target_page=target,
         )
 
@@ -176,23 +223,13 @@ class WebBridge:
         @param text 随文件附带的说明文字；为空则自动生成一句
         @returns 卡片 id；失败返回空串
         """
-        body = str(text or "").strip()
-        # 没写说明时给 AI 一句上下文：谁发来的、什么文件、在哪
-        if not body:
-            body = "用户从网页发来文件：%s（%d 字节），已保存到 %s" % (name, size, path)
-        payload = {
-            "kind": "web-file",
-            "path": str(path or ""),
-            "name": str(name or ""),
-            "size": int(size or 0),
-            "text": body,
-        }
+        payload = _file_payload(path, name, size, text)
         return self._create_card(
             card_type="web-file",
             title="网页文件",
             content=body,
             payload=payload,
-            log_hint="文件卡片",
+            opts={"log_hint": "文件卡片"},
             extra="name=" + str(name or ""),
         )
 

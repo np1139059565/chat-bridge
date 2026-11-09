@@ -347,6 +347,13 @@ def _init_runtime():
     runtime.CONFIG = init_config()
     # 3) 加载外部工具提供方（executor=external 的工具按 provider 注册）
     runtime.refresh_external_providers()
+    # 4) 载入通道绑定表：让 QQ / 企微各自固定跟某个站点（重启后保持）
+    try:
+        import channel_binding
+        channel_binding.load_from_config(runtime.CONFIG.get("channel_bindings") or {})
+    except Exception as e:
+        import app_log
+        app_log.warn("[app]", "载入通道绑定失败（按未绑定处理）：", e)
 
 
 # 应用是否已完成装配：create_app() 可被测试脚本重复调用，

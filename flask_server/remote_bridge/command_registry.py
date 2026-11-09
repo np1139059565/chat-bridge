@@ -37,6 +37,8 @@ BUILTIN = {
     # 一台电脑开多个网页 AI 时，用这两个指令指定指令投给哪个页面，避免串台。
     "/pages": {"desc": "列出在线的网页 AI 页面", "aliases": ["/pg"], "group": "页面与服务"},
     "/page": {"desc": "接管指定页面（/page 序号 | /page off）", "aliases": [], "group": "页面与服务"},
+    # 通道绑定：让 QQ 与企微各跟一个站点，互不干扰
+    "/bind": {"desc": "绑定当前通道到站点（/bind 站点名 | /bind off）", "aliases": [], "group": "页面与服务"},
     "/settings": {"desc": "打开设置面板", "aliases": ["/st"], "group": "抽屉外观"},
     "/back": {"desc": "从设置返回对话镜像", "aliases": ["/bk"], "group": "抽屉外观"},
     # —— 会话管理 ——

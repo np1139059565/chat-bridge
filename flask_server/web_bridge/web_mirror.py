@@ -421,8 +421,6 @@ def _build_item(m, push, parsers):
 def mirror_report(messages, site_key=""):
     """把一批上报消息镜像进网页收件箱，返回新增条数。
 
-    入参就是 message_router 处理的那份切片；本函数自行分类与拼文本，
-    不依赖 message_router 的中间结果，保持两侧解耦。
     逐条组装委托 _build_item，本函数只负责编排「准备 → 遍历 → 入库」。
     @param messages 消息列表；site_key 为来源站点，供手机端分流
     @returns 新增入库的消息条数
@@ -436,14 +434,15 @@ def mirror_report(messages, site_key=""):
     push = _load_push()
     # 遍历阶段：逐条组装，跳过无需入箱的消息
     items = [it for it in (_build_item(m, push, parsers) for m in messages) if it]
-    if not items:
-        return 0
-    # 入库阶段：批量写入，成功则触发后台语音合成
-    items = [dict(it, site_key=site_key) for it in items] if site_key else items
+    return _store_items(items, site_key)
+
+
+def _store_items(items, site_key):
+    """批量入库并触发语音合成；site_key 非空时整批打标供手机端分流。"""
+    if site_key:
+        items = [dict(it, site_key=site_key) for it in items]
     added = web_inbox.append_many(items)
     if added:
-        # 正常入库走 debug（默认不落盘）：每 2-3 秒一次，记 INFO 会淹没日志。
         app_log.debug("[web][mirror]", "镜像入库", len(added), "条")
-        # 入库后立刻在后台自动合成语音：不阻塞上报、网页无需点击即自动连播。
         schedule_auto_synth(added)
     return len(added)

@@ -250,9 +250,9 @@ def _h_refush(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
 
 
-# 多页面接管指令（/pages、/page）的实现已抽到 command_pages.py（本文件行数上限）。
-# 此处按名导入，指令表照旧引用，分发逻辑不变。
+# 页面接管与通道绑定指令：实现分别在 command_pages.py / command_bind.py
 from .command_pages import handle_pages as _h_pages, handle_page as _h_page
+from .command_bind import handle_bind as _h_bind
 
 
 def _h_side(qq_client, openid, arg, msg_id):
@@ -360,6 +360,7 @@ _BUILTIN_HANDLERS = {
     "/side": _h_side,
     "/pages": _h_pages,
     "/page": _h_page,
+    "/bind": _h_bind,
     "/settings": _h_settings,
     "/back": _h_back,
     "/reconnect": _h_reconnect,
@@ -428,12 +429,12 @@ def _handle_custom(qq_client, openid, msg_id, cmd):
     return True
 
 
-def handle_command(qq_client, openid, msg_id, text):
+def handle_command(qq_client, openid, msg_id, text, channel=""):
     """处理一条指令消息。返回 True 表示已处理（不再当普通消息投递）。
 
-    流程：解析出命令名与参数 → 先查内置指令表 → 再查自定义指令。
-    别名（/sp → /screenshot 等）在解析阶段归一为主命令名。
+    @param channel 通道标识（qq / wecom / weixin），指令据此投给该通道绑定的站点
     """
+    from .command_dispatch import set_channel as _set_ch; _set_ch(channel)  # 供下发层识别通道
     parts = text.strip().split(None, 1)
     cmd = resolve_cmd(parts[0].lower())
     arg = parts[1] if len(parts) > 1 else ""

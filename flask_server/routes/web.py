@@ -199,7 +199,7 @@ def web_send():
         return jsonify(success=False, error="empty_text")
     # 指令：以 / 开头，交给指令处理器，不投网页 AI
     if text.startswith("/"):
-        web_inbox.append("user", text, kind="command", site_key=site)
+        web_inbox.append("user", text, kind="command", extra={"site_key": site})
         _handle_command(text)
         return jsonify(success=True, command=True)
     # 普通消息：投进卡片总线，送进网页 AI。
@@ -208,7 +208,7 @@ def web_send():
     _timer = web_poll_log.new_send_timer()
     card_id = web_bridge.web.ingest_text(text, site_key=site)
     _timer.mark_card()
-    web_inbox.append("user", text, kind="web-user", site_key=site)
+    web_inbox.append("user", text, kind="web-user", extra={"site_key": site})
     _timer.mark_inbox(len(text))
     return jsonify(success=True, cardId=card_id)
 
@@ -313,39 +313,11 @@ def web_messages():
     """
     # site：站点过滤。未传 → None（不过滤，保持旧行为）；传空串 → 只取无站点标记的
     site = request.args.get("site")
-    # before：向上翻历史用——返回比该 seq 更早的一批消息（前端滑到底部时懒加载）
     before = request.args.get("before")
+    from . import web_messages as wm
     if before:
-        try:
-            blimit = int(request.args.get("limit", "50"))
-        except ValueError:
-            blimit = 50
-        # 单批上限 100：翻历史是交互式操作，一次给太多会重新撑大页面
-        data = web_inbox.before_seq(before, max(1, min(blimit, 100)), site)
-        return jsonify(success=True, **data)
-    cursor = request.args.get("cursor", "0")
-    try:
-        limit = int(request.args.get("limit", "200"))
-    except ValueError:
-        limit = 200
-    # 打点与日志统一走 web_poll_log（实现见该模块，含异常兜底）
-    from web_bridge import web_poll_log
-    web_poll_log.log_poll_start()
-    import time as _t
-    _t0 = _t.perf_counter()
-    if request.args.get("history") == "1":
-        # 首次铺屏只给最近 10 条：首屏渲染越轻，手机端越快看到内容。
-        # 其余历史靠滑到底部懒加载（before_seq 分批取），避免一次渲染过多撑爆手机内存。
-        try:
-            hlimit = int(request.args.get("limit", "10"))
-        except ValueError:
-            hlimit = 10
-        data = web_inbox.recent(max(1, min(hlimit, 100)), site)
-    else:
-        data = web_inbox.list_since(cursor, limit, site)
-    # 读收件箱（含等锁 + 读缓存/解析）耗时：轮询卡顿最常见的嫌疑点
-    web_poll_log.log_poll_done(cursor, data, (_t.perf_counter() - _t0) * 1000.0)
-    return jsonify(success=True, **data)
+        return wm.messages_before(before, site)
+    return wm.messages_cursor(site)
 
 
 # 图片 / 截图 / 音频三个下发路由已迁至 routes/web_files_serve.py。
