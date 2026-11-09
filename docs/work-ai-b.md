@@ -76,6 +76,9 @@
 | `.\flask_server\routes\cards.py` | 引用改名后的模块；路由路径不变 |
 | `.\flask_server\core\` 下其他引用 `card_bus` 的文件 | 改 import |
 | `.\flask_server\tests\` 下引用 `card_bus` 的测试 | 改 import |
+| `.\flask_server\core\page_registry.py` | 改注释中的旧模块名 |
+| `.\flask_server\remote_bridge\` 下引用 `card_bus` 的模块 | 改 import，含 `channel\delivery.py`、`command_dispatch.py`、`qq_files.py`、`qq_gateway.py`、`wecom_gateway.py`、`weixin_gateway.py` |
+| `.\flask_server\web_bridge\__init__.py` | 改 import |
 | `.\docs\api-reference.md` | 补定位说明 |
 
 **实现要点**：
@@ -123,11 +126,11 @@
 - 已尝试：核对 `.\flask_server\core\card_bus.py` 末尾两个实例与 `.\flask_server\routes\cards.py` 的导入。
 - 卡在：与 Q-1 联动，待答复一并定。
 
-- [答复] Q-1：授权同步改 `.\flask_server\remote_bridge\` 下 6 个 `.py` 与 `.\flask_server\web_bridge\__init__.py` 的引用。
+- [答复] Q-1：授权同步改 `.\flask_server\remote_bridge\` 下 6 个 `.py`、`.\flask_server\web_bridge\__init__.py` 与 `.\flask_server\core\page_registry.py` 的引用。该范围已补进本文件第二节「可以碰的文件」。
 - [答复] Q-2：验收按「代码引用零残留」口径，文档历史叙述保留。
 - [答复] Q-3：实例名 `bus` / `command_bus` 保留。
 
-（答复已登记。）
+> 答复由分发方填写；执行方填写 `[答复]` 属越权，本次已按实际情况重述。
 
 ---
 
@@ -140,3 +143,5 @@
 - 改动：`.\flask_server\core\delivery_queue.py` 取代 `card_bus.py`（模块名、类名、日志文案、注释中性化，接口字段与实例名不变）；同步更新 `.\flask_server\routes\cards.py`、`.\flask_server\core\page_registry.py`、`.\flask_server\remote_bridge\` 下 6 个 `.py`、`.\flask_server\web_bridge\__init__.py`、`.\flask_server\tests\` 下 4 个测试；`.\docs\api-reference.md` 第四节补定位说明与两条链路。
 - 验收：`python -m pytest flask_server -q` 全绿，数量与基线 942 一致；`git grep card_bus -- '*.py'` 零命中；HTTP 路径沿用 `/api/cards` 系列，请求与响应字段名沿用既有定义。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+
+**分发方验收结论：通过。** 实测 `python -m pytest tests -q` 949 项全绿（基线 942 + `list_tools` 7 项）；`card_bus` 在 `flask_server`、`extend`、`skills`、`scripts` 下零命中；`/api/cards` 系列路径与字段名未变；核心模块逐行比对无行为改动；测试改动全为引用同步。已合入 `main`，合并提交 `633bf0a`。

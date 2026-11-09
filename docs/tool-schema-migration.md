@@ -30,8 +30,8 @@
 
 ### 3.1 参数声明本体
 
-- [ ] `flask_server/tools/tool_meta.py` — 20 个内置工具的参数声明改写，逐项核对：
-      `get_tool_params`、`list_dir`、`search_file`、`search_content`、`read_file`、
+- [ ] `flask_server/tools/tool_meta.py` — 21 个内置工具的参数声明改写，逐项核对：
+      `list_tools`、`get_tool_params`、`list_dir`、`search_file`、`search_content`、`read_file`、
       `read_image`、`push_file`、`list_skills`、`read_skill`、`read_lints`、
       `replace_in_file`、`write_to_file`、`delete_file`、`list_rules`、`read_rule`、
       `run_command`、`command_task`、`memory_search`、`memory_inspect`、`memory_refine`
@@ -84,7 +84,7 @@
 
 每完成一个阶段，按下列顺序验证：
 
-1. **单测**：`python -m pytest tests -q`，全绿（基线 942 项，2026-11-09 于 `a974f83` 实测）。
+1. **单测**：`python -m pytest tests -q`，全绿（基线 949 项，2026-11-09 于 B-1 合入后实测）。
 2. **前端测试**：`node --test flask_server/tests/js/*.test.js`，全绿（基线 380 项，同日实测）。
 3. **质量闸门**：`python scripts/quality_rules.py`，无新增违规。
 4. **实机冒烟**：
@@ -98,3 +98,4 @@
 |---|---|---|
 | — | 建立本清单 | — |
 | 2026-11-09 | 核实清单事实：工具数 13→20 并列出名单；联合类型全量扫描确认仅 `read_file.path` 一处，策略定为 `anyOf`；基线更新为 py 942 / js 380；前端条目按实测改写并确定适配层落点 | 扫描 + 实测 |
+| 2026-11-09 | 合入 `list_tools` 后复核：工具数 20→21，基线 py 942→949 | 实测 |
