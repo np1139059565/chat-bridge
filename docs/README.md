@@ -20,8 +20,7 @@
 
 | 文档 | 性质 | 什么时候读 |
 |---|---|---|
-| `command-tool-isolation.md` | 强制规范 | 改动「指令 / 工具 / 卡片回传」相关代码前**必读** |
-| `external-card.md` / `external-tool.md` / `external-skill.md` / `external-command.md` | 规范 | 涉及外部卡片、外部工具、技能、指令扩展时 |
+| `extensions.md` | **扩展开发规范** | 写 skill、加 AI 工具、注册指令、投递任务时；其第五节「隔离铁律」改动指令与工具相关代码前**必读** |
 | `channel-genericization.md` | 改造原则 | 新增通道、改动推送链路前；其第五节是各通道必须遵守的等价原则 |
 
 ### 当前进行中的工程
