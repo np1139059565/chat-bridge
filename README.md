@@ -182,7 +182,7 @@ WAV 转 MP3 默认用 `soundfile` + `lameenc`；两者都不可用时自动回�
 - 接入方式：QQ 官方 Bot API 的 WebSocket 长连接，本地服务无需公网地址。
 - 对网页 AI 完全透明：QQ 消息包装成普通外部卡片，AI 感知不到桥接层存在。
 - 配置入口：抽屉「设置」页的「远程桥接（QQ）」区块。
-- 使用说明见 `docs/remote-bridge-guide.md`，设计与架构见 `docs/remote-bridge-plan.md`。
+- 使用说明见 `docs/remote-bridge-guide.md`。
 
 ## 开发
 

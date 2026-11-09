@@ -64,18 +64,11 @@
 
 | 文档 | 记录内容 |
 |---|---|
-| `refactor-plan.md` | 一轮重构的执行计划与批次记录 |
-| `前端测试补充进度.md` | 前端测试覆盖补充那一轮的清单与进度 |
-| `debug_chrome改造进度.md` | 调试扩展改造那一轮的清单与进度 |
-| `wecom-refactor-plan.md` | 企业微信通道重构那一轮的问题清单与改造步骤 |
-| `code-review-report.md` | 代码走查那一轮的结论与修复记录 |
-| `memory-system-review.md` | 记忆系统走查那一轮的问题清单与边界结论 |
 | `PROGRESS.md` | 千问页面输入适配器那一轮的调试进度与结论 |
 | `card-state-issue-tracker.md` | 卡片状态类故障的追踪与结案记录 |
 | `incident-2026-11-08-glm-paste-guard.md` | 一次粘贴守卫相关事故的现场记录与结论 |
 | `服务不可用.html` | 风控形态排查时抓取的页面快照 |
 | `pending-tasks-closed.md` | 已结案待办条目存档 |
 | `dialog-parts-split-history.md` | 抽屉分片拆分过程与期间故障记录 |
-| `让AI从“应声虫”变成敢于反驳你的思考伙伴.md` | 提示词模板合集，与工程代码无关 |
 
 需要查「某个改动为什么这么做」时，归档文档是线索；判断「现在该怎么做」时，以根目录文档与代码为准。

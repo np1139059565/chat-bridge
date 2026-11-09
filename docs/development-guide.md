@@ -244,7 +244,7 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 
 ## 六、验证脚本
 
-> 代码走查结论见 `docs/archive/code-review-report.md`，待办清单见 `docs/pending-tasks.md`。
+> 待办清单见 `docs/pending-tasks.md`。
 
 - `flask_server/scripts/_smoke_ct.py`：自定义工具子系统冒烟测试（解析 → 安装 → 落盘 → 回读 → 上线 → 执行 → 缺参报错 → 扫描 → 删除）。
 - `scripts/quality_rules.py`：结构质量闸门，十二项检查，钩子与 CI 共用此入口。

@@ -1,7 +1,6 @@
 # 远程桥接使用说明（QQ ↔ 网页 AI）
 
 这份文档面向使用者，讲清楚怎么配置、怎么用、遇到问题怎么办。
-设计细节见 `docs/remote-bridge-plan.md`。
 
 ---
 
@@ -264,6 +263,5 @@ QQ 官方规定：你发消息后 60 分钟内，机器人才能回复你。超�
 
 ## 十、相关文档
 
-- `docs/remote-bridge-plan.md`：方案设计与架构选型。
 - `docs/architecture.md`：工程架构总览。
 - `docs/development-guide.md`：开发与调试。
