@@ -54,27 +54,150 @@
   };
 
   /**
+   * 去掉代码文本里的不可见字符：零宽空格 / 零宽连接符 / BOM 会被 JSON.parse 判为非法，
+   * 不换行空格（U+00A0）则按普通空格处理。
+   * @param {string} s 原始文本
+   * @returns {string} 规整后的文本
+   */
+  M._stripInvisible = function (s) {
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if ((c >= 0x200b && c <= 0x200f) || c === 0xfeff) continue;
+      out += c === 0xa0 ? ' ' : s[i];
+    }
+    return out;
+  };
+
+  /**
+   * 剥掉站点在代码块左侧渲染的行号栏。
+   * 判定从严：只有每一行都以 1、2、3…… 连续数字开头且至少两行，才认定是行号栏，
+   * 否则原样返回，避免误删正常 JSON 里的数字内容。
+   * @param {string} s 文本
+   * @returns {string} 去掉行号后的文本
+   */
+  M._stripLineNumbers = function (s) {
+    const lines = String(s || '').split('\n');
+    const kept = [];
+    let expect = 1;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line.trim()) continue;
+      const m = /^(\d{1,4})\s?(.*)$/.exec(line.trim());
+      if (!m || Number(m[1]) !== expect) return s;
+      expect += 1;
+      kept.push(m[2]);
+    }
+    return expect > 2 ? kept.join('\n') : s;
+  };
+
+  /**
+   * 去掉站点工具条混进正文的装饰行：首行的语言标签、末行的复制按钮文案。
+   * @param {string} raw 原始文本
+   * @returns {string} 去装饰后的文本
+   */
+  M._stripCodeDecor = function (raw) {
+    const s = this._stripLineNumbers(this._stripInvisible(String(raw || '')));
+    const lines = s.split('\n');
+    if (lines.length > 1 && /^[A-Za-z0-9_+#.-]{1,12}$/.test(lines[0].trim())) lines.shift();
+    while (lines.length && /^(复制代码|复制|copy)$/i.test(lines[lines.length - 1].trim())) lines.pop();
+    return lines.join('\n').trim();
+  };
+
+  /**
+   * 从文本中截取第一个「大括号配平」的 JSON 对象，字符串内的括号不计数。
+   * @param {string} s 文本
+   * @returns {string} JSON 片段；找不到返回空串
+   */
+  M._jsonSpan = function (s) {
+    const text = String(s || '');
+    const start = text.indexOf('{');
+    if (start < 0) return '';
+    let depth = 0;
+    let inStr = false;
+    let esc = false;
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+      if (inStr) {
+        if (esc) esc = false;
+        else if (ch === '\\') esc = true;
+        else if (ch === '"') inStr = false;
+        continue;
+      }
+      if (ch === '"') inStr = true;
+      else if (ch === '{') depth += 1;
+      else if (ch === '}') {
+        depth -= 1;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+    return '';
+  };
+
+  /**
+   * 生成候选文本序列：原样、去装饰、截取配平对象。去重后交给逐一解析。
+   * @param {string} raw 代码块原始文本
+   * @returns {Array<string>} 候选列表
+   */
+  M._jsonCandidates = function (raw) {
+    const out = [];
+    const add = function (v) {
+      const t = String(v || '').trim();
+      if (t && out.indexOf(t) < 0) out.push(t);
+    };
+    add(raw);
+    const cleaned = this._stripCodeDecor(raw);
+    add(cleaned);
+    add(this._jsonSpan(cleaned));
+    return out;
+  };
+
+  /**
+   * 解析单个候选：先直接解析，失败再修复字符串内裸控制字符后解析一次。
+   * @param {string} s 候选文本
+   * @returns {Object|null} 解析结果
+   */
+  M._tryParseJson = function (s) {
+    if (!s || s.charAt(0) !== '{') return null;
+    try {
+      return JSON.parse(s);
+    } catch (e) {
+      try {
+        const fixed = JSON.parse(this._repairJsonControlChars(s));
+        if (fixed) D.log('解析修复：裸控制字符已修复后解析成功');
+        return fixed || null;
+      } catch (e2) {
+        return null;
+      }
+    }
+  };
+
+  /**
+   * 按候选顺序解析工具调用 JSON，任一候选成功即返回。
+   * @param {string} raw 代码块原始文本
+   * @returns {Object|null} 解析出的对象
+   */
+  M._parseToolJson = function (raw) {
+    const cands = this._jsonCandidates(raw);
+    for (let i = 0; i < cands.length; i++) {
+      const obj = this._tryParseJson(cands[i]);
+      if (obj) return obj;
+    }
+    return null;
+  };
+
+  /**
    * 判断代码块是否为一次工具调用：内容是 { tool, parameters } 且带 bridge-chat-call 即算。
    * 安全性由调用方保证：只有「助手消息」里的代码块才会被判为工具调用。
    * 容错：首次解析失败时，先修复字符串内裸控制字符再解析一次（见 _repairJsonControlChars）。
    */
   M.parseToolCall = function (block) {
     if (!block || block.type !== 'code') return null;
-    const src = String(block.code || '').trim();
-    if (!src || src.charAt(0) !== '{') return null; // 快速排除非 JSON
-    let obj = null;
-    try {
-      obj = JSON.parse(src);
-    } catch (e) {
-      // 首次失败：多半是网页渲染把 \n 还原成真实换行，导致字符串内出现裸控制字符。
-      // 修复后再解析一次；仍失败则按普通代码块处理。
-      try {
-        obj = JSON.parse(this._repairJsonControlChars(src));
-        if (obj) D.log('解析修复：裸控制字符已修复后解析成功');
-      } catch (e2) {
-        return null;
-      }
-    }
+    // 代码块文本常被站点装饰污染：行号栏、语言标签、复制按钮文案、零宽字符。
+    // 直接 JSON.parse 会整块失败，卡片随即退化成普通代码块（千问实测如此）。
+    // 故不预设首字符，改为候选提取后逐个尝试：原样 / 去装饰 / 截取配平对象。
+    const obj = M._parseToolJson(String(block.code || ''));
+    if (!obj) return null;
     if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
       return { tool: String(obj.tool), parameters: obj.parameters || {} };
     }
