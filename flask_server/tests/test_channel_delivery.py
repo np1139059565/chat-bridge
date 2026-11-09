@@ -28,7 +28,7 @@ from remote_bridge.channel import delivery  # noqa: E402
 
 
 class _FakeBus:
-    """记录 create 调用的假卡片总线。"""
+    """记录 create 调用的假投递队列。"""
 
     def __init__(self):
         """初始化调用记录。"""
@@ -46,9 +46,9 @@ class _FakeBus:
 
 @pytest.fixture
 def _patch_bus(monkeypatch):
-    """把卡片总线替换成假实现，返回它以便断言。"""
+    """把投递队列替换成假实现，返回它以便断言。"""
     fake = _FakeBus()
-    monkeypatch.setattr(delivery.card_bus, "bus", fake)
+    monkeypatch.setattr(delivery.delivery_queue, "bus", fake)
     return fake
 
 

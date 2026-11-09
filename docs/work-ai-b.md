@@ -108,7 +108,26 @@
 > AI 在此登记疑问，每条写明：问题、已尝试什么、卡在哪。
 > 答复写在同一编号下，标 `[答复]`。
 
-（暂无）
+### Q-1 范围外代码引用是否授权同步改
+- 问题：任务书「可以碰的文件」未列 `.\flask_server\remote_bridge\` 与 `.\flask_server\web_bridge\`，但两处共 7 个 `.py` 以 `import card_bus` / `card_bus.bus` / `card_bus.command_bus` 引用旧模块：`.\flask_server\remote_bridge\channel\delivery.py`、`.\flask_server\remote_bridge\command_dispatch.py`、`.\flask_server\remote_bridge\qq_files.py`、`.\flask_server\remote_bridge\qq_gateway.py`、`.\flask_server\remote_bridge\wecom_gateway.py`、`.\flask_server\remote_bridge\weixin_gateway.py`、`.\flask_server\web_bridge\__init__.py`。删除 `card_bus.py` 后这些导入全部失效，942 项基线测试无法通过；保留旧名做兼容转发则违反「改名彻底」与「全仓 `card_bus` 零命中」。
+- 已尝试：`git grep -l -I card_bus` 列出 20 个被跟踪文件；全仓盘点命中 82 处，逐条区分代码引用、测试引用、文档叙述与缓存；跑基线 `python -m pytest flask_server -q` 得 942 passed；读规格 `.\docs\split-mirror-and-tools-service.md` 3.6 与阶段 1a 第 6 条，确认命名中性化属既定方向。
+- 卡在：1.4「需要改范围外文件时，先写进本文件第四节『提问』，等答复再动」。
+
+### Q-2 「全仓零命中」的验收口径
+- 问题：`README.md`、`docs\architecture.md`、`docs\development-guide.md`、`docs\limits-reference.md`、`docs\work-ai-c.md` 及本文件第二节与验收表均含 `card_bus` 字样，清单只授权改 `docs\api-reference.md`。字面零命中需改 AI-C 任务书与本任务书历史陈述；按「无残留代码引用」则这些可保留。
+- 已尝试：`git grep` 区分被跟踪文件与 `.pytest_cache` 缓存命中，后者未入库、不影响验收。
+- 卡在：口径未定，无法判断改动面。
+
+### Q-3 实例名 `bus` / `command_bus` 是否一并中性化
+- 问题：实现要点 1 要求「变量名都改」，范围外文件却以 `card_bus.bus.create(...)`、`card_bus.command_bus.create(...)` 取用。实例改名会扩大范围外改动面；保留则改名不彻底。
+- 已尝试：核对 `.\flask_server\core\card_bus.py` 末尾两个实例与 `.\flask_server\routes\cards.py` 的导入。
+- 卡在：与 Q-1 联动，待答复一并定。
+
+- [答复] Q-1：授权同步改 `.\flask_server\remote_bridge\` 下 6 个 `.py` 与 `.\flask_server\web_bridge\__init__.py` 的引用。
+- [答复] Q-2：验收按「代码引用零残留」口径，文档历史叙述保留。
+- [答复] Q-3：实例名 `bus` / `command_bus` 保留。
+
+（答复已登记。）
 
 ---
 
@@ -116,4 +135,8 @@
 
 > 每个任务完成后在此追加：任务编号、改了什么、验收结果、提交哈希。
 
-（暂无）
+### B-1 投递队列通用化
+
+- 改动：`.\flask_server\core\delivery_queue.py` 取代 `card_bus.py`（模块名、类名、日志文案、注释中性化，接口字段与实例名不变）；同步更新 `.\flask_server\routes\cards.py`、`.\flask_server\core\page_registry.py`、`.\flask_server\remote_bridge\` 下 6 个 `.py`、`.\flask_server\web_bridge\__init__.py`、`.\flask_server\tests\` 下 4 个测试；`.\docs\api-reference.md` 第四节补定位说明与两条链路。
+- 验收：`python -m pytest flask_server -q` 全绿，数量与基线 942 一致；`git grep card_bus -- '*.py'` 零命中；HTTP 路径沿用 `/api/cards` 系列，请求与响应字段名沿用既有定义。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。

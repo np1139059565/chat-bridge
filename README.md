@@ -49,7 +49,7 @@ chat-bridge-main/
 │   │   ├── yaml_utils.py      # YAML 标量原语
 │   │   ├── rules.py           # 规则文件读取与优先级
 │   │   ├── prompt_sections.py # 技能说明与技能清单收集
-│   │   ├── card_bus.py        # 外部卡片总线
+│   │   ├── delivery_queue.py  # 通用投递队列
 │   │   ├── external_tools.py  # 外部工具提供方注册表与转发
 │   │   ├── screenshot_store.py# 截图存盘
 │   │   ├── memory_text.py     # 记忆消息块转纯文本（共享）

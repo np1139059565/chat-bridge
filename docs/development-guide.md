@@ -49,7 +49,7 @@ python flask_server/scripts/_smoke_ct.py
 |---|---|
 | 新增/修改内置工具 | `flask_server/tools/tools_impl.py`（改完需重启服务）；辅助在 `tool_helpers.py`，元数据在 `tool_meta.py` |
 | 工具上线开关、端口、体积上限 | `flask_server/config/runtime.yaml` 或 `POST /config` |
-| 卡片总线行为 | `flask_server/core/card_bus.py` + `routes/cards.py` |
+| 投递队列行为 | `flask_server/core/delivery_queue.py` + `routes/cards.py` |
 | 外部工具转发 | `flask_server/core/external_tools.py` + `routes/ext.py` |
 | 运行期全局状态（工具表 / 配置） | `flask_server/runtime.py` |
 | 路径基准 | `flask_server/paths.py`（唯一来源，文件搬迁时只改这里） |
@@ -234,7 +234,7 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 |---|---|---|
 | M1 | `extend/dialog/parts/00_data.js` / `04_sessions.js` | （已修）外部卡片曾未按会话隔离 / 不持久化 |
 | M2 | `extend/dialog/parts/06_execute.js` | （已修）关闭自动开关后外部卡片曾卡死 |
-| M3 | `flask_server/core/card_bus.py` | 卡片投递为全局 claim，多标签页可能串台 |
+| M3 | `flask_server/core/delivery_queue.py` | 投递项为全局 claim，多标签页可能串台 |
 | D1 | `flask_server/routes/ext.py` | （已修）提供方通道按 `page_url` / `is_open` 定向，目标页面工具未开即逸散 |
 | D3 | `skills/debug_chrome/extension/content/05_tool-handlers.js` | （已修）`get_element_style` 强制采集样式，默认返回常用属性集 |
 | D4 | `skills/debug_chrome/extension/content/00_namespace.js` | 后端地址端口硬编码 5000 |

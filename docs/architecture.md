@@ -100,7 +100,7 @@ chat-bridge/
 | 文件 | 职责 |
 |---|---|
 | `config_store.py` / `config_file.py` | 主配置读写、分区合并 |
-| `card_bus.py` | 卡片总线：统一登记外部卡片并投递给镜像插件 |
+| `delivery_queue.py` | 通用投递队列：登记投递项并供接收端取走 |
 | `external_tools.py` | 外部工具提供方注册与转发（队列、心跳、等待） |
 | `envelope.py` | 外部调用信封解析（共享） |
 | `rules.py` / `rule_enforce.py` | 规则文件管理与可机械判定的程序化校验 |
@@ -222,7 +222,7 @@ chat-bridge/
 
 ```
 调试扩展抽屉 POST /api/cards（挂起）
-  → card_bus 登记卡片
+  → delivery_queue 登记投递项
   → 镜像插件 GET /api/cards/pending 取走
   → 抽屉内渲染外部卡片（按 anchorKey 锚点插入到对应消息之后）
   → 倒计时后 auto_send 信封 {type,request} 到网页 AI（不携带 id）

@@ -8,7 +8,7 @@
 
 | 上限 | 值 | 位置 | 含义 |
 |---|---|---|---|
-| `MAX_CARDS` | 200 | `core/card_bus.py` | 卡片总线最多保留的卡片数，超限优先裁剪已确认展示的最旧卡片 |
+| `MAX_CARDS` | 200 | `core/delivery_queue.py` | 投递队列最多保留的投递项数，超限优先裁剪已确认展示的最旧卡片 |
 | `MAX_MESSAGES` | 500 | `web_bridge/web_inbox.py` | 网页收件箱最多保留的消息条数，超限丢最旧 |
 | `MAX_AUDIO_FILES` | 100 | `web_bridge/audio_prune.py` | 网页音频目录最多保留的文件数，合成后按修改时间回收更旧的 |
 | `MAX_SCREENSHOT_FILES` | 200 | `core/app_limits.py` | 截图目录上限，落盘后按修改时间回收（实现见 `core/file_prune.py`） |

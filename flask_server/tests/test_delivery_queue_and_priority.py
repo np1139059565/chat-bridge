@@ -1,22 +1,22 @@
-"""卡片总线与界面优先级的测试。
+"""投递队列与界面优先级的测试。
 
 背景：
-    card_bus 负责外部卡片的登记与投递（含总数上限裁剪，防内存泄漏）；
+    delivery_queue 负责投递项的登记与取件（含总数上限裁剪，防内存泄漏）；
     ui_priority 负责让后台维护在界面请求进行时主动让路。此前均无测试。
 
 隔离策略：
-    card_bus 测试新建独立 CardBus 实例，不碰全局单例 bus；
+    delivery_queue 测试新建独立 DeliveryQueue 实例，不碰全局单例 bus；
     ui_priority 测试直接操作模块计数，并在 tearDown 复位为 0。
 
 验证目标：
-    1. CardBus.create / get / claim_pending / confirm_delivered 主流程；
+    1. DeliveryQueue.create / get / claim_pending / confirm_delivered 主流程；
     2. 未确认卡片可反复取走，确认后不再投递，重复确认幂等；
     3. 超过上限时优先裁剪已确认卡片，未确认的保留；
     4. ui_request_enter/exit 计数增减，exit 不使计数为负；
     5. maintenance_yield：无界面请求时不等待，有请求时会等待。
 
 运行方式（在 flask_server/ 目录下）：
-    python -m unittest tests.test_card_bus_and_priority -v
+    python -m unittest tests.test_delivery_queue_and_priority -v
 """
 import os
 import sys
@@ -26,17 +26,17 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
-import card_bus
+import delivery_queue
 import ui_priority
 
 
 def _new_bus():
     """新建独立总线实例，避免污染全局单例。"""
-    return card_bus.CardBus()
+    return delivery_queue.DeliveryQueue()
 
 
-class TestCardBus(unittest.TestCase):
-    """卡片总线。"""
+class TestDeliveryQueue(unittest.TestCase):
+    """通用投递队列。"""
 
     def test_create_and_get(self):
         """登记后可按 id 取回。"""
@@ -45,7 +45,7 @@ class TestCardBus(unittest.TestCase):
         got = b.get(card.id)
         self.assertIsNotNone(got)
         self.assertEqual(got["content"], "正文")
-        self.assertEqual(got["status"], card_bus.STATUS_PENDING)
+        self.assertEqual(got["status"], delivery_queue.STATUS_PENDING)
 
     def test_get_missing_returns_none(self):
         """取不存在的卡片返回 None。"""
@@ -87,7 +87,7 @@ class TestCardBus(unittest.TestCase):
         # 先造一张未确认卡片
         keep = b.create("external", "t", "keep", "正文", {})
         # 再造超上限的已确认卡片
-        for i in range(card_bus.MAX_CARDS + 20):
+        for i in range(delivery_queue.MAX_CARDS + 20):
             c = b.create("external", "t", "x", "正文", {})
             b.confirm_delivered(c.id)
         pending_ids = {c["id"] for c in b.claim_pending()}
@@ -96,10 +96,10 @@ class TestCardBus(unittest.TestCase):
     def test_trim_reduces_size(self):
         """超上限后总卡片数应回到上限之内。"""
         b = _new_bus()
-        for i in range(card_bus.MAX_CARDS + 30):
+        for i in range(delivery_queue.MAX_CARDS + 30):
             c = b.create("external", "t", "x", "正文", {})
             b.confirm_delivered(c.id)
-        self.assertLessEqual(len(b._cards), card_bus.MAX_CARDS)
+        self.assertLessEqual(len(b._items), delivery_queue.MAX_CARDS)
 
 
 class TestUiPriority(unittest.TestCase):
