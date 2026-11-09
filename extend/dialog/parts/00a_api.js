@@ -22,9 +22,23 @@
    */
   D.apiFetch = async function (ctx, path, options) {
     const opts = Object.assign({}, options || {});
+    const commit = !!opts.__commit;
+    delete opts.__commit;
     const lenientJson = !!opts.lenientJson;
     delete opts.lenientJson;
-    const base = (ctx.config.flaskUrl || '').replace(/\/+$/, '');
+    const base = String((ctx && ctx.config && ctx.config.flaskUrl) || '').replace(/[\/]+$/, '');
+    const method = String(opts.method || 'GET').toUpperCase();
+    const draftOn = !!ctx && ctx.configDraftMode !== false && !commit;
+
+    // v3 全区块草稿：命中受管配置写端点时不发请求，只登记待覆盖写入。
+    if (draftOn && typeof D.matchConfigBlock === 'function') {
+      const wb = D.matchConfigBlock(path, method, true);
+      if (wb && (!wb.guard || wb.guard(opts.body))) {
+        await D.queuePendingWrite(ctx, wb, path, method, opts.body);
+        return { ok: true, success: true, draft: true };
+      }
+    }
+
     opts.headers = Object.assign({}, opts.headers || {});
     if (opts.body && typeof opts.body !== 'string') {
       opts.body = JSON.stringify(opts.body);
@@ -32,17 +46,21 @@
     }
     const r = await fetch(base + path, opts);
     if (!r.ok) {
-      // 非 2xx：尽量取出后端响应体里的具体错误，避免只剩「HTTP 400」
-      // 让人无从下手。后端失败响应通常形如 {ok:false, error:"原因"}，
-      // 这里把 error/message 拼进消息，真实原因才不会被吞掉。
       let detail = '';
       try {
         const body = await r.json();
         if (body) detail = body.error || body.message || '';
-      } catch (e) { /* 响应不是 JSON：忽略，仅用状态码 */ }
+      } catch (e) { }
       throw new Error('HTTP ' + r.status + (detail ? ('：' + detail) : ''));
     }
-    if (lenientJson) return r.json().catch(function () { return {}; });
-    return r.json();
+    let data;
+    if (lenientJson) data = await r.json().catch(function () { return {}; });
+    else data = await r.json();
+    // 读端点：把待覆盖的本地改动合并进响应，避免 setter 重读把 UI 冲回服务端旧值。
+    if (draftOn && typeof D.applyPendingToRead === 'function') {
+      const rb = D.matchConfigBlock(path, method, false);
+      if (rb) data = D.applyPendingToRead(ctx, path, data, rb);
+    }
+    return data;
   };
 })();

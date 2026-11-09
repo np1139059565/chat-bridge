@@ -59,12 +59,15 @@
     Object.keys(pl).concat(Object.keys(pb)).forEach(function (k) {
       if (JSON.stringify(pl[k]) !== JSON.stringify(pb[k])) pd[k] = pb[k];
     });
+    const pending = cache.pending || [], byBlock = {};
+    pending.forEach(function (w) { byBlock[w.block] = (byBlock[w.block] || 0) + 1; });
     this.configDiff = diff;
     this.configPublicDiff = pd;
+    this.configBlockDirty = byBlock;
     const nSite = Object.keys(diff).reduce(function (a, k) {
       return a + Object.keys(diff[k]).length; }, 0);
-    this.configDirty = nSite > 0 || Object.keys(pd).length > 0;
-    this.configDiffCount = nSite + Object.keys(pd).length;
+    this.configDirty = nSite > 0 || Object.keys(pd).length > 0 || pending.length > 0;
+    this.configDiffCount = nSite + Object.keys(pd).length + pending.length;
   };
 
   M.persistConfigCache = async function () {
@@ -187,22 +190,32 @@
   M.cancelConfigOverwrite = function () { this.siteProfConfirmOpen = false; };
 
   M.applyConfigOverwrite = async function () {
-    await this.persistConfigCache();
-    const cache = this.configCache || {};
-    const body = D.configPublicToBody(D.configPublic(cache));
-    const pid = this.currentProfileId();
-    const out = D.serializeProfilesDraft(this.siteProfDraft || {});
-    if (pid && out[pid]) body.profiles = { [pid]: out[pid] };
-    const removed = (this._configRemovedSites || []).slice();
-    if (removed.length) body.profiles_remove = removed;
     try {
-      await D.apiFetch(this, '/config', { method: 'POST', body: body });
+      // 1) 回放所有受管配置区块的待覆盖写入（__commit 绕过草稿拦截）
+      const pending = ((this.configCache && this.configCache.pending) || []).slice()
+        .sort(function (a, b) { return a.seq - b.seq; });
+      for (let i = 0; i < pending.length; i++) {
+        const w = pending[i];
+        await D.apiFetch(this, w.path, { method: w.method, body: w.body, __commit: true });
+      }
+      // 2) 站点档案草稿落缓存，再整份提交 /config 母版
+      await this.persistConfigCache();
+      const cache = this.configCache || {};
+      const body = D.configPublicToBody(D.configPublic(cache));
+      const pid = this.currentProfileId();
+      const out = D.serializeProfilesDraft(this.siteProfDraft || {});
+      if (pid && out[pid]) body.profiles = { [pid]: out[pid] };
+      const removed = (this._configRemovedSites || []).slice();
+      if (removed.length) body.profiles_remove = removed;
+      await D.apiFetch(this, '/config', { method: 'POST', body: body, __commit: true });
+      // 3) 清空待覆盖写入，后端快照按本地缓存对齐
+      cache.pending = [];
       this.configBackend = JSON.parse(JSON.stringify(cache));
       await D.configCacheSet(this.siteKey, cache);
       window.parent.postMessage({ type: 'profiles_refresh' }, '*');
       this.siteProfConfirmOpen = false;
       this.recomputeConfigDiff();
-      this.toast('已覆盖服务端配置');
+      this.toast('已覆盖服务端配置（含 ' + pending.length + ' 项其它配置）');
     } catch (e) {
       this.toast('覆盖失败：' + e);
     }
@@ -212,6 +225,7 @@
     const offline = !!ctx.configOffline;
     const dirty = !!ctx.configDirty;
     const pubKeys = Object.keys(ctx.configPublicDiff || {});
+    const blockIds = Object.keys(ctx.configBlockDirty || {});
     return h('div', { class: 'sp-config-bar' }, [
       offline ? h('span', {}, '（后端未连接：仅显示本地缓存，不做比对）')
         : (dirty ? h('span', {}, '有 ' + (ctx.configDiffCount || 0)
@@ -224,8 +238,16 @@
       ...pubKeys.map(function (k) {
         return h('span', { key: k, class: 'sp-diff-badge' }, '公共差异：' + k);
       }),
-      pubKeys.length ? h('span', { class: 'sp-site-scope' },
-        '（下方各控件旁可点【还原】逐项还原）') : null
+      ...blockIds.map(function (id) {
+        const b = (D.CONFIG_BLOCKS || []).filter(function (x) { return x.id === id; })[0];
+        return h('span', { key: id, class: 'sp-diff-badge' }, [
+          h('span', {}, ctx.configBlockDirty[id] + ' 项未覆盖：' + (b ? b.label : id) + ' '),
+          h('button', { class: 'sp-restore-btn',
+            onClick: () => { if (ctx.discardConfigBlock) ctx.discardConfigBlock(id); } }, '还原')
+        ]);
+      }),
+      (pubKeys.length || blockIds.length) ? h('span', { class: 'sp-site-scope' },
+        '（各控件旁可点【还原】逐项还原）') : null
     ]);
   };
 
@@ -248,4 +270,32 @@
       ])
     ]);
   };
+  /** 受管配置区块的待覆盖写入登记（由 00a_api.js 草稿拦截层调用）。 */
+  D.queuePendingWrite = async function (ctx, block, path, method, body) {
+    const cache = ctx.configCache || (ctx.configCache = {});
+    // 同一路径只留最后一次：配置 POST 通常是整份覆盖，旧草稿无意义。
+    const list = (cache.pending || []).filter(function (w) { return w.path !== path; });
+    list.push({ seq: Date.now() + Math.random(), block: block.id,
+      label: block.label, path: path, method: method, body: body });
+    cache.pending = list;
+    await D.configCacheSet(ctx.siteKey, cache);
+    if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
+  };
+
+  /** 丢弃某区块的本地草稿；不写后端，重新展开后显示服务端值。 */
+  M.discardConfigBlock = async function (id) {
+    const cache = this.configCache || (this.configCache = {});
+    cache.pending = (cache.pending || []).filter(function (w) { return w.block !== id; });
+    await D.configCacheSet(this.siteKey, cache);
+    this.recomputeConfigDiff();
+    this.toast('已丢弃该区块的本地改动，重新展开后显示服务端值');
+  };
+
+  /** 区块卡片头徽标：一致 / 离线静默，仅存在未覆盖写入时亮。 */
+  D.renderBlockBadge = function (ctx, id) {
+    if (!ctx || !ctx.configBlockDirty || !ctx.configBlockDirty[id]) return null;
+    return h('span', { class: 'sp-diff-badge' }, ctx.configBlockDirty[id] + ' 项未覆盖');
+  };
+
+
 })();

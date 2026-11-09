@@ -49,7 +49,7 @@
   D.configPublic = function (cfg) {
     const out = {};
     Object.keys(cfg || {}).forEach(function (k) {
-      if (k !== 'profiles') out[k] = cfg[k];
+      if (k !== 'profiles' && k !== 'pending' && k !== 'blocks' && k !== 'overrides') out[k] = cfg[k];
     });
     return out;
   };
@@ -123,6 +123,9 @@
     if (out.flask) {    out.flask = Object.assign({}, out.flask);    delete out.flask.url;  }
     delete out.available_tools;
     delete out.site_profiles;
+    delete out.pending;
+    delete out.blocks;
+    delete out.overrides;
     return out;
   };
 })();

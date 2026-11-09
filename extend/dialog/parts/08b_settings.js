@@ -268,29 +268,36 @@
         // 1) System Prompt：供复制粘贴到网页 AI 对话框
         D.renderSystemPromptBlock(ctx),
         // 2) 规则：用户自定义约定文件，AI 按需读取
+        D.renderBlockBadge(ctx, 'rules'),
         D.renderRulesBlock(ctx),
         // 2.5) 技能：工具的容器；一键控制其下全部工具的上 / 下线。
         //      技能内的工具同时出现在下方「工具」区块，两处开关同源。
+        D.renderBlockBadge(ctx, 'skills'),
         D.renderSkillsBlock(ctx),
         // ===== 分组一：通道 =====
         // 三条通道各自独立，各自管自己的凭证与连接状态。
         // 投递策略（推送什么、要不要语音）是三通道共用的，不归任何单条通道，
         // 故从本组移出，单独成组渲染。
         // 4) 远程桥接（QQ）：仅 QQ 凭证与连接
+        D.renderBlockBadge(ctx, 'bridge'),
         D.renderBridgeBlock(ctx),
         // 4.2) 微信通道（扫码登录 + 配额约束）
+        D.renderBlockBadge(ctx, 'weixin'),
         D.renderWeixinBlock(ctx),
         // 4.3) 企业微信通道（长连接 + 主动推送 + 图片/文件）
+        D.renderBlockBadge(ctx, 'wecom'),
         D.renderWecomBlock(ctx),
         // ===== 分组二：投递策略 =====
         // 决定「哪些内容推到手机」，对三条通道同时生效。
         // 与此前把推送开关塞进 QQ 区块相比，这里的归属与配置结构一致。
+        D.renderBlockBadge(ctx, 'bridge'),
         D.renderDeliveryPolicyBlock(ctx),
         // ===== 分组三：工具与技能 =====
         h('div', { class: 'sp-block' }, [
           h('div', { class: 'card-head' }, [
             h('span', { title: '内置 + 自定义；点名称展开参数，开关控制是否上线到 System Prompt' }, '工具'),
             D.renderConfigBadge ? D.renderConfigBadge(ctx) : null,
+             D.renderBlockBadge(ctx, 'custom_tools'),
              h('button', { onClick: () => { ctx.toolsOpen = !ctx.toolsOpen; } }, ctx.toolsOpen ? '▾' : '▸')
           ]),
           ctx.toolsOpen ? h('div', { class: 'tool-list' }, [
@@ -307,6 +314,7 @@
         // 站点配置：网页 AI 站点档案（选择器等）的可视化编辑与字段级试运行
         D.renderSiteProfilesBlock(ctx),
         // 指令：对所有通道生效，配置的是指令本身而非某条通道
+        D.renderBlockBadge(ctx, 'commands'),
         D.renderCommandBlock(ctx),
         // 连接地址 / 端口 / 自动回传延迟 / 文件访问权限 / 资源上限
         D.renderGeneralSettings(ctx),
