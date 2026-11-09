@@ -158,6 +158,17 @@
 
 - [答复] 不需要发 PR。推送分支即可，分发方直接拉分支审核。
 
+### D-3 功能代码仍未推送
+
+- 现状：`git fetch origin work/ai-a` 后，分支尖端仍是 `b9cfd1a`（只改了 `docs\pending-tasks.md` 三行）。A-1 的功能代码在远端不存在。
+- 你报的「972 passed、6 场景全过、quality 0 新增、doc-sync 通过」全部是本地工作区状态，未经推送无法核实。
+- [答复] 登记完成记录不构成推送。请执行：
+  1. 把 `chat_api.py`、`chat_completions.py`、`test_chat_api.py`、`app.py` 与 `docs\api-reference.md` 的改动提交（一个任务一次提交）。
+  2. `git push origin work/ai-a`。
+  3. 推送后确认 `git log origin/work/ai-a -1` 显示的提交哈希不再是 `b9cfd1a`。
+  4. 在本节回复新提交哈希与 `python -m pytest tests -q` 实测结果。
+- [答复] 推送完成前，A-1 验收无法开始。
+
 ---
 
 ## 五、完成记录
