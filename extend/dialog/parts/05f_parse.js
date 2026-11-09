@@ -96,8 +96,33 @@
    * @param {string} raw 原始文本
    * @returns {string} 去装饰后的文本
    */
+  /**
+   * 剥掉「行号独占一行」的代码块行号栏。
+   *
+   * 千问把行号渲染成独立文本行，且与内容之间还夹着空行，
+   * 取到的文本形如 "1\n{\n\n2\n  \"tool\": ..."，直接解析必然失败。
+   * 判定从严：纯数字行必须恰好是 1..n 且各出现一次才算行号栏，
+   * 否则原样返回，避免误删 JSON 里独立成行的数字。
+   * @param {string} s 文本
+   * @returns {string} 去掉行号后的文本
+   */
+  M._stripNumberLines = function (s) {
+    const lines = String(s || '').split('\n');
+    const nums = [];
+    lines.forEach(function (line) {
+      if (/^\d{1,4}$/.test(line.trim())) nums.push(Number(line.trim()));
+    });
+    if (nums.length < 2) return s;
+    const sorted = nums.slice().sort(function (a, b) { return a - b; });
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i] !== i + 1) return s;
+    }
+    return lines.filter(function (line) { return !/^\d{1,4}$/.test(line.trim()); }).join('\n');
+  };
+
   M._stripCodeDecor = function (raw) {
-    const s = this._stripLineNumbers(this._stripInvisible(String(raw || '')));
+    const base = this._stripInvisible(String(raw || ''));
+    const s = this._stripNumberLines(this._stripLineNumbers(base));
     const lines = s.split('\n');
     if (lines.length > 1 && /^[A-Za-z0-9_+#.-]{1,12}$/.test(lines[0].trim())) lines.shift();
     while (lines.length && /^(复制代码|复制|copy)$/i.test(lines[lines.length - 1].trim())) lines.pop();

@@ -74,3 +74,17 @@ test('普通 JSON 代码块不误判为工具调用', () => {
 test('行号栏判定从严：行号不连续时按原文处理', () => {
   assert.strictEqual(M._stripLineNumbers('1 {"a": 1}\n3 {"b": 2}'), '1 {"a": 1}\n3 {"b": 2}');
 });
+
+test('行号独占一行且夹空行时仍识别（千问实测形态）', () => {
+  const code = '1\n{\n\n2\n  "tool": "list_rules",\n\n3\n  "type": "bridge-chat-call",\n\n4\n  "parameters": {}\n\n5\n}';
+  assert.deepStrictEqual(M.parseToolCall(block(code)), WANT);
+});
+
+test('行号独占一行：纯数字行被剥离，内容行保留', () => {
+  assert.strictEqual(M._stripNumberLines('1\n{\n\n2\n}\n'), '{\n\n}\n');
+});
+
+test('JSON 里独立成行的数字不被误删', () => {
+  const src = '{\n  "a": [\n    1,\n    2\n  ]\n}';
+  assert.strictEqual(M._stripNumberLines(src), src);
+});
