@@ -40,10 +40,10 @@
    *   3) 命中边为空        → 可回退时从已知节点接上（来源为 generate，
    *                          或切片首条在树、其余都不在树：叶子末端追加，
    *                          或非叶子新开分支）；否则仅展示不入树
-   *   4) 命中边不连续      → 判定碰撞，整片不入树
+   *   4) 命中边不连续      → 从最后一个已知节点补尾部新内容；补不出才判碰撞
    *   5) 命中的是前缀一节  → 向后追加新节点
    *   6) 命中的是后缀一节  → 向前补接新节点（根随之变更）
-   *   7) 命中位于中间      → 暂不支持，忽略
+   *   7) 命中位于中间      → 同 4)，补尾部新内容，不动更早历史
    *   8) 整片命中          → 无新增
    * 已在树中的节点一律不改写。
    * @param {Object} conv 会话记录（就地修改 msgTree）
@@ -75,13 +75,21 @@
       return this._treeNoMatch(conv, tree, ids, list, reason, atBottom, sliceKeys);
     }
 
-    // 5) 命中的边必须连续，否则视为碰撞
+    // 5) 命中边必须连续；不连续时退化为「从最后一个已知节点补尾部」。
+    // 常见成因是内容指纹重复：msgId 按内容算，同一段正文重复出现时，
+    // 同一切片里会出现重复的「父-子」边，matched 下标被同一条树边占了
+    // 两处（如 [0, 2]），并非真的跨了多个分支。旧实现一律判碰撞、整片
+    // 不入树，把尾部真正的新回复一起丢掉，抽屉列表便停在旧内容并弹
+    // 「切片命中多处」。这里只补锚点之后的新边，已有边不覆盖、不把历史
+    // 接到树末端；连锚点都找不到才保留原碰撞兜底。
     let contiguous = true;
     for (let i = 1; i < matched.length; i++) {
       if (matched[i] !== matched[i - 1] + 1) { contiguous = false; break; }
     }
     if (!contiguous) {
-      log('upsertTree：切片命中多处不连续的边，判定碰撞，整片不入树');
+      const recovered = this._treeAppendFromExisting(conv, tree, ids, list, reason);
+      if (recovered) return recovered;
+      log('upsertTree：切片命中多处且无可衔接节点，判定碰撞，整片不入树');
       if (this.toast) this.toast('切片命中多处，已跳过本次入库');
       conv.orphanSlice = [];
       return { mode: 'collision' };
@@ -104,8 +112,12 @@
     // 6) 后缀命中：向前补接（根随之变更）
     if (b === n - 2) return this._treePrepend(conv, tree, ids, list, a);
 
-    // 7) 命中位于中间：暂不支持
-    log('upsertTree：切片命中位于中间，暂不支持，已忽略');
+    // 7) 命中位于中间：与不连续同源，同样只补尾部新内容。
+    // 命中段之前是更早历史，不 prepend 改根，也不把历史接到末端；
+    // 以最后一个已在树的节点为锚，把它之后的新节点依次补上即可。
+    const recoveredMid = this._treeAppendFromExisting(conv, tree, ids, list, reason);
+    if (recoveredMid) return recoveredMid;
+    log('upsertTree：切片命中位于中间且无可衔接节点，已忽略');
     if (this.toast) this.toast('切片位于历史中间，已跳过本次入库');
     conv.orphanSlice = [];
     return { mode: 'middle' };
@@ -145,8 +157,10 @@
   };
 
   /**
-   * 无命中边时，尝试「从树中最后一个已知节点往后按顺序接上」。
+   * 尝试「从树中最后一个已知节点往后按顺序接上」。
    * 新消息的第一条边天然不在树里，故按节点定位接入点。
+   * 命中边不连续 / 命中位于中间时也复用本函数：无法确定整片如何衔接，
+   * 但尾部新节点总能从最后一个已知节点安全补上（已有边不覆盖）。
    * @returns {Object|null} 成功返回 { mode:'append' }；无法接上返回 null
    */
   M._treeAppendFromExisting = function (conv, tree, ids, list, reason) {
