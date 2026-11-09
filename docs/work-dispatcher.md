@@ -56,6 +56,8 @@
 
 **判断归因的方法**：把待提交改动 stash 掉，在干净 HEAD 上复跑闸门。若仍失败，说明是存量问题，非本次引入。
 
+**存量欠账的登记权归分发方**：`scripts\quality_baseline.json` 是全仓共用的一份基线，执行方各自修改会在合并时冲突。存量欠账由分发方在 `main` 上统一登记（`python scripts\quality_rules.py --update-baseline`），登记单独成一次提交，执行方 rebase 后正常提交，不使用 `--no-verify`。
+
 ### 2.3.1 提问与答复的权责
 
 执行方文档第四节分两部分，权责不同：

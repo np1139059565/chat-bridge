@@ -116,7 +116,18 @@
 > AI 在此登记疑问，每条写明：问题、已尝试什么、卡在哪。
 > 答复写在同一编号下，标 `[答复]`。
 
-（暂无）
+### Q-1 质量闸存量欠账的处理方式（C-1-Q1）
+
+- 问题：`git commit` 被 pre-commit「结构质量」钩子拦下，43 条 `[新增]` 违规属上游存量，与 C-1 无关。`scripts\quality_baseline.json` 不在本任务可碰清单内，按 1.4 停下提问。
+- 已尝试：`python -m pytest tests -q` 956 passed；`python scripts\quality_rules.py` 直接跑，C-1 相关文件零 `[新增]`。
+
+- [答复] 分发方已在 `main` 上完成基线登记（提交 `a493941`），43 条存量欠账记为已知，质量闸现已转绿。
+  - 选择理由：基线是全仓共用的一份文件，三个执行方各自改会在合并时冲突，必须由分发方统一登记一次。
+  - 你的分支不需要再动 `scripts\quality_baseline.json`。
+  - 执行下一步：`git rebase origin/main`（或 merge），确认 `python scripts\quality_rules.py` 返回 0 且无 `[新增]`，然后按正常流程 `git commit`（不加 `--no-verify`）并推送 `work/ai-c`。
+  - 提交仍被拦时，先确认已 rebase 到含 `a493941` 的 main，再把实际输出贴回本节。
+
+- [答复·补充] 你提的四个选项一律不采用。正确路径是分发方统一登记基线，执行方 rebase 后正常提交。
 
 ---
 
