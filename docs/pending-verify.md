@@ -531,3 +531,25 @@ isFreshReply = !isInitialLoad && !scrollOnly && addedNodes && lastIsAssistant &&
    这个方向的失效更容易被察觉，且影响面更小。
 2. **全链路无日志**：各判断分支原先都是静默 return，出问题时无从排查。
    现「不在底部」「未识别到形态」两条路径均记日志。
+
+### 网页版语音合成独立接口 /api/voice（P1，已实施，2026-11-09，待实机验证）
+
+**背景**：网页版机器人此前只有消息镜像侧的按需合成（`/api/web/voice-ensure`，音色写死默认值、带缓存复用），没有面向前端「朗读这段话」按钮的独立入口。本任务新增按需合成与音色列表两个接口，契约见 `docs/api-reference.md` 第十节。
+
+**已实施**（2026-11-09）：
+1. `flask_server/routes/voice.py` 新增蓝图：
+    - POST /api/voice/tts：text 必填（空白视为缺参 → 400 text_required）；voice 选填（空白归一为空串走引擎默认）；成功 200 返回 success/file/url/voice，url 即 `GET /api/web/audio/<file>`；文件名 `tts_<时间戳>_<随机>.mp3`，连点不互撞；失败 500 返回 tts_failed 带底层 reason 或 tts_unavailable（合成模块缺失），失败不留残留文件；成功后触发旧音频回收，回收失败不影响本次响应；
+    - GET /api/voice/voices：engine 查询参数透传 `remote_bridge.voice_voices.list_voices`；异常 → 500 voices_failed 带原因。
+2. `flask_server/app.py` 注册 voice 蓝图。
+3. 测试 `flask_server/tests/test_voice_route.py` 12 项用例（参数校验三类、成功落盘与 url、voice 透传与默认、同文本两次文件名不同、引擎失败不留残留、模块缺失、回收容错、音色透传与失败）；合成与音色模块全部替身注入，音频目录由 conftest 夹具重定向到用例独立临时目录，不碰真机引擎与真实目录。运行：`python -m pytest flask_server/tests/test_voice_route.py -v`。
+4. 文档 `docs/api-reference.md` 文末新增「十三、网页语音合成（/api/voice）」并说明与 voice-ensure 的分工；「路由补充接口」保持第十节，C 系列第十一、十二节编号不动。
+
+**待实机验证**：
+1. 前端 POST /api/voice/tts 合成中文长文本，返回 url 直接可播；
+2. 带 voice（如 Huihui）与不带各合成一次，听感可区分；
+3. 同文本连点两次均出声、文件不互撞；
+4. 合成失败路径：传非法 voice 或令引擎不可用，前端收到 500 与明确 reason，服务其余接口不受影响；
+5. GET /api/voice/voices?engine=sapi 返回本机音色清单；
+6. 多次合成后音频目录旧文件按保留数自动回收。
+
+**优先级**：P1。
