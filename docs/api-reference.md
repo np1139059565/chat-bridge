@@ -755,3 +755,44 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 ### GET /api/commands/help
 
 返回按来源分组的帮助文本：`{ "success": true, "help": "..." }`。分组标题为「内置指令 / 自定义指令 / 客户端指令」，与清单取自同一次读取，内容一致；某来源为空时不产生空分组。
+
+## 十三、标准对话接口（/v1/chat/completions）
+
+任务 A-1（阶段一）的 OpenAI 风格对话入口：客户端发标准 messages / tools，
+服务端完成校验、历史合并、（占位）生成与工具执行后返回标准 choices 结构。
+路由见 `flask_server/routes/chat_api.py`；消息规范化、占位生成、工具执行
+与会话存储的内部实现见 `flask_server/core/chat_completions.py`。
+
+### POST /v1/chat/completions
+
+请求体（JSON 对象）字段：
+
+- `messages`（数组，必填）：OpenAI 风格消息序列。role 允许 system / user /
+  assistant / tool；content 为字符串或 null（assistant 带 tool_calls 时
+  可为 null）；assistant 可带 tool_calls；tool 消息带 tool_call_id / name。
+- `tools`（数组，可选）：OpenAI 风格工具声明（JSON Schema）；缺省视为空。
+- `site_key`（字符串，可选）：会话标识，仅允许字母、数字、下划线、连字符，
+  长度 1-64；缺省由服务端生成并在响应中返回。
+- `model`（字符串，可选）：透传字段；缺省 "chat-bridge-placeholder"。
+- `stream`（布尔，可选）：传 true 时明确拒绝（HTTP 400，
+  code=stream_not_supported），不静默降级。
+
+行为要点：
+
+- 服务端按「内置 -> 自定义 -> 未知」顺序复用现有工具管线执行 tool_calls，
+  结果信封整体 JSON 化为 tool 角色 content（含 success / error / errorType /
+  origin / hint），工具失败不产生 HTTP 5xx；
+- 会话历史按 site_key 落盘（flask_server/data/chat_sessions/，运行时产物
+  不入库）；多轮延续以服务端已存历史为权威合并：前缀一致只追加新增、重发
+  已存内容幂等去重、真分叉以请求重建；
+- 阶段一未接入真实模型：assistant 轮由服务端占位生成器按可解释规则产生
+  （识别「工具名({...})」显式参数表达、防同一工具重放），阶段 2 接入
+  翻译员后仅替换生成器。
+
+响应（HTTP 200）：标准 choices 结构 + usage 粗估（字符数 // 4）+ 扩展字段
+site_key 与 messages（本轮合并后的完整消息序列，含 tool 结果，供客户端
+断言与续接）。
+
+错误（HTTP 400）：{ "error": { "message", "type": "invalid_request_error",
+"code"? } }；覆盖：请求体非 JSON 对象、messages 缺失或格式非法、role 非法、
+tools 非数组、site_key 非法、stream=true。
