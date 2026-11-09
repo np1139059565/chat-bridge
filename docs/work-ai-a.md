@@ -38,67 +38,68 @@
 
 ## 二、当前任务
 
-### 任务 A-1：标准对话接口
+### 任务 A-2：标准 System Prompt 生成
 
-**目标**：让工具服务能以标准格式接收一次对话请求，并返回标准格式的回复（含工具调用）。
+**目标**：由工具服务生成并返回「标准 System Prompt 主体」，供翻译员在阶段 2 取回后再追加方言说明。内容边界以 `.\docs\split-mirror-and-tools-service.md` 第 3.2 节为准：**身份 + 规则 + 技能清单 +「调用前先查参数」通则**。
 
 **做什么**：
 
-1. 新增路由 `POST /v1/chat/completions`
-2. 接收标准 `messages` 数组（`role` + `content`）
-3. 接收标准 `tools` 参数（JSON Schema 格式的工具声明）
-4. 返回标准 `choices` 结构，`message` 里可含 `tool_calls`
-5. 接收 `tool` 角色消息并回灌给 AI，形成下一轮
-6. 请求携带 `stream: true` 时返回明确错误，不静默降级
-7. 会话历史落盘，支持多轮延续
+1. 在 `.\flask_server\core\` 下新建模块，聚合四段内容生成完整提示词文本
+2. 在 `.\flask_server\routes\` 下新增 GET 路由（或扩展现有 `prompts.py`），对外返回该文本；路径建议 `GET /v1/system_prompt`，与 `/v1/chat/completions` 同族
+3. 身份段：工具服务自身定位，一段固定文字
+4. 规则段：只列**规则名 + 读取优先级**（取自 `.\flask_server\core\rules.py` 的清单口径），不塞规则正文；正文由 AI 按需 `read_rule` 读取
+5. 技能段：只取**已上线**技能的说明与清单（复用 `.\flask_server\core\prompt_sections.py` 的口径），指令执行端工具不进
+6. 「调用前先查参数」通则：写明调用任何工具前先用 `get_tool_params` 查准确参数名，口径同 `.\flask_server\tools\list_tools_impl.py`
+7. 在 `.\docs\api-reference.md` 补该接口说明（当前末节为第十四节，顺延为第十五节）
+8. 在 `.\flask_server\tests\` 下新建测试文件，覆盖下方验收标准
 
 **不做什么**：
 
-- 不做流式输出
-- 不做鉴权
-- 不改造翻译员（那是阶段 2）
-- 不改参数声明格式（那是阶段 1b）
-- 不做工具列表的对外输出改造（现有 `/tools/all` 先保持原样）
+- 不含方言说明（调用格式、回传格式）、朗读稿约定、任何只在网页 AI 场景成立的内容
+- 不含工具全量参数清单（参数按需查，不一次塞满）
+- 不含指令类工具名（见 `.\docs\extensions.md` R1：指令不得进任何「给 AI 看的」清单）
+- 不改造 `.\extend\` 下任何文件（提示词拼装是阶段 2）
+- 不改工具参数声明格式（那是阶段 1b）
+- 不碰 A-1 已交付的 `/v1/chat/completions` 链路，除非确有必要且先提问
 
 **可以碰的文件**：
 
 | 文件 | 说明 |
 |---|---|
-| `.\flask_server\routes\` 下新建一个路由文件 | 承载新接口 |
-| `.\flask_server\app.py` | 注册蓝图 |
-| `.\flask_server\core\` 下新建模块 | 存放标准消息格式转换、会话存储 |
-| `.\flask_server\tests\` 下新建测试文件 | 覆盖新接口 |
-| `.\flask_server\scripts\` 下新建验收脚本 | 承载 `check_chat_api.py` |
-| `.\docs\api-reference.md` | 补 `/v1/chat/completions` 接口说明 |
+| `.\flask_server\core\` 下新建模块 | 聚合四段、生成文本 |
+| `.\flask_server\routes\` 下新建路由文件，或现有 `prompts.py` | 对外 GET |
+| `.\flask_server\app.py` | 若新建蓝图则注册 |
+| `.\flask_server\tests\` 下新建测试文件 | 覆盖验收项 |
+| `.\flask_server\scripts\` 下新建验收脚本 | 可选 |
+| `.\docs\api-reference.md` | 补接口说明（第十五节） |
 
 **不要碰**：
 
-- `.\flask_server\tools\` 下的任何文件（工具执行链路复用即可，不改）
-- `.\extend\` 下的任何文件（翻译员是阶段 2）
-- `.\flask_server\routes\tools.py`（现有工具路由不动）
-- `.\flask_server\routes\cards.py`（投递队列归 AI-B）
+- `.\extend\` 下任何文件
+- `.\flask_server\tools\` 下的参数声明文件（阶段 1b）
+- `.\flask_server\routes\tools.py`、`.\flask_server\routes\cards.py`
+- `.\flask_server\core\rules.py`、`.\flask_server\core\prompt_sections.py` 的现有对外行为（只读复用，不改语义）
+- `rules\`、`skills\` 下的数据本体
 
 **实现原则**：
 
-1. 工具执行复用现有链路，不新建执行器。看懂 `.\flask_server\tools\tools_impl.py` 的派发方式后直接调用。
-2. 工具结果放进 `tool` 角色的 `content` 里，按 `.\docs\split-mirror-and-tools-service.md` 第 6.1 节：整套错误结构以 JSON 字符串形式放入，不加额外布尔字段。
-3. 会话标识用请求里携带的 `site_key` 字段（字段名已定，见规格文档决策 6）。若请求未携带，自行生成并返回。
-4. 工具列表在 `tools` 参数里按标准 JSON Schema 传（容器是对象、必填是顶层数组）。阶段 1b 会改造内部声明格式，**本任务不依赖那个改造**——你只需要能接收并原样使用外部传进来的标准 schema。
+1. 四段内容全部从现有模块读数据，不复制一份常量到新模块里当第二真源
+2. 规则段只暴露清单与优先级；技能段只暴露已上线项；指令工具名一律不出现
+3. 返回结构用 `{ "system_prompt": "<文本>" }`，并附各段长度或分段标记便于断言
+4. 一切取舍以 `.\docs\split-mirror-and-tools-service.md` 第 3.2、4.3 节为准；规格没写的先提问
 
 **验收标准**：
 
-写一个脚本 `.\flask_server\scripts\check_chat_api.py`，覆盖以下六类场景，全部通过：
+| # | 场景 | 期望 |
+|---|---|---|
+| 1 | 四段齐全 | 返回文本含身份、规则清单、技能清单、「先查参数」通则四段 |
+| 2 | 规则正文不注入 | 输出只含规则名与优先级，不含任何规则正文全文 |
+| 3 | 已上线口径 | 下线技能、指令执行端工具名不出现在输出里 |
+| 4 | 方言隔离 | 输出不含代码块调用格式、回传格式、朗读约定、网页选择器等场景词 |
+| 5 | 参数清单不塞满 | 输出不含具体工具参数 schema，只给「先查参数」通则 |
+| 6 | 单一真源 | 改一条规则优先级或下线一个技能后，重新取回输出随之变化 |
 
-| 场景 | 期望 |
-|---|---|
-| 单轮纯文本对话 | 返回一条 `assistant` 消息，无 `tool_calls` |
-| 单轮带一个工具调用 | 返回含 `tool_calls` 的 `assistant` 消息 |
-| 工具结果回灌 | 传入 `tool` 角色消息后能继续生成下一轮 |
-| 多轮延续 | 同一 `site_key` 连续请求，历史被正确累加 |
-| `stream: true` | 返回明确错误，不是 200 |
-| 工具执行出错 | `tool` 消息的 `content` 是 JSON 字符串，含错误分类字段 |
-
-脚本跑通后，把输出摘要贴进本文件第五节。
+写验收脚本把六项断言跑通，输出摘要贴进本文件第五节；`python -m pytest tests -q` 全绿；提交钩子全过、不用 `--no-verify`。
 
 **完成后**：
 
@@ -106,7 +107,7 @@
 2. 推送 `work/ai-a` 分支
 3. 若第三节已有标注「可开工」的排队任务，直接开工；否则等「更新 git」指令
 
-> 第三节的排队任务可提前开工；当前任务 A-1 的范围、可碰文件、验收标准不受影响。
+> 本任务为当前任务；A-3 待 A-2 完成后再拆，未标注「可开工」不得动手。
 
 ---
 
@@ -117,7 +118,7 @@
 
 | 编号 | 任务 | 状态 |
 |---|---|---|
-| A-2 | 标准 System Prompt 生成 | 待分发方预下发，届时标注「可开工」 |
+| A-2 | 标准 System Prompt 生成 | 已下发为当前任务，见第二节 |
 | A-3 | 标准会话历史存储细化 | 待定，A-1 与 A-2 完成后再拆 |
 
 ---
@@ -171,6 +172,10 @@
   4. 在本节回复新提交哈希与 `python -m pytest tests -q` 实测结果。
 - [答复] 推送完成前，A-1 验收无法开始。
 
+### D-4 A-1 验收结果
+
+- [答复] 通过。2026-11-10 拉取 `origin/work/ai-a` 至 `6d3707e` 逐条实测：`python -m pytest tests -q` → 972 passed in 18.27s；`check_chat_api.py` 六场景全过；`quality_rules.py` 统一闸门 exit 0、新增文件零 `[新增]` 违规；`check_doc_sync.py` 通过；`generate_reply` 已拆为短函数，D-2 点名的嵌套深度与高复杂度违规已消除。合入 `main` 为 `ed3d663`，`api-reference.md` 章节顺延为十四。A-2 已下发为当前任务，见第二节。
+
 ---
 
 ## 五、完成记录
@@ -186,3 +191,5 @@
 **测试与闸门**：python -m pytest tests -q 实测 972 passed in 17.46s（rebase 到 ff83941 后）；质量扫描无新增违规；doc-sync 通过；提交钩子全过、未用 SKIP。
 
 **提交哈希**：功能 ffc69309b6ff09f3d3d8daa90c7077d359147acf；核验报告落档 fdd5f20fc9737607687279f958edf3a6009ee4a2；本记录随其后 docs 提交入库；origin/work/ai-a 尖端 fdd5f20fc9737607687279f958edf3a6009ee4a2。
+
+**分发方验收（2026-11-10）**：拉取 `origin/work/ai-a` 至 `6d3707e`，独立工作树实测 972 passed in 18.27s、六场景全过、统一质量闸 exit 0 且新增文件零 `[新增]` 违规、doc-sync 通过、`generate_reply` 已重构。合入 `main` 时 `api-reference.md` 与 B-2 的「十三、网页语音合成」章节号冲突，按「保留双方新增」将本接口顺延为第十四节；合并提交 `ed3d663`，八项提交钩子全过。结论：**通过**。
