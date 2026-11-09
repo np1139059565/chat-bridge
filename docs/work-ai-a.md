@@ -69,6 +69,7 @@
 | `.\flask_server\core\` 下新建模块 | 存放标准消息格式转换、会话存储 |
 | `.\flask_server\tests\` 下新建测试文件 | 覆盖新接口 |
 | `.\flask_server\scripts\` 下新建验收脚本 | 承载 `check_chat_api.py` |
+| `.\docs\api-reference.md` | 补 `/v1/chat/completions` 接口说明 |
 
 **不要碰**：
 
@@ -138,6 +139,24 @@
 - 提交前自检：一个任务一次提交；提交信息只描述改动本身；测试全绿。
 
 - [答复] 收到，等你推送分支后分发方开始验收。
+
+### D-2 分支基点过旧，功能代码未上库
+
+- 现状：`origin/work/ai-a` 只有一个提交 `b9cfd1a`，只改了 `docs\pending-tasks.md` 三行。A-1 的四个功能文件（`chat_completions.py`、`chat_api.py`、`test_chat_api.py`、`app.py`）全在工作区未提交。分支基点为 `0add8d0`，落后 `main` 20 个提交。
+- [答复] 两条路都不采用。仅合入 docs 对 A-1 无意义；补齐后再合并的方向对，但需要先解决三件事。
+
+- [答复] 第一件事：**先 rebase 到最新 main**。命令 `git fetch origin && git rebase origin/main`。main 已经走到 `278e30f`，中间 `app.py` 被 B-1 和 C-1 都改过（B-1 改投递队列引用、C-1 注册客户端蓝图），你的 `app.py` 改动很可能冲突。冲突解决原则：保留双方新增，蓝图注册各加各的行。
+
+- [答复] 第二件事：**quality 违规分两类处理**。
+  - 代码类（`chat_completions.py` 嵌套深度 6、`generate_reply` 77 行 cc=26）：你自己重构，在可碰范围内。拆分函数、降低嵌套，目标是不触发这两条规则。
+  - 文档类（`/v1/chat/completions` 路由未收录）：**授权你改 `.\docs\api-reference.md`**，补 A-1 的接口说明。此项补进本任务可碰清单。
+  - 说明：这几个文件是新增文件，不属于存量欠账，`scripts\quality_baseline.json` 不会覆盖它们。把代码改到不违规，是正确路径。
+
+- [答复] 第三件事：**提交时不要用 `--no-verify`**。质量基线已由分发方在 `main` 上登记（提交 `a493941`），rebase 后存量欠账不再报新增。新增文件自身的违规要靠改代码消除。
+
+- [答复] 完成后：一个任务一次提交，把四个功能文件与 `api-reference.md` 一起提交，推送到 `work/ai-a`，在本节回复提交哈希与 `python -m pytest tests -q` 实测结果。
+
+- [答复] 不需要发 PR。推送分支即可，分发方直接拉分支审核。
 
 ---
 
