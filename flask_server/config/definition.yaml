@@ -106,21 +106,21 @@ app:
       userContent: .cs-question-pure-text
       userItem: .conversation-flow-question-container
     xinghuo:
-      assistantContent: .new-line-content_result__ptmhL
-      assistantItem: '[class*=assistantMessage]'
-      container: '[class*=ChatWindow_chat_content_wrapper]'
+      assistantContent: '[class*="task-helper-content_bubble"]'
+      assistantItem: '[class*="task-helper-content_message_item"][class*="task-helper-content_assistant"]'
+      container: '#chat-content-wrapper'
       convIdUrl: '[?&]chatId=([0-9]+)'
       hosts:
       - xinghuo.xfyun.cn
       inputSelector: div[contenteditable="true"][class*=WorkSkillEditor_editor]
-      item: article[class*=turn]
+      item: '[class*="task-helper-content_turn__"]'
       label: 讯飞星火
       newConversation: '[class*=LeftSideExpand_new_chat_wrap]'
       sendButton: '[class*=AskWindow_send]'
       split: true
-      thinking: '[class*=new-line-content_process]'
-      userContent: '[class*=requestRow]'
-      userItem: '[class*=userMessage]'
+      thinking: '[class*="task-helper-content_reasoning_block"]'
+      userContent: '[class*="task-helper-content_bubble"]'
+      userItem: '[class*="task-helper-content_user__"]'
     yuanbao:
       assistantContent: .hyc-common-markdown
       assistantMark: .agent-chat__bubble--ai
