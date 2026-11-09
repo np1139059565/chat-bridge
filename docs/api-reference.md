@@ -755,3 +755,34 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 ### GET /api/commands/help
 
 返回按来源分组的帮助文本：`{ "success": true, "help": "..." }`。分组标题为「内置指令 / 自定义指令 / 客户端指令」，与清单取自同一次读取，内容一致；某来源为空时不产生空分组。
+
+## 十三、网页语音合成（/api/voice）
+
+网页前端按需合成语音的独立入口。与「九」中 `/api/web/voice-ensure` 的分工：
+`voice-ensure` 面向消息镜像（音色写死默认值、带缓存复用，同文本命中即复用旧文件）；
+本组接口面向按需合成（音色可透传、每次独立出片、失败如实上报），
+供前端「朗读这段话」之类的按钮直接调用。产物落在与 `GET /api/web/audio/<name>`
+相同的音频目录，回收策略一致（旧音频超量自动清理）。
+
+### POST /api/voice/tts
+
+把文本合成为语音。请求：`{ text, voice? }`。`text` 必填（空串或全空白视为缺参）；
+`voice` 选填，缺省走引擎默认音色。
+
+- 成功：`{ success: true, file, url, voice }`。`url` 即 `GET /api/web/audio/<file>`，
+  前端直接用它播放；文件名由服务端按时间戳 + 随机串生成，连点不互撞。
+- 参数问题：HTTP 400 + `{ success: false, error: "text_required" }`。
+- 合成失败：HTTP 500 + `{ success: false, error: "tts_failed", reason }`
+  （reason 为底层原因）；语音依赖不可用时返回 `{ error: "tts_unavailable" }`。
+  两种失败都不影响服务其余功能。
+
+### GET /api/voice/voices
+
+列出可用音色，供前端音色选择器使用。查询参数 `engine`（可选，透传给音色模块）。
+数据源与 `GET /api/bridge/voices` 相同，路由独立互不影响。
+
+- 成功：`{ success: true, voices: [...] }`。
+- 失败：HTTP 500 + `{ success: false, error: "voices_failed", reason }`。
+
+---
+

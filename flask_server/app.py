@@ -35,6 +35,7 @@ from routes.web_file import bp as web_file_bp
 from routes.web_files_serve import bp as web_files_serve_bp
 from routes.clients import bp as clients_bp
 from routes.command_catalog import bp as catalog_bp
+from routes.voice import bp as voice_bp
 
 
 def _register_blueprints(app):
@@ -58,6 +59,7 @@ def _register_blueprints(app):
     app.register_blueprint(web_files_serve_bp)
     app.register_blueprint(clients_bp)
     app.register_blueprint(catalog_bp)
+    app.register_blueprint(voice_bp)
 
 
 def _register_options(app):
