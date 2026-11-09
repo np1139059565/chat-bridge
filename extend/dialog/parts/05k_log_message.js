@@ -22,7 +22,15 @@
     // 构建应答：收得到说明本页内容脚本是新版，收不到则是旧版
     //（旧版没有应答代码，常见于「只刷新页面、没重载扩展」）。
     if (d.type === 'pong_content') {
+      // 记下本抽屉所在页面的地址与站点：上报消息、登记在线页面都要用它。
+      // 为什么从应答里拿而不是自己读 location：抽屉跑在扩展 iframe 里，
+      // location 指向 drawer.html，只有内容脚本知道宿主页面的真实地址。
+      if (d.page_url) this.page_url = d.page_url;
+      if (d.site_key) this.profileId = d.site_key;
       this._postClientLog([{ tag: 'ext-版本', msg: '内容脚本已加载 build=' + (d.build || '(旧版无应答)') }]);
+      // 立刻登记一次在线：后端据此把本页列入可选页面，
+      // 不必等用户发消息（无消息时 sendPage 不推送）。
+      this.pollExternalCards();
       return true;
     }
     if (d.type !== 'ext_log') return false;

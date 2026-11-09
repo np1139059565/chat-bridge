@@ -63,7 +63,19 @@
     // 版本探测：抽屉启动时会问一次，据此确认本页内容脚本是新版还是旧版。
     // 旧版没有这段代码，不会回复——抽屉端据此判定「需重载扩展 + 刷新页面」。
     if (d.type === 'ping_content') {
-      A.post({ type: 'pong_content', build: BUILD_TAG });
+      // 顺带回传本页身份：页面地址 + 站点 id。
+      // 抽屉需要它来登记在线页面、把用户消息定向投给本页。
+      // 不能只靠 sendPage 带：页面无消息时 sendPage 不推送，
+      // 抽屉就永远不知道自己在哪个页面（表现为消息被别的页抢走）。
+      A.post({
+        type: 'pong_content',
+        build: BUILD_TAG,
+        page_url: location.href,
+        // 兜底：抽屉可能在初始化完成前就发 ping，此时 profileId 还没赋值，
+        // 现场按当前域名推断一次，保证回传的站点 id 永不为空。
+        site_key: A.state.profileId || A.guessProfile(A.currentHost()),
+        site_host: A.state.siteKey || '',
+      });
       return;
     }
     // 抽屉保存站点档案后的通知：重新经后台中转拉取（取数口唯一，仍走 GET /profiles，

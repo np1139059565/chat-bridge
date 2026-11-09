@@ -321,7 +321,12 @@
         body: {
           conversationId: this.activeConv,
           messages: messages,
-          openid: this._bridgeQQOpenid || ''
+          openid: this._bridgeQQOpenid || '',
+          // 来源站点与页面：多网页 AI 并存时后端据此分流（收件箱按站点存、
+          // 推送按页面过滤）。缺了这两个字段，AI 回复会归入「未知站点」，
+          // 表现为手机端切站后只有自己发的消息、看不到 AI 回复。
+          profileId: this.profileId || '',
+          page_url: this.page_url || ''
         }
       }).catch(function () { /* 桥接未启用时忽略 */ });
     } catch (e) { /* 忽略 */ }
