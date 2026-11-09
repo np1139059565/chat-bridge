@@ -227,10 +227,9 @@ class WebBridge:
         return self._create_card(
             card_type="web-file",
             title="网页文件",
-            content=body,
+            content=payload["text"],
             payload=payload,
-            opts={"log_hint": "文件卡片"},
-            extra="name=" + str(name or ""),
+            opts={"log_hint": "文件卡片", "extra": "name=" + str(name or "")},
         )
 
 
