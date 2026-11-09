@@ -177,7 +177,10 @@
           + Math.random().toString(36).slice(2, 8);
       }
       const sep = url.indexOf('?') >= 0 ? '&' : '?';
-      const fullUrl = url + sep + 'client=' + encodeURIComponent(this._cardClientTag);
+      // page：声明本抽屉所在页面，后端据此做归属过滤（多页面指令隔离）。
+      // client：取证用标识（页面地址 + 随机串），仅用于日志。
+      const fullUrl = url + sep + 'client=' + encodeURIComponent(this._cardClientTag)
+        + '&page=' + encodeURIComponent(this.page_url || '');
       const data = await D.apiFetch(this, fullUrl, {
         headers: { 'Accept': 'application/json' }
       });

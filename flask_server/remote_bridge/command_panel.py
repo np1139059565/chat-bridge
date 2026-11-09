@@ -250,6 +250,11 @@ def _h_refush(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
 
 
+# 多页面接管指令（/pages、/page）的实现已抽到 command_pages.py（本文件行数上限）。
+# 此处按名导入，指令表照旧引用，分发逻辑不变。
+from .command_pages import handle_pages as _h_pages, handle_page as _h_page
+
+
 def _h_side(qq_client, openid, arg, msg_id):
     """抽屉在左 / 右之间切换（执行后自动截图回传）。"""
     _dispatch("switch_side", {}, openid, screenshot=True)
@@ -353,6 +358,8 @@ _BUILTIN_HANDLERS = {
     "/refush": _h_refush,
     "/md": _h_md,
     "/side": _h_side,
+    "/pages": _h_pages,
+    "/page": _h_page,
     "/settings": _h_settings,
     "/back": _h_back,
     "/reconnect": _h_reconnect,

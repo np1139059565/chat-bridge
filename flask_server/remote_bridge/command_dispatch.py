@@ -134,16 +134,24 @@ def _dispatch(action, params=None, openid="", screenshot=False):
                       组合指令执行期间（_reply_ctx.suppress）强制关闭，避免大量截图刷屏。
     """
     import card_bus
+    import page_registry
     payload = {"action": action, "params": params or {}}
     want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
+    # 页面归属：指令只投给当前接管页面。未接管时 target 为空串，
+    # 维持旧行为（任何页面可取），保证不接管时指令仍能送达。
+    target = page_registry.get_active()
+    if target:
+        payload["target_page"] = target
     card = card_bus.command_bus.create(
         source="bridge",
         card_type="drawer-command",
         title="远程指令",
         content=json.dumps(payload, ensure_ascii=False),
         payload=payload,
+        target_page=target,
     )
-    log("已下发抽屉命令", action, "截图=" + ("是" if want_shot else "否"), "id=" + card.id[:8])
+    log("已下发抽屉命令", action, "截图=" + ("是" if want_shot else "否"),
+        "目标页=" + (target or "不限"), "id=" + card.id[:8])
     return card
 
 

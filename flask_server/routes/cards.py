@@ -44,14 +44,25 @@ def create_card():
 
 
 def _pending_of(target_bus):
-    """取某条通道的待投递卡片。
+    """取某条通道的待投递卡片（按页面归属过滤）。
 
     抽成一个函数供两个路由共用：AI 通道与指令通道行为完全一致，
     差异只在「取哪个实例」，复制一份逻辑只会让日后改一处漏一处。
+
+    页面归属：请求方用 ?page=<页面地址> 声明自己是谁。声明后只取
+    「不限页面」与「目标就是本页」的卡片，其他页面的卡片取不到——
+    这是多网页 AI 并存时指令不串台的落地。未声明页面时退化为
+    只取不限页面的卡片（宁可不给，也不串台）。
+
     @param target_bus 目标通道实例（bus / command_bus）
     @returns Flask 响应
     """
-    return jsonify({"success": True, "cards": target_bus.claim_pending()})
+    page = (request.args.get("page") or "").strip()
+    # 轮询即视为该页面在线：登记活跃时间供 /pages 列表与接管校验使用
+    if page:
+        import page_registry
+        page_registry.touch(page)
+    return jsonify({"success": True, "cards": target_bus.claim_pending(page)})
 
 
 @bp.route("/api/cards/pending", methods=["GET", "OPTIONS"])

@@ -38,7 +38,7 @@ class Card:
     - delivered  ：是否已被某个客户端确认「已展示」
     """
 
-    def __init__(self, source, card_type, title, content, payload):
+    def __init__(self, source, card_type, title, content, payload, target_page=""):
         self.id = str(uuid.uuid4())
         self.source = source or "external"
         self.type = card_type or ""   # 信封类型，如 external-call
@@ -47,6 +47,9 @@ class Card:
         self.payload = payload or {}
         self.status = STATUS_PENDING
         self.created_at = int(time.time() * 1000)
+        # target_page：目标页面地址。空串表示不限（任何页面可取），
+        # 非空时只有该页面的抽屉能取走——这是多页面指令隔离的依据。
+        self.target_page = str(target_page or "")
         # delivered：是否已被某个客户端确认「已展示」。
         # 为 false 时任何客户端都可取走（可反复取走）；
         # 直到有客户端回执，才置 true 并停止投递。
@@ -66,6 +69,8 @@ class Card:
             # 缺此字段时前端只能靠状态字段猜测，无法准确判断是否需要继续渲染。
             "delivered": bool(self.delivered),
             "created_at": self.created_at,
+            # target_page：目标页面地址（空串=不限页面）。前端据此核对归属。
+            "target_page": self.target_page,
         }
 
 
@@ -125,13 +130,16 @@ class CardBus:
         """
         return TimedLock(self._lock, op)
 
-    def create(self, source, card_type, title, content, payload):
+    def create(self, source, card_type, title, content, payload, target_page=""):
         """登记一张卡片，返回卡片对象。
 
         登记后按上限裁剪：优先丢弃「已被确认展示」的最旧卡片，
         未确认的始终保留，避免 _cards 无界增长导致内存泄漏。
+
+        @param target_page 目标页面地址；非空时只有该页面的抽屉能取走。
+                           空串维持旧行为（任何页面可取）。
         """
-        card = Card(source, card_type, title, content, payload)
+        card = Card(source, card_type, title, content, payload, target_page)
         with self._timed("create"):
             self._cards[card.id] = card
             self._trim_locked()
@@ -151,17 +159,30 @@ class CardBus:
         for c in delivered[:need]:
             self._cards.pop(c.id, None)
 
-    def claim_pending(self):
+    def claim_pending(self, page_url=""):
         """取走尚未被确认的卡片（镜像插件轮询用）。
 
-        只要卡片没被任何客户端确认「已展示」，任何客户端都可以取走；
+        只要卡片没被任何客户端确认「已展示」，且归属校验通过，就可以取走；
         不设租约、不设占位：确认之前可被反复取走，直到有客户端回执为止。
         重复投递由接收方按卡片 id 去重。
+
+        归属规则（多页面隔离的核心）：
+        - 卡片 target_page 为空：不限页面，任何页面可取（旧行为，保持兼容）；
+        - 卡片 target_page 非空：只有该页面能取。这是「指令必须带上页面标记」
+          的落地——指令下发时按当前接管页面写入 target_page，其他页面取不到。
+
+        @param page_url 取件方所在页面地址；空串表示调用方未声明页面，
+                        此时只返回不限页面的卡片（宁可少给，不可串台）
+        @returns {list} 卡片字典列表（按创建时间升序）
         """
+        me = str(page_url or "").strip()
         out = []
         with self._timed('claim_pending'):
             for card in self._cards.values():
                 if card.delivered:
+                    continue
+                # 归属过滤：目标页面非空时必须与取件方一致
+                if card.target_page and card.target_page != me:
                     continue
                 out.append(card.to_dict())
         out.sort(key=lambda c: c["created_at"])
