@@ -100,3 +100,32 @@
   flex-wrap: wrap;
 }
 .sp-add-field input { flex: 1; min-width: 120px; }
+
+
+/* ===== 方案 v3：本地缓存与后端母版差异标色 / 逐项还原 / 覆盖确认 ===== */
+.sp-config-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 10px; margin-bottom: 8px;
+  border: 1px solid var(--cb-warn-border); border-radius: 6px;
+  background: var(--cb-warn-bg); color: var(--cb-warn-text); font-size: 12px;
+}
+.sp-config-bar .sp-config-ok { color: var(--cb-ok); }
+.sp-config-bar button { font-size: 12px; padding: 2px 10px; }
+.sp-field-diff .sp-input,
+.sp-field-diff .sp-area {
+  border-color: var(--cb-warn-border); background: var(--cb-warn-bg);
+}
+.sp-restore-btn {
+  align-self: flex-start; font-size: 11px; padding: 2px 8px;
+  background: var(--cb-warn-bg); color: var(--cb-warn-text);
+  border: 1px solid var(--cb-warn-border); border-radius: 4px;
+}
+.sp-confirm {
+  border: 1px solid var(--cb-danger-border); border-radius: 6px;
+  background: var(--cb-danger-bg); color: var(--cb-danger-text);
+  padding: 8px 10px; margin-bottom: 8px; font-size: 12px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.sp-confirm-col { padding-left: 8px; border-left: 2px solid var(--cb-danger); }
+.sp-confirm button { align-self: flex-start; font-size: 12px; padding: 2px 10px; }
+.sp-site-scope { font-size: 11px; color: var(--cb-text-muted); }

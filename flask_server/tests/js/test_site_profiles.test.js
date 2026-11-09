@@ -84,7 +84,11 @@ function makeCtx(over) {
   for (const name of ['resetSiteProfDraft', 'saveSiteProfiles', 'queueSiteProfSave', 'testProfileField',
     'deleteSiteProfile', 'addSiteProfile', 'addProfileField', 'removeProfileField',
     'onProfilesTestResult']) {
-    ctx[name] = function (...args) { return D.methods[name].apply(ctx, args); };
+  // v3 新增方法（08j）在真实运行时由 dialog.html 全量加载后混入；
+  // 本测试文件只 require 08g/08h，故缺失项降级为空函数，避免 undefined 调用。
+    ctx[name] = D.methods[name]
+      ? function (...args) { return D.methods[name].apply(ctx, args); }
+      : function () {};
   }
   return Object.assign(ctx, over || {});
 }
@@ -198,21 +202,19 @@ test('渲染产物上的事件处理器可全部安全调用（toggle / 输入 /
 
 // ---------- 4. 方法与消息监听 ----------
 
-test('saveSiteProfiles：非法 id 拦截；成功写回并通知热更新；失败走 catch', async () => {
+test('saveSiteProfiles：只提交当前页面档案，不再整集替换；失败走 catch', async () => {
   let posted = null;
   D.apiFetch = (ctx, url, opts) => { posted = { url: url, opts: opts }; return Promise.resolve(); };
   const bad = makeCtx({ siteProfDraft: { 'bad-id!': { label: 'x', hosts: '' } } });
   await D.methods.saveSiteProfiles.call(bad);
   assert.strictEqual(posted, null);
   assert.ok(bad._toasts.some((t) => t.indexOf('bad-id!') >= 0));
-
   const ctx = makeCtx();
+  ctx.currentProfileId = () => 'glm';
   await D.methods.saveSiteProfiles.call(ctx);
   assert.strictEqual(posted.url, '/config');
-  assert.deepStrictEqual(posted.opts.body.profiles, D.serializeProfilesDraft(ctx.siteProfDraft));
+  assert.deepStrictEqual(Object.keys(posted.opts.body.profiles), ['glm']);
   assert.ok(_sent.some((m) => m && m.type === 'profiles_refresh'));
-  // 自动保存语义：成功静默，不再弹「已保存」（失败仍 toast）
-
   D.apiFetch = () => Promise.reject(new Error('boom'));
   const failing = makeCtx();
   await D.methods.saveSiteProfiles.call(failing);
@@ -331,15 +333,16 @@ test('消息监听：试运行回执分发到实例；profiles_applied(refresh) 
 
 // ---------- 5. 自动保存与主题令牌（实机反馈修复守卫） ----------
 
-test('queueSiteProfSave：800ms 防抖合并连续输入，仅最后一定时器触发写回', async () => {
+test('queueSiteProfSave：防抖合并，只写本地缓存，不 POST 后端', async () => {
   const realSetTimeout = global.setTimeout;
   const realClearTimeout = global.clearTimeout;
-  let posted = null;
+  let posted = null, persisted = 0;
   const timers = [];
   global.setTimeout = (fn, ms) => { timers.push({ fn: fn, ms: ms }); return timers.length; };
   global.clearTimeout = () => {};
   D.apiFetch = (c2, url, opts) => { posted = { url: url, opts: opts }; return Promise.resolve(); };
   const ctx = makeCtx();
+  ctx.persistConfigCache = () => { persisted += 1; return Promise.resolve(); };
   try {
     ctx.queueSiteProfSave();
     ctx.queueSiteProfSave();
@@ -347,8 +350,8 @@ test('queueSiteProfSave：800ms 防抖合并连续输入，仅最后一定时器
     assert.strictEqual(timers.length, 3);
     assert.ok(timers.every((x) => x.ms === 800));
     await timers[timers.length - 1].fn();
-    assert.strictEqual(posted.url, '/config');
-    assert.ok(posted.opts.body && posted.opts.body.profiles);
+    assert.strictEqual(posted, null);
+    assert.strictEqual(persisted, 1);
     assert.strictEqual(ctx._spSaveTimer, null);
   } finally {
     global.setTimeout = realSetTimeout;

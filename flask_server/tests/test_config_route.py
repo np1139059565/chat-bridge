@@ -260,17 +260,33 @@ class TestProfilesSection:
         data = client.get("/profiles").get_json()
         assert data["profiles"]["glm"]["label"] == "GLM"
 
-    def test_post_replaces_profiles(self, client):
-        """POST 整体替换档案（含删除未提交站点）并记入变更列表。"""
-        runtime.CONFIG["profiles"] = {"old": {"label": "old"}}
+    def test_post_merges_profiles_preserves_others(self, client):
+        """按档案 id 合并：未提交站点原样保留，只改请求里带的那份。"""
+        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM"}, "deepseek": {"label": "DS"}}
         resp = client.post("/config", json={"profiles": {
-            "glm": {"label": "GLM", "hosts": ["chatglm.cn"], "newConversation": ""}}})
+            "glm": {"label": "GLM2", "hosts": ["chatglm.cn"], "newConversation": ""}}})
         assert resp.status_code == 200
-        assert set(runtime.CONFIG["profiles"]) == {"glm"}
+        assert set(runtime.CONFIG["profiles"]) == {"glm", "deepseek"}
+        assert runtime.CONFIG["profiles"]["deepseek"] == {"label": "DS"}
+        assert runtime.CONFIG["profiles"]["glm"]["label"] == "GLM2"
+        assert runtime.CONFIG["site_profiles"] == {"chatglm.cn": "glm"}
         assert "profiles" in resp.get_json()["changed"]
+
+    def test_post_profiles_remove_only_deletes_listed(self, client):
+        """删除通道：只删 profiles_remove 列出的 id，其余保留。"""
+        runtime.CONFIG["profiles"] = {
+            "glm": {"label": "GLM"}, "deepseek": {"label": "DS"}, "kimi": {"label": "K"}}
+        resp = client.post("/config", json={
+            "profiles": {"glm": {"label": "GLM2"}},
+            "profiles_remove": ["deepseek"]})
+        assert resp.status_code == 200
+        assert set(runtime.CONFIG["profiles"]) == {"glm", "kimi"}
+        assert runtime.CONFIG["profiles"]["glm"]["label"] == "GLM2"
+        assert runtime.CONFIG["site_profiles"] == {}
 
     def test_post_sanitizes_entries(self, client):
         """非法档案 id 与非法类型字段被规整丢弃，不进运行时配置。"""
+        runtime.CONFIG["profiles"] = {}
         resp = client.post("/config", json={"profiles": {
             "bad id!": {"label": "x"},
             "glm": {"hosts": "chatglm.cn", "split": "yes"},

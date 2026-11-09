@@ -10,13 +10,13 @@
 - tools.run_command.languages    即时生效
 - limits.max_json_chars          即时生效
 - GET  /profiles 轻量返回站点档案（内容脚本注入时经后台中转拉取）
-- profiles（站点档案）           每站一份完整清单，整体替换，即时生效
+- profiles（站点档案）           按档案 id 合并，未提交的档案保留，即时生效
 """
 from flask import Blueprint, jsonify, request
 
 import runtime
 import tool_config
-from config_store import sanitize_profiles, save_config_to_yaml
+from config_store import sanitize_profiles, save_config_to_yaml, derive_site_profiles
 from service_control import rolling_restart
 
 bp = Blueprint("config_route", __name__)
@@ -109,16 +109,27 @@ def _apply_tool_config_section(data, changed):
 
 
 def _apply_profiles_section(data, changed):
-    """应用 profiles 区块：站点档案整体替换（每站一份完整清单）。
+    """应用 profiles 区块：站点档案按 id 合并，不再整集替换。
 
-    值先经 sanitize_profiles 规整（非法档案 id、非法类型字段被丢弃）；
-    规整结果与当前不同才写入并记入变更列表；非字典输入整块忽略。
+    方案 v3（D2）：【覆盖】只提交当前站点那份档案。整集替换会让 A 电脑改
+    glm 时冲掉 B 电脑刚提交的 deepseek，故未出现在请求里带之外的档案原样保留。
+    删除须经 data["profiles_remove"] 显式列出 id，避免与「未提交」混淆。
+    合并后同步派生 site_profiles，防止内存映射与档案集漂移。
     """
-    if not isinstance(data.get("profiles"), dict):
-        return
-    profiles = sanitize_profiles(data["profiles"])
-    if profiles != runtime.CONFIG.get("profiles", {}):
-        runtime.CONFIG["profiles"] = profiles
+    current = runtime.CONFIG.get("profiles", {})
+    merged = dict(current)
+    block = data.get("profiles")
+    if isinstance(block, dict):
+        for pid, entry in sanitize_profiles(block).items():
+            merged[pid] = entry
+    removed = data.get("profiles_remove")
+    if isinstance(removed, list):
+        for pid in removed:
+            if isinstance(pid, str) and pid in merged:
+                del merged[pid]
+    if merged != current:
+        runtime.CONFIG["profiles"] = merged
+        runtime.CONFIG["site_profiles"] = derive_site_profiles(merged)
         changed.append("profiles")
 
 
@@ -172,7 +183,7 @@ def config():
     """读取（GET）或部分更新（POST）配置。
 
     POST 支持四个区块：flask（host/port）、tools（开关与语言）、limits（体积上限）、
-    profiles（站点档案整体替换）。仅 flask 改动需要重启服务才能生效。
+    profiles（站点档案按 id 合并，profiles_remove 显式删除）。仅 flask 改动需要重启服务才能生效。
     """
     if request.method == "POST":
         return _handle_config_post()

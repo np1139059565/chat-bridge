@@ -164,54 +164,42 @@
   };
 
   /** 配置从后端配置文件读取（不存浏览器）：连接地址、端口、工具上下线状态。 */
+  /** 刷新：拉后端母版做比对，派生 state 一律以本地缓存为准（不覆盖本地修改）。 */
   M.loadConfig = async function () {
     try {
-      const cfg = await D.apiFetch(this, '/config', {
+      const backend = await D.apiFetch(this, '/config', {
         headers: { 'Accept': 'application/json' }
       });
-      // 注意：flaskUrl 由 discoverFlask() 探测到的「实际可连通地址」决定，
-      // 绝不能用 cfg.flask.url（配置文件声明的端口）覆盖——否则端口改了
-      // 但服务还没重启时会连到空端口，导致连接断开。
-      if (cfg.flask && cfg.flask.port) this.config.flaskPort = cfg.flask.port;
-      if (cfg.tools) this.configTools = cfg.tools;
-      // 工具配置：声明 + 当前值，供设置页按类型通用渲染
-      if (cfg.tool_config) this.toolConfig = cfg.tool_config;
-      // 系统级配置：目录与队列上限，独立于工具
-      if (cfg.system_config) this.systemConfig = cfg.system_config;
-      if (cfg.limits && cfg.limits.max_json_chars) this.maxJsonChars = cfg.limits.max_json_chars;
-      if (cfg.default_profile) this.config.profile = cfg.default_profile;
-      // 站点档案：真源在后端。首载时初始化编辑工作副本；此后刷新只更新
-      // siteProfiles 快照，不覆盖 siteProfDraft，避免编辑到一半被冲掉。
-      if (cfg.profiles) {
-        this.siteProfiles = cfg.profiles;
-        if (!this._siteProfLoaded) { this._siteProfLoaded = true; this.resetSiteProfDraft(); }
-      }
-      // 配置端口与实际连通端口不一致 = 端口已改但服务尚未重启（需重启才生效）
-      // 从当前实际连通的地址里取端口做比对；取不到就不判不一致，
-      // 避免用一个写死的端口去猜。
+      await this.configLoadAndDiff(backend);
+      const cache = this.configCache || backend;
+      if (cache.tools) this.configTools = cache.tools;
+      if (cache.tool_config) this.toolConfig = cache.tool_config;
+      if (cache.system_config) this.systemConfig = cache.system_config;
+      if (cache.limits && cache.limits.max_json_chars) this.maxJsonChars = cache.limits.max_json_chars;
+      if (cache.default_profile) this.config.profile = cache.default_profile;
+      if (backend.flask && backend.flask.port) this.config.flaskPort = backend.flask.port;
       const m = /:(\d+)/.exec(this.config.flaskUrl || '');
       const livePort = m ? parseInt(m[1], 10) : NaN;
       this.portMismatch = !isNaN(livePort) && livePort !== parseInt(this.config.flaskPort, 10);
-      log('loadConfig: 后端=' + this.config.flaskUrl, '工具数=' + Object.keys(this.configTools).length,
+      log('loadConfig: 后端=' + this.config.flaskUrl, '本地缓存已恢复',
         '端口一致=' + !this.portMismatch);
     } catch (e) {
-      log('loadConfig 失败，使用内置默认值', e);
+      this.configOffline = true;
+      this.configBackend = null;
+      this.configDiff = {};
+      this.configPublicDiff = {};
+      log('loadConfig 失败：离线，使用本地缓存', e);
     }
   };
 
-  /** 工具上 / 下线：写回后端 runtime.yaml，并立即刷新工具目录（影响 System Prompt）。 */
   M.setToolEnabled = async function (name, enabled) {
     if (!this.configTools[name]) this.configTools[name] = {};
-    this.configTools[name].enabled = enabled;   // 乐观更新
+    this.configTools[name].enabled = enabled;
     try {
-      await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { tools: { [name]: { enabled: enabled } } }
-      });
-      await this.fetchTools();   // 上下线影响 System Prompt 与支持的工具树
-      this.toast(enabled ? ('已上线：' + name) : ('已下线：' + name));
+      await this.syncPublicToCache();
+      this.toast((enabled ? '已上线：' : '已下线：') + name + '（本地，点【覆盖】生效）');
     } catch (e) {
-      this.configTools[name].enabled = !enabled;   // 回滚
+      this.configTools[name].enabled = !enabled;
       this.toast('保存失败：' + e);
     }
   };
@@ -237,10 +225,7 @@
     const before = spec ? spec.value : undefined;
     if (spec) spec.value = value;
     try {
-      await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { tool_config: { [tool]: { [key]: value } } }
-      });
+      await this.syncPublicToCache();
     } catch (e) {
       if (spec) spec.value = before;
       this.toast('保存失败：' + e);
@@ -251,13 +236,12 @@
   M.setRunCommandLanguages = async function (languages) {
     const name = 'run_command';
     const enabled = !this.configTools[name] || this.configTools[name].enabled !== false;
+    if (!this.configTools[name]) this.configTools[name] = {};
+    this.configTools[name].enabled = enabled;
+    this.configTools[name].languages = languages;
     try {
-      await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { tools: { [name]: { enabled: enabled, languages: languages } } }
-      });
-      await Promise.all([this.fetchTools(), this.loadConfig()]);
-      this.toast('已更新 run_command 支持语言');
+      await this.syncPublicToCache();
+      this.toast('已更新 run_command 支持语言（本地，点【覆盖】生效）');
     } catch (e) {
       this.toast('保存失败：' + e);
     }
@@ -297,17 +281,13 @@
   M.saveMaxJsonChars = async function () {
     const v = parseInt(this.maxJsonChars, 10);
     if (!v || v <= 0) { this.toast('上限必须为正整数'); return; }
+    this.maxJsonChars = v;
     try {
-      const data = await D.apiFetch(this, '/config', {
-        method: 'POST',
-        body: { limits: { max_json_chars: v } },
-        lenientJson: true
-      });
-      if (!data.success) throw new Error(data.error || '保存失败');
-      this.maxJsonChars = v;
-      this.toast('已保存体积上限：' + v + ' 字符');
+      await this.syncPublicToCache();
+      this.toast('体积上限已存本地：' + v + ' 字符（点【覆盖】生效）');
     } catch (e) {
       this.toast('保存失败：' + e);
     }
   };
+
 })();

@@ -253,6 +253,13 @@ window.AIMirrorDialog = (function () {
       // 刷新覆盖）；试运行状态与结果按 pid.field 为键。newField 是自定义字段
       // 录入区。渲染与方法见 parts/08g_site_profiles.js。
       siteProfiles: {}, siteProfDraft: {}, siteProfOpen: false,
+      // 方案 v3：本地缓存的全量配置（D3）、本次刷新拉到的后端母版、逐字段差异表、
+      // 离线标记 / 未覆盖标记 / 按站点渲染开关 / 覆盖确认框。
+      configCache: null, configBackend: null, configDiff: {},
+      configOffline: false, configDirty: false,
+      siteProfShowAll: false, siteProfConfirmOpen: false,
+      configPublicDiff: {}, _configRemovedSites: [], _cfgCacheTimer: null,
+
       siteProfExpanded: Vue.reactive({}),
       siteProfTesting: Vue.reactive({}), siteProfTestResult: Vue.reactive({}),
       siteProfDeleting: Vue.reactive({}), newField: Vue.reactive({}),

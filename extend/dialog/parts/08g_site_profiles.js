@@ -60,13 +60,22 @@
         h('button', { onClick: () => { ctx.siteProfOpen = !ctx.siteProfOpen; } },
           ctx.siteProfOpen ? '▾' : '▸')
       ]),
-      ctx.siteProfOpen ? h('div', { class: 'bridge-body' }, [renderProfilesBody(ctx)]) : null
+      ctx.siteProfOpen ? h('div', { class: 'bridge-body' }, [
+        D.renderConfigStatusBar ? D.renderConfigStatusBar(ctx) : null,
+        D.renderConfigConfirmBar ? D.renderConfigConfirmBar(ctx) : null,
+        renderProfilesBody(ctx)
+      ]) : null
     ]);
   };
 
   /** 区块主体：未连接后端的提示，或 新增表单 + 各站点卡片 + 保存行。 */
   function renderProfilesBody(ctx) {
-    const ids = Object.keys(ctx.siteProfDraft || {});
+    const allIds = Object.keys(ctx.siteProfDraft || {});
+    let ids = allIds;
+    if (!ctx.siteProfShowAll && ctx.siteKey && ctx.currentProfileId) {
+      const pid = ctx.currentProfileId();
+      if (pid && allIds.indexOf(pid) >= 0) ids = [pid];
+    }
     if (!ids.length && !Object.keys(ctx.siteProfiles || {}).length) {
       return h('div', { class: 'hint' }, '（未读取到站点档案，请先连接后端）');
     }
@@ -137,6 +146,19 @@
    * 单个已知字段行：label + hint + 控件（按 kind 选 input / textarea / checkbox）
    * + 试运行按钮 + 结果。测试用当前编辑值，未保存也可测。
    */
+  /** v3：不一致字段标色；旁边挂【还原】把该项改回服务端值（N1 无基准）。 */
+  function fieldDiffClass(ctx, pid, field) {
+    const d = ctx.configDiff && ctx.configDiff[pid];
+    return (d && field in d) ? ' sp-field-diff' : '';
+  }
+  function fieldRestoreBtn(ctx, pid, field) {
+    const d = ctx.configDiff && ctx.configDiff[pid];
+    if (!d || !(field in d)) return null;
+    return h('button', { class: 'sp-restore-btn',
+      onClick: () => { if (ctx.restoreProfileField) ctx.restoreProfileField(pid, field); }
+    }, '还原');
+  }
+
   function renderProfileField(ctx, pid, field, meta) {
     const draft = ctx.siteProfDraft[pid] || {};
     const val = draft[field];
@@ -173,7 +195,8 @@
         h('div', { class: 'tc-hint' }, (meta && meta.label ? meta.label : '自定义字段')
           + (meta && meta.hint ? '：' + meta.hint : ''))
       ]),
-      h('div', { class: 'tc-control sp-field-control' }, [
+      h('div', { class: 'tc-control sp-field-control' + fieldDiffClass(ctx, pid, field) }, [
+        fieldRestoreBtn(ctx, pid, field),
         control,
         kind && kind !== 'hosts' ? h('button', {
           class: 'sp-test-btn', disabled: testing,
@@ -211,7 +234,8 @@
         h('span', {}, field),
         h('div', { class: 'tc-hint' }, '自定义字段：值按选择器 / 表达式处理')
       ]),
-      h('div', { class: 'tc-control sp-field-control' }, [
+      h('div', { class: 'tc-control sp-field-control' + fieldDiffClass(ctx, pid, field) }, [
+        fieldRestoreBtn(ctx, pid, field),
         h('input', { type: 'text', class: 'sp-input', value: val == null ? '' : String(val),
           onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } }),
         h('div', { class: 'sp-btn-row' }, [
@@ -269,27 +293,32 @@
   };
 
   /** 输入防抖自动保存：800ms 合并一次写回；成功静默，失败 toast。 */
+  /** 编辑后只写浏览器缓存（D3 全存），绝不直接 POST；【覆盖】才写后端。 */
   M.queueSiteProfSave = function () {
     if (this._spSaveTimer) clearTimeout(this._spSaveTimer);
     this._spSaveTimer = setTimeout(() => {
       this._spSaveTimer = null;
-      this.saveSiteProfiles();
+      this.persistConfigCache();
     }, 800);
   };
 
-  /** 保存：序列化工作副本 → POST /config profiles 整体替换 → 通知内容脚本重拉。 */
+  /** 兼容入口：只提交【当前页面】的档案（D2 按档案 id 合并）。
+      公共配置的整份提交与两栏确认由 08j 的 applyConfigOverwrite 统一负责。 */
   M.saveSiteProfiles = async function () {
-    const out = D.serializeProfilesDraft(this.siteProfDraft);
+    const out = D.serializeProfilesDraft(this.siteProfDraft || {});
     for (const pid of Object.keys(out)) {
       if (!/^[A-Za-z0-9_]+$/.test(pid)) {
         this.toast('站点 id 不合法：' + pid);
         return;
       }
     }
+    const pid = this.currentProfileId ? this.currentProfileId() : Object.keys(out)[0];
+    const body = {};
+    if (pid && out[pid]) body.profiles = { [pid]: out[pid] };
+    const removed = (this._configRemovedSites || []).slice();
+    if (removed.length) body.profiles_remove = removed;
     try {
-      await D.apiFetch(this, '/config', { method: 'POST', body: { profiles: out } });
-      this.siteProfiles = out;
-      // 通知当前页内容脚本重拉（热更新）；其它已开标签页在下次注入 / 刷新时取新值
+      await D.apiFetch(this, '/config', { method: 'POST', body: body });
       window.parent.postMessage({ type: 'profiles_refresh' }, '*');
     } catch (e) {
       this.toast('保存失败：' + e);
