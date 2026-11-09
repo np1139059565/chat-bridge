@@ -261,6 +261,10 @@
         h('button', { class: 'close', title: '返回对话镜像', onClick: () => { ctx.settingsOpen = false; } }, '←')
       ]),
       h('div', { class: 'settings-body' }, [
+        // v3：全局状态栏/覆盖确认放最顶部，所有配置区（含公共配置）都可见；
+        // 此前藏在站点配置块内，折叠即消失，公共配置等于没管。
+        D.renderConfigStatusBar ? D.renderConfigStatusBar(ctx) : null,
+        D.renderConfigConfirmBar ? D.renderConfigConfirmBar(ctx) : null,
         // 1) System Prompt：供复制粘贴到网页 AI 对话框
         D.renderSystemPromptBlock(ctx),
         // 2) 规则：用户自定义约定文件，AI 按需读取
@@ -286,7 +290,8 @@
         h('div', { class: 'sp-block' }, [
           h('div', { class: 'card-head' }, [
             h('span', { title: '内置 + 自定义；点名称展开参数，开关控制是否上线到 System Prompt' }, '工具'),
-            h('button', { onClick: () => { ctx.toolsOpen = !ctx.toolsOpen; } }, ctx.toolsOpen ? '▾' : '▸')
+            D.renderConfigBadge ? D.renderConfigBadge(ctx) : null,
+             h('button', { onClick: () => { ctx.toolsOpen = !ctx.toolsOpen; } }, ctx.toolsOpen ? '▾' : '▸')
           ]),
           ctx.toolsOpen ? h('div', { class: 'tool-list' }, [
             // 用 allTools（含已下线）而非 tools（AI 目录，已滤掉下线工具）：

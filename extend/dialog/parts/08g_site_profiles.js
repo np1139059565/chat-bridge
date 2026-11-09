@@ -60,11 +60,7 @@
         h('button', { onClick: () => { ctx.siteProfOpen = !ctx.siteProfOpen; } },
           ctx.siteProfOpen ? '▾' : '▸')
       ]),
-      ctx.siteProfOpen ? h('div', { class: 'bridge-body' }, [
-        D.renderConfigStatusBar ? D.renderConfigStatusBar(ctx) : null,
-        D.renderConfigConfirmBar ? D.renderConfigConfirmBar(ctx) : null,
-        renderProfilesBody(ctx)
-      ]) : null
+      ctx.siteProfOpen ? h('div', { class: 'bridge-body' }, [renderProfilesBody(ctx)]) : null
     ]);
   };
 

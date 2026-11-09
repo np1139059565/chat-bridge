@@ -119,6 +119,8 @@
       out.tool_config.system = flat;
     }
     delete out.system_config;
+    delete out.default_profile;
+    if (out.flask) {    out.flask = Object.assign({}, out.flask);    delete out.flask.url;  }
     delete out.available_tools;
     delete out.site_profiles;
     return out;

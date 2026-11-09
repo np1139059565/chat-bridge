@@ -129,3 +129,21 @@
 .sp-confirm-col { padding-left: 8px; border-left: 2px solid var(--cb-danger); }
 .sp-confirm button { align-self: flex-start; font-size: 12px; padding: 2px 10px; }
 .sp-site-scope { font-size: 11px; color: var(--cb-text-muted); }
+
+
+/* 公共配置控件也走同一套差异标色：input / 开关 / 文本域 */
+input.sp-field-diff,
+textarea.sp-field-diff,
+.sp-field-diff input,
+.sp-field-diff textarea {
+  border-color: var(--cb-warn-border); background: var(--cb-warn-bg);
+}
+.sp-field-diff .switch { box-shadow: 0 0 0 2px var(--cb-warn-border); }
+.sp-diff-badge {
+  font-size: 11px; padding: 1px 6px; margin-left: 6px; border-radius: 4px;
+  background: var(--cb-warn-bg); color: var(--cb-warn-text);
+  border: 1px solid var(--cb-warn-border);
+}
+.sp-diff-badge.ok {
+  background: var(--cb-ok-bg); color: var(--cb-ok); border-color: var(--cb-ok-border);
+}

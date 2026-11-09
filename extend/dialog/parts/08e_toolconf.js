@@ -20,9 +20,14 @@
     // 多选：独立成块，说明行 + 横排复选框（与工具原有配置同一外观）
     if (spec.type === 'multiselect') {
       const cur = Array.isArray(val) ? val : [];
+      const isLangs = (tool === 'run_command' && key === 'languages');
+      const secX = isLangs ? 'tools' : ((tool === 'system') ? 'system_config' : 'tool_config');
+      const nmX = isLangs ? 'run_command' : ((tool === 'system') ? '' : tool);
       const desc = spec.hint ? (spec.label + '（' + spec.hint + '）') : spec.label;
-      return h('div', { class: 'lang-checks', key: key }, [
+      return h('div', { class: 'lang-checks' + (D.publicFieldClass
+        ? D.publicFieldClass(ctx, secX, nmX, key, val) : ''), key: key }, [
         h('div', { class: 'desc' }, desc),
+        D.publicRestoreBtn ? D.publicRestoreBtn(ctx, secX, nmX, key, val) : null,
         h('div', { class: 'check-row' }, (spec.options || []).map((opt) =>
           h('label', { class: 'check-item', key: opt }, [
             h('input', {
@@ -64,12 +69,16 @@
         onChange: (ev) => ctx.setToolConfig(tool, key, ev.target.value),
       });
     }
-    return h('div', { class: 'tc-row', key: key }, [
+    const sec = (tool === 'system') ? 'system_config' : 'tool_config';
+    const nm = (tool === 'system') ? '' : tool;
+    return h('div', { class: 'tc-row' + (D.publicFieldClass
+      ? D.publicFieldClass(ctx, sec, nm, key, val) : ''), key: key }, [
       h('div', { class: 'tc-label' }, [
         h('span', {}, spec.label),
         spec.hint ? h('div', { class: 'tc-hint' }, spec.hint) : null,
       ]),
-      h('div', { class: 'tc-control' }, control),
+      h('div', { class: 'tc-control' }, [control,
+        D.publicRestoreBtn ? D.publicRestoreBtn(ctx, sec, nm, key, val) : null]),
     ]);
   }
 

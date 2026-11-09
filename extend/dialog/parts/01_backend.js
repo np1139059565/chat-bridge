@@ -252,7 +252,10 @@
     const all = ['cmd', 'powershell', 'shell', 'git', 'python'];
     const cfgLangs = (this.configTools.run_command && this.configTools.run_command.languages) || [];
     const current = (tool && tool.languages) || cfgLangs || [];
-    return h('div', { class: 'lang-checks' }, [
+    return h('div', { class: 'lang-checks' + (D.publicFieldClass
+      ? D.publicFieldClass(this, 'tools', 'run_command', 'languages', current) : '') }, [
+      D.publicRestoreBtn
+        ? D.publicRestoreBtn(this, 'tools', 'run_command', 'languages', current) : null,
       h('div', { class: 'desc' }, '支持语言（勾选后 AI 可用该语言执行命令）'),
       h('div', { class: 'check-row' }, all.map((lang) => {
         const checked = current.indexOf(lang) !== -1;

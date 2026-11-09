@@ -39,7 +39,9 @@
         h('b', name),
         h('span', { class: 'desc' }, tool.description)
       ]),
-      h('div', { class: 'tool-btns' }, [
+      h('div', { class: 'tool-btns' +
+         (D.publicFieldClass ? D.publicFieldClass(ctx, 'tools', name, 'enabled', on) : '') }, [
+         D.publicRestoreBtn ? D.publicRestoreBtn(ctx, 'tools', name, 'enabled', on) : null,
         h('button', {
           class: 'switch ' + (on ? 'on' : 'off'),
           onClick: () => ctx.setToolEnabled(name, !on)
@@ -233,10 +235,11 @@
     return h('div', { class: 'sp-block' }, [
       h('div', { class: 'card-head' }, [
         h('span', '通用配置'),
+         D.renderConfigBadge ? D.renderConfigBadge(ctx) : null,
         h('button', { onClick: () => { ctx.generalOpen = !ctx.generalOpen; } },
           ctx.generalOpen ? '▾' : '▸')
       ]),
-      ctx.generalOpen ? h('div', [renderGeneralBody(ctx)]) : null
+            ctx.generalOpen ? h('div', [renderGeneralBody(ctx)]) : null
     ]);
   };
 
@@ -358,10 +361,14 @@ function renderGeneralBody(ctx) {
       h('label', ['工具结果体积上限(字符)', h('input', {
         type: 'number', min: '1', step: '1',
         value: ctx.maxJsonChars,
+           class: 'tc-num' + (D.publicFieldClass
+             ? D.publicFieldClass(ctx, 'limits', '', 'max_json_chars', ctx.maxJsonChars) : ''),
         onInput: (e) => { const v = parseInt(e.target.value, 10); ctx.maxJsonChars = v > 0 ? v : 100000; }
       })]),
       h('div', [
-        h('button', { onClick: () => ctx.saveMaxJsonChars() }, '保存上限'),
+        D.publicRestoreBtn
+           ? D.publicRestoreBtn(ctx, 'limits', '', 'max_json_chars', ctx.maxJsonChars) : null,
+         h('button', { onClick: () => ctx.saveMaxJsonChars() }, '保存上限'),
         h('span', { class: 'hint' }, 'search_content / read_file 等结果超过此字符数会报错，提示 AI 缩小范围')
       ]),
       h('br'),
