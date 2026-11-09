@@ -4,7 +4,7 @@
     {
       "check": "dup",
       "file": "<duplicates>",
-      "count": 103
+      "count": 58
     },
     {
       "check": "pyfunc",
