@@ -39,6 +39,8 @@ from push_file_impl import t_push_file
 from memory_search_impl import t_memory_search
 # 蒸馏质量管理（抽检 + 修正）拆到独立模块
 from memory_quality_impl import t_memory_inspect, t_memory_refine
+# 工具清单枚举拆到独立模块：与 get_tool_params（按名查参）职责相对，一为发现、一为详查
+from list_tools_impl import t_list_tools
 
 
 # 工具目录：元数据定义在 tool_meta.py，此处直接引用，保持「声明」与「实现」分离
@@ -408,6 +410,7 @@ DISPATCH = {
     "replace_in_file": t_replace_in_file,
     "write_to_file": t_write_to_file,
     "delete_file": t_delete_file,
+    "list_tools": t_list_tools,
     "get_tool_params": t_get_tool_params,
     "list_rules": t_list_rules,
     "read_rule": t_read_rule,

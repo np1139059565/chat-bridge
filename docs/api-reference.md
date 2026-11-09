@@ -288,6 +288,7 @@ POST 请求体示例：
 | `replace_in_file` | `path`, `old_string` | `new_string` |
 | `write_to_file` | `path`, `content` | — |
 | `delete_file` | `path` | — |
+| `list_tools` | — | —（返回当前可调用工具的名称、说明与有无参数；参数详情再查 `get_tool_params`） |
 | `get_tool_params` | `tool_id` | — |
 | `list_rules` | — | — |
 | `read_rule` | `rule` | — |

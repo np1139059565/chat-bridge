@@ -21,6 +21,11 @@
 
 TOOLS = {
     # ---------- 自描述类：让 AI 先查参数再调用，避免臆造参数名 ----------
+    "list_tools": {
+        "description": "列出当前可调用的全部工具（名称 + 说明 + 是否含参数），供发现有哪些工具可用；"
+                       "需查某个工具的参数时再用 get_tool_params",
+        "parameters": [],
+    },
     "get_tool_params": {
         "description": "根据工具 id 查询其参数、说明与用法",
         "parameters": [
