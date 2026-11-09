@@ -60,6 +60,7 @@
         h('input', {
           type: 'text',
           value: ctx.wxVerifyCode || '',
+          'data-cfg-skip': '1',
           placeholder: '手机上的数字',
           onInput: (e) => { ctx.wxVerifyCode = e.target.value; }
         }),

@@ -91,7 +91,11 @@
    * @returns {VNode|null} 配置节点；该工具无配置声明时返回 null
    */
   D.renderToolConfig = function (ctx, tool) {
-    const rows = (ctx.toolConfig || {})[tool] || [];
+    let rows = (ctx.toolConfig || {})[tool] || [];
+    if (!Array.isArray(rows)) {
+      const spec = ((ctx.configBackend || {}).tool_config || {})[tool];
+      rows = Array.isArray(spec) ? spec : [];
+    }
     if (!rows.length) return null;
     return h('div', { class: 'tc-body' }, rows.map((spec) => renderField(ctx, tool, spec)));
   };
@@ -104,7 +108,11 @@
    * @returns {VNode|null} 配置节点；无声明时返回 null
    */
   D.renderSystemConfig = function (ctx) {
-    const rows = ctx.systemConfig || [];
+    let rows = ctx.systemConfig || [];
+    if (!Array.isArray(rows)) {
+      const spec = (ctx.configBackend || {}).system_config;
+      rows = Array.isArray(spec) ? spec : [];
+    }
     if (!rows.length) return null;
     return h('div', { class: 'tc-body' }, rows.map((spec) => renderField(ctx, 'system', spec)));
   };

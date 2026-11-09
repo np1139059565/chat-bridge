@@ -209,7 +209,7 @@
       });
       const st = data.status || {};
       this.bridgeConnected = !!st.connected;
-      this.toast(this.bridgeEnabled ? '桥接已保存并重启' : '桥接已关闭');
+      if (D.settleBlockFields) D.settleBlockFields(this, 'bridge'); this.toast(data && data.draft ? '配置已存本地草稿，点【覆盖】后生效' : (this.bridgeEnabled ? '桥接已保存并重启' : '桥接已关闭'));
     } catch (e) {
       this.toast('保存失败：' + e);
     }

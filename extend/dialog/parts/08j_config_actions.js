@@ -36,6 +36,42 @@
     // 否则后端改端口后，本地旧值会被【覆盖】写回去，把服务打到空端口。
     cache.flask = JSON.parse(JSON.stringify(backend.flask || {}));
     await D.configCacheSet(this.siteKey, cache);
+    // 自愈：历史缓存曾因提交体扁平化被原地改成 {tool:{key:value}}，
+    // renderToolConfig 对对象调 .map 会抛错，工具内部配置项整片消失。
+    // spec 结构永远以服务端声明为准，本地只保留同名 key 的 value。
+    function healSpecs(bSpec, cSpec) {
+      const out = {};
+      Object.keys(bSpec || {}).forEach(function (tool) {
+        const rows = bSpec[tool], cur = (cSpec || {})[tool] || {};
+        const local = {};
+        if (Array.isArray(cur)) cur.forEach(function (r) { local[r.key] = r.value; });
+        else Object.keys(cur).forEach(function (k) { local[k] = cur[k]; });
+        out[tool] = (Array.isArray(rows) ? rows : []).map(function (sp) {
+          const x = Object.assign({}, sp);
+          if (sp.key in local) x.value = local[sp.key];
+          return x;
+        });
+      });
+      return out;
+    }
+    cache.tool_config = healSpecs(backend.tool_config, cache.tool_config);
+    if (Array.isArray(backend.system_config)) {
+      const localSys = {}, curSys = cache.system_config;
+      if (Array.isArray(curSys)) {
+        curSys.forEach(function (r) { localSys[r.key] = r.value; });
+      } else if (curSys && typeof curSys === 'object') {
+        // 历史缓存曾被提交体扁平化成 {key:value} 对象；只认数组会让资源上限值退回默认。
+        Object.keys(curSys).forEach(function (k) { localSys[k] = curSys[k]; });
+      }
+      cache.system_config = backend.system_config.map(function (sp) {
+        const x = Object.assign({}, sp);
+        if (sp.key in localSys) x.value = localSys[sp.key];
+        return x;
+      });
+    }
+    this.toolConfig = cache.tool_config;
+    this.systemConfig = cache.system_config;
+    await D.configCacheSet(this.siteKey, cache);
     this.configCache = cache;
     this.siteProfiles = cache.profiles || {};
     if (!this._siteProfLoaded) {
@@ -59,15 +95,27 @@
     Object.keys(pl).concat(Object.keys(pb)).forEach(function (k) {
       if (JSON.stringify(pl[k]) !== JSON.stringify(pb[k])) pd[k] = pb[k];
     });
-    const pending = cache.pending || [], byBlock = {};
-    pending.forEach(function (w) { byBlock[w.block] = (byBlock[w.block] || 0) + 1; });
+    const pending = cache.pending || [], byBlock = {}, blockIds = {};
+    pending.forEach(function (w) { byBlock[w.block] = (byBlock[w.block] || 0) + 1; blockIds[w.block] = 1; });
+    // 输入态：未点保存的字段改动也要提示。同一区块已有 pending 时不重复计数。
+    const bf = cache.blockFields || {};
+    let fieldExtra = 0;
+    Object.keys(bf).forEach(function (bid) {
+      let n = 0;
+      Object.keys(bf[bid] || {}).forEach(function (k) {
+        const e = bf[bid][k];
+        if (String(e.current) !== String(e.baseline)) n++;
+      });
+      if (!n) return;
+      if (!byBlock[bid]) { byBlock[bid] = n; fieldExtra += n; }
+    });
     this.configDiff = diff;
     this.configPublicDiff = pd;
     this.configBlockDirty = byBlock;
     const nSite = Object.keys(diff).reduce(function (a, k) {
       return a + Object.keys(diff[k]).length; }, 0);
-    this.configDirty = nSite > 0 || Object.keys(pd).length > 0 || pending.length > 0;
-    this.configDiffCount = nSite + Object.keys(pd).length + pending.length;
+    this.configDirty = nSite > 0 || Object.keys(pd).length > 0 || pending.length > 0 || fieldExtra > 0;
+    this.configDiffCount = nSite + Object.keys(pd).length + pending.length + fieldExtra;
   };
 
   M.persistConfigCache = async function () {
@@ -177,12 +225,17 @@
     }, '还原');
   };
   /** 各公共配置区卡片头挂的小徽标，滚下去也看得见差异。 */
-  D.renderConfigBadge = function (ctx) {
+  D.renderConfigBadge = function (ctx, section) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
-    const n = ctx.configDiffCount || 0;
-    // 一致时静默：折叠态看不到任何控件，报平安是零信息量还碍眼。
+    const pd = ctx.configPublicDiff || {};
+    let keys;
+    if (section === 'tools') keys = ['tools', 'tool_config'];
+    else if (section === 'general') keys = ['limits', 'system_config', 'default_profile'];
+    else keys = Object.keys(pd);
+    const n = keys.filter(function (k) { return k in pd; }).length;
+    // 只数本段：全局计数含站点档案与其它区块，挂局部头会串号。
     if (!n) return null;
-    return h('span', { class: 'sp-diff-badge' }, '与服务端有 ' + n + ' 项差异');
+    return h('span', { class: 'sp-diff-badge' }, n + ' 项未覆盖');
   };
 
   M.toggleSiteScope = function () { this.siteProfShowAll = !this.siteProfShowAll; };
@@ -191,14 +244,12 @@
 
   M.applyConfigOverwrite = async function () {
     try {
-      // 1) 回放所有受管配置区块的待覆盖写入（__commit 绕过草稿拦截）
       const pending = ((this.configCache && this.configCache.pending) || []).slice()
         .sort(function (a, b) { return a.seq - b.seq; });
       for (let i = 0; i < pending.length; i++) {
         const w = pending[i];
         await D.apiFetch(this, w.path, { method: w.method, body: w.body, __commit: true });
       }
-      // 2) 站点档案草稿落缓存，再整份提交 /config 母版
       await this.persistConfigCache();
       const cache = this.configCache || {};
       const body = D.configPublicToBody(D.configPublic(cache));
@@ -208,8 +259,8 @@
       const removed = (this._configRemovedSites || []).slice();
       if (removed.length) body.profiles_remove = removed;
       await D.apiFetch(this, '/config', { method: 'POST', body: body, __commit: true });
-      // 3) 清空待覆盖写入，后端快照按本地缓存对齐
       cache.pending = [];
+      if (D.clearBlockFields) D.clearBlockFields(this);
       this.configBackend = JSON.parse(JSON.stringify(cache));
       await D.configCacheSet(this.siteKey, cache);
       window.parent.postMessage({ type: 'profiles_refresh' }, '*');
@@ -286,9 +337,10 @@
   M.discardConfigBlock = async function (id) {
     const cache = this.configCache || (this.configCache = {});
     cache.pending = (cache.pending || []).filter(function (w) { return w.block !== id; });
+    if (D.resetBlockFields) D.resetBlockFields(this, id);
     await D.configCacheSet(this.siteKey, cache);
     this.recomputeConfigDiff();
-    this.toast('已丢弃该区块的本地改动，重新展开后显示服务端值');
+    this.toast('已丢弃该区块的本地改动');
   };
 
   /** 区块卡片头徽标：一致 / 离线静默，仅存在未覆盖写入时亮。 */
@@ -297,5 +349,15 @@
     return h('span', { class: 'sp-diff-badge' }, ctx.configBlockDirty[id] + ' 项未覆盖');
   };
 
+
+  /** 站点配置块专属徽标：只数 configDiff 里的字段差异。 */
+  D.renderSiteProfileBadge = function (ctx) {
+    if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
+    const d = ctx.configDiff || {};
+    let n = 0;
+    Object.keys(d).forEach(function (pid) { n += Object.keys(d[pid]).length; });
+    if (!n) return null;
+    return h('span', { class: 'sp-diff-badge' }, n + ' 项未覆盖');
+  };
 
 })();

@@ -49,7 +49,10 @@
   D.configPublic = function (cfg) {
     const out = {};
     Object.keys(cfg || {}).forEach(function (k) {
-      if (k !== 'profiles' && k !== 'pending' && k !== 'blocks' && k !== 'overrides') out[k] = cfg[k];
+      if (k !== 'profiles' && k !== 'pending' && k !== 'blocks' && k !== 'overrides' && k !== 'blockFields') {
+      const v = cfg[k];
+      out[k] = (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
+    }
     });
     return out;
   };
@@ -126,6 +129,7 @@
     delete out.pending;
     delete out.blocks;
     delete out.overrides;
+    delete out.blockFields;
     return out;
   };
 })();

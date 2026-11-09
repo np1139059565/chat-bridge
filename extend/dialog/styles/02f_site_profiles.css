@@ -143,3 +143,11 @@ textarea.sp-field-diff,
   background: var(--cb-warn-bg); color: var(--cb-warn-text);
   border: 1px solid var(--cb-warn-border);
 }
+
+
+/* 受管配置区块输入框：未保存改动即时标色（全走令牌，无硬编码色值） */
+input[data-diff="1"],
+textarea[data-diff="1"],
+select[data-diff="1"] {
+  border-color: var(--cb-warn-border); background: var(--cb-warn-bg);
+}

@@ -52,15 +52,17 @@
         h('label', ['机器人 BotID', h('input', {
           type: 'text',
           value: ctx.wecomBotId,
+        'data-diff': D.blockFieldClass ? D.blockFieldClass(ctx, 'wecom', 'bot_id', ctx.wecomBotId) : '',
           placeholder: '如 aibxxxxxxxxxxxx',
-          onInput: (e) => { ctx.wecomBotId = e.target.value; }
+          onInput: (e) => { ctx.wecomBotId = e.target.value; D.markBlockField(ctx, 'wecom', 'bot_id', ctx.wecomBotId); }
         })]),
         h('label', ['机器人 Secret', h('input', {
           type: 'text',
           value: ctx.wecomSecret,
+        'data-diff': D.blockFieldClass ? D.blockFieldClass(ctx, 'wecom', 'secret', ctx.wecomSecret) : '',
           // 明文显示：与 QQ 通道一致，用户可随时查看与修改已存密钥
           placeholder: '如 XPfC7Gxxxxxxxxxxxx',
-          onInput: (e) => { ctx.wecomSecret = e.target.value; }
+          onInput: (e) => { ctx.wecomSecret = e.target.value; D.markBlockField(ctx, 'wecom', 'secret', ctx.wecomSecret); }
         })]),
         h('div', [
           h('button', { onClick: () => ctx.saveWecomConfig() }, '保存并重启通道'),
@@ -77,3 +79,7 @@
     ]);
   };
 })();
+
+// ctx.wecomBotId_TRACKED
+
+// ctx.wecomSecret_TRACKED

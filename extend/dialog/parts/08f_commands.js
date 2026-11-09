@@ -124,6 +124,7 @@
         h('input', {
           type: 'text', placeholder: '命令名（含 /，如 /deploy）',
           value: ctx.bridgeNewCmdName,
+          'data-cfg-skip': '1',
           onInput: (e) => { ctx.bridgeNewCmdName = e.target.value; }
         }),
         h('input', {

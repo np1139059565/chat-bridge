@@ -25,7 +25,9 @@
         if (!body || typeof body !== 'object') return false;
         // 下发 / 执行类请求带这些字段，不是配置保存，必须放行。
         return !(body.action || body.exec || body.command_id || body.run);
-      } }
+      } },
+    { id: 'general', label: '通用配置', write: null, read: null },
+    { id: 'site_profiles', label: '网页 AI 站点配置', write: null, read: null }
   ];
 
   D.matchConfigBlock = function (path, method, isWrite) {

@@ -1,6 +1,6 @@
 # 配置按站点隔离与缓存交互：设计评审记录
 
-> **状态**：方案已定稿（第八节 v3），代码零改动；2026-11-09 用户拍板 N1 不设基准、D2 覆盖分公共/站点两类、D3 全量缓存。
+> **状态**：v3 已落地（实现与故障复盘见第九节）；2026-11-09 用户拍板 N1 不设基准、D2 覆盖分公共/站点两类、D3 全量缓存。
 > 第四 / 五节的 v2 版本号思路已作废，仅保留推理历史。8.3 为实施依据，可开工。
 > **走查基准**：`a37b2e0`（2026-11-09），独立空间 `chat-bridge-yuanbao`。
 > **本文定位**：只记录原始提案、代码事实与漏洞清单，**不是实施定稿**。第四节为建议方向，第六节为改动面预估，均待拍板。
@@ -171,3 +171,59 @@
 - **取消**：时间戳 / 版本字段、服务端单调 revision、时钟授时、base 基准快照、三纸对比、409 冲突检测、sanitize_profiles 与 applyProfiles 类型放行、字段元表排除、序列化排除，以及上述各项的测试。
 - **仍需**：08g_site_profiles.js（按 URL 过滤渲染 + 单色标注 + 逐项还原 + 覆盖两栏提示 + 单份本地缓存读写）、01_backend.js（刷新拉后端、离线不标色）、00_data.js（state）、08b_settings.js（按钮挂载）、config_route.py / config_store.py（按档案 id 合并，D2）、全量缓存读写（D3）。
 - **测试**：刷新保留草稿、不一致标色、逐项还原不误删其它项、覆盖只写当前站点档案、公共配置整份覆盖、拉取失败不标色。
+
+## 九、实现落地与故障复盘（2026-11-09）
+
+**提交序列**：`e57260a`（缓存 / 差异 / 覆盖骨架）、`3235111`（公共配置区 UI）、`b110f13`（删除报平安文案）、`9e99c37`（全受管区块草稿拦截）、本轮（串号与输入框追踪修复）。
+
+### 9.1 追踪范围
+
+后端 `GET /config` 只覆盖 flask / limits / tools / tool_config / system_config / profiles / default_profile。其余配置区（远程桥接 QQ、微信、企业微信、投递策略、技能、规则、自定义工具、指令）走独立端点，由 `00a_api.js` + `08k_config_blocks.js` 白名单统一拦截：写操作进 `configCache.pending` 草稿，读响应经 `mergeIntoShape` 合并本地改动，点【覆盖】按 `seq` 回放到各自端点后再提交 /config 母版。动作类端点（登录 / 扫码 / 下发 / 执行 / 日志 / 会话）与端口切换 `restart-port` 不拦。
+
+### 9.2 输入态追踪
+
+`08l_config_field_tracking.js` 在渲染时记下每个输入框的 baseline（后端读回值），`onInput` 调 `markBlockField` 立即标色（`data-diff="1"`）并计入 `configBlockDirty`；点保存后 `settleBlockFields` 把差异转为 pending 以免双算；【还原】用 `resetBlockFields` 擦回 baseline；覆盖成功后 `clearBlockFields` 全清。
+
+### 9.3 卡片头徽标归属（禁止全局数挂局部头）
+
+`renderConfigBadge(ctx, section)` 只数该段公共键（tools / general）；站点配置块自己挂 `renderSiteProfileBadge`；其余区块挂 `renderBlockBadge(ctx, id)`。一致 / 离线一律静默，只有存在差异才亮。
+
+### 9.4 三起故障复盘
+
+| 故障 | 根因 | 修复 |
+|---|---|---|
+| 改「网页 AI 站点配置」却在「工具」头提示 | 局部卡片头读了全局 `configDiffCount`（含站点档案与所有区块） | 徽标按段 / 按区块归属，站点块补挂专属徽标 |
+| 远程桥接 / 企业微信输入框改了不变色、无提示 | 拦截层只在「点保存发 POST」时登记 pending，`onInput` 仅改内存 state；保存按钮拿到 draft 响应仍 toast「已保存并重启」 | 输入态 baseline 追踪 + 草稿态文案 + settle |
+| 折叠卡片头显示「与服务端一致」 | 一致时也渲染绿标，零信息量且重复顶部状态栏 | 一致 / 离线静默，仅差异亮警示 |
+
+### 9.5 已知边界（非本轮引入）
+
+- 【覆盖】回放是多次请求、非原子事务；中途失败停在已写入位置，不自动回滚。两台同时覆盖仍后写胜。
+- 投递策略下拉、语音引擎选择、指令参数编辑为 `onChange` 即发保存（会登记 pending），但**未做逐控件标色**；审计测试 `test_config_audit.test.js` 会打印全仓未接追踪的 `onInput` 清单，供后续逐项复核。
+- 风控自动恢复开关、连接地址缓存两个 `chrome.storage` 直写项，以及 System Prompt 展示区、历史会话，均不属配置母版，不进追踪链路。
+
+### 9.6 全量输入追踪与同类故障排查
+
+- **串号根因**：`renderConfigBadge` 曾读全局 `configDiffCount`（含站点档案与所有区块）却挂在「工具」卡片头，改站点配置时工具头报「与服务端有 19 项差异」。现按段计数（tools / general），站点配置块挂 `renderSiteProfileBadge`，其余区块按 `renderBlockBadge(ctx, id)` 归属；审计测试硬断言局部徽标段内不得出现全局计数。
+- **输入框无反应根因**：草稿拦截只在「点保存发 POST」时登记 `pending`，`onInput` 仅改内存 state；保存方法拿到 draft 响应仍 toast「已保存并重启」。现 `08l_config_field_tracking.js` 在 `renderSettings` 安装 `focusin / pointerdown / input / change` 统一监听：首次交互记 baseline，输入当下写 `data-diff="1"` 并计入 `configBlockDirty`，各受管区块由 `data-cfg-block` 容器圈定。瞬态表单（技能目录、新建规则、自动延迟、端口草稿、验证码、指令参数编辑）用 `data-cfg-skip` 显式排除；工具内部配置 `.tc-row`、run_command 语言 `.lang-checks`、站点新增/加字段表单已有各自链路，同样排除。
+- **审计清单**：`test_config_audit.test.js` 会打印全仓未接追踪的 `onInput` 行号，逐项复核归属；未接的多为瞬态表单或已由公共配置链路覆盖的控件，不属于漏追踪。
+
+### 9.7 工具内部配置被吞（严重回归）
+
+**现象**：展开 `read_file` 后只剩参数表与 usage 示例，工具配置里的「上传文件最大数量」输入框、「是否以文件上传」复选框整片消失。
+
+**根因**：`configPublic` 是顶层浅拷贝，`out.tool_config` 与 `cache.tool_config` 指向同一个 spec 数组；`configPublicToBody` 把 spec 数组扁平化成 `{tool:{key:value}}` 时借该引用原地改写，缓存里的 `tool_config` 从数组变成对象。`renderToolConfig` 对对象调 `.map` 抛错，Vue 中断 `tree-detail` 后续渲染，看起来像「配置被吞掉」。`system_config` 同理。
+
+**三层修复**：① `configPublic` 对对象值做 `JSON.parse(JSON.stringify(v))` 深拷贝，提交体再也不会回写缓存；② `configLoadAndDiff` 用 `backend.tool_config` / `backend.system_config` 的声明结构自愈历史缓存，只把本地同名 key 的 `value` 合并回去，用户已改的值不丢；③ `renderToolConfig` / `renderSystemConfig` 对畸形输入不抛错，回退到服务端 spec 渲染。回归用例见 `test_toolconf_swallow.test.js`（污染前后、自愈、兜底、system_config 四条）。
+
+**边界**：`GET /config` 的 `tool_config` 是「声明 + 当前值」，声明结构始终以服务端为准；本地草稿只覆盖 `value`。这与 D3 全存口径不冲突——缓存存的是完整 spec，不是扁平化提交体。
+
+**用户侧操作**：重载扩展即可，无需手工清 `chrome.storage.local`——`configLoadAndDiff` 每次刷新都会用服务端 spec 声明重建结构，本地已改的 `value` 按 key 合并保留。自愈同时覆盖两种历史污染形态：spec 数组被扁平成 `{tool:{key:value}}`，以及 `system_config` 被扁平成 `{key:value}` 对象；后者只认数组时资源上限值会静默退回默认，属同类故障，已一并修。
+
+截图里那句「与服务端有 19 项差异」来自未重载的旧版全局徽标，本轮提交后按段徽标只会在对应区块显示「N 项未覆盖」。
+
+**同类故障反查（本轮补）**：① 全仓不得再有不带 `section` 的 `renderConfigBadge(ctx)` 调用；② 局部渲染文件（`08b_settings.js` / `08_settings.js` / `08g_site_profiles.js`）源码内不得出现 `configDiffCount`；③ 审计用例本身曾因把文件末尾追加的 `renderSiteProfileBadge` 当切片终点，误把状态栏算进函数体、误报「含全局计数」——已改为按函数体结束标记精确切片。三条均写入 `test_config_audit.test.js` 断言，防止同类边界问题再溜过去。
+
+**审计用例自身故障**：`test_config_audit.test.js` 曾因把 `split` 的分隔符转义写成真实换行，整文件加载期即 SyntaxError，`node --test` 只报一个顶层失败、看不到任何子用例，把业务红灯全盖住。已改为 `split(String.fromCharCode(10))`，并在提交前先跑 `node --check` 单文件语法校验；同类「测试文件自己先炸」不得再掩盖业务失败。
+
+**端到端实检（本轮）**：`test_toolconf_swallow.test.js` 追加三条真实渲染用例——直接调 `renderUnifiedToolRow` 展开 `read_file`，断言参数表、「上传文件最大数量」整数输入框、「是否以文件上传」复选框、usage 全在且不抛错；再走一次 `configPublicToBody`（即点【覆盖】时构造提交体的原 bug 触发路径）后重新展开，两个控件仍完整；最后模拟历史污染缓存经 `configLoadAndDiff` 自愈后展开，控件回来且本地已改的 `value` 保留。结论：工具内部配置被吞已修复，重载扩展后可见。

@@ -57,6 +57,7 @@
     return h('div', { class: 'sp-block' }, [
       h('div', { class: 'card-head' }, [
         h('span', { title: '站点档案：每站一份完整清单，真源在后端配置文件；保存后当前页即时生效' }, '网页 AI 站点配置'),
+        D.renderSiteProfileBadge ? D.renderSiteProfileBadge(ctx) : null,
         h('button', { onClick: () => { ctx.siteProfOpen = !ctx.siteProfOpen; } },
           ctx.siteProfOpen ? '▾' : '▸')
       ]),

@@ -122,15 +122,14 @@ test('renderToolConfig：差异项渲染出标色 class 与还原按钮（公共
   assert.ok(txt.indexOf('sp-restore-btn') >= 0);
 });
 
-test('renderConfigBadge：一致/离线静默；仅差异亮警示', async () => {
+test('renderConfigBadge：一致/离线静默；仅本段差异亮警示', async () => {
   const c = await loaded();
-  assert.strictEqual(D.renderConfigBadge(Object.assign({}, c, { configOffline: true })), null);
-  c.configDiffCount = 0;
-  assert.strictEqual(D.renderConfigBadge(c), null);
-  c.configDiffCount = 3;
-  const badge = JSON.stringify(D.renderConfigBadge(c));
+  assert.strictEqual(D.renderConfigBadge(c, 'tools'), null);
+  assert.strictEqual(D.renderConfigBadge(Object.assign({}, c, { configOffline: true }), 'tools'), null);
+  c.configPublicDiff = { tools: { read_file: { enabled: false } } };
+  const badge = JSON.stringify(D.renderConfigBadge(c, 'tools'));
   assert.ok(badge.indexOf('sp-diff-badge') >= 0);
-  assert.ok(badge.indexOf('3') >= 0);
+  assert.ok(badge.indexOf('未覆盖') >= 0);
 });
 
 test('折叠卡片头不再出现「与服务端一致」废话', () => {

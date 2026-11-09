@@ -73,7 +73,7 @@
    */
   D.renderCustomToolRow = function (ctx, t) {
     const name = t.name;
-    return h('li', { class: 'tool-row custom', key: 'c:' + name }, [
+    return h('li', { class: 'tool-row custom', key: 'c:' + name, 'data-cfg-block': 'custom_tools' }, [
       h('div', { class: 'tree-node', onClick: () => ctx.toggleCustom(name) }, [
         h('span', { class: 'caret' }, ctx.customExpanded[name] ? '▾' : '▸'),
         h('b', name),
@@ -129,6 +129,7 @@
       h('label', ['skill 目录（选包含 skill 的父目录）', h('div', { class: 'dir-row' }, [
         h('input', {
           type: 'text', value: ctx.skillScanDir,
+          'data-cfg-skip': '1',
           onInput: (e) => { ctx.skillScanDir = e.target.value; }
         })
       ])]),
@@ -232,10 +233,10 @@
    * @returns {VNode} 区块节点
    */
   D.renderGeneralSettings = function (ctx) {
-    return h('div', { class: 'sp-block' }, [
+    return h('div', { class: 'sp-block', 'data-cfg-block': 'general' }, [
       h('div', { class: 'card-head' }, [
         h('span', '通用配置'),
-         D.renderConfigBadge ? D.renderConfigBadge(ctx) : null,
+         D.renderConfigBadge ? D.renderConfigBadge(ctx, 'general') : null,
         h('button', { onClick: () => { ctx.generalOpen = !ctx.generalOpen; } },
           ctx.generalOpen ? '▾' : '▸')
       ]),
@@ -316,6 +317,7 @@ function renderGeneralBody(ctx) {
         h('input', {
           type: 'number', min: '1', step: '1',
           value: ctx.autoSendDelay / 1000,
+          'data-cfg-skip': '1',
           onInput: (e) => { const v = parseInt(e.target.value, 10); ctx.autoSendDelay = (v > 0 ? v : 3) * 1000; }
         }),
         h('button', {
@@ -361,6 +363,7 @@ function renderGeneralBody(ctx) {
       h('label', ['工具结果体积上限(字符)', h('input', {
         type: 'number', min: '1', step: '1',
         value: ctx.maxJsonChars,
+        'data-cfg-skip': '1',
            class: 'tc-num' + (D.publicFieldClass
              ? D.publicFieldClass(ctx, 'limits', '', 'max_json_chars', ctx.maxJsonChars) : ''),
         onInput: (e) => { const v = parseInt(e.target.value, 10); ctx.maxJsonChars = v > 0 ? v : 100000; }

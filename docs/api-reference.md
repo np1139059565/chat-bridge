@@ -83,7 +83,7 @@ POST 请求体示例：
 - GET：返回站点档案本体（definition.yaml 的 `app.profiles`，每站一份完整字段清单）。
   - 内容脚本注入时经扩展后台中转拉取（HTTPS 页直连本地服务会被混合内容策略拦截）；
     前端零缓存：取到即入内存覆盖出厂兜底（00_state.js 的内联 PROFILES），不落任何存储。
-- 写入走 POST /config 的 `profiles` 区块：整体替换（改哪站写哪站、删站同路径），
+- 写入走 POST /config 的 `profiles` 区块：按档案 id 合并（未提交的档案原样保留），删除须用 `profiles_remove` 显式列出 id；
   空字段按「未配置」语义保留；设置页「网页 AI 站点配置」区块（08g_site_profiles.js）即此读写界面，
   保存后通知当前页内容脚本重拉，无需刷新即生效。
 ### GET /prompt_sections

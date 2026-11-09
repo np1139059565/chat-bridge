@@ -69,7 +69,7 @@
         // 不再清空输入框：密钥以明文常驻显示，用户随时可查看与修改。
         // _applyWecomStatus 会用后端回传的最新值刷新它。
         this._applyWecomStatus(data);
-        this.toast(this.wecomEnabled ? '企业微信通道已保存并重启' : '企业微信通道已关闭');
+        if (D.settleBlockFields) D.settleBlockFields(this, 'wecom'); this.toast(data && data.draft ? '配置已存本地草稿，点【覆盖】后生效' : (this.wecomEnabled ? '企业微信通道已保存并重启' : '企业微信通道已关闭'));
       } else {
         this.toast('保存失败：' + ((data && data.error) || '未知错误'));
       }

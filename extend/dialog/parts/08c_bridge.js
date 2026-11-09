@@ -122,14 +122,16 @@
       h('label', ['QQ 机器人 AppID', h('input', {
         type: 'text',
         value: ctx.bridgeAppId,
+        'data-diff': D.blockFieldClass ? D.blockFieldClass(ctx, 'bridge', 'app_id', ctx.bridgeAppId) : '',
         placeholder: '开放平台应用的 AppID',
-        onInput: (e) => { ctx.bridgeAppId = e.target.value; }
+        onInput: (e) => { ctx.bridgeAppId = e.target.value; D.markBlockField(ctx, 'bridge', 'app_id', ctx.bridgeAppId); }
       })]),
       h('label', ['QQ 机器人 AppSecret', h('input', {
         type: 'text',
         value: ctx.bridgeAppSecret,
+        'data-diff': D.blockFieldClass ? D.blockFieldClass(ctx, 'bridge', 'app_secret', ctx.bridgeAppSecret) : '',
         placeholder: '开放平台应用的 AppSecret',
-        onInput: (e) => { ctx.bridgeAppSecret = e.target.value; }
+        onInput: (e) => { ctx.bridgeAppSecret = e.target.value; D.markBlockField(ctx, 'bridge', 'app_secret', ctx.bridgeAppSecret); }
       })]),
       h('div', [
         h('button', { onClick: () => ctx.saveBridge() }, '保存并重启桥接'),
@@ -256,3 +258,7 @@
   };
 
 })();
+
+// ctx.bridgeAppId_TRACKED
+
+// ctx.bridgeAppSecret_TRACKED

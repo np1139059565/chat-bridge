@@ -59,7 +59,7 @@
         body: JSON.stringify({ enabled: this.wxEnabled })
       });
       this._applyWeixinStatus(data);
-      this.toast(this.wxEnabled ? '微信通道已开启' : '微信通道已关闭');
+      if (D.settleBlockFields) D.settleBlockFields(this, 'weixin'); this.toast(data && data.draft ? '配置已存本地草稿，点【覆盖】后生效' : (this.wxEnabled ? '微信通道已开启' : '微信通道已关闭'));
     } catch (e) {
       this.toast('保存失败：' + e);
     }
