@@ -122,13 +122,37 @@ test('renderToolConfig：差异项渲染出标色 class 与还原按钮（公共
   assert.ok(txt.indexOf('sp-restore-btn') >= 0);
 });
 
-test('renderConfigBadge：离线返回 null；有差异显示数量；一致显示绿色', async () => {
+test('renderConfigBadge：一致/离线静默；仅差异亮警示', async () => {
   const c = await loaded();
   assert.strictEqual(D.renderConfigBadge(Object.assign({}, c, { configOffline: true })), null);
   c.configDiffCount = 0;
-  assert.ok(JSON.stringify(D.renderConfigBadge(c)).indexOf('sp-diff-badge ok') >= 0);
+  assert.strictEqual(D.renderConfigBadge(c), null);
   c.configDiffCount = 3;
-  assert.ok(JSON.stringify(D.renderConfigBadge(c)).indexOf('3') >= 0);
+  const badge = JSON.stringify(D.renderConfigBadge(c));
+  assert.ok(badge.indexOf('sp-diff-badge') >= 0);
+  assert.ok(badge.indexOf('3') >= 0);
+});
+
+test('折叠卡片头不再出现「与服务端一致」废话', () => {
+  const files = ['extend/dialog/parts/08j_config_actions.js',
+    'extend/dialog/parts/08b_settings.js', 'extend/dialog/parts/08_settings.js'];
+  for (const f of files) {
+    const s = fs.readFileSync(R(f), 'utf8');
+    assert.strictEqual(s.indexOf('与服务端一致'), -1, f + ' 仍含该文案');
+  }
+});
+
+test('顶部状态栏：一致时不渲染状态文字，仍保留功能按钮', async () => {
+  const c = await loaded();
+  c.configDirty = false;
+  c.configOffline = false;
+  const txt = JSON.stringify(D.renderConfigStatusBar(c));
+  assert.ok(txt.indexOf('与服务端一致') < 0);
+  assert.ok(txt.indexOf('覆盖') >= 0);
+  assert.ok(txt.indexOf('显示全部站点') >= 0);
+  c.configDirty = true;
+  c.configDiffCount = 2;
+  assert.ok(JSON.stringify(D.renderConfigStatusBar(c)).indexOf('2') >= 0);
 });
 
 test('连接层不进草稿：后端改端口后本地缓存跟随，覆盖不会把旧端口写回', async () => {

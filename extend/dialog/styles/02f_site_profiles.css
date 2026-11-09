@@ -109,7 +109,6 @@
   border: 1px solid var(--cb-warn-border); border-radius: 6px;
   background: var(--cb-warn-bg); color: var(--cb-warn-text); font-size: 12px;
 }
-.sp-config-bar .sp-config-ok { color: var(--cb-ok); }
 .sp-config-bar button { font-size: 12px; padding: 2px 10px; }
 .sp-field-diff .sp-input,
 .sp-field-diff .sp-area {
@@ -143,7 +142,4 @@ textarea.sp-field-diff,
   font-size: 11px; padding: 1px 6px; margin-left: 6px; border-radius: 4px;
   background: var(--cb-warn-bg); color: var(--cb-warn-text);
   border: 1px solid var(--cb-warn-border);
-}
-.sp-diff-badge.ok {
-  background: var(--cb-ok-bg); color: var(--cb-ok); border-color: var(--cb-ok-border);
 }

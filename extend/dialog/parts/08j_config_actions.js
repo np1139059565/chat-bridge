@@ -177,7 +177,8 @@
   D.renderConfigBadge = function (ctx) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
     const n = ctx.configDiffCount || 0;
-    if (!n) return h('span', { class: 'sp-diff-badge ok' }, '与服务端一致');
+    // 一致时静默：折叠态看不到任何控件，报平安是零信息量还碍眼。
+    if (!n) return null;
     return h('span', { class: 'sp-diff-badge' }, '与服务端有 ' + n + ' 项差异');
   };
 
@@ -212,9 +213,9 @@
     const dirty = !!ctx.configDirty;
     const pubKeys = Object.keys(ctx.configPublicDiff || {});
     return h('div', { class: 'sp-config-bar' }, [
-      h('span', {}, offline ? '（后端未连接：仅显示本地缓存，不做比对）'
-        : (dirty ? '有 ' + (ctx.configDiffCount || 0) + ' 项与服务端不一致，运行仍用服务端版本'
-          : h('span', { class: 'sp-config-ok' }, '本地与服务端一致'))),
+      offline ? h('span', {}, '（后端未连接：仅显示本地缓存，不做比对）')
+        : (dirty ? h('span', {}, '有 ' + (ctx.configDiffCount || 0)
+            + ' 项与服务端不一致，运行仍用服务端版本') : null),
       h('button', { onClick: () => { if (ctx.toggleSiteScope) ctx.toggleSiteScope(); } },
         ctx.siteProfShowAll ? '只看当前站点' : '显示全部站点'),
       h('button', { onClick: () => { if (ctx.confirmConfigOverwrite) ctx.confirmConfigOverwrite(); } }, '覆盖'),
