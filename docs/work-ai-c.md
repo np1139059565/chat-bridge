@@ -111,8 +111,73 @@
 
 | 编号 | 任务 | 状态 |
 |---|---|---|
-| C-2 | 指令统一收归服务端 | 待分发方预下发。依赖 C-1 的注册机制，返工时可能随之调整 |
+| C-2 | 指令统一收归服务端 | **可开工**（C-1 已合入 `main`）。依赖 C-1 的注册机制，若 C-1 返工随之调整 |
 | C-3 | 站点档案迁移到客户端注册信息 | 待定，C-2 完成后再拆 |
+
+### 任务 C-2：指令统一收归服务端
+
+**背景**：指令定义现在分散在两处——内置指令写死在 `.\.flask_server\remote_bridge\command_registry.py` 的 `BUILTIN` 表里，各客户端注册时声明的可执行指令又只存在注册表里没有统一出口。规格要求「指令定义全部存于工具服务」，客户端注册时登记自己能执行哪些指令，服务端提供统一的指令清单查询入口。
+
+**做什么**：
+
+1. 新增 `GET /api/commands`：返回全部可用指令的清单，含三个来源——内置指令、自定义指令、已注册客户端声明的指令
+2. 新增 `GET /api/commands/help`：返回指令帮助文本，按来源分组
+3. 清单每项至少含：指令名、来源（builtin / custom / client）、说明
+4. 客户端声明的指令从 C-1 的注册表读取（`commands` 字段），按 `site_key` 归属标注
+5. 指令**回执不进 AI 对话流**：本任务只做定义收归与查询，不改执行通道
+
+**不做什么**：
+
+- 不改现有指令的执行路径（`.\.flask_server\remote_bridge\command_dispatch.py` 一行不动）
+- 不改 `.\.flask_server\routes\cards.py` 的 `/api/commands/pending` 语义（那是执行侧的取件接口）
+- 不改 C-1 的注册表读写逻辑
+- 不做指令权限控制（用户指令与 AI 工具的隔离已由通道分离保证）
+- 不改 `.\.extend\` 下任何文件
+
+**可以碰的文件**：
+
+| 文件 | 说明 |
+|---|---|
+| `.\.flask_server\routes\` 下新建路由文件 | 承载两个查询接口 |
+| `.\.flask_server\core\` 下新建模块或扩展已有模块 | 指令清单汇总逻辑 |
+| `.\.flask_server\app.py` | 注册蓝图 |
+| `.\.flask_server\tests\` 下新建测试文件 | 覆盖两个接口 |
+| `.\.docs\api-reference.md` | 补接口说明 |
+
+**不要碰**：
+
+- `.\.flask_server\remote_bridge\command_registry.py`（只读它的 `BUILTIN`，不改）
+- `.\.flask_server\remote_bridge\command_dispatch.py`
+- `.\.flask_server\routes\cards.py`
+- `.\.flask_server\core\client_registry.py`（C-1 刚合入，只读不改）
+- `.\.extend\` 下任何文件
+
+**实现要点**：
+
+1. 内置指令清单直接从 `command_registry.BUILTIN` 读，不要复制一份表——两处维护必然漂移。
+2. 客户端声明的指令从 C-1 注册表读，注册表没有「列出全部客户端」的接口，需要新增一个只读的枚举函数；这是对 `client_registry.py` 的最小扩展，加函数不改已有行为，如判断有风险先在提问区问。
+3. 自定义指令用现有的 `.\.flask_server\custom_tools\commands.py` 里的 `list_external_commands()`，不要重新实现扫描逻辑。
+4. 三个来源合并时统一字段名，来源用固定枚举值区分。
+5. 帮助文本按来源分组，参考 `command_registry.help_text()` 的现有格式。
+
+**验收标准**：
+
+| 场景 | 期望 |
+|---|---|
+| 查询全部指令 | 返回三个来源的合并清单，每项含名称、来源、说明 |
+| 无客户端注册时 | 只返回内置与自定义来源，不报错 |
+| 有客户端注册后 | 清单包含该客户端声明的指令，来源标为 client |
+| 两个客户端声明同名指令 | 两条都出现，用 `site_key` 区分 |
+| 帮助文本 | 按来源分组，内容与清单一致 |
+| 内置指令表为空 | 不报错，返回其余来源 |
+
+测试写进 `.\.flask_server\tests\` 下新建的测试文件，跑通后把结果贴进第五节。
+
+**完成后**：
+
+1. 在本文件第五节追加完成记录
+2. 推送 `work/ai-c` 分支
+3. 若第三节已有标注「可开工」的排队任务，直接开工；否则等「更新 git」指令
 
 ---
 
@@ -150,5 +215,7 @@
   - `.\docs\api-reference.md`：补客户端注册接口说明。
 - 落盘位置选择理由：注册信息写入 `.\flask_server\data\client_registry.json`。该目录是既有运行时数据目录，不入库；采用 JSON 而非 YAML 或 `.\flask_server\config\definition.yaml`，是为原生保留任意嵌套结构、中文、null、空字符串与特殊字符，且不把客户端私有数据混入入库的定义文件；新通道不调用 `sanitize_profiles` 等任何清洗逻辑。
 - 验收：`.\flask_server\tests\test_client_registry.py` 7 passed；`.\flask_server` 全量 `pytest tests` 956 passed；`.\scripts\quality_rules.py` 返回 0、零 `[新增]`。
-- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+- 提交哈希：`db400db`（完整 `db400db56bddae8ad7bcf731948442e1e7b3ec9f`）。
+
+**分发方验收结论：通过。** 实测 `python -m pytest tests -q` 956 项全绿；改动 6 个文件全部落在可碰清单内；自建含中文、嵌套对象、数组、null、空字符串、emoji 的配置做深比较，deep_equal 与 byte_equal 均为 True；重启后取回、重复注册覆盖、注销幂等、未注册返回 404、缺 `site_key` 返回 400、`OPTIONS` 行为与既有路由一致，七项场景逐一实测通过。已合入 `main`。
 
