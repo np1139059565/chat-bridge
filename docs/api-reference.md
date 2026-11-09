@@ -728,3 +728,30 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 ### 落盘
 
 注册信息写入 `.\flask_server\data\client_registry.json`（JSON 格式，运行时数据目录，不入库）。每次操作重新读盘，服务重启后内容不变。
+
+---
+
+## 十二、指令清单（/api/commands）
+
+指令定义统一收归服务端后的查询出口。只返回定义，不改执行通道；与 `GET /api/commands/pending`（执行侧取件接口）互不相同。
+
+### GET /api/commands
+
+返回三个来源合并后的清单：`{ "success": true, "commands": [...] }`。每项字段：
+
+| 字段 | 说明 |
+|---|---|
+| `name` | 指令名 |
+| `source` | 来源，固定为 `builtin` / `custom` / `client` |
+| `desc` | 说明 |
+| `site_key` | 仅 `client` 来源带，标注归属客户端 |
+
+- `builtin`：读内置指令表 `BUILTIN`，不另复制一份。
+- `custom`：读已上线 skill 声明的指令（`list_external_commands()`）。
+- `client`：读客户端注册信息里的 `commands` 声明；同名指令各自成条，靠 `site_key` 区分。
+
+单一来源读取失败按空来源处理，接口仍返回其余来源。
+
+### GET /api/commands/help
+
+返回按来源分组的帮助文本：`{ "success": true, "help": "..." }`。分组标题为「内置指令 / 自定义指令 / 客户端指令」，与清单取自同一次读取，内容一致；某来源为空时不产生空分组。

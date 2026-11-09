@@ -169,6 +169,18 @@
 
 **分发方验收结论：通过。** 实测 `python -m pytest tests -q` 956 项全绿；改动 6 个文件全部落在可碰清单内；自建含中文、嵌套对象、数组、null、空字符串、emoji 的配置做深比较，deep_equal 与 byte_equal 均为 True；重启后取回、重复注册覆盖、注销幂等、未注册返回 404、缺 `site_key` 返回 400、`OPTIONS` 行为与既有路由一致，七项场景逐一实测通过。已合入 `main`。
 
+### C-2 指令统一收归服务端
+
+- 改动：
+  - 新增 `.\flask_server\core\command_catalog.py`：三来源指令定义汇总与按来源分组的帮助文本；只读汇总，不改执行通道。
+  - 新增 `.\flask_server\routes\command_catalog.py`：`GET /api/commands` 与 `GET /api/commands/help` 两个查询接口。
+  - 新增 `.\flask_server\tests\test_command_catalog.py`：覆盖六个验收场景。
+  - `.\flask_server\app.py`：注册指令清单蓝图。
+  - `.\docs\api-reference.md`：补第十二节接口说明。
+- 取数口径：内置读 `command_registry.BUILTIN`（不复制表）；自定义读 `list_external_commands()`（不重写扫描）；客户端读 C-1 注册表的 `commands` 字段。注册表没有公开枚举函数且本任务「不要碰」该文件，故在新建汇总模块里只读复用其整表读取原语，`.\flask_server\core\client_registry.py` 一行未改。
+- 验收：六个场景全部通过（三来源合并、无客户端、有客户端、两客户端同名指令按 `site_key` 区分、帮助文本分组且与清单一致、内置表为空不报错）。`.\flask_server\tests\test_command_catalog.py` 6 passed；`.\flask_server` 全量 `pytest tests` 962 passed；`.\scripts\quality_rules.py` 返回 0、零 `[新增]`；`.\scripts\check_doc_sync.py` 通过。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管

@@ -34,10 +34,11 @@ from routes.web_source import bp as web_source_bp
 from routes.web_file import bp as web_file_bp
 from routes.web_files_serve import bp as web_files_serve_bp
 from routes.clients import bp as clients_bp
+from routes.command_catalog import bp as catalog_bp
 
 
 def _register_blueprints(app):
-    """注册全部蓝图：工具、提示词、配置、自定义工具、规则、卡片、客户端注册与外部通道。"""
+    """注册全部蓝图：工具、提示词、配置、自定义工具、规则、卡片、客户端注册、指令清单与外部通道。"""
     app.register_blueprint(tools_bp)
     app.register_blueprint(prompts_bp)
     app.register_blueprint(config_bp)
@@ -56,6 +57,7 @@ def _register_blueprints(app):
     app.register_blueprint(web_file_bp)
     app.register_blueprint(web_files_serve_bp)
     app.register_blueprint(clients_bp)
+    app.register_blueprint(catalog_bp)
 
 
 def _register_options(app):
