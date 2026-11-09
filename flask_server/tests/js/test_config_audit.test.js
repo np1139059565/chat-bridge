@@ -141,3 +141,24 @@ test('站点配置块徽标不重复：08g 挂专属徽标，08b 不再另挂', 
   const b = rd('extend/dialog/parts/08b_settings.js');
   assert.strictEqual((b.match(/renderBlockBadge\(ctx, 'site_profiles'\)/g) || []).length, 0);
 });
+
+test('浮层逐项确认：确认框改 fixed 浮层，伪差异字段已剔除', () => {
+  const b = rd('extend/dialog/parts/08b_settings.js');
+  const j = rd('extend/dialog/parts/08j_config_actions.js');
+  const i = rd('extend/dialog/parts/08i_config_cache.js');
+  assert.ok(b.indexOf('D.renderConfigConfirmBar') >= 0);
+  assert.ok(j.indexOf('sp-modal-mask') >= 0);
+  assert.ok(j.indexOf('configDiffItems') >= 0);
+  assert.ok(i.indexOf("k !== 'available_tools'") >= 0);
+  assert.ok(i.indexOf("k !== 'site_profiles'") >= 0);
+});
+
+test('渲染层 hosts 不再直接 String(val)', () => {
+  assert.strictEqual(rd('extend/dialog/parts/08g_site_profiles.js').indexOf('String(val)'), -1);
+});
+
+test('08g 自带文本归一化：单独渲染不因 08j 未加载而抛错', () => {
+  const g = rd('extend/dialog/parts/08g_site_profiles.js');
+  assert.ok(g.indexOf('const toText') >= 0);
+  assert.strictEqual(g.indexOf('D.configValueToText(val)'), -1);
+});

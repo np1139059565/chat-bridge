@@ -126,7 +126,9 @@ test('renderConfigBadge：一致/离线静默；仅本段差异亮警示', async
   const c = await loaded();
   assert.strictEqual(D.renderConfigBadge(c, 'tools'), null);
   assert.strictEqual(D.renderConfigBadge(Object.assign({}, c, { configOffline: true }), 'tools'), null);
-  c.configPublicDiff = { tools: { read_file: { enabled: false } } };
+  c.configDiffItems = [
+    { block: 'tools', section: 'tools', label: '公共配置 · 工具上下线', detail: '' }
+  ];
   const badge = JSON.stringify(D.renderConfigBadge(c, 'tools'));
   assert.ok(badge.indexOf('sp-diff-badge') >= 0);
   assert.ok(badge.indexOf('未覆盖') >= 0);
@@ -150,8 +152,13 @@ test('顶部状态栏：一致时不渲染状态文字，仍保留功能按钮',
   assert.ok(txt.indexOf('覆盖') >= 0);
   assert.ok(txt.indexOf('显示全部站点') >= 0);
   c.configDirty = true;
-  c.configDiffCount = 2;
-  assert.ok(JSON.stringify(D.renderConfigStatusBar(c)).indexOf('2') >= 0);
+  c.configDiffItems = [
+    { block: 'general', section: 'general', label: '公共配置 · 体积上限', detail: '' },
+    { block: 'tools', section: 'tools', label: '公共配置 · 工具上下线', detail: '' }
+  ];
+  const busy = JSON.stringify(D.renderConfigStatusBar(c));
+  assert.ok(busy.indexOf('2 项未覆盖') >= 0);
+  assert.ok(busy.indexOf('体积上限') >= 0);
 });
 
 test('连接层不进草稿：后端改端口后本地缓存跟随，覆盖不会把旧端口写回', async () => {

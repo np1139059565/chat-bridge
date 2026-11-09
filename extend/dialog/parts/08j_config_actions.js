@@ -81,42 +81,76 @@
     this.recomputeConfigDiff();
   };
 
+
   M.recomputeConfigDiff = function () {
     const cache = this.configCache || {}, backend = this.configBackend || {};
     const cp = cache.profiles || {}, bp = backend.profiles || {};
     const ids = {}, diff = {};
     Object.keys(cp).forEach(function (k) { ids[k] = 1; });
     Object.keys(bp).forEach(function (k) { ids[k] = 1; });
+    function norm(draft) {
+      const o = {};
+      Object.keys(draft || {}).forEach(function (k) { o[k] = D.configValueToText(draft[k]); });
+      return o;
+    }
     Object.keys(ids).forEach(function (pid) {
-      const d = D.profileFieldDiff(D.profileToDraft(cp[pid]), D.profileToDraft(bp[pid]));
+      const d = D.profileFieldDiff(norm(D.profileToDraft(cp[pid])), norm(D.profileToDraft(bp[pid])));
       if (Object.keys(d).length) diff[pid] = d;
     });
     const pl = D.configPublic(cache), pb = D.configPublic(backend), pd = {};
     Object.keys(pl).concat(Object.keys(pb)).forEach(function (k) {
       if (JSON.stringify(pl[k]) !== JSON.stringify(pb[k])) pd[k] = pb[k];
     });
-    const pending = cache.pending || [], byBlock = {}, blockIds = {};
-    pending.forEach(function (w) { byBlock[w.block] = (byBlock[w.block] || 0) + 1; blockIds[w.block] = 1; });
-    // 输入态：未点保存的字段改动也要提示。同一区块已有 pending 时不重复计数。
+    const PUB_LABEL = {
+      tools: '工具上下线 / run_command 支持语言',
+      tool_config: '工具内部配置', system_config: '系统资源上限',
+      limits: '工具结果体积上限', default_profile: '默认站点档案',
+      flask: '服务端口 / 地址'
+    };
+    function blockLabel(id) {
+      const b = (D.CONFIG_BLOCKS || []).filter(function (x) { return x.id === id; })[0];
+      return b ? b.label : id;
+    }
+    // 单一明细源：顶部计数 / 各徽标 / 弹框列表全从这里取，数目不会再对不上。
+    const items = [], seen = {};
+    function add(block, section, label, detail) {
+      const k = block + '|' + label;
+      if (seen[k]) return;
+      seen[k] = 1;
+      items.push({ block: block, section: section, label: label, detail: detail || '' });
+    }
+    Object.keys(diff).forEach(function (pid) {
+      Object.keys(diff[pid]).forEach(function (f) {
+        add('site_profiles', 'site_profiles', '网页 AI 站点配置 · ' + pid + '.' + f,
+          '本地草稿与服务端不一致');
+      });
+    });
+    Object.keys(pd).forEach(function (k) {
+      const sec = (k === 'tools' || k === 'tool_config') ? 'tools' : 'general';
+      add(sec, sec, '公共配置 · ' + (PUB_LABEL[k] || k), '整份提交，影响所有页面与电脑');
+    });
+    (cache.pending || []).forEach(function (w) {
+      add(w.block, w.block, blockLabel(w.block) + ' · 待覆盖写入', w.path);
+    });
     const bf = cache.blockFields || {};
-    let fieldExtra = 0;
     Object.keys(bf).forEach(function (bid) {
-      let n = 0;
       Object.keys(bf[bid] || {}).forEach(function (k) {
         const e = bf[bid][k];
-        if (String(e.current) !== String(e.baseline)) n++;
+        if (String(e.current) !== String(e.baseline)) {
+          add(bid, bid, blockLabel(bid) + ' · ' + k, '输入未保存');
+        }
       });
-      if (!n) return;
-      if (!byBlock[bid]) { byBlock[bid] = n; fieldExtra += n; }
     });
+    const byBlock = {};
+    items.forEach(function (it) { byBlock[it.block] = (byBlock[it.block] || 0) + 1; });
     this.configDiff = diff;
     this.configPublicDiff = pd;
+    this.configDiffItems = items;
     this.configBlockDirty = byBlock;
-    const nSite = Object.keys(diff).reduce(function (a, k) {
-      return a + Object.keys(diff[k]).length; }, 0);
-    this.configDirty = nSite > 0 || Object.keys(pd).length > 0 || pending.length > 0 || fieldExtra > 0;
-    this.configDiffCount = nSite + Object.keys(pd).length + pending.length + fieldExtra;
+    this.configDirty = items.length > 0;
+    this.configDiffCount = items.length;
   };
+
 
   M.persistConfigCache = async function () {
     const cache = this.configCache || (this.configCache = {});
@@ -225,18 +259,15 @@
     }, '还原');
   };
   /** 各公共配置区卡片头挂的小徽标，滚下去也看得见差异。 */
+
   D.renderConfigBadge = function (ctx, section) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
-    const pd = ctx.configPublicDiff || {};
-    let keys;
-    if (section === 'tools') keys = ['tools', 'tool_config'];
-    else if (section === 'general') keys = ['limits', 'system_config', 'default_profile'];
-    else keys = Object.keys(pd);
-    const n = keys.filter(function (k) { return k in pd; }).length;
-    // 只数本段：全局计数含站点档案与其它区块，挂局部头会串号。
-    if (!n) return null;
-    return h('span', { class: 'sp-diff-badge' }, n + ' 项未覆盖');
+    const list = (ctx.configDiffItems || []).filter(function (it) { return it.section === section; });
+    if (!list.length) return null;
+    const tip = list.map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
+
 
   M.toggleSiteScope = function () { this.siteProfShowAll = !this.siteProfShowAll; };
   M.confirmConfigOverwrite = function () { this.siteProfConfirmOpen = true; };
@@ -272,55 +303,66 @@
     }
   };
 
+
   D.renderConfigStatusBar = function (ctx) {
     const offline = !!ctx.configOffline;
-    const dirty = !!ctx.configDirty;
-    const pubKeys = Object.keys(ctx.configPublicDiff || {});
-    const blockIds = Object.keys(ctx.configBlockDirty || {});
+    const items = ctx.configDiffItems || [];
+    const n = items.length;
+    const tip = items.slice(0, 24).map(function (it) { return it.label; }).join(String.fromCharCode(10));
     return h('div', { class: 'sp-config-bar' }, [
       offline ? h('span', {}, '（后端未连接：仅显示本地缓存，不做比对）')
-        : (dirty ? h('span', {}, '有 ' + (ctx.configDiffCount || 0)
-            + ' 项与服务端不一致，运行仍用服务端版本') : null),
+        : (n ? h('span', { class: 'sp-diff-badge', title: tip },
+            n + ' 项未覆盖（悬浮看具体项）') : null),
       h('button', { onClick: () => { if (ctx.toggleSiteScope) ctx.toggleSiteScope(); } },
         ctx.siteProfShowAll ? '只看当前站点' : '显示全部站点'),
-      h('button', { onClick: () => { if (ctx.confirmConfigOverwrite) ctx.confirmConfigOverwrite(); } }, '覆盖'),
+      h('button', { onClick: () => {
+        if (ctx.confirmConfigOverwrite) ctx.confirmConfigOverwrite();
+        else ctx.siteProfConfirmOpen = true;
+      } }, '查看差异 / 覆盖'),
       offline ? null : h('span', { class: 'sp-site-scope' },
-        '当前站点：' + (ctx.currentProfileId ? ctx.currentProfileId() : '')),
-      ...pubKeys.map(function (k) {
-        return h('span', { key: k, class: 'sp-diff-badge' }, '公共差异：' + k);
-      }),
-      ...blockIds.map(function (id) {
-        const b = (D.CONFIG_BLOCKS || []).filter(function (x) { return x.id === id; })[0];
-        return h('span', { key: id, class: 'sp-diff-badge' }, [
-          h('span', {}, ctx.configBlockDirty[id] + ' 项未覆盖：' + (b ? b.label : id) + ' '),
-          h('button', { class: 'sp-restore-btn',
-            onClick: () => { if (ctx.discardConfigBlock) ctx.discardConfigBlock(id); } }, '还原')
-        ]);
-      }),
-      (pubKeys.length || blockIds.length) ? h('span', { class: 'sp-site-scope' },
-        '（各控件旁可点【还原】逐项还原）') : null
+        '当前站点：' + (ctx.currentProfileId ? ctx.currentProfileId() : ''))
     ]);
   };
 
+
+
   D.renderConfigConfirmBar = function (ctx) {
     if (!ctx.siteProfConfirmOpen) return null;
+    const items = ctx.configDiffItems || [];
     const pid = ctx.currentProfileId ? ctx.currentProfileId() : '';
-    const removed = ctx._configRemovedSites || [];
-    return h('div', { class: 'sp-confirm' }, [
-      h('b', {}, '确认覆盖服务端配置？'),
-      h('div', { class: 'sp-confirm-col' },
-        '【公共配置】整份提交：端口、工具上下线、体积上限、工具与系统配置等。'
-        + '其它页面、其它电脑都会受影响。'),
-      h('div', { class: 'sp-confirm-col' },
-        '【网页 AI 站点配置】只提交当前页面【' + pid + '】的档案；'
-        + '其它站点不受影响，但其它电脑上同一个页面会被覆盖。'
-        + (removed.length ? '（将删除站点：' + removed.join('、') + '）' : '')),
-      h('div', {}, [
-        h('button', { onClick: () => { if (ctx.applyConfigOverwrite) ctx.applyConfigOverwrite(); } }, '确认覆盖'),
-        h('button', { onClick: () => { if (ctx.cancelConfigOverwrite) ctx.cancelConfigOverwrite(); } }, '取消')
+    const groups = {};
+    items.forEach(function (it) {
+      (groups[it.block] || (groups[it.block] = [])).push(it);
+    });
+    const rows = [];
+    Object.keys(groups).forEach(function (bid) {
+      rows.push(h('div', { class: 'sp-modal-group', key: 'g:' + bid },
+        (groups[bid][0].label.split(' · ')[0] || bid)));
+      groups[bid].forEach(function (it, i) {
+        rows.push(h('div', { class: 'sp-modal-row', key: bid + i }, [
+          h('span', {}, '· ' + it.label),
+          it.detail ? h('span', { class: 'sp-site-scope' }, it.detail) : null
+        ]));
+      });
+    });
+    if (!rows.length) rows.push(h('div', { class: 'sp-modal-row' }, '没有待覆盖项。'));
+    return h('div', { class: 'sp-modal-mask' }, [
+      h('div', { class: 'sp-modal' }, [
+        h('b', {}, '确认覆盖服务端配置？以下 ' + items.length + ' 项将被写入'),
+        h('div', { class: 'sp-modal-list' }, rows),
+        h('div', { class: 'sp-modal-scope' }, [
+          h('div', {}, '【公共配置】整份提交：以上「公共配置」各项会影响其它页面、其它电脑。'),
+          h('div', {}, '【网页 AI 站点配置】只提交当前页面【' + pid + '】的档案；其它站点不受影响，但其它电脑上同一个页面会被覆盖。'),
+          h('div', { class: 'sp-site-scope' }, '两台几乎同时覆盖仍后写胜；回放为多次请求、非原子，中途失败不自动回滚。')
+        ]),
+        h('div', { class: 'sp-modal-actions' }, [
+          h('button', { onClick: () => { if (ctx.applyConfigOverwrite) ctx.applyConfigOverwrite(); } }, '确认覆盖'),
+          h('button', { onClick: () => { ctx.siteProfConfirmOpen = false; } }, '取消')
+        ])
       ])
     ]);
   };
+
   /** 受管配置区块的待覆盖写入登记（由 00a_api.js 草稿拦截层调用）。 */
   D.queuePendingWrite = async function (ctx, block, path, method, body) {
     const cache = ctx.configCache || (ctx.configCache = {});
@@ -344,20 +386,40 @@
   };
 
   /** 区块卡片头徽标：一致 / 离线静默，仅存在未覆盖写入时亮。 */
+
   D.renderBlockBadge = function (ctx, id) {
     if (!ctx || !ctx.configBlockDirty || !ctx.configBlockDirty[id]) return null;
-    return h('span', { class: 'sp-diff-badge' }, ctx.configBlockDirty[id] + ' 项未覆盖');
+    const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === id; });
+    const tip = list.map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
+
 
 
   /** 站点配置块专属徽标：只数 configDiff 里的字段差异。 */
+
   D.renderSiteProfileBadge = function (ctx) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
-    const d = ctx.configDiff || {};
-    let n = 0;
-    Object.keys(d).forEach(function (pid) { n += Object.keys(d[pid]).length; });
-    if (!n) return null;
-    return h('span', { class: 'sp-diff-badge' }, n + ' 项未覆盖');
+    const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === 'site_profiles'; });
+    if (!list.length) return null;
+    const tip = list.map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
+
+  /** 任意配置值稳定转文本：数组按行、对象取 hosts/value 或 JSON，杜绝 [object Object]。 */
+  D.configValueToText = D.configValueToText || function (v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    if (Array.isArray(v)) return v.map(D.configValueToText).join(String.fromCharCode(10));
+    if (typeof v === 'object') {
+      if ('hosts' in v) return D.configValueToText(v.hosts);
+      if ('value' in v) return D.configValueToText(v.value);
+      try { return JSON.stringify(v); } catch (e) { return ''; }
+    }
+    return String(v);
+  };
+  // 覆盖 08h 旧实现：所有草稿字段一律走上面的归一化。
+  D.configFieldToText = function (v) { return D.configValueToText(v); };
 })();

@@ -49,7 +49,7 @@
   D.configPublic = function (cfg) {
     const out = {};
     Object.keys(cfg || {}).forEach(function (k) {
-      if (k !== 'profiles' && k !== 'pending' && k !== 'blocks' && k !== 'overrides' && k !== 'blockFields') {
+      if (k !== 'profiles' && k !== 'pending' && k !== 'blocks' && k !== 'overrides' && k !== 'blockFields' && k !== 'available_tools' && k !== 'site_profiles') {
       const v = cfg[k];
       out[k] = (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
     }

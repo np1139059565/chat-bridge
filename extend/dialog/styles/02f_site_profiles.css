@@ -151,3 +151,33 @@ textarea[data-diff="1"],
 select[data-diff="1"] {
   border-color: var(--cb-warn-border); background: var(--cb-warn-bg);
 }
+
+/* 覆盖确认改浮层：fixed 脱离文档流，不挤占设置页布局 */
+.sp-modal-mask {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0, 0, 0, 0.58);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.sp-modal {
+  width: min(560px, 92vw); max-height: 82vh; overflow: auto;
+  border: 1px solid var(--cb-danger-border); border-radius: 8px;
+  background: var(--cb-bg, var(--cb-warn-bg));
+  color: var(--cb-text, var(--cb-danger-text));
+  padding: 12px 14px; font-size: 12px;
+  display: flex; flex-direction: column; gap: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+}
+.sp-modal-list {
+  max-height: 44vh; overflow: auto; border: 1px solid var(--cb-border-strong);
+  border-radius: 6px; padding: 6px 8px;
+}
+.sp-modal-group { font-weight: 600; margin-top: 4px; color: var(--cb-warn-text); }
+.sp-modal-row { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
+.sp-modal-scope {
+  border-top: 1px solid var(--cb-border-strong); padding-top: 6px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.sp-modal-actions { display: flex; gap: 8px; }
+.sp-modal-actions button { font-size: 12px; padding: 3px 12px; }
+.sp-diff-badge[title] { cursor: help; }

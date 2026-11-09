@@ -20,14 +20,24 @@ test('configCache Get/Set：node 环境走内存降级，刷新不丢本地值',
   assert.strictEqual(other, null);
 });
 
-test('configPublic：剔除 profiles，保留其余全部顶层键（D3 全存口径）', () => {
+test('configPublic：剔除 profiles 与派生只读字段，其余顶层键全保留', () => {
   const pub = D.configPublic({
     flask: { port: 5000 }, limits: { max_json_chars: 1 },
-    profiles: { glm: { label: 'G' } }, tools: {}, available_tools: ['x']
+    profiles: { glm: { label: 'G' } }, tools: {},
+    available_tools: ['x'], site_profiles: { 'chatglm.cn': 'glm' },
+    pending: [{ a: 1 }], blockFields: { bridge: {} }
   });
   assert.ok(!('profiles' in pub));
+  assert.ok(!('available_tools' in pub), '派生字段 available_tools 不该进公共比对');
+  assert.ok(!('site_profiles' in pub), '派生字段 site_profiles 不该进公共比对');
+  assert.ok(!('pending' in pub));
+  assert.ok(!('blockFields' in pub));
   assert.deepStrictEqual(pub.limits, { max_json_chars: 1 });
-  assert.deepStrictEqual(pub.available_tools, ['x']);
+  assert.deepStrictEqual(pub.flask, { port: 5000 });
+  assert.deepStrictEqual(pub.tools, {});
+  const body = D.configPublicToBody(pub);
+  assert.ok(!('available_tools' in body));
+  assert.ok(!('site_profiles' in body));
 });
 
 test('configFieldToText：数组 / 布尔 / 多行文本归一，空值转空串', () => {

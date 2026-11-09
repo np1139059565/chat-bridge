@@ -155,6 +155,10 @@ test('renderBlockBadge：一致静默，仅未覆盖时亮', () => {
   const ctx = makeCtx();
   assert.strictEqual(D.renderBlockBadge(ctx, 'bridge'), null);
   ctx.configBlockDirty = { bridge: 2 };
+  ctx.configDiffItems = [
+    { block: 'bridge', section: 'bridge', label: '远程桥接 / 投递策略 · 待覆盖写入 a', detail: '' },
+    { block: 'bridge', section: 'bridge', label: '远程桥接 / 投递策略 · 待覆盖写入 b', detail: '' }
+  ];
   assert.ok(JSON.stringify(D.renderBlockBadge(ctx, 'bridge')).indexOf('2') >= 0);
 });
 
@@ -164,8 +168,12 @@ test('状态栏：一致时不报平安；有待覆盖区块时逐块列出', ()
   const quiet = JSON.stringify(D.renderConfigStatusBar(ctx));
   assert.ok(quiet.indexOf('与服务端' + '一致') < 0);
   assert.ok(quiet.indexOf('覆盖') >= 0);
-  ctx.configDirty = true; ctx.configDiffCount = 2;
-  ctx.configBlockDirty = { bridge: 1 };
+  ctx.configDirty = true;
+  ctx.configDiffItems = [
+    { block: 'bridge', section: 'bridge', label: '远程桥接 / 投递策略 · 待覆盖写入', detail: '' },
+    { block: 'general', section: 'general', label: '公共配置 · 体积上限', detail: '' }
+  ];
+  ctx.configBlockDirty = { bridge: 1, general: 1 };
   const busy = JSON.stringify(D.renderConfigStatusBar(ctx));
   assert.ok(busy.indexOf('远程桥接') >= 0);
   assert.ok(busy.indexOf('未覆盖') >= 0);

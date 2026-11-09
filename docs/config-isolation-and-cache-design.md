@@ -227,3 +227,30 @@
 **审计用例自身故障**：`test_config_audit.test.js` 曾因把 `split` 的分隔符转义写成真实换行，整文件加载期即 SyntaxError，`node --test` 只报一个顶层失败、看不到任何子用例，把业务红灯全盖住。已改为 `split(String.fromCharCode(10))`，并在提交前先跑 `node --check` 单文件语法校验；同类「测试文件自己先炸」不得再掩盖业务失败。
 
 **端到端实检（本轮）**：`test_toolconf_swallow.test.js` 追加三条真实渲染用例——直接调 `renderUnifiedToolRow` 展开 `read_file`，断言参数表、「上传文件最大数量」整数输入框、「是否以文件上传」复选框、usage 全在且不抛错；再走一次 `configPublicToBody`（即点【覆盖】时构造提交体的原 bug 触发路径）后重新展开，两个控件仍完整；最后模拟历史污染缓存经 `configLoadAndDiff` 自愈后展开，控件回来且本地已改的 `value` 保留。结论：工具内部配置被吞已修复，重载扩展后可见。
+
+### 9.8 逐项确认浮层、数目准确性与 hosts 乱码（本轮）
+
+**用户反馈**：① 覆盖确认两栏只写「端口、工具上下线…等」，不列具体哪些配置将被覆盖，且 inline 挂在 `settings-body` 顶部占大量空间；② 黄色徽标数目不准确、缺悬浮明细，`hosts` 输入框显示 `[object Object]` 乱码。
+
+**根因**：
+- `available_tools` / `site_profiles` 是后端派生只读字段（`sorted(TOOLS.keys())`、`derive_site_profiles`），却被 `configPublic` 计入公共差异，截图里「公共差异：available_tools」纯属伪差异，也是数目虚高的来源。
+- 顶部 `configDiffCount` 由站点字段 + 公共差异 + pending + 输入态四路分别累加，各徽标又各算各的，没有单一数据源，必然对不上。
+- `hosts` 草稿值被写成数组 / 对象，字段渲染直接 `String(val)` 得到 `[object Object]`；差异比对两边值形态不一致，把整份档案每个字段都判成差异，「15 项未覆盖」由此撑出来。
+
+**修复**：
+1. `configPublic` / `configPublicToBody` 剔除 `available_tools`、`site_profiles` 派生字段。
+2. `recomputeConfigDiff` 生成单一明细数组 `configDiffItems`（每条含 `block / section / label / detail`），顶部计数、各徽标数字、确认框列表、悬浮 `title` 全部由它派生；站点字段比对前先过 `configValueToText` 归一，形态一致不再误判。
+3. `configValueToText` 统一处理 null / 字符串 / 数字 / 数组（按行连接）/ 对象（取 `hosts` 或 `value`，否则 JSON），并覆盖 `configFieldToText`；`08g` 字段渲染全部改用它，`[object Object]` 绝迹。
+4. 顶部状态栏压成一行（计数带 `title` 明细 +【显示全部站点】+【查看差异 / 覆盖】），不再铺开「公共差异：xxx」徽标。
+5. `renderConfigConfirmBar` 改为 `position: fixed` 浮层（`.sp-modal-mask` / `.sp-modal`），不占设置页布局；按 block 分组**逐项列出**将被覆盖的配置名与影响说明，标题写明「以下 N 项将被写入」。
+6. 三个徽标（`renderConfigBadge` / `renderSiteProfileBadge` / `renderBlockBadge`）均带 `title`，鼠标悬浮显示具体字段名。
+
+**回归用例**：`test_config_diff_items.test.js`（派生字段剔除、单一明细同源、浮层逐项、一行状态栏、悬浮 title、hosts 文本化、站点渲染无乱码），`test_config_audit.test.js` 追加浮层与渲染兜底断言。
+
+**同类故障反查（本轮补）**：`configValueToText` 原先只定义在 `08j`，而 `test_site_profiles.test.js` 只加载 `08g` 不加载 `08j`，渲染字段时 `D.configValueToText is not a function` 直接抛错——又一起「测试文件加载顺序暴露隐式依赖」。现 `08g` 自带 `toText` 同实现并暴露到 `D`，`08j` 改为「缺失才兜底」；审计断言禁止 `08g` 渲染层再出现 `D.configValueToText(val)` 或直接 `String(val)`。
+
+**旧用例同步**：`test_public_config_ui.test.js` / `test_config_blocks.test.js` 里四条断言原先手动设 `configDiffCount`、`configPublicDiff`、`configBlockDirty` 再断言徽标数字；单一明细源上线后实现只认 `configDiffItems`，已全部改为显式构造明细项再断言。测试跟着实现走，不再留「设了旧字段却没人读」的假覆盖。
+
+**D3 全存口径旧用例同步**：`test_config_cache.test.js` 原先断言 `configPublic` 保留 `available_tools: ['x']`（D3「GET /config 全量字段都进缓存」旧口径）。9.8 把 `available_tools` / `site_profiles` 定为后端派生只读字段、从公共比对与提交体剔除后，该断言改为显式校验二者与内部字段 `pending` / `blockFields` 均不在 `pub` / `body` 里，其余顶层键仍保留。
+
+**行数约束**：9.8 给 `08g` 加自包含 `toText` 后该文件一度 457 行，触发仓库卫生「单文件 ≤450 行」门禁。已把辅助压成 7 行链式实现（行为不变，仍自包含、不依赖加载顺序），回落到 450 行以内；`test_site_profiles` 与 `test_config_diff_items` 复验全绿。

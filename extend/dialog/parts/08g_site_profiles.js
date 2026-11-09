@@ -12,6 +12,14 @@
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
+  // 自包含文本归一化：单独加载 08g 的测试不依赖 08j；数组按行、对象取 hosts/value，杜绝 [object Object]。
+  const toText = (v) => v == null ? '' : typeof v === 'string' ? v
+    : Array.isArray(v) ? v.map(toText).join(String.fromCharCode(10))
+    : typeof v !== 'object' ? String(v)
+    : 'hosts' in v ? toText(v.hosts) : 'value' in v ? toText(v.value)
+    : (() => { try { return JSON.stringify(v); } catch (e) { return ''; } })();
+  D.configValueToText = D.configValueToText || toText;
+
   const h = Vue.h;
   const M = D.methods;
 
@@ -177,11 +185,11 @@
       control = h('textarea', { class: 'sp-area', rows: kind === 'click' ? 3 : 2,
         placeholder: field === 'hosts' ? '每行一个域名'
           : (kind === 'click' ? '裸选择器或完整 JS 表达式' : '每行一条选择器'),
-        value: val == null ? '' : String(val),
+        value: val == null ? '' : toText(val),
         onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } });
     } else {
       control = h('input', { type: 'text', class: 'sp-input', placeholder: '未配置（留空）',
-        value: val == null ? '' : String(val),
+        value: val == null ? '' : toText(val),
         onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } });
     }
     const res = ctx.siteProfTestResult[key];
@@ -233,7 +241,7 @@
       ]),
       h('div', { class: 'tc-control sp-field-control' + fieldDiffClass(ctx, pid, field) }, [
         fieldRestoreBtn(ctx, pid, field),
-        h('input', { type: 'text', class: 'sp-input', value: val == null ? '' : String(val),
+        h('input', { type: 'text', class: 'sp-input', value: val == null ? '' : toText(val),
           onInput: (e) => { ctx.siteProfDraft[pid][field] = e.target.value; ctx.queueSiteProfSave(); } }),
         h('div', { class: 'sp-btn-row' }, [
           btn('locate', '定位测试'),
@@ -330,7 +338,7 @@
    */
   M.testProfileField = function (pid, field, mode) {
     const val = (this.siteProfDraft[pid] || {})[field];
-    if (val == null || String(val).trim() === '') {
+    if (val == null || toText(val).trim() === '') {
       this.toast('该字段为空，测试前请先填写');
       return;
     }
@@ -338,7 +346,7 @@
     this.siteProfTesting[key] = true;
     this.siteProfTestResult[key] = null;
     window.parent.postMessage({
-      type: 'profiles_test_field', key: key, mode: mode, value: String(val)
+      type: 'profiles_test_field', key: key, mode: mode, value: toText(val)
     }, '*');
     // 超时兜底：内容脚本未响应（旧版未重载扩展 / 页面无脚本）时给出明确提示
     setTimeout(() => {
