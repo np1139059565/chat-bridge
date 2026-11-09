@@ -5,10 +5,15 @@ app:
     max_json_chars: 100000
   default_profile: glm
   site_profiles:
+    deepseek.com: deepseek
     chatglm.cn: glm
     chatglm.com: glm
-    deepseek.com: deepseek
+    www.kimi.com: kimi
+    kimi.com: kimi
+    qianwen.com: qianwen
     wenxin.baidu.com: wenxin
+    xinghuo.xfyun.cn: xinghuo
+    yuanbao.tencent.com: yuanbao
   profiles:
     deepseek:
       assistantContent: .ds-markdown.ds-assistant-message-main-content
@@ -46,6 +51,7 @@ app:
       generatingSelectors:
       - .enter.is-main-chat.m-three-row
       - .enter.is-main-chat.searching
+      generatingRequireEmptyInput: true
       historyContainer: aside.aside-container, .aside-container
       historyItem: .history-item
       historySelectedMark: .selected
@@ -62,6 +68,25 @@ app:
       userContent: .question-txt
       userItem: .conversation.question, .question, [id^="row-question"]
       userName: .user-name
+    kimi:
+      answerWrap: .markdown
+      assistantMark: .chat-content-item-assistant
+      container: .chat-content-list
+      convIdUrl: /chat/([0-9a-zA-Z-]+)
+      hosts:
+      - www.kimi.com
+      - kimi.com
+      inputSelector: .chat-input-editor
+      item: '[class*=chat-content-item]'
+      label: Kimi
+      newConversation: .new-chat-btn
+      scrollToBottomButton:
+      - .chat-action .to-bottom-show[data-v-b77754eb]
+      sendButton: .send-button-container
+      sendButtonDisabledMark: disabled
+      split: false
+      thinking: '[class*=thinking-container]'
+      userContent: .segment-container
     qianwen:
       assistantContent: .qk-markdown
       assistantItem: .chat-answers-card-wrap
@@ -121,9 +146,11 @@ app:
       thinking: '[class*="task-helper-content_reasoning_block"]'
       userContent: '[class*="task-helper-content_bubble"]'
       userItem: '[class*="task-helper-content_user__"]'
+      atBottomCheck: false
     yuanbao:
       assistantContent: .hyc-common-markdown
       assistantMark: .agent-chat__bubble--ai
+      atBottomCheck: false
       container: .agent-chat__list__content
       convIdUrl: /chat/([A-Za-z0-9]+)
       hosts:
@@ -132,29 +159,12 @@ app:
       item: .agent-chat__bubble
       label: 腾讯元宝
       newConversation: .yb-new-chat-entry__item
+      scrollToBottomButton:
+      - '#chat-content > div > div.agent-chat__list__content-wrapper > div.agent-chat__scroll-arrow.agent-chat__scroll-arrow--show'
       sendButton: '[class*=SendButton_sendButton]'
       sendButtonDisabledMark: SendButton_disabled
       split: false
       userContent: .agent-chat__bubble__content
-      scrollToBottomButton:
-      - '#chat-content > div > div.agent-chat__list__content-wrapper > div.agent-chat__scroll-arrow.agent-chat__scroll-arrow--show'
-    kimi:
-      answerWrap: .markdown
-      assistantMark: .chat-content-item-assistant
-      container: .chat-content-list
-      convIdUrl: /chat/([0-9a-zA-Z-]+)
-      hosts:
-      - www.kimi.com
-      - kimi.com
-      inputSelector: .chat-input-editor
-      item: '[class*=chat-content-item]'
-      label: Kimi
-      newConversation: .new-chat-btn
-      sendButton: .send-button-container
-      sendButtonDisabledMark: disabled
-      split: false
-      thinking: '[class*=thinking-container]'
-      userContent: .segment-container
 custom_tools:
   tools:
   - name: json_validate

@@ -63,6 +63,7 @@
     scrollToBottomButton: { group: 'actions', label: '滚动到底部按钮', kind: 'list', hint: '按钮存在=不在底部' },
     atBottomCheck: { group: 'actions', label: '启用底部判定', kind: 'bool', defaultOn: true, hint: '关闭后不看是否在底部，自动执行不再受其限制' },
     generatingSelectors: { group: 'state', label: '生成中标记', kind: 'list', hint: '命中任一即视为 AI 正在输出' },
+    generatingRequireEmptyInput: { group: 'state', label: '生成中须输入框为空', kind: 'bool', defaultOn: true, hint: '开启后仅当输入框为空才算生成中，避免多行输入被误判' },
     sendButtonStopMark: { group: 'state', label: '停止图标签名', hint: 'SVG path 片段，无测试' }
   };
 })();

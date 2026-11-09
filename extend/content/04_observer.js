@@ -265,8 +265,22 @@
         // 代价与取舍：生成期间用户手动输入会使判定翻回空闲（假阴性），此时粘贴不挂起；
         // GLM 生成中本就允许输入排队发送，假阴性危害远小于死锁，可接受。
         if (nowGen && P.generatingRequireEmptyInput) {
-          const ta = document.querySelector(P.inputSelector);
-          if (ta && String(ta.value || '').trim() !== '') nowGen = false;
+          // 先按站点档案取输入框；档案选择器失配时退一步找通用输入框，
+          // 避免站点改版后这道校验整条失效（失效即退回「类名命中即生成中」的老路）。
+          const ta = document.querySelector(P.inputSelector)
+            || document.querySelector('textarea, div[contenteditable="true"][role="textbox"]');
+          // 找不到输入框：无法验证「是否为空」，此时仍判生成中会让死锁重新成立。
+          // 两害相权判空闲——最坏是生成中多按一次回车，危害远小于文本滞留卡死。
+          if (!ta) nowGen = false;
+          // 找到输入框：框里有内容说明是「输入区随多行文本变高」造成的假阳性，判空闲。
+          // 取值分两种控件：textarea 用 value；contenteditable 编辑器没有 value，
+          // 只能读 textContent（直接读 value 会得到 undefined，拼成 "undefined" 恒非空，
+          // 导致富文本站点永远判空闲——那是反向的错判）。
+          else {
+            const isEditable = ta.tagName !== 'TEXTAREA' && ta.tagName !== 'INPUT';
+            const text = isEditable ? String(ta.textContent || '') : String(ta.value || '');
+            if (text.trim() !== '') nowGen = false;
+          }
         }
       } else {
         const btn = document.querySelector(P.sendButton);
