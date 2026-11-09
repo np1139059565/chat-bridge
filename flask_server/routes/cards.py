@@ -57,11 +57,13 @@ def _pending_of(target_bus):
     @param target_bus 目标通道实例（bus / command_bus）
     @returns Flask 响应
     """
-    page = (request.args.get("page") or "").strip()
-    # 轮询即视为该页面在线：登记活跃时间供 /pages 列表与接管校验使用
+    page = (request.args.get("page") or "").strip()  # 取请求方声明的页面地址
+    # 兜底登记：正常情况下抽屉打开时已显式上报上线，这里只是补一次。
+    # register 是幂等的（集合重复加入无副作用），因此每次轮询都调用不会出错，
+    # 但「是否在线」不由轮询决定——只有显式下线才把页面移出列表。
     if page:
         import page_registry
-        page_registry.touch(page)
+        page_registry.register(page)
     return jsonify({"success": True, "cards": target_bus.claim_pending(page)})
 
 
@@ -112,6 +114,40 @@ def _warn_if_stale_client():
     except Exception:
         # 检测本身绝不能影响取件
         pass
+
+
+@bp.route("/api/pages/online", methods=["POST", "OPTIONS"])
+def page_online():
+    """页面显式上线：抽屉打开时立即上报，不等任何轮询或超时。
+
+    请求体：{ page: 页面地址 }
+    与轮询中的兜底登记不同，这是页面进入在线集合的正规入口，
+    打开抽屉的那一刻就生效。
+    """
+    data = request.get_json(force=True, silent=True) or {}  # 解析请求体
+    page = str(data.get("page") or "").strip()              # 取页面地址并去空白
+    if not page:                                             # 缺地址无法登记
+        return jsonify({"success": False, "error": "PAGE_REQUIRED"}), 400
+    import page_registry                                     # 延迟导入：避免循环依赖
+    page_registry.register(page)                             # 加入在线集合
+    return jsonify({"success": True, "page": page})         # 回执带地址便于核对
+
+
+@bp.route("/api/pages/offline", methods=["POST", "OPTIONS"])
+def page_offline():
+    """页面显式下线：抽屉关闭或页面卸载时立即上报。
+
+    请求体：{ page: 页面地址 }
+    下线不依赖任何超时判定——页面被浏览器节流时仍然是在线的，
+    只有明确关闭才从在线集合移除。
+    """
+    data = request.get_json(force=True, silent=True) or {}  # 解析请求体
+    page = str(data.get("page") or "").strip()              # 取页面地址并去空白
+    if not page:                                             # 缺地址无从注销
+        return jsonify({"success": False, "error": "PAGE_REQUIRED"}), 400
+    import page_registry                                     # 延迟导入
+    page_registry.unregister(page)                           # 移出在线集合
+    return jsonify({"success": True, "page": page})         # 回执带地址
 
 
 @bp.route("/api/commands/pending", methods=["GET", "OPTIONS"])

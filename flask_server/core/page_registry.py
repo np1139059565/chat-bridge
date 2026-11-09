@@ -14,43 +14,53 @@
 - 只做归属判断，不碰卡片投递细节（那是 card_bus 的职责）。
 """
 import threading
-import time
-
-# 页面超过这么久没轮询即视为已关闭（抽屉轮询间隔约 5 秒，留足余量）
-PAGE_TTL_SEC = 90
 
 _lock = threading.Lock()
-# {page_url: 最后活跃时间戳}
-_pages = {}
+# 在线页面集合。上下线一律由抽屉显式上报：打开即登记、关闭或卸载即注销。
+# 不设超时剔除——页面切到后台被浏览器节流时仍然是打开着的页面，
+# 按超时判离线会让它的消息改投到别的站点，那才是真正的串台来源。
+_pages = set()
 # 当前接管页面；空串 = 未接管，指令广播给所有页面
 _active = ""
 
 
-def touch(page_url):
-    """登记一次页面活跃（每次轮询调用）。
+def register(page_url):
+    """登记一个页面为在线（抽屉打开时上报）。
+
+    打开抽屉即上线，不等待任何轮询或超时判定。
 
     @param page_url 页面地址；空值直接忽略，避免脏数据进表
     """
-    url = str(page_url or "").strip()
-    if not url:
+    url = str(page_url or "").strip()  # 规范化：去空白，空地址视为无效
+    if not url:                         # 空地址不登记，防止脏数据污染集合
         return
-    with _lock:
-        _pages[url] = time.time()
+    with _lock:                         # 加锁：Flask 多线程并发读写同一集合
+        _pages.add(url)                 # 加入在线集合（重复加入无副作用）
+
+
+def unregister(page_url):
+    """注销一个页面（抽屉关闭或页面卸载时上报）。
+
+    显式下线，不残留任何待清理状态。
+
+    @param page_url 页面地址；空值直接忽略
+    """
+    url = str(page_url or "").strip()  # 规范化，与 register 保持同一口径
+    if not url:                         # 空地址无从注销，直接返回
+        return
+    with _lock:                         # 加锁：与 register / online 互斥
+        _pages.discard(url)             # discard：不存在也不报错
 
 
 def online():
-    """取当前在线页面列表（按地址排序，剔除超时项）。
+    """取当前在线页面列表（按地址排序）。
+
+    只返回抽屉明确上报为在线的页面，不做任何超时推断。
 
     @returns {list} 页面地址列表
     """
-    now = time.time()
-    out = []
-    with _lock:
-        # 顺手清理超时项：页面关闭后不该一直占着列表
-        for url in [u for u, t in _pages.items() if now - t > PAGE_TTL_SEC]:
-            _pages.pop(url, None)
-        out = sorted(_pages.keys())
-    return out
+    with _lock:                         # 加锁读取，避免与增删并发
+        return sorted(_pages)           # 排序保证 /pages 序号稳定可复现
 
 
 def get_active():
@@ -127,6 +137,6 @@ def _by_fragment(sel, pages):
 def reset():
     """清空登记（测试与热重载用）。"""
     global _active
-    with _lock:
-        _pages.clear()
-        _active = ""
+    with _lock:                 # 加锁：清空与并发读写互斥
+        _pages.clear()          # 清空在线集合
+        _active = ""            # 同时取消接管页

@@ -208,6 +208,12 @@ def web_send():
     _timer = web_poll_log.new_send_timer()
     card_id = web_bridge.web.ingest_text(text, site_key=site)
     _timer.mark_card()
+    # 投递失败（典型原因：所选站点此刻没有打开的抽屉）：直接回执错误，
+    # 不写收件箱。写进去会让手机端看见「自己发的消息」，误以为已送达。
+    if not card_id:
+        return jsonify(success=False,
+                       error="site_offline",
+                       message="该站点当前没有在线页面，消息未发送。请先在电脑上打开该站点的抽屉。"), 409
     web_inbox.append("user", text, kind="web-user", extra={"site_key": site})
     _timer.mark_inbox(len(text))
     return jsonify(success=True, cardId=card_id)

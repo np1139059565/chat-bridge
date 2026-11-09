@@ -10,7 +10,6 @@
 """
 import os
 import sys
-import time
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -33,78 +32,91 @@ class _PageBase(unittest.TestCase):
 class TestPageRegistry(_PageBase):
     """页面登记表本身的行为。"""
 
-    def test_touch_登记后出现在在线列表(self):
-        page_registry.touch("https://a.com/chat")
-        self.assertIn("https://a.com/chat", page_registry.online())
+    def test_register_登记后出现在在线列表(self):
+        page_registry.register("https://a.com/chat")           # 显式上线
+        self.assertIn("https://a.com/chat", page_registry.online())  # 立即出现在列表
 
-    def test_touch_空地址被忽略(self):
-        page_registry.touch("")
-        page_registry.touch(None)
-        self.assertEqual(page_registry.online(), [])
+    def test_register_空地址被忽略(self):
+        page_registry.register("")                             # 空串不登记
+        page_registry.register(None)                           # None 也不登记
+        self.assertEqual(page_registry.online(), [])           # 列表仍为空
+
+    def test_重复登记不产生重复项(self):
+        page_registry.register("https://a.com")                # 第一次登记
+        page_registry.register("https://a.com")                # 重复登记
+        self.assertEqual(page_registry.online(), ["https://a.com"])  # 集合去重，只有一条
+
+    def test_unregister_下线后立即消失(self):
+        """下线是显式的：不再有 90 秒超时窗口。"""
+        page_registry.register("https://a.com")                # 先上线
+        page_registry.unregister("https://a.com")              # 再显式下线
+        self.assertNotIn("https://a.com", page_registry.online())    # 立刻查不到
+
+    def test_unregister_不存在的页面不报错(self):
+        page_registry.unregister("https://never.com")          # 注销未登记的页面
+        self.assertEqual(page_registry.online(), [])           # 不抛异常，列表为空
+
+    def test_unregister_空地址被忽略(self):
+        page_registry.register("https://a.com")                # 先有一条
+        page_registry.unregister("")                           # 空地址注销应被忽略
+        self.assertEqual(page_registry.online(), ["https://a.com"])  # 原记录不受影响
 
     def test_在线列表按地址排序(self):
-        page_registry.touch("https://c.com")
-        page_registry.touch("https://a.com")
-        page_registry.touch("https://b.com")
+        page_registry.register("https://c.com")                # 乱序登记
+        page_registry.register("https://a.com")
+        page_registry.register("https://b.com")
         self.assertEqual(page_registry.online(),
-                         ["https://a.com", "https://b.com", "https://c.com"])
-
-    def test_超时页面被剔除(self):
-        """页面关闭后不该一直占着列表。"""
-        page_registry.touch("https://old.com")
-        # 把它的活跃时间改成很久以前
-        page_registry._pages["https://old.com"] = time.time() - 999
-        self.assertNotIn("https://old.com", page_registry.online())
+                         ["https://a.com", "https://b.com", "https://c.com"])  # 输出有序
 
     def test_默认未接管(self):
-        self.assertEqual(page_registry.get_active(), "")
+        self.assertEqual(page_registry.get_active(), "")      # 初始无接管页
 
     def test_设置接管页面(self):
-        page_registry.touch("https://a.com")
-        self.assertTrue(page_registry.set_active("https://a.com"))
+        page_registry.register("https://a.com")                # 页面需先在线
+        self.assertTrue(page_registry.set_active("https://a.com"))   # 设置在线的页面成功
         self.assertEqual(page_registry.get_active(), "https://a.com")
 
     def test_不能接管离线页面(self):
-        self.assertFalse(page_registry.set_active("https://nope.com"))
+        self.assertFalse(page_registry.set_active("https://nope.com"))  # 未登记的页面不可接管
         self.assertEqual(page_registry.get_active(), "")
 
     def test_空串取消接管(self):
-        page_registry.touch("https://a.com")
-        page_registry.set_active("https://a.com")
-        self.assertTrue(page_registry.set_active(""))
+        page_registry.register("https://a.com")                # 先上线
+        page_registry.set_active("https://a.com")              # 再接管
+        self.assertTrue(page_registry.set_active(""))          # 空串表示取消
         self.assertEqual(page_registry.get_active(), "")
 
     def test_按序号选择页面(self):
-        page_registry.touch("https://a.com")
-        page_registry.touch("https://b.com")
-        url, err = page_registry.resolve("2")
+        page_registry.register("https://a.com")                # 第 1 个
+        page_registry.register("https://b.com")                # 第 2 个
+        url, err = page_registry.resolve("2")                  # 按序号选第 2 个
         self.assertEqual(err, "")
         self.assertEqual(url, "https://b.com")
 
     def test_序号越界报错(self):
-        page_registry.touch("https://a.com")
-        url, err = page_registry.resolve("5")
+        page_registry.register("https://a.com")                # 只有 1 个页面
+        url, err = page_registry.resolve("5")                  # 取第 5 个必然越界
         self.assertEqual(url, "")
         self.assertIn("超出范围", err)
 
     def test_按地址片段选择(self):
-        page_registry.touch("https://a.com/chat")
-        page_registry.touch("https://b.com/chat")
-        url, err = page_registry.resolve("a.com")
+        page_registry.register("https://a.com/chat")           # 两个页面都含 chat
+        page_registry.register("https://b.com/chat")
+        url, err = page_registry.resolve("a.com")              # 用更精确的片段消歧
         self.assertEqual(err, "")
         self.assertEqual(url, "https://a.com/chat")
 
     def test_片段匹配多个时报错(self):
         """歧义时必须报错，不能随便挑一个——挑错等于串台。"""
-        page_registry.touch("https://a.com/chat")
-        page_registry.touch("https://b.com/chat")
-        url, err = page_registry.resolve("chat")
+        page_registry.register("https://a.com/chat")           # 两个页面都含 chat
+        page_registry.register("https://b.com/chat")
+        url, err = page_registry.resolve("chat")                # 片段有歧义
         self.assertEqual(url, "")
         self.assertIn("匹配到", err)
 
     def test_无匹配时报错(self):
-        page_registry.touch("https://a.com")
-        url, err = page_registry.resolve("zzz")
+        page_registry.register("https://a.com")                # 只有一个无关页面
+        url, err = page_registry.resolve("zzz")                # 无任何匹配
         self.assertEqual(url, "")
         self.assertIn("没有页面匹配", err)
 

@@ -70,9 +70,15 @@
     // 询问内容脚本版本：本页内容脚本若是旧版，不会回应，据此可判断
     // 「抽屉已更新但内容脚本未更新」——两者加载机制不同，常见于只刷页面没重载扩展。
     window.parent.postMessage({ type: 'ping_content' }, '*');
-    // 询问内容脚本版本：本页内容脚本若是旧版，不会回应，据此可判断
-    // 「抽屉已更新但内容脚本未更新」——两者加载机制不同，常见于只刷页面没重载扩展。
-    window.parent.postMessage({ type: 'ping_content' }, '*');
+    // 抽屉卸载即上报下线：页面关闭、抽屉被销毁、刷新都会走到这里。
+    // 用 beforeunload 而非 unload：后者在部分浏览器上对 iframe 不可靠。
+    // 只注册一次，重复注册会让同一次关闭上报多次（服务端幂等，但仍是无谓开销）。
+    if (!this._offlineHooked) {
+      this._offlineHooked = true;                                    // 标记已注册，避免重复绑定
+      window.addEventListener('beforeunload', function () {          // 卸载前触发
+        this.reportPageOffline();                                    // 立即上报下线
+      }.bind(this));
+    }
     // 直读风控自动恢复开关：对话框本身就是扩展页面（chrome-extension:// 协议），
     // 可直接访问 chrome.storage，无需经内容脚本中转。
     //

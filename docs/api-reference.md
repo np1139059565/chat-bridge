@@ -228,6 +228,38 @@ POST 请求体示例：
 
 ---
 
+## 五·A、页面登记（/api/pages）
+
+页面在线表记录「当前有哪些网页 AI 页面处于打开状态」，是指令投递与消息推送选择目标页面的依据。
+
+**上下线由抽屉显式上报**：抽屉打开即登记、关闭或卸载即注销。不设超时剔除——页面切到后台被浏览器节流时仍然是打开的页面，按超时判离线会让它的消息改投到别的站点，那才是串台的来源。
+
+内存态，重启后清空。页面在线与否本就随标签页开关变化。
+
+### POST /api/pages/online
+
+登记页面为在线。请求：`{ page }`（页面地址）。
+
+- 成功：`{ success: true, page }`
+- 失败：`{ success: false, error: "PAGE_REQUIRED" }`，HTTP 400（缺地址）
+
+幂等：重复登记同一地址无副作用。
+
+### POST /api/pages/offline
+
+注销页面。请求：`{ page }`（页面地址）。
+
+- 成功：`{ success: true, page }`
+- 失败：`{ success: false, error: "PAGE_REQUIRED" }`，HTTP 400（缺地址）
+
+注销不存在的地址不报错。
+
+### GET /api/cards/pending 与 GET /api/commands/pending 的 page 参数
+
+两个轮询接口带 `page` 参数时会顺带登记该页面（幂等兜底）。正常路径下抽屉打开时已通过 `/api/pages/online` 显式登记，轮询登记只是补一次。
+
+---
+
 ## 五·B、指令通道（/api/commands）
 
 ### GET /api/commands/pending
@@ -557,12 +589,19 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 列出可切换的网页 AI 站点。返回 `{ success, sites: [{ id, label, online }] }`。
 
 数据源是后端站点档案（`definition.yaml` 的 `app.profiles`），新增站点自动出现。
-`online` 表示该站点当前是否有页面在轮询（页面在线表由 `/api/commands/pending`
-与 `/api/cards/pending` 的 `page` 参数自动登记，90 秒无心跳视为离线）。
+`online` 表示该站点当前是否有打开的页面，判定依据是页面在线表（见「五·A、页面登记」）：
+抽屉打开即登记、关闭即注销，不依赖轮询心跳与超时推断。
 
 ### POST /api/web/send
 
-从网页发送一条消息（转投到 QQ）。请求：`{ text }`。返回 `{ success }`。
+从网页发送一条消息（转投到 QQ）。请求：`{ text, site? }`。
+
+`site` 指定目标站点，卡片按此投给对应站点的在线页面。
+
+- 成功：`{ success: true, cardId }`
+- 站点无在线页面：`{ success: false, error: "site_offline", message }`，HTTP 409。
+  此时消息**不入收件箱**，避免手机端看见自己发的消息而误以为已送达。
+  提示语引导用户先在电脑上打开该站点的抽屉。
 
 ### POST /api/web/image
 

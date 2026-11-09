@@ -30,13 +30,15 @@ def _resolve_target_page(site_key):
     任意页面的抽屉取走，造成「消息发到了别的 AI 那里」。
 
     解析顺序：
-    1. 若已用 /page 接管某页面，且该页面属于该站点 → 用接管页；
-    2. 否则在该站点的在线页面里取第一个（按地址排序，保证稳定）；
-    3. 该站点无在线页面 → 返回空串，退回旧行为（任何页面可取）。
-       宁可让它被广播取走，也不要因为解析不到而卡住消息。
+    1. 未指定站点 → 返回空串，由调用方按「不限页面」投递；
+    2. 若已用 /page 接管某页面，且该页面属于该站点 → 用接管页；
+    3. 否则在该站点的在线页面里取第一个（按地址排序，保证稳定）；
+    4. 指定了站点但该站点无在线页面 → 返回空串。
+       此时不能把空串当成「不限页面」投出去——那会让消息落到别的站点，
+       正是消息串台的来源。调用方须据「指定了站点却拿到空串」判为失败。
 
     @param site_key 站点标识（glm / qianwen / yuanbao …）
-    @returns {string} 页面地址；无法确定时为空串
+    @returns {string} 页面地址；未指定站点或该站点无在线页面时为空串
     """
     key = str(site_key or "").strip()
     if not key:
@@ -172,11 +174,18 @@ class WebBridge:
         @param text     用户输入的文本
         @param site_key 目标站点。多网页 AI 并存时，卡片按此投给对应页面，
                         避免被别的页面抢走；空串表示不限页面（旧行为）。
-        @returns 卡片 id；失败返回空串
+        @returns 卡片 id；该站点无在线页面或投递失败时返回空串
         """
         import json
         # 目标页面：优先取该站点已登记且在线的那一个
         target = _resolve_target_page(site_key)
+        # 指定了站点却解析不到页面：该站点此刻没有打开的抽屉。
+        # 此时必须停下——若照旧用空 target 投出去，卡片会被任意页面取走，
+        # 消息就落到别的站点去了（实测曾从 GLM 落到 DeepSeek）。
+        # 返回空串交由上层回执「站点无在线页面」，比投错更诚实也更好排查。
+        if str(site_key or "").strip() and not target:
+            log("投递文本卡片失败：站点 %s 无在线页面" % str(site_key).strip())
+            return ""
         payload = _text_payload(text, target)
         return self._create_card(
             card_type="external-call",
