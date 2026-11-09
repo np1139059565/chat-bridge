@@ -68,6 +68,7 @@
 | `.\flask_server\app.py` | 注册蓝图 |
 | `.\flask_server\core\` 下新建模块 | 存放标准消息格式转换、会话存储 |
 | `.\flask_server\tests\` 下新建测试文件 | 覆盖新接口 |
+| `.\flask_server\scripts\` 下新建验收脚本 | 承载 `check_chat_api.py` |
 
 **不要碰**：
 
