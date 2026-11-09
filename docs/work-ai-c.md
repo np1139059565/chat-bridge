@@ -140,4 +140,15 @@
 
 > 每个任务完成后在此追加：任务编号、改了什么、验收结果、提交哈希。
 
-（暂无）
+### C-1 客户端注册接口与自定义配置保管
+
+- 改动：
+  - 新增 `.\flask_server\core\client_registry.py`：注册表登记 / 取回 / 注销与 JSON 落盘。
+  - 新增 `.\flask_server\routes\clients.py`：注册、取回、注销三个接口。
+  - `.\flask_server\app.py`：注册客户端注册蓝图。
+  - 新增 `.\flask_server\tests\test_client_registry.py`：覆盖六个验收场景与重启后取回。
+  - `.\docs\api-reference.md`：补客户端注册接口说明。
+- 落盘位置选择理由：注册信息写入 `.\flask_server\data\client_registry.json`。该目录是既有运行时数据目录，不入库；采用 JSON 而非 YAML 或 `.\flask_server\config\definition.yaml`，是为原生保留任意嵌套结构、中文、null、空字符串与特殊字符，且不把客户端私有数据混入入库的定义文件；新通道不调用 `sanitize_profiles` 等任何清洗逻辑。
+- 验收：`.\flask_server\tests\test_client_registry.py` 7 passed；`.\flask_server` 全量 `pytest tests` 956 passed；`.\scripts\quality_rules.py` 返回 0、零 `[新增]`。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+

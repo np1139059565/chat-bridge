@@ -686,3 +686,45 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 ### GET/PUT/DELETE /rules/<name>
 
 按名字读取、更新或删除某条规则。
+---
+
+## 十一、客户端注册（/api/clients）
+
+客户端（翻译员或标准 API 客户端）把私有配置寄存在工具服务。服务端原样保管、原样下发，不解释字段、不校验结构、不清洗内容。
+
+### POST /api/clients
+
+注册或覆盖登记。请求：
+
+```json
+{
+  "site_key": "glm",
+  "custom_config": {
+    "语言包": { "输入框": "#search-input-box textarea", "备注": "" },
+    "别名": ["甲", "乙"],
+    "空值": null,
+    "特殊": "引号\" 换行\n 反斜杠\\"
+  },
+  "commands": []
+}
+```
+
+- `site_key`：客户端标识，非空字符串；重复注册时整条覆盖，不追加。
+- `custom_config`：任意嵌套的 JSON 值；字段名、结构、值原样保留。
+- `commands`：可执行指令声明，沿用 `.\docs\extensions.md` 第四节的 `commands` 格式；本阶段仅登记，不执行、不校验。
+
+成功：`{ "success": true, "site_key": "glm" }`。
+
+### GET /api/clients?site_key=glm
+
+取回注册信息。成功返回 `{ success, site_key, custom_config, commands }`，其中 `custom_config` 与存入时逐字段一致。
+
+未注册：HTTP 404，`{ "success": false, "error": "客户端未注册：glm" }`。
+
+### DELETE /api/clients?site_key=glm
+
+注销登记。返回 `{ "success": true, "site_key": "glm", "removed": true|false }`；标识不存在时 `removed=false`，不报错。
+
+### 落盘
+
+注册信息写入 `.\flask_server\data\client_registry.json`（JSON 格式，运行时数据目录，不入库）。每次操作重新读盘，服务重启后内容不变。
