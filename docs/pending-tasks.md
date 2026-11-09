@@ -248,7 +248,9 @@ split 按迭代顺序把前 58 组判为已知、其余判为新增。组数一�
 **影响面**：闸门底线仍有效（总组数超基线即失败），但 [已知]/[新增] 标签误导排查与登记。
 **修法方向**：重复块基线改为按内容指纹（规范化窗口键的哈希）登记，标签与真实新旧一一对应。
 
-### P1 · js-tests 覆盖率闸拦提交：16f492b 存量债待决策（2026-11-08）- 实测 249 个前端测试全绿，但 node 内置覆盖率报告 10 个 `extend/dialog/parts/*` 低于门禁（行<90%/分支<70%）：  04_sessions 41.67/50.00、04b_sessions 53.95/58.33、05_messages 34.59/—、05c_prompt 49.84/44.44、  05e_quality 63.20/25.00、05g_cards 74.94/61.25、05h_memory_bridge 61.03/—、05h_tree_query 66.94/40.00、  05j_card_sig 78.05/56.00、05l_autoexec 44.67/—（行%/分支%，—=分支达标）。- 债随 16f492b（拆分 05_messages/00_data 只拆未伴测）入 origin/main，属存量；本轮 8 个任务文件无一在列。- 待决策：A 仿 quality_baseline.json 加 per-file 覆盖基线（只拦新增退化，棘轮式）；B 伴随式补测清债。倾向 A 解阻塞、B 列长期。- 留痕：本轮提交用 SKIP=js-tests 越过该闸（其余六钩照常运行）；不处理则后续所有提交同样被拦。## 二、暂缓
+### P1 · js-tests 覆盖率闸拦提交：16f492b 存量债待决策（2026-11-08）- 实测 249 个前端测试全绿，但 node 内置覆盖率报告 10 个 `extend/dialog/parts/*` 低于门禁（行<90%/分支<70%）：  04_sessions 41.67/50.00、04b_sessions 53.95/58.33、05_messages 34.59/—、05c_prompt 49.84/44.44、  05e_quality 63.20/25.00、05g_cards 74.94/61.25、05h_memory_bridge 61.03/—、05h_tree_query 66.94/40.00、  05j_card_sig 78.05/56.00、05l_autoexec 44.67/—（行%/分支%，—=分支达标）。- 债随 16f492b（拆分 05_messages/00_data 只拆未伴测）入 origin/main，属存量；本轮 8 个任务文件无一在列。- 待决策：A 仿 quality_baseline.json 加 per-file 覆盖基线（只拦新增退化，棘轮式）；B 伴随式补测清债。倾向 A 解阻塞、B 列长期。- 留痕：本轮提交用 SKIP=js-tests 越过该闸（其余六钩照常运行）；不处理则后续所有提交同样被拦。> 代码评审 8 项核验收尾（2026-11-09）：结论已独立落档 docs/review-verification-2026-11-09.md——4 项随 v3 重构已结、1 项降级可接受、3 项待修（06_execute postCardResult 矛盾注释对 / sessionEntries 逐条 parseExternalCall / resolveSelectorExpr 能力边界文档声明）+ 3 处编辑残留；均 P2 小活，按伴随式原则穿插批 5 间隙处理，详情以该文件为准。
+
+## 二、暂缓
 
 > 以下十一项已确认成立，处理动作取决于外部验证结果或用户决策，待反馈后再排期。
 
