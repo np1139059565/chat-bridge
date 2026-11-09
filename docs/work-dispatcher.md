@@ -113,8 +113,8 @@
 | A-2 | 标准 System Prompt 生成 | AI-A | `.\docs\work-ai-a.md` | 已下发 |
 | B-2 | 语音合成独立接口 | AI-B | `.\docs\work-ai-b.md` | 已通过 |
 | C-2 | 指令统一收归服务端 | AI-C | `.\docs\work-ai-c.md` | 已通过 |
-| B-1 | 投递队列通用化 | AI-B | `.\docs\work-ai-b.md` | 已下发 |
-| C-1 | 客户端注册与自定义配置保管 | AI-C | `.\docs\work-ai-c.md` | 已下发 |
+| B-1 | 投递队列通用化 | AI-B | `.\docs\work-ai-b.md` | 已通过 |
+| C-1 | 客户端注册与自定义配置保管 | AI-C | `.\docs\work-ai-c.md` | 已通过 |
 
 ### 3.3 已发现的冲突点
 
