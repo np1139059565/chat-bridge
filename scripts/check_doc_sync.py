@@ -162,9 +162,10 @@ def _is_valid_ref(ref):
         return False
     if "/" not in ref:
         return False
-    # 运行时产物不参与存在性校验：data/ 下的文件由服务运行期间生成，
-    # 文档引用它们是为了说明「会生成什么」，静态检查必然误报缺漏。
-    if ref.startswith(RUNTIME_DATA_PREFIXES):
+    # 运行时产物不参与存在性校验：data/ 数据文件与 runtime.yaml 运行时配置都由
+    # 服务运行期间写出，文档引用它们是说明「会生成什么、写到哪」，文件存在
+    # 与否随机器而异，静态检查会环境相关地误报缺漏。
+    if ref.startswith(RUNTIME_ARTIFACT_PREFIXES):
         return False
     return not any(pat in ref for pat in REF_SKIP_PATTERNS)
 
@@ -226,11 +227,15 @@ REF_BASES = (
     "skills/debug_chrome/extension/drawer",
 )
 
-# 运行时产物前缀：这些路径由服务运行期间生成，文档引用它们是说明「会产出什么」，
-# 静态检查时文件可能尚未存在，故一律跳过存在性校验。
-RUNTIME_DATA_PREFIXES = (
+# 运行时产物前缀：这些路径由服务运行期间生成（data/ 数据文件、runtime.yaml
+# 运行时配置），文档引用它们是说明「会产出什么、配置写在哪」，文件是否已生成
+# 随机器而异，静态检查会环境相关地误报缺漏，故一律跳过存在性校验。
+# runtime.yaml 由保存配置时写出（core/config_file.py），.gitignore 载明不入库。
+RUNTIME_ARTIFACT_PREFIXES = (
     "data/",
     "flask_server/data/",
+    "config/runtime.yaml",
+    "flask_server/config/runtime.yaml",
 )
 
 # 示例占位：文档中用于演示的假路径，并非真实文件引用，不参与校验

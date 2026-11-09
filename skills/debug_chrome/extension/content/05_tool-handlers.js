@@ -314,16 +314,9 @@
 
   A.requestScreenshot = function () {
     return new Promise((resolve, reject) => {
-      let done = false;
-      const finish = (fn, arg) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        fn(arg);
-      };
       // 超时兜底：后台若因 service worker 休眠等原因不回，回调不会触发，
-      // 必须自行超时退出，否则等待方永久挂起、卡死轮询循环。
-      const timer = setTimeout(() => finish(reject, new Error('SNAPSHOT_TIMEOUT')), A.SCREENSHOT_TIMEOUT_MS);
+      // 必须自行超时退出，否则等待方永久挂起、卡死轮询循环（守卫见 makeOnceGuard）。
+      const finish = A.makeOnceGuard(reject, A.SCREENSHOT_TIMEOUT_MS, 'SNAPSHOT_TIMEOUT');
       // 关键：后台用 sendResponse 回复，响应只会进 sendMessage 的回调参数，
       // 不会作为一条独立消息触发 onMessage。故这里必须用回调接收，
       // 早先用 onMessage.addListener 等待，永远等不到，必然超时。

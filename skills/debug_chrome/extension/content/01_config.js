@@ -2,6 +2,32 @@
 (function () {
   const A = window.AIStyleDebug;
 
+  /**
+   * 一次性守卫：为 Promise 的「超时 + 回调」双出口生成共用骨架。
+   *
+   * 首个触发者生效：超时定时器与正常回调只放行先到的一个，其余调用
+   * 静默忽略，生效时自动清理定时器。proxyFetch（本文件）与
+   * requestScreenshot（05_tool-handlers.js）原先各自手写同一形态的
+   * done/finish 块，收敛于此统一维护；本文件先于 05 加载，直接挂 A 即可。
+   *
+   * @param {Function} reject Promise 的 reject
+   * @param {number} timeoutMs 超时毫秒数
+   * @param {string} timeoutMsg 超时时以 Error 包装抛给 reject 的消息
+   * @returns {Function} finish(fn, arg)——首次调用执行 fn(arg) 并清定时器
+   */
+  A.makeOnceGuard = function (reject, timeoutMs, timeoutMsg) {
+    let done = false;
+    let timer = null;
+    const finish = (fn, arg) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      fn(arg);
+    };
+    timer = setTimeout(() => finish(reject, new Error(timeoutMsg)), timeoutMs);
+    return finish;
+  };
+
   // 从本地存储读取配置：仅保留与调试能力相关的项，连接地址指向工具服务
   A.loadConfig = async function () {
     const stored = await chrome.storage.local.get(['aistyleCfg', 'backendUrl', 'aistyleDrawerSide']);
@@ -71,16 +97,9 @@
     const o = opts || {};
     const timeoutMs = typeof o.timeoutMs === 'number' ? o.timeoutMs : A.PROXY_FETCH_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
-      let done = false;
-      const finish = (fn, arg) => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        fn(arg);
-      };
       // 超时兜底：service worker 的 fetch 若挂起，sendMessage 回调不会返回，
-      // 不设超时会让调用方永久 await，进而卡死轮询循环。
-      const timer = setTimeout(() => finish(reject, new Error('PROXY_TIMEOUT')), timeoutMs);
+      // 不设超时会让调用方永久 await，进而卡死轮询循环（守卫见 makeOnceGuard）。
+      const finish = A.makeOnceGuard(reject, timeoutMs, 'PROXY_TIMEOUT');
       try {
         chrome.runtime.sendMessage({
           type: 'proxy-fetch',

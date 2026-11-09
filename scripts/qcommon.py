@@ -90,6 +90,11 @@ def is_exempt(rel):
 DUP_EXEMPT_PREFIXES = (
     "extend/lib/host_theme.js",
     "skills/debug_chrome/extension/shared/host_theme.js",
+    # qianwen 适配器双副本（3568ce8 交付：扩展沙箱仅能加载自身目录内文件，
+    # 根目录交付件与 extension 装载件内容刻意一致，见 docs/PROGRESS.md
+    # 「双副本为有意为之」），与 host_theme 同类的同步镜像，不参与重复统计
+    "skills/debug_chrome/adapters/",
+    "skills/debug_chrome/extension/adapters/",
 )
 
 
