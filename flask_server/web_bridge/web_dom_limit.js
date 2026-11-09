@@ -110,7 +110,8 @@
   function loadOlder() {
     if (loading || noMore || !isFinite(minSeqInDom) || !render) return;
     loading = true;
-    fetch('/api/web/messages?before=' + minSeqInDom + '&limit=' + PAGE_SIZE,
+    fetch('/api/web/messages?before=' + minSeqInDom + '&limit=' + PAGE_SIZE
+      + (window.WebSite ? window.WebSite.queryParam() : ''),
       { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(function (d) {

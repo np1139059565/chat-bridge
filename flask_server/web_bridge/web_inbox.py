@@ -101,7 +101,7 @@ def _norm_image(image):
     return str(image or "")
 
 
-def append(role, text, voice="", kind="", image="", voice_text=""):
+def append(role, text, voice="", kind="", image="", voice_text="", site_key=""):
     """向收件箱追加一条消息，返回该消息对象。
 
     @param role  角色：user（网页/QQ 用户）/ ai（AI 回复）/ tool / system
@@ -110,6 +110,9 @@ def append(role, text, voice="", kind="", image="", voice_text=""):
     @param kind  可选，附加类型标记（如 command-image），供前端区分展示
     @param image 可选，图片文件名（相对网页图片目录），前端据此渲染 <img>
     @param voice_text 可选，待朗读的文本；点播时据此按需合成，不占用上报链路
+    @param site_key 可选，来源站点（glm / qianwen / yuanbao …）。多网页 AI 并存时，
+                    手机端按此字段分流展示，否则各站消息会混在同一条时间线里。
+                    空串表示来源未知，归入「未知站点」分组。
     @returns 追加后的消息对象（含分配好的 seq 与 id）
     """
     # 登记最近活跃渠道：仅当这是「用户在网页侧发的消息」时才登记。
@@ -122,6 +125,8 @@ def append(role, text, voice="", kind="", image="", voice_text=""):
     it = {
         "role": role, "text": text, "voice": voice, "voice_text": voice_text,
         "image": image, "kind": kind, "key": "", "ts": None,
+        # 站点标签：多网页 AI 并存时手机端据此分流，空串归入「未知站点」
+        "site_key": str(site_key or ""),
     }
     with _timed_lock('append'):
         state = _read_state()
@@ -194,6 +199,8 @@ def _make_msg(it, seq):
         # key：消息在抽屉消息树里的 key（pid-id 格式），供前端核对块完整性
         "key": str(it.get("key") or ""),
         "ts": int(it.get("ts") or (time.time() * 1000)),
+        # 站点标签：手机端据此分流，空串归入「未知站点」
+        "site_key": str(it.get("site_key") or ""),
     }
 
 
@@ -270,6 +277,7 @@ def append_many(items):
     source_id（抽屉里的消息 id）去重，只有首次出现才写进收件箱。
     整个批次共用一次读改写，避免逐条写盘。
     逐条判定与构造委托 _init_batch / _apply_item / _flush_batch，本函数只做编排。
+
     @param items 列表，每项 {source_id, role, text, voice, kind}
     @returns 新增的消息对象列表（按入库顺序）
     """
@@ -333,11 +341,34 @@ def get_by_seq(seq):
     return None
 
 
-def list_since(cursor=0, limit=200):
+def _filter_site(messages, site_key):
+    """按站点过滤消息列表。
+
+    多网页 AI 并存时，手机端一次只显示一个站点的对话，避免不同 AI 的
+    消息混在同一条时间线里。
+
+    语义（三态，与调用方约定一致）：
+    - site_key 为 None：不过滤，返回全部（兼容尚未传参的旧调用）；
+    - site_key 为空串：只返回无站点标记的消息（历史遗留数据）；
+    - site_key 非空：只返回该站点的消息。
+
+    @param messages 消息列表
+    @param site_key 站点标识
+    @returns {list} 过滤后的列表
+    """
+    if site_key is None:
+        return messages
+    want = str(site_key or "")
+    return [m for m in messages if str(m.get("site_key") or "") == want]
+
+
+def list_since(cursor=0, limit=200, site_key=None):
     """拉取游标之后的新消息（增量）。
 
-    @param cursor 上次拿到的最大 seq；传 0 表示首次拉取
-    @param limit  单次最多返回条数，避免一次拉太多卡住手机
+    @param cursor   上次拿到的最大 seq；传 0 表示首次拉取
+    @param limit    单次最多返回条数，避免一次拉太多卡住手机
+    @param site_key 站点过滤：None 表示不限（兼容旧调用），空串表示只取无站点标记的，
+                    非空表示只取该站点的消息。多网页 AI 并存时手机端按站点分流。
     @returns {seq, messages}：seq 为当前最新游标，messages 为新消息（按时间正序）
     """
     with _timed_lock('list_since'):
@@ -349,6 +380,7 @@ def list_since(cursor=0, limit=200):
     messages = state.get("messages") or []
     # 只取 seq 严格大于游标的：等于游标说明已拉过，不重复
     fresh = [m for m in messages if int(m.get("seq") or 0) > cur]
+    fresh = _filter_site(fresh, site_key)
     # 超过单次上限时截取最新的一批（末尾 limit 条），保证尽量看到最新内容。
     # 关键：返回给客户端的游标必须是「本批最后一条」的 seq，而非全局最新 seq。
     # 否则中间被截断的消息会因游标一步跳到最后而永久拉不到。
@@ -366,27 +398,29 @@ def list_since(cursor=0, limit=200):
     return {"seq": next_cursor, "messages": fresh}
 
 
-def recent(limit=50):
+def recent(limit=50, site_key=None):
     """取最近的若干条消息（首次打开页面时用于铺满一屏历史）。
 
-    @param limit 条数上限
+    @param limit    条数上限
+    @param site_key 站点过滤，语义见 _filter_site
     @returns {seq, messages}：messages 按时间正序
     """
     with _timed_lock('recent'):
         state = _read_state()
-    messages = state.get("messages") or []
+    messages = _filter_site(state.get("messages") or [], site_key)
     if limit and len(messages) > limit:
         messages = messages[-limit:]
     return {"seq": int(state.get("seq") or 0), "messages": messages}
 
 
-def before_seq(before, limit=50):
+def before_seq(before, limit=50, site_key=None):
     """取比给定 seq 更早的一批消息（向上翻历史用）。
 
     与 list_since 方向相反：那边取更新的，这边取更旧的。用于前端滑到底部时
     懒加载更早的消息，避免首屏一次铺满全部历史把手机内存撑爆。
-    @param before 已渲染的最早一条消息的 seq；只返回 seq 严格小于它的消息
-    @param limit  单次最多返回条数
+    @param before   已渲染的最早一条消息的 seq；只返回 seq 严格小于它的消息
+    @param limit    单次最多返回条数
+    @param site_key 站点过滤，语义见 _filter_site
     @returns {messages, has_more}：messages 按时间正序；has_more 表示是否还有更早的
     """
     try:
@@ -395,7 +429,7 @@ def before_seq(before, limit=50):
         cur = 0
     with _timed_lock('before_seq'):
         state = _read_state()
-    messages = state.get("messages") or []
+    messages = _filter_site(state.get("messages") or [], site_key)
     older = [m for m in messages if int(m.get("seq") or 0) < cur]
     # 还有更早的：取最靠近 cur 的一批（末尾），保证与当前已渲染的内容连续
     has_more = len(older) > limit

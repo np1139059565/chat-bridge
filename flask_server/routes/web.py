@@ -132,6 +132,43 @@ def web_commands():
     return jsonify(success=True, commands=flat, groups=groups)
 
 
+@bp.route("/api/web/sites", methods=["GET", "OPTIONS"])
+def web_sites():
+    """返回可切换的站点列表，供手机端站点切换器渲染。
+
+    每项包含站点 id、显示名、是否当前有在线页面。手机端据此一次只看一个
+    AI 的对话，避免多站消息混在一条时间线里。
+
+    数据源是后端站点档案（definition.yaml 的 app.profiles），新增站点自动出现。
+    @returns {success, sites: [{id, label, online}]}
+    """
+    sites = []
+    try:
+        import runtime
+        import page_registry
+        profiles = (runtime.CONFIG or {}).get("profiles") or {}
+        online_urls = page_registry.online()
+        # 站点 id → 域名片段，与 web_bridge 里的解析口径保持一致
+        hints = {
+            "glm": "chatglm", "wenxin": "wenxin", "deepseek": "deepseek",
+            "qianwen": "qianwen", "yuanbao": "yuanbao",
+            "xinghuo": "xinghuo", "kimi": "kimi",
+        }
+        for pid in sorted(profiles.keys()):
+            ent = profiles.get(pid) or {}
+            frag = hints.get(pid, pid)
+            # 该站点是否有在线页面：手机端据此提示「可切换但当前无页面」
+            is_online = any(frag in u for u in online_urls)
+            sites.append({
+                "id": pid,
+                "label": str(ent.get("label") or pid),
+                "online": is_online,
+            })
+    except Exception as e:
+        app_log.warn("[web]", "读取站点列表失败：", e)
+    return jsonify(success=True, sites=sites)
+
+
 def _handle_command(text):
     """把一条以 / 开头的文本交给指令处理器执行。
 
@@ -155,20 +192,23 @@ def web_send():
     """网页发消息：指令走指令通道，普通文本投卡片送进网页 AI。"""
     data = request.get_json(force=True, silent=True) or {}
     text = str(data.get("text") or "").strip()
+    # site：手机端当前选中的站点。带上它，收件箱才能把这条消息归到对应站点，
+    # 而不是混进公共时间线。未传时为空串（归入「未知站点」）。
+    site = str(data.get("site") or "")
     if not text:
         return jsonify(success=False, error="empty_text")
     # 指令：以 / 开头，交给指令处理器，不投网页 AI
     if text.startswith("/"):
-        web_inbox.append("user", text, kind="command")
+        web_inbox.append("user", text, kind="command", site_key=site)
         _handle_command(text)
         return jsonify(success=True, command=True)
     # 普通消息：投进卡片总线，送进网页 AI。
     # 两段分别计时（投卡片 / 写收件箱），实现见 web_poll_log。
     from web_bridge import web_poll_log
     _timer = web_poll_log.new_send_timer()
-    card_id = web_bridge.web.ingest_text(text)
+    card_id = web_bridge.web.ingest_text(text, site_key=site)
     _timer.mark_card()
-    web_inbox.append("user", text, kind="web-user")
+    web_inbox.append("user", text, kind="web-user", site_key=site)
     _timer.mark_inbox(len(text))
     return jsonify(success=True, cardId=card_id)
 
@@ -267,8 +307,12 @@ def web_messages():
     - cursor：上次拿到的最大 seq；缺省 0（配合 history=1 用于首次铺历史）
     - limit ：单次上限，缺省 200
     - history：为 1 时返回最近一批历史（首次打开页面用），否则按游标增量
+    - site  ：站点过滤。缺省不过滤（兼容旧调用）；给值时只返回该站点的消息，
+              手机端据此一次只看一个 AI 的对话，避免多站消息混在一条时间线里
     @returns {success, seq, messages}
     """
+    # site：站点过滤。未传 → None（不过滤，保持旧行为）；传空串 → 只取无站点标记的
+    site = request.args.get("site")
     # before：向上翻历史用——返回比该 seq 更早的一批消息（前端滑到底部时懒加载）
     before = request.args.get("before")
     if before:
@@ -277,7 +321,7 @@ def web_messages():
         except ValueError:
             blimit = 50
         # 单批上限 100：翻历史是交互式操作，一次给太多会重新撑大页面
-        data = web_inbox.before_seq(before, max(1, min(blimit, 100)))
+        data = web_inbox.before_seq(before, max(1, min(blimit, 100)), site)
         return jsonify(success=True, **data)
     cursor = request.args.get("cursor", "0")
     try:
@@ -296,9 +340,9 @@ def web_messages():
             hlimit = int(request.args.get("limit", "10"))
         except ValueError:
             hlimit = 10
-        data = web_inbox.recent(max(1, min(hlimit, 100)))
+        data = web_inbox.recent(max(1, min(hlimit, 100)), site)
     else:
-        data = web_inbox.list_since(cursor, limit)
+        data = web_inbox.list_since(cursor, limit, site)
     # 读收件箱（含等锁 + 读缓存/解析）耗时：轮询卡顿最常见的嫌疑点
     web_poll_log.log_poll_done(cursor, data, (_t.perf_counter() - _t0) * 1000.0)
     return jsonify(success=True, **data)

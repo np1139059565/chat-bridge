@@ -165,7 +165,9 @@
     api.init({
       // 按游标取一批增量：不传 history，走后端 list_since 分支
       fetchSince: function (cur, limit) {
-        var u = '/api/web/messages?cursor=' + cur + '&limit=' + limit;
+        // 带上站点参数：多站并存时只补齐当前站的空缺，不把别的站消息拉进来
+        var siteQ = window.WebSite ? window.WebSite.queryParam() : '';
+        var u = '/api/web/messages?cursor=' + cur + '&limit=' + limit + siteQ;
         return fetch(u, { headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); });
       },
       // 补齐的消息比首屏那批更旧：插到列表末尾（倒序布局下即时间更早的位置）

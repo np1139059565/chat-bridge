@@ -211,7 +211,8 @@
     if (!history && POLL_LOG_VERBOSE) clientLog('poll', 'begin src=' + _src + ' cursor=' + cursor + ' hidden=' + (document.hidden ? 1 : 0));
     // 首次铺屏只取最新 10 条（后端 history=1 分支），其余滑到底部再懒加载。
     // 增量轮询仍按 200 拉，避免断开重连后新消息一次拿不全。
-    var url = '/api/web/messages?cursor=' + cursor + '&limit=' + (history ? 10 : 200);
+    var url = '/api/web/messages?cursor=' + cursor + '&limit=' + (history ? 10 : 200)
+      + (window.WebSite ? window.WebSite.queryParam() : '');
     if (history) url += '&history=1';
     // 加超时：卡住的请求主动中断，否则 pollBusy 会永久为真、轮询停摆。
     // 由 10 秒收紧到 6 秒：轮询每 2.5 秒一次，6 秒足够正常请求完成；
@@ -446,4 +447,3 @@
     hardResetPolling();
   });
 })();
-

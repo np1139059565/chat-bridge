@@ -548,6 +548,18 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 
 拉取网页收件箱消息。返回 `{ success, messages: [...] }`。
 
+查询参数：`cursor`（增量游标）、`before`（向上翻历史）、`history=1`（首屏铺历史）、
+`site`（站点过滤）。`site` 三态语义：缺省不过滤（兼容旧调用）；传值只返回该站点的
+消息；传空串只返回无站点标记的历史消息。多网页 AI 并存时前端据此一次只看一个站。
+
+### GET /api/web/sites
+
+列出可切换的网页 AI 站点。返回 `{ success, sites: [{ id, label, online }] }`。
+
+数据源是后端站点档案（`definition.yaml` 的 `app.profiles`），新增站点自动出现。
+`online` 表示该站点当前是否有页面在轮询（页面在线表由 `/api/commands/pending`
+与 `/api/cards/pending` 的 `page` 参数自动登记，90 秒无心跳视为离线）。
+
 ### POST /api/web/send
 
 从网页发送一条消息（转投到 QQ）。请求：`{ text }`。返回 `{ success }`。

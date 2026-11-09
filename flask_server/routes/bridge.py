@@ -112,7 +112,9 @@ def bridge_report():
     # 让手机网页能拉到 AI 回复。失败不影响 QQ 推送。
     try:
         from web_bridge import web_mirror
-        web_mirror.mirror_report(data.get("messages") or [])
+        # siteKey 由内容脚本随上报一并带来（抽屉侧从站点档案得知），
+        # 手机端据此按站点分流，避免多 AI 的消息混在一条时间线里。
+        web_mirror.mirror_report(data.get("messages") or [], data.get("siteKey") or "")
     except Exception as e:
         app_log.warn("[web]", "镜像上报失败：", e)
     # QQ 推送放后台线程执行，请求立即返回：合成 + 逐条发送是重活，

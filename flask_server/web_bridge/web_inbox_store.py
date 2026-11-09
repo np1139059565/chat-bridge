@@ -78,6 +78,12 @@ def read_state():
     if _cache is not None and sig is not None and sig == _cache_sig:
         return _cache
     if not path.exists():
+        # 文件尚未落盘：写盘是异步的，刚 append 完立刻读会走到这里。
+        # 此时内存里已有内容，绝不能清空缓存——否则这次读取会把刚写入的
+        # 数据抹掉，表现为「append 返回成功，紧接着读取却是空箱」。
+        # 只在内存也为空时才初始化空状态。
+        if _cache is not None and _cache_sig is None and _cache.get("messages"):
+            return _cache
         _cache = empty_state()
         _cache_sig = None
         return _cache
