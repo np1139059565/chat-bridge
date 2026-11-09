@@ -195,6 +195,21 @@
 - 验收：六个场景全部通过（三来源合并、无客户端、有客户端、两客户端同名指令按 `site_key` 区分、帮助文本分组且与清单一致、内置表为空不报错）。`.\flask_server\tests\test_command_catalog.py` 6 passed；`.\flask_server` 全量 `pytest tests` 962 passed；`.\scripts\quality_rules.py` 返回 0、零 `[新增]`；`.\scripts\check_doc_sync.py` 通过。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 
+### C-3a 语言包寄存通道（后端）
+
+- 改动：
+  - 新增 `.\flask_server\tests\test_client_language_pack.py`：含中文、嵌套、null、特殊字符的语言包深比较与逐字节一致实测，覆盖未注册不兜底、站点隔离、重复覆盖、服务端不解释字段。
+  - `.\docs\api-reference.md`：新增「十六、语言包寄存」顶层章节，记录寄存、取回与边界；按任务书指令用第十六节（A-2 预定十五节，合入时由分发方按「保留双方新增」重排），只追加新章节，不改既有编号。
+- 复用判定：按「做什么」第 2 条与实现原则 1，现有 `POST/GET /api/clients` 的 `custom_config` 已满足任意嵌套 JSON 原样保管、逐字段一致取回、按 `site_key` 隔离、未注册 404 明确报错，且链路不经过 `.\flask_server\core\config_store.py` 的档案解析链。故**不新增独立入口、不改接口契约、不提问**；`.\flask_server\routes\clients.py` 与 `.\flask_server\core\client_registry.py` 一行未改，未制造第二套寄存结构。
+- 输出摘要（验收六项）：
+  1. 原样一致：`.\flask_server\tests\test_client_language_pack.py` 5 passed，深比较与同一规则序列化后的 UTF-8 字节串均一致；
+  2. 未注册不兜底：未注册 `site_key` 返回 HTTP 404 与明确错误，响应不含 `custom_config` / `profiles`，不返回默认档案；
+  3. 隔离：两个 `site_key` 语言包互不串，重复注册整条覆盖；
+  4. 全量测试：`.\flask_server` 下 `python -m pytest tests -q` 989 passed（当前基线 984 + 新增 5）；
+  5. 质量闸：`.\scripts\quality_rules.py` 返回 0、零 `[新增]`；`.\scripts\check_doc_sync.py` 通过；提交钩子全过，不用 `--no-verify`；
+  6. 文档：`.\docs\api-reference.md` 新增第十六节，说明复用 `custom_config` 的寄存与取回方式。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
