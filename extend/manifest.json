@@ -31,6 +31,7 @@
         "content/03_bridge.js",
         "content/03b_paste.js",
         "content/03c_rich_editor.js",
+        "content/03d_snapshot_retry.js",
         "content/04_observer.js",
         "content/06_picker.js",
         "content/07_stopped_watch.js",

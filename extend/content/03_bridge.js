@@ -108,12 +108,20 @@
     if (convChanged) A.state.currentConvId = convId;
 
     const messages = A.extractBlocks(A.state.containerEl);
+    if (!messages.length) {
+      // 空快照不锁死：补发会话身份同步并排递增复查，等 DOM 挂载后重推（实现见 03d）。
+      A.onEmptySnapshot(convId, reason);
+      return;
+    }
+    // 已拿到非空快照：作废本会话仍在排队的空快照复查。
+    A.cancelEmptyRetry();
 
     // 去重键先按「原始解析结果」算：命中即返回，避免滚动时反复做图片转换这类重活。
     // blob 地址在同一页面会话内稳定，故用它做键是可靠的。
     const key = convId + '|' + JSON.stringify(messages);
     if (!force && !convChanged && key === A.state.lastPageKey) return;
     A.state.lastPageKey = key;
+    A.state.lastPageConvId = convId;
 
     // 图片归一化：把 blob: / http(s) 地址转成自包含的 dataURL，
     // 使抽屉镜像、抽屉消息列表、服务端三处都能取到同一张图。

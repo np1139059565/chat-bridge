@@ -394,6 +394,8 @@
     if (A.stopThemeWatch) A.stopThemeWatch();
     // 取消待执行的静默扫描，避免清理后仍触发一次解析
     if (A.state.scanTimer) { clearTimeout(A.state.scanTimer); A.state.scanTimer = null; }
+    // 取消未走完的空快照复查，避免清理后仍触发一次强制重推
+    if (A.cancelEmptyRetry) A.cancelEmptyRetry();
     if (A.state.buttonTimer) { clearInterval(A.state.buttonTimer); A.state.buttonTimer = null; }
     if (A.state.riskIdleTimer) { clearInterval(A.state.riskIdleTimer); A.state.riskIdleTimer = null; }
     if (A.state.observer) { A.state.observer.disconnect(); A.state.observer = null; }
