@@ -196,8 +196,16 @@
     // 代码块文本常被站点装饰污染：行号栏、语言标签、复制按钮文案、零宽字符。
     // 直接 JSON.parse 会整块失败，卡片随即退化成普通代码块（千问实测如此）。
     // 故不预设首字符，改为候选提取后逐个尝试：原样 / 去装饰 / 截取配平对象。
-    const obj = M._parseToolJson(String(block.code || ''));
-    if (!obj) return null;
+    const raw = String(block.code || '');
+    const obj = M._parseToolJson(raw);
+    if (!obj) {
+      // 诊断：块里带调用标记却解析不出来，说明文本被站点装饰污染。
+      // 回放前 200 字，便于在控制台直接看出是语言标签、行号还是别的混入。
+      if (raw.indexOf('bridge-chat-call') >= 0) {
+        D.log('工具调用解析失败，原文片段：' + raw.slice(0, 200));
+      }
+      return null;
+    }
     if (obj && typeof obj === 'object' && obj.tool && obj.type === 'bridge-chat-call') {
       return { tool: String(obj.tool), parameters: obj.parameters || {} };
     }
