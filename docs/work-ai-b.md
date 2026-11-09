@@ -49,7 +49,74 @@
 
 ## 二、当前任务
 
-（暂无。待分发方下发下一任务。）
+### 任务 B-3：阶段 1b 后端参数声明迁移（标准 JSON Schema）
+
+**目标**：把工具服务对外暴露的工具参数声明从自定义数组格式改为标准 JSON Schema，逐项勾选 `.\docs\tool-schema-migration.md` 第三、五节；前端适配层不属本任务。
+
+**做什么**：
+
+1. 按 `.\docs\tool-schema-migration.md` 第三节 3.1 改写 21 个内置工具声明：容器由数组改为 `{"type":"object","properties":{...}}`，必填由每项的 `required` 布尔改为顶层 `required` 数组；`list_skills`、`list_rules` 迁移后为 `{"type":"object","properties":{}}`
+2. 联合类型只有一处：`read_file.path` 用 `anyOf`，两支分别为 `{"type":"string"}` 与 `{"type":"array","items":{"type":"string"},"maxItems":20}`（决策 8）
+3. 同步第三节 3.2 的全部参数名读取方（`tool_param_check.py`、`error_utils.py`、`tool_external.py`、`loader.py` 的 `_dump_params`），从 `properties` 取键名
+4. 同步第三节 3.3 的对外输出结构（`/tools/all`、`get_tool_params`、`custom_tools/meta.py` 三处视图、`core/prompt_sections.py` L92）
+5. 按第五节改 `flask_server/tests/` 中所有构造 `"parameters": [...]` 的地方，以及 `scripts/_smoke_ct.py` 对 `parameters[0]["name"]` 的断言
+6. 在 `.\docs\tool-schema-migration.md` 逐项把 `[ ]` 改为 `[x]` 并写明验证方式，第七节追加进度记录
+7. 若 `/tools/all` 或 `get_tool_params` 的对外结构变化，在 `.\docs\api-reference.md` **既有「一、工具」章节内**补充说明，不新增顶层章节
+
+**不做什么**：
+
+- 不碰 `.\extend\` 下任何文件：第四节三处前端调用方与 前端适配层（见迁移清单第四节）留到本任务定稿后另派（按 1.4）
+- 不改 `.\flask_server\core\prompt_sections.py` 的**返回结构**，只换参数读取方式，保持技能段口径与 A-2 一致；若需改其输出文本，先提问
+- 不改 A-1 的 `/v1/chat/completions` 链路，不改 B-1/B-2 已交付的投递队列与语音接口行为
+- 不改 `.\docs\api-reference.md` 的顶层章节编号（A-2、C-3a 也在补文档，三方不抢号）
+- 不动 `scripts\quality_baseline.json`
+
+**可以碰的文件**：
+
+| 文件 | 说明 |
+|---|---|
+| `.\flask_server\tools\tool_meta.py` | 21 个内置工具声明本体 |
+| `.\flask_server\custom_tools\loader.py`、`registry.py` | skill 工具声明解析与保存 |
+| `.\flask_server\tools\tool_param_check.py`、`.\flask_server\core\error_utils.py`、`.\flask_server\routes\tool_external.py` | 参数名读取方 |
+| `.\flask_server\routes\tools.py`、`.\flask_server\tools\tools_impl.py`、`.\flask_server\custom_tools\meta.py`、`.\flask_server\core\prompt_sections.py` | 对外输出结构 |
+| `.\flask_server\tests\`、`.\flask_server\scripts\_smoke_ct.py` | 测试与冒烟断言 |
+| `.\docs\tool-schema-migration.md`、`.\docs\api-reference.md` | 清单勾选与既有章节内说明 |
+
+**不要碰**：
+
+- `.\extend\` 下任何文件
+- `.\flask_server\routes\chat_api.py`、`.\flask_server\core\chat_completions.py`
+- `.\flask_server\routes\cards.py`、`.\flask_server\routes\voice.py`
+- `.\flask_server\config\definition.yaml`
+- `scripts\quality_baseline.json`
+
+**实现原则**：
+
+1. 不允许只改声明不改消费方——那样运行时会静默失效；每改一处按第六节顺序验证
+2. `get_tool_params` 是 AI 查参数的主要入口，改格式后需确认 System Prompt 的使用说明仍准确；A-2 正在写该文本，**不直接改 A 的文件**，需要协调先提问
+3. 一个任务一次提交；提交信息只描述改动；提交前跑通 `.\flask_server` 下测试
+4. 一切取舍以 `.\docs\split-mirror-and-tools-service.md` 第 3.3 节与 `.\docs\tool-schema-migration.md` 为准
+
+**验收标准**：
+
+| # | 项 | 期望 |
+|---|---|---|
+| 1 | 清单勾选 | 第三、五节全部 `[x]`，每项写明验证方式 |
+| 2 | 全量测试 | `python -m pytest tests -q` 全绿（当前基线 984） |
+| 3 | 前端测试 | `node --test flask_server/tests/js/*.test.js` 全绿（基线 380） |
+| 4 | 质量闸 | `python scripts/quality_rules.py` 无 `[新增]` 违规，`doc-sync` 通过 |
+| 5 | 两种调用 | `read_file` 单路径与多路径（≤20）两种调用均可用 |
+| 6 | AI 可见结构 | `get_tool_params` 返回标准 schema，按顶层 `required` 与 `properties` 可正确取到必填与键名 |
+
+把输出摘要贴进本文件第五节；提交钩子全过、不用 `--no-verify`。
+
+**完成后**：
+
+1. 在本文件第五节追加完成记录
+2. 推送 `work/ai-b` 分支
+3. 等「更新 git」指令，由分发方逐条验收
+
+> 第三节排队槽暂无任务；1b 前端适配层待本任务定稿后按 2.5 节预下发。
 
 ---
 

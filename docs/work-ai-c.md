@@ -48,7 +48,73 @@
 
 ## 二、当前任务
 
-（暂无。待 C-3 拆分后下发。）
+### 任务 C-3a：语言包寄存通道（C-3 第一刀，后端）
+
+**目标**：按 `.\docs\split-mirror-and-tools-service.md` 1.2、4.2 节，语言包（站点元素选择器与容器特征）由翻译员所有、**寄存在工具服务的客户端注册信息里，服务端不解释其内容**。本任务把这条寄存/取回通道在后端做实，不涉及前端界面。
+
+> 拆分说明：原 C-3「站点档案迁移到客户端注册信息」涉及前端界面改造，Q-3 答复要求先拆清范围。现拆为 C-3a（后端寄存通道，本任务）与 C-3b（前端 `08g_site_profiles.js` 等读写迁移 + 真源切换）。C-3b 待本任务定稿后按 2.5 节预下发。
+
+**做什么**：
+
+1. 先读 `.\flask_server\routes\clients.py`、`.\flask_server\core\client_registry.py` 与 `.\docs\api-reference.md` 第十一节：现有 `POST/GET/DELETE /api/clients` 已支持 `custom_config` 任意嵌套 JSON **原样保管、逐字段一致取回**
+2. 判断语言包寄存是否需要新增独立入口：倾向**复用现有 `custom_config`，不新增路由**；若论证必须新增（例如按 site_key 单独取回语言包），则在 `.\flask_server\routes\clients.py` 增加 GET/PUT 并在任务书外先提问确认，不得擅自改接口契约
+3. 取回时逐字段原样返回，不校验、不清洗、不解释字段（与 C-1「逐字节一致」同口径）
+4. 未注册的 `site_key` 返回 404 与明确错误，**不静默兜底到默认站点档案**——历史事故「千问站点档案缺失被按 GLM 解析」即由静默兜底引起
+5. 新建 `.\flask_server\tests\test_client_language_pack.py`：含中文、嵌套、null、特殊字符的语言包存一遍取一遍深比较；不同 `site_key` 互不串；未注册不兜底；重复注册整条覆盖
+6. 在 `.\docs\api-reference.md` **新增一个顶层章节**记录语言包寄存与取回方式：章节号按合入时实际末节顺延，A-2 已预定第十五节，本任务用**第十六节**；若 A-2 尚未落地，合入时由分发方按「保留双方新增」重排。只追加新章节，不改既有章节编号
+
+**不做什么**：
+
+- 不改 `.\flask_server\config\definition.yaml` 里 `app.profiles` 站点档案真源（真源切换属 C-3b）
+- 不改 `.\extend\` 下任何文件（前端 `08g` 迁移属 C-3b）
+- 不改 `.\flask_server\core\config_store.py` 的 `sanitize_profiles` 语义
+- 不碰 A 的 `/v1/chat/completions`、`/v1/system_prompt`，不碰 B 正在改的工具参数声明文件（`tool_meta.py` 等）
+- 不动 `scripts\quality_baseline.json`
+
+**可以碰的文件**：
+
+| 文件 | 说明 |
+|---|---|
+| `.\flask_server\core\client_registry.py` | 寄存逻辑（若需） |
+| `.\flask_server\routes\clients.py` | 取回入口（若需新增，先提问） |
+| `.\flask_server\tests\test_client_language_pack.py` | 新建测试 |
+| `.\docs\api-reference.md` | 新增第十六节 |
+
+**不要碰**：
+
+- `.\flask_server\config\definition.yaml`
+- `.\extend\` 下任何文件
+- `.\flask_server\core\config_store.py`
+- `.\flask_server\tools\` 下参数声明文件
+- `.\flask_server\routes\chat_api.py`、`.\flask_server\core\chat_completions.py`
+
+**实现原则**：
+
+1. 优先复用不新增：现有 `custom_config` 已满足「任意 JSON 原样保管」时，本任务以测试与文档落档为主，不制造第二套寄存结构
+2. 服务端不解释语言包字段含义，不把它并入 `config_store` 的档案解析链
+3. 一个任务一次提交；提交前跑通 `.\flask_server` 下测试
+4. 规格没写的先提问，按 1.4 处理
+
+**验收标准**：
+
+| # | 项 | 期望 |
+|---|---|---|
+| 1 | 原样一致 | 含中文、嵌套、null、特殊字符的语言包存一遍取一遍深比较完全一致 |
+| 2 | 未注册不兜底 | 未注册 `site_key` 返回 404 与明确错误，不返回默认档案 |
+| 3 | 隔离 | 两个 `site_key` 的语言包互不串；重复注册整条覆盖 |
+| 4 | 全量测试 | `python -m pytest tests -q` 全绿（当前基线 984） |
+| 5 | 质量闸 | `python scripts/quality_rules.py` 无 `[新增]` 违规，`doc-sync` 通过 |
+| 6 | 文档 | `api-reference.md` 新增章节说明寄存与取回方式 |
+
+把输出摘要贴进本文件第五节；提交钩子全过、不用 `--no-verify`。
+
+**完成后**：
+
+1. 在本文件第五节追加完成记录
+2. 推送 `work/ai-c` 分支
+3. 等「更新 git」指令，由分发方逐条验收
+
+> C-3b（前端迁移）待本任务定稿后按 2.5 节预下发，未标注「可开工」不得动手。
 
 ---
 
@@ -58,7 +124,8 @@
 
 | 编号 | 任务 | 状态 |
 |---|---|---|
-| C-3 | 站点档案迁移到客户端注册信息 | 待定，C-2 完成后再拆 |
+| C-3b | 站点档案前端迁移（`08g` 等） | 待 C-3a 定稿后按 2.5 节预下发 |
+| C-3a | 语言包寄存通道（后端） | 已下发为当前任务，见第二节 |
 
 ---
 
@@ -92,6 +159,7 @@
 - 分发方实测：`python -m pytest tests -q` 962 项全绿；改动 6 个文件全在可碰清单内；自建数据验证三来源合并（builtin 25 条、custom 5 条、client 按 site_key 展开）、两客户端同名指令各成一条、内置表置空不报错、单来源抛异常不影响整体、帮助文本与清单取自同一次读取，全部通过。
 - [答复] 你停在 C-3 未标注「可开工」处，处理正确。**C-3 暂不下发**：站点档案迁移涉及前端界面改造，范围还需要拆分清楚，拆完再写任务书。
 - [答复] 当前无待办任务，等 C-3 下发即可。
+- [答复] C-3 已拆为 C-3a（后端寄存通道）与 C-3b（前端迁移）。**C-3a 已下发为当前任务**，任务书见第二节，可直接开工；C-3b 待 C-3a 定稿后按 2.5 节预下发。
 
 ---
 
