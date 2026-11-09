@@ -250,9 +250,8 @@ def _h_refush(qq_client, openid, arg, msg_id):
     _reply(qq_client, openid, "已下发：刷新浏览器并打开抽屉")
 
 
-# 页面接管与通道绑定指令：实现分别在 command_pages.py / command_bind.py
-from .command_pages import handle_pages as _h_pages, handle_page as _h_page
-from .command_bind import handle_bind as _h_bind
+# 页面绑定指令：把当前通道固定到某个页面（实现见 command_bind.py）
+from .command_bind import handle_page as _h_page
 
 
 def _h_side(qq_client, openid, arg, msg_id):
@@ -358,9 +357,7 @@ _BUILTIN_HANDLERS = {
     "/refush": _h_refush,
     "/md": _h_md,
     "/side": _h_side,
-    "/pages": _h_pages,
     "/page": _h_page,
-    "/bind": _h_bind,
     "/settings": _h_settings,
     "/back": _h_back,
     "/reconnect": _h_reconnect,

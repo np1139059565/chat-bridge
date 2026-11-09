@@ -263,10 +263,10 @@ class RemoteBridge:
         # 按通道绑定过滤：某通道若绑定了站点，只推该站点的消息。
         # 这是「QQ 只跟 DeepSeek、企微只跟 GLM」的推送侧落实——
         # 未绑定站点的通道照旧接收全部消息（保持旧行为）。
-        site = str(payload.get("siteKey") or "")
+        page_url = str(payload.get("page_url") or "")
         # 三条通道按同一套规则调度，差异全在各自的适配器里
         if cfg.get("enabled") and self.client and self._wants(target, "qq", broadcast) \
-                and self._site_ok("qq", site):
+                and self._site_ok("qq", page_url):
             try:
                 self.qq_adapter.client = self.client
                 sent = push_pipeline.run(self.qq_adapter, payload, push, log)
@@ -274,7 +274,7 @@ class RemoteBridge:
                 log("QQ 推送异常（管线）：", e)
         wx = cfg.get("weixin") or {}
         if wx.get("enabled") and self.wx_client and self._wants(target, "weixin", broadcast) \
-                and self._site_ok("weixin", site):
+                and self._site_ok("weixin", page_url):
             try:
                 self.weixin_adapter.client = self.wx_client
                 push_pipeline.run(self.weixin_adapter, payload, push, log)
@@ -282,7 +282,7 @@ class RemoteBridge:
                 log("微信推送异常（管线）：", e)
         wc = cfg.get("wecom") or {}
         if wc.get("enabled") and self.wecom_client and self._wants(target, "wecom", broadcast) \
-                and self._site_ok("wecom", site):
+                and self._site_ok("wecom", page_url):
             try:
                 self.wecom_adapter.client = self.wecom_client
                 push_pipeline.run(self.wecom_adapter, payload, push, log)
@@ -291,28 +291,21 @@ class RemoteBridge:
         return sent
 
     @staticmethod
-    def _site_ok(channel, site):
-        """判断某通道本轮是否该接收这个站点的消息。
+    def _site_ok(channel, page_url):
+        """判断某通道本轮是否该接收这个页面发来的消息。
 
-        三条通道都是单窗口，同时开多个网页 AI 时若不按站点过滤，
-        各站回复会混进同一个聊天窗口。绑定后各看各的：
-        - 通道未绑定站点 → 全部接收（旧行为，不改变现有用法）；
-        - 通道已绑定 → 只接收该站点的消息；
-        - 消息未带站点（历史数据）→ 绑定通道也接收，避免丢历史。
+        三条通道都是单窗口，同时开多个网页 AI 时若不按页面过滤，
+        各页回复会混进同一个聊天窗口。绑定后各看各的（规则见
+        channel_binding.matches：未绑定全收、已绑定只收该页、
+        消息无页面时也收，避免丢历史）。
 
-        @param channel 通道名（qq / wecom / weixin）
-        @param site    本条消息所属站点；空串表示来源未知
+        @param channel  通道名（qq / wecom / weixin）
+        @param page_url 本条消息来源页面
         @returns {boolean} 是否推送
         """
         import channel_binding
-        bound = channel_binding.get(channel)
-        if not bound:
-            return True
-        if not site:
-            return True
-        return bound == site
+        return channel_binding.matches(channel, page_url)
 
-    @staticmethod
     def _wants(target, channel, broadcast=False):
         """判断某个通道本轮是否该推送。
 

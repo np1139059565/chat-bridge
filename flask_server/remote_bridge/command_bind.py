@@ -1,91 +1,88 @@
-"""远程桥接 —— 通道绑定指令（/bind）
+"""远程桥接 —— 页面绑定指令（/page）
 
-用途：把某条通道固定绑到某个网页 AI 站点，实现「QQ 只跟 DeepSeek、
-企微只跟 GLM」这类分工，两者互不干扰。
+用途：把「当前这条通道」固定到某个网页页面，实现「QQ 只跟 DeepSeek 页面、
+企微只跟 GLM 页面」这类分工，两者互不干扰。
 
-三条通道（qq / wecom / weixin）都是单窗口，同时开多个网页 AI 时若不绑定，
-各站回复会混进同一个聊天窗口；绑定后各看各的。
+三条通道（qq / wecom / weixin）都是单窗口。用户每次只关注某一个页面，
+所以只需要一条指令：列出在线页面、选一个绑上。
 
 用法：
-    /bind            查看当前绑定
-    /bind deepseek   把「当前这条通道」绑到 deepseek
-    /bind off        解除当前通道的绑定
+    /page            列出在线页面与当前绑定
+    /page 1          把「当前这条通道」绑到第 1 个页面
+    /page deepseek   按地址片段绑（唯一命中才算）
+    /page off        解除当前通道的绑定
 
-从 command_panel.py 抽出（该文件已在行数上限附近）。依赖单向：
-command_panel 引用本模块。
+设计说明：不再区分 /bind 与 /page——绑定对象就是页面本身。
+原先「站点绑定」需要先想站点再找页面，多一层概念且容易与页面接管打架。
 """
 
 from .command_dispatch import _reply, current_channel
 
 
-def _known_sites():
-    """取已配置的站点 id 列表（排序）。取不到时返回空列表。
+def handle_page(qq_client, openid, arg, msg_id):
+    """查看或切换当前通道绑定的页面。
 
-    @returns {list} 站点 id 列表
-    """
-    try:
-        import runtime
-        profiles = (runtime.CONFIG or {}).get("profiles") or {}
-        return sorted(profiles.keys())
-    except Exception:
-        return []
-
-
-def _show_binding(qq_client, openid, channel):
-    """回复当前绑定状态与可选站点。
-
-    @param channel 通道名
-    """
-    import channel_binding
-    bound = channel_binding.get(channel) or "（未绑定，接收全部站点）"
-    lines = ["当前通道：" + channel, "绑定站点：" + bound, ""]
-    ids = _known_sites()
-    if ids:
-        lines.append("可选站点：" + " / ".join(ids))
-    lines.append("用法：/bind 站点名  或  /bind off")
-    _reply(qq_client, openid, "\n".join(lines))
-
-
-def handle_bind(qq_client, openid, arg, msg_id):
-    """绑定或查看当前通道的站点绑定。
-
-    绑定的作用范围是「当前这条通道」：在 QQ 里敲就绑 QQ，在企微里敲就绑企微，
-    互不影响。这正是用户要的「QQ 跟 DeepSeek、企微跟 GLM」。
+    作用范围是「当前这条通道」：在 QQ 里敲就绑 QQ，在企微里敲就绑企微。
     """
     import channel_binding
     channel = current_channel()
     if not channel:
-        _reply(qq_client, openid, "无法确定当前通道，绑定指令只在 QQ / 企微 / 微信里可用")
+        _reply(qq_client, openid, "无法确定当前通道，页面绑定只在 QQ / 企微 / 微信里可用")
         return
-    sel = str(arg or "").strip().lower()
-    # 不带参数：查看当前绑定与可选站点
+    sel = str(arg or "").strip()
     if not sel:
-        _show_binding(qq_client, openid, channel)
+        _show_pages(qq_client, openid, channel)
         return
-    # off：解除绑定
-    if sel == "off":
+    if sel.lower() == "off":
         channel_binding.bind(channel, "")
         _save_bindings()
-        _reply(qq_client, openid, "已解除绑定：%s 通道将接收全部站点的消息" % channel)
+        _reply(qq_client, openid, "已解除绑定：%s 通道将接收全部页面的消息" % channel)
         return
-    _bind_site(qq_client, openid, channel, sel)
+    _bind_page(qq_client, openid, channel, sel)
 
 
-def _bind_site(qq_client, openid, channel, site):
-    """把通道绑到指定站点（先校验站点存在）。
+def _show_pages(qq_client, openid, channel):
+    """回复在线页面列表与当前绑定。
 
     @param channel 通道名
-    @param site    站点 id
     """
     import channel_binding
-    ids = _known_sites()
-    if ids and site not in ids:
-        _reply(qq_client, openid, "没有站点「%s」。可选：%s" % (site, " / ".join(ids)))
+    import page_registry
+    pages = page_registry.online()
+    bound = channel_binding.get(channel)
+    lines = ["当前通道：" + channel,
+             "绑定页面：" + (bound or "（未绑定，接收全部页面）"), ""]
+    if not pages:
+        lines.append("当前没有在线页面。请先打开网页并点开抽屉。")
+    else:
+        lines.append("【在线页面 %d 个】" % len(pages))
+        for i, url in enumerate(pages, 1):
+            mark = " ← 当前绑定" if url == bound else ""
+            lines.append("%d. %s%s" % (i, url, mark))
+        lines.append("")
+        lines.append("用 /page 序号 绑定，/page off 解除。")
+    _reply(qq_client, openid, "\n".join(lines))
+
+
+def _bind_page(qq_client, openid, channel, sel):
+    """把通道绑到指定页面（先解析选择器）。
+
+    @param channel 通道名
+    @param sel     序号或地址片段
+    """
+    import channel_binding
+    import page_registry
+    url, err = page_registry.resolve(sel)
+    if err:
+        _reply(qq_client, openid, "绑定失败：" + err + "\n用 /page 查看在线页面。")
         return
-    channel_binding.bind(channel, site)
+    if not url:
+        _reply(qq_client, openid, "绑定失败：页面已离线。\n用 /page 查看在线页面。")
+        return
+    channel_binding.bind(channel, url)
     _save_bindings()
     _reply(qq_client, openid,
-           "已绑定：%s 通道 ↔ %s\n此后这条通道只收发该站点的消息。" % (channel, site))
+           "已绑定：%s 通道 →\n%s\n此后这条通道只收发该页面的消息。" % (channel, url))
 
 
 def _save_bindings():
@@ -102,6 +99,6 @@ def _save_bindings():
     except Exception as e:
         try:
             import app_log
-            app_log.warn("[bridge][bind]", "保存绑定失败（内存已生效）：", e)
+            app_log.warn("[bridge][page]", "保存绑定失败（内存已生效）：", e)
         except Exception:
             pass

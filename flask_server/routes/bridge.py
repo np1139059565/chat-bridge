@@ -114,7 +114,11 @@ def bridge_report():
         from web_bridge import web_mirror
         # siteKey 由内容脚本随上报一并带来（抽屉侧从站点档案得知），
         # 手机端据此按站点分流，避免多 AI 的消息混在一条时间线里。
-        web_mirror.mirror_report(data.get("messages") or [], data.get("siteKey") or "")
+        # 站点标识统一用 profileId（站点 id，如 deepseek），不用 siteKey（域名）。
+        # 手机端切换器展示与过滤用的都是站点 id，两边口径必须一致，
+        # 否则消息按域名打标、按 id 查询，永远对不上（表现为切站后一片空白）。
+        web_mirror.mirror_report(data.get("messages") or [],
+                                 data.get("profileId") or data.get("siteKey") or "")
     except Exception as e:
         app_log.warn("[web]", "镜像上报失败：", e)
     # QQ 推送放后台线程执行，请求立即返回：合成 + 逐条发送是重活，

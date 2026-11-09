@@ -12,13 +12,12 @@
 <!-- 顶栏：标题 + 连接状态 -->
 <div class="topbar">
   <span class="title">网页版机器人</span>
+  <!-- 站点下拉：多网页 AI 并存时一次只看一个站；放在顶栏不额外占高度 -->
+  <select id="siteSelect" class="site-select" title="选择要查看的网页 AI"></select>
   <span class="status"><span class="dot" id="dot"></span><span id="statusText">连接中…</span></span>
   <!-- 心跳开关：默认关闭。开启后每秒向服务端推一条诊断日志，供排查卡顿 -->
   <button id="btnHeartbeat" class="hb-btn" title="心跳日志（排查卡顿时开启）">心跳：关</button>
 </div>
-
-<!-- 站点切换器：多网页 AI 并存时一次只看一个站的对话 -->
-<div class="site-bar" id="siteBar"></div>
 
 <!-- 消息列表：脚本倒序插入，最新永远在最上面 -->
 <div class="list" id="list"></div>

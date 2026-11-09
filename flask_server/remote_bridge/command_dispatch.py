@@ -150,20 +150,14 @@ def _dispatch(action, params=None, openid="", screenshot=False):
                       组合指令执行期间（_reply_ctx.suppress）强制关闭，避免大量截图刷屏。
     """
     import card_bus
-    import page_registry
     import channel_binding
     payload = {"action": action, "params": params or {}}
     want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
-    # 页面归属：两条判据，通道绑定优先于全局接管页。
-    #
-    # 为什么优先通道绑定：QQ 与企微都是单窗口，用户可能要求「QQ 只跟 DeepSeek、
-    # 企微只跟 GLM」。此时全局接管页只能是一个，无法同时满足两条通道，
-    # 必须按通道各自解析目标页面，两者才互不干扰。
-    # 通道未绑定时退回全局接管页；两者都没配则不限页面（旧行为）。
+    # 页面归属：指令只投给「当前通道绑定的那个页面」。
+    # QQ 与企微都是单窗口，绑定后各看各的页面，互不干扰；
+    # 未绑定的通道不限页面（旧行为，任何页面的抽屉都能取）。
     channel = current_channel()
-    target = channel_binding.resolve_target_page(channel) if channel else ""
-    if not target:
-        target = page_registry.get_active()
+    target = channel_binding.get(channel) if channel else ""
     if target:
         payload["target_page"] = target
     card = card_bus.command_bus.create(

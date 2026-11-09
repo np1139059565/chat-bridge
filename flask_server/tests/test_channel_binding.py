@@ -1,12 +1,12 @@
-"""通道绑定与按通道隔离的测试。
+"""通道与页面绑定的测试。
 
 背景：QQ 与企微都是单窗口，同时开多个网页 AI 时，两者的消息会混在
-同一片页面池里。绑定后「QQ 只跟 DeepSeek、企微只跟 GLM」，互不干扰。
+同一片页面池里。绑定后「QQ 只跟 DeepSeek 页面、企微只跟 GLM 页面」，
+互不干扰。绑定对象就是页面本身（不再区分站点与页面两层概念）。
 
 验证目标：
 1. 绑定表的读写、解除、批量载入；
-2. 通道解析目标页面的规则（接管页优先、无页面退回空串）；
-3. 推送侧的站点过滤（未绑定全收、绑定只收本站点、未知站点仍收）。
+2. 推送过滤规则（未绑定全收、已绑定只收该页、无页面的历史消息也收）。
 """
 import os
 import sys
@@ -16,19 +16,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
 import channel_binding
-import page_registry
+
+DEEPSEEK_PAGE = "https://chat.deepseek.com/chat/abc"
+GLM_PAGE = "https://chatglm.cn/main/xyz"
 
 
 class _BindBase(unittest.TestCase):
-    """每个用例前清空绑定与页面表，互不干扰。"""
+    """每个用例前清空绑定，互不干扰。"""
 
     def setUp(self):
         channel_binding.reset()
-        page_registry.reset()
 
     def tearDown(self):
         channel_binding.reset()
-        page_registry.reset()
 
 
 class TestBindingTable(_BindBase):
@@ -38,112 +38,71 @@ class TestBindingTable(_BindBase):
         self.assertEqual(channel_binding.get("qq"), "")
 
     def test_绑定后能读回(self):
-        self.assertTrue(channel_binding.bind("qq", "deepseek"))
-        self.assertEqual(channel_binding.get("qq"), "deepseek")
+        self.assertTrue(channel_binding.bind("qq", DEEPSEEK_PAGE))
+        self.assertEqual(channel_binding.get("qq"), DEEPSEEK_PAGE)
 
     def test_两条通道各自独立(self):
         """这是本次需求的核心：QQ 与企微互不影响。"""
-        channel_binding.bind("qq", "deepseek")
-        channel_binding.bind("wecom", "glm")
-        self.assertEqual(channel_binding.get("qq"), "deepseek")
-        self.assertEqual(channel_binding.get("wecom"), "glm")
+        channel_binding.bind("qq", DEEPSEEK_PAGE)
+        channel_binding.bind("wecom", GLM_PAGE)
+        self.assertEqual(channel_binding.get("qq"), DEEPSEEK_PAGE)
+        self.assertEqual(channel_binding.get("wecom"), GLM_PAGE)
 
     def test_空串解除绑定(self):
-        channel_binding.bind("qq", "deepseek")
+        channel_binding.bind("qq", DEEPSEEK_PAGE)
         self.assertTrue(channel_binding.bind("qq", ""))
         self.assertEqual(channel_binding.get("qq"), "")
 
     def test_重复绑定同一值返回假(self):
-        channel_binding.bind("qq", "deepseek")
-        self.assertFalse(channel_binding.bind("qq", "deepseek"))
+        channel_binding.bind("qq", DEEPSEEK_PAGE)
+        self.assertFalse(channel_binding.bind("qq", DEEPSEEK_PAGE))
 
     def test_空通道名被忽略(self):
-        self.assertFalse(channel_binding.bind("", "deepseek"))
+        self.assertFalse(channel_binding.bind("", DEEPSEEK_PAGE))
 
     def test_批量载入(self):
-        channel_binding.load_from_config({"qq": "deepseek", "wecom": "glm"})
-        self.assertEqual(channel_binding.get("qq"), "deepseek")
-        self.assertEqual(channel_binding.get("wecom"), "glm")
+        channel_binding.load_from_config({"qq": DEEPSEEK_PAGE, "wecom": GLM_PAGE})
+        self.assertEqual(channel_binding.get("qq"), DEEPSEEK_PAGE)
+        self.assertEqual(channel_binding.get("wecom"), GLM_PAGE)
 
     def test_载入时非法项被跳过(self):
-        channel_binding.load_from_config({"qq": "", "": "glm", "wecom": "glm"})
+        channel_binding.load_from_config({"qq": "", "": GLM_PAGE, "wecom": GLM_PAGE})
         self.assertEqual(channel_binding.get("qq"), "")
-        self.assertEqual(channel_binding.get("wecom"), "glm")
+        self.assertEqual(channel_binding.get("wecom"), GLM_PAGE)
 
     def test_载入非字典不报错(self):
         channel_binding.load_from_config(None)
         self.assertEqual(channel_binding.get("qq"), "")
 
 
-class TestResolveTargetPage(_BindBase):
-    """通道 → 页面地址的解析。"""
+class TestMatches(_BindBase):
+    """推送侧的页面过滤规则。"""
 
-    def test_未绑定返回空串(self):
-        self.assertEqual(channel_binding.resolve_target_page("qq"), "")
+    def test_未绑定通道接收全部页面(self):
+        self.assertTrue(channel_binding.matches("qq", DEEPSEEK_PAGE))
+        self.assertTrue(channel_binding.matches("qq", GLM_PAGE))
 
-    def test_绑定但无在线页面返回空串(self):
-        """无在线页面时退回广播，不卡住消息。"""
-        channel_binding.bind("qq", "deepseek")
-        self.assertEqual(channel_binding.resolve_target_page("qq"), "")
-
-    def test_绑定且有在线页面时解析出地址(self):
-        channel_binding.bind("qq", "deepseek")
-        page_registry.touch("https://chat.deepseek.com/chat/1")
-        url = channel_binding.resolve_target_page("qq")
-        self.assertIn("deepseek", url)
-
-    def test_两条通道解析到各自的页面(self):
-        """QQ 解析到 deepseek 页、企微解析到 glm 页，互不串。"""
-        channel_binding.bind("qq", "deepseek")
-        channel_binding.bind("wecom", "glm")
-        page_registry.touch("https://chat.deepseek.com/chat/1")
-        page_registry.touch("https://chatglm.cn/main/2")
-        self.assertIn("deepseek", channel_binding.resolve_target_page("qq"))
-        self.assertIn("chatglm", channel_binding.resolve_target_page("wecom"))
-
-    def test_接管页优先于首个在线页(self):
-        channel_binding.bind("qq", "deepseek")
-        page_registry.touch("https://chat.deepseek.com/chat/aaa")
-        page_registry.touch("https://chat.deepseek.com/chat/zzz")
-        page_registry.set_active("https://chat.deepseek.com/chat/zzz")
-        self.assertEqual(channel_binding.resolve_target_page("qq"),
-                         "https://chat.deepseek.com/chat/zzz")
-
-
-class TestSiteFilter(_BindBase):
-    """推送侧的站点过滤规则。"""
-
-    def _ok(self, channel, site):
-        """复刻 RemoteBridge._site_ok 的判定逻辑。"""
-        bound = channel_binding.get(channel)
-        if not bound:
-            return True
-        if not site:
-            return True
-        return bound == site
-
-    def test_未绑定通道接收全部站点(self):
-        self.assertTrue(self._ok("qq", "deepseek"))
-        self.assertTrue(self._ok("qq", "glm"))
-
-    def test_绑定通道只收本站点(self):
-        channel_binding.bind("qq", "deepseek")
-        self.assertTrue(self._ok("qq", "deepseek"))
-        self.assertFalse(self._ok("qq", "glm"))
+    def test_绑定通道只收该页面(self):
+        channel_binding.bind("qq", DEEPSEEK_PAGE)
+        self.assertTrue(channel_binding.matches("qq", DEEPSEEK_PAGE))
+        self.assertFalse(channel_binding.matches("qq", GLM_PAGE))
 
     def test_两条通道各收各的(self):
-        """同一条消息：QQ 收 deepseek，企微收 glm，交叉收不到。"""
-        channel_binding.bind("qq", "deepseek")
-        channel_binding.bind("wecom", "glm")
-        self.assertTrue(self._ok("qq", "deepseek"))
-        self.assertFalse(self._ok("qq", "glm"))
-        self.assertTrue(self._ok("wecom", "glm"))
-        self.assertFalse(self._ok("wecom", "deepseek"))
+        """同一条消息：QQ 收 DeepSeek 页，企微收 GLM 页，交叉收不到。"""
+        channel_binding.bind("qq", DEEPSEEK_PAGE)
+        channel_binding.bind("wecom", GLM_PAGE)
+        self.assertTrue(channel_binding.matches("qq", DEEPSEEK_PAGE))
+        self.assertFalse(channel_binding.matches("qq", GLM_PAGE))
+        self.assertTrue(channel_binding.matches("wecom", GLM_PAGE))
+        self.assertFalse(channel_binding.matches("wecom", DEEPSEEK_PAGE))
 
-    def test_未知站点的消息绑定通道也接收(self):
-        """历史数据没站点标记，绑定通道也收，避免丢历史。"""
-        channel_binding.bind("qq", "deepseek")
-        self.assertTrue(self._ok("qq", ""))
+    def test_无页面来源的消息绑定通道也接收(self):
+        """历史数据没页面标记，绑定通道也收，避免丢历史。"""
+        channel_binding.bind("qq", DEEPSEEK_PAGE)
+        self.assertTrue(channel_binding.matches("qq", ""))
+
+    def test_未绑定时无页面来源也接收(self):
+        self.assertTrue(channel_binding.matches("qq", ""))
 
 
 if __name__ == "__main__":

@@ -296,7 +296,7 @@
     // 发送超时：8 秒未返回即中断，避免按钮永久无反馈。
     var sctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
     var stimer = setTimeout(function () { if (sctrl) sctrl.abort(); }, 8000);
-    var _sopts = { headers: { 'Content-Type': 'application/json' } };
+    var _sopts = { headers: { 'Content-Type': 'application/json' } }, _site = window.WebSite ? window.WebSite.getActive() : '';
     if (sctrl) _sopts.signal = sctrl.signal;
     inputEl.value = '';
     autoGrow();
@@ -304,13 +304,13 @@
     if (snapshotImgs.length > 0) {
       // 有图片：图文一次性提交（多张一并），避免图片被丢弃
       _sopts.method = 'POST';
-      _sopts.body = JSON.stringify({ dataUrls: snapshotImgs, text: text });
+      _sopts.body = JSON.stringify({ dataUrls: snapshotImgs, text: text, site: _site });
       fetch('/api/web/image', _sopts)
         .then(function (r) { _done(); finish(r, null); })
         .catch(function (e) { _done(); finish(null, e); });
     } else {
       _sopts.method = 'POST';
-      _sopts.body = JSON.stringify({ text: text });
+      _sopts.body = JSON.stringify({ text: text, site: _site });
       fetch('/api/web/send', _sopts)
         .then(function (r) { _done(); finish(r, null); })
         .catch(function (e) { _done(); finish(null, e); });

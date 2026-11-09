@@ -347,40 +347,17 @@ body {
   font-size: 14px; cursor: pointer;
 }
 
-/* ===== 站点切换器（多网页 AI 并存时一次只看一个站） ===== */
-.site-bar {
-  display: flex;
-  gap: 8px;
-  padding: 8px 12px;
-  overflow-x: auto;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--line, #262a33);
-  background: var(--bg);
-}
-.site-chip {
-  flex: 0 0 auto;
-  padding: 5px 12px;
+/* ===== 站点下拉（顶栏内，不额外占高度） ===== */
+.site-select {
+  margin-left: 10px;
+  padding: 3px 6px;
   font-size: 13px;
-  border-radius: 14px;
+  max-width: 130px;
+  border-radius: 6px;
   border: 1px solid var(--line, #262a33);
-  background: transparent;
-  color: var(--text-dim, #9aa3b2);
-  cursor: pointer;
+  background: var(--bg-soft, #171a21);
+  color: var(--text, #e6e8ee);
+  /* 移动端原生下拉外观统一，避免各浏览器差异 */
+  -webkit-appearance: none;
+  appearance: none;
 }
-.site-chip.on {
-  background: var(--accent, #3b6cf6);
-  border-color: var(--accent, #3b6cf6);
-  color: #fff;
-}
-/* 有在线页面的站点加一个小圆点，提示可切换 */
-.site-chip.live::after {
-  content: '';
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-left: 5px;
-  border-radius: 50%;
-  background: #35c56a;
-  vertical-align: middle;
-}
-.site-empty { font-size: 12px; color: var(--text-dim, #9aa3b2); }

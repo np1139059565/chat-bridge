@@ -93,32 +93,36 @@
   }
 
   /**
-   * 把站点选择器渲染到指定容器。
-   * 每个站点一个按钮，带在线状态点；当前选中的高亮。
-   * @param {Element} box 容器元素
-   * @param {Function} onPick 选中回调，入参为站点 id
+   * 把站点选择器渲染为顶栏下拉框。
+   *
+   * 用下拉而非一排按钮：站点多时会撑出一条独立横向滚动栏，白白占掉一行高度；
+   * 下拉在顶栏内只占一小块，站点再多也不挤。
+   * 选项文本带在线绿点提示（●=有在线页面）。
+   *
+   * @param sel   select 元素
+   * @param onPick 选中回调，入参为站点 id
    */
-  function render(box, onPick) {
-    if (!box) return;
-    box.innerHTML = '';
+  function render(sel, onPick) {
+    if (!sel) return;
+    sel.innerHTML = '';
     if (!sites.length) {
-      var empty = document.createElement('span');
-      empty.className = 'site-empty';
-      empty.textContent = '未配置站点';
-      box.appendChild(empty);
+      var opt0 = document.createElement('option');
+      opt0.textContent = '未配置站点';
+      opt0.value = '';
+      sel.appendChild(opt0);
       return;
     }
     sites.forEach(function (s) {
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'site-chip' + (s.id === active ? ' on' : '') + (s.online ? ' live' : '');
-      btn.textContent = s.label || s.id;
-      btn.title = s.id + (s.online ? '（在线）' : '（无在线页面）');
-      btn.addEventListener('click', function () {
-        if (typeof onPick === 'function') onPick(s.id);
-      });
-      box.appendChild(btn);
+      var opt = document.createElement('option');
+      opt.value = s.id;
+      // 在线站点带绿点，一眼看出哪个页面正开着
+      opt.textContent = (s.online ? '● ' : '') + (s.label || s.id);
+      if (s.id === active) opt.selected = true;
+      sel.appendChild(opt);
     });
+    sel.onchange = function () {
+      if (typeof onPick === 'function') onPick(sel.value);
+    };
   }
 
   // 启动即恢复上次选择，不等网络：这样首屏请求就能带上正确的站点
@@ -130,10 +134,10 @@
    * 比逐处重置更不容易漏。
    */
   function boot() {
-    var box = document.getElementById('siteBar');
-    if (!box) return;
+    var sel = document.getElementById('siteSelect');
+    if (!sel) return;
     load(function () {
-      render(box, function (id) {
+      render(sel, function (id) {
         if (setActive(id)) location.reload();
       });
     });

@@ -1,61 +1,59 @@
-"""通道与站点的绑定表 —— 每条通道各看各的网页 AI
+"""通道与页面的绑定表 —— 每条单窗口通道各看各的网页 AI
 
-解决的问题：QQ 与企微都是单窗口，但同时开多个网页 AI 时，
-两者的消息会混在同一片页面池里，无法做到「QQ 只跟 DeepSeek 对话、
-企微只跟 GLM 对话」。
+解决的问题：QQ 与企微都是单窗口，同时开多个网页 AI 时，两者的消息会混在
+同一片页面池里，无法做到「QQ 只跟 DeepSeek 页面、企微只跟 GLM 页面」。
 
-本模块维护「通道 → 站点」的绑定：
-- 收消息时按来源通道查出绑定站点，据此把消息定向投给该站点的页面；
-- 推消息时按通道绑定过滤，只推属于本站点的回复。
+设计取向（用户拍板）：只保留一套指令，绑定的是**页面**而非站点。
+用户每次只关注某一个页面，直接在页面列表里选一个即可，不必先想站点再找页面。
 
 与 page_registry 的分工：
-- page_registry 管「当前接管哪个页面」（全局、手动切换、影响网页端）；
-- 本模块管「哪条通道固定跟哪个站点」（按通道、持久化、互不干扰）。
+- page_registry 记录「哪些页面在线」；
+- 本模块记录「哪条通道固定看哪个页面」（按通道、持久化、互不干扰）。
 
-持久化：绑定关系写进运行时配置（本机偏好、不入库），重启后保持。
+持久化：绑定关系写进运行时配置，重启后保持。
 """
 import threading
 
-# 绑定表：{通道名: 站点 id}。通道名为适配器的 name（qq / wecom / weixin）。
-# 未绑定的通道不做过滤，保持旧行为（所有站点消息都推给它）。
+# 绑定表：{通道名: 页面地址}。通道名为适配器的 name（qq / wecom / weixin）。
+# 未绑定的通道不做过滤，保持旧行为（所有页面消息都推给它）。
 _bindings = {}
 _lock = threading.Lock()
 
 
 def get(channel):
-    """取某条通道绑定的站点 id；未绑定时返回空串。
+    """取某条通道绑定的页面地址；未绑定时返回空串。
 
     @param channel 通道名（qq / wecom / weixin）
-    @returns {string} 站点 id；未绑定为空串
+    @returns {string} 页面地址；未绑定为空串
     """
     with _lock:
         return str(_bindings.get(str(channel or "")) or "")
 
 
-def bind(channel, site_key):
-    """绑定通道到站点。
+def bind(channel, page_url):
+    """绑定通道到页面。
 
     @param channel  通道名
-    @param site_key 站点 id；传空串表示解除绑定
+    @param page_url 页面地址；传空串表示解除绑定
     @returns {boolean} 是否发生了改变
     """
     ch = str(channel or "").strip()
     if not ch:
         return False
-    site = str(site_key or "").strip()
+    page = str(page_url or "").strip()
     with _lock:
         old = _bindings.get(ch, "")
-        if site:
-            _bindings[ch] = site
+        if page:
+            _bindings[ch] = page
         else:
             _bindings.pop(ch, None)
-        return old != site
+        return old != page
 
 
 def all_bindings():
     """取全部绑定（副本）。
 
-    @returns {dict} {通道名: 站点 id}
+    @returns {dict} {通道名: 页面地址}
     """
     with _lock:
         return dict(_bindings)
@@ -64,16 +62,16 @@ def all_bindings():
 def load_from_config(cfg):
     """从配置字典载入绑定表（启动时调用）。
 
-    @param cfg 形如 {"qq": "deepseek", "wecom": "glm"} 的字典
+    @param cfg 形如 {"qq": "https://chat.deepseek.com/..."} 的字典
     """
     with _lock:
         _bindings.clear()
         if isinstance(cfg, dict):
-            for ch, site in cfg.items():
+            for ch, page in cfg.items():
                 ch = str(ch or "").strip()
-                site = str(site or "").strip()
-                if ch and site:
-                    _bindings[ch] = site
+                page = str(page or "").strip()
+                if ch and page:
+                    _bindings[ch] = page
 
 
 def reset():
@@ -82,46 +80,22 @@ def reset():
         _bindings.clear()
 
 
-# 站点 id → 域名片段。键为档案 id，值为该站点页面地址里出现的特征串。
-# 只登记「id 与域名主体不一致」的站点；其余直接用 id 本身匹配。
-SITE_HOST_HINTS = {
-    "glm": "chatglm", "wenxin": "wenxin", "deepseek": "deepseek",
-    "qianwen": "qianwen", "yuanbao": "yuanbao",
-    "xinghuo": "xinghuo", "kimi": "kimi",
-}
+def matches(channel, page_url):
+    """判断某个页面发来的消息是否该推给该通道。
 
+    规则（宁多推不漏推）：
+    - 通道未绑定 → 全部接收（旧行为）；
+    - 通道已绑定 → 只接收该页面的消息；
+    - 消息未带页面（历史数据）→ 绑定通道也接收，避免丢历史。
 
-def _pick_page(site, online, active):
-    """在在线页面里挑一个属于该站点的（接管页优先）。
-
-    @param site   站点 id
-    @param online 在线页面列表
-    @param active 当前接管页面；空串表示未接管
-    @returns {string} 页面地址；该站点无在线页面时为空串
+    @param channel  通道名
+    @param page_url 消息来源页面
+    @returns {boolean} 是否推送
     """
-    frag = SITE_HOST_HINTS.get(site, site)
-    candidates = [u for u in online if frag in u]
-    if not candidates:
-        return ""
-    if active and active in candidates:
-        return active
-    return candidates[0]
-
-
-def resolve_target_page(channel):
-    """把通道绑定解析为该站点当前在线的页面地址。
-
-    解析顺序：该站点的接管页优先，否则取第一个在线页面；
-    无在线页面则返回空串（退回广播，不卡住消息）。
-
-    @param channel 通道名
-    @returns {string} 页面地址；无法确定为空串
-    """
-    site = get(channel)
-    if not site:
-        return ""
-    try:
-        import page_registry
-        return _pick_page(site, page_registry.online(), page_registry.get_active())
-    except Exception:
-        return ""
+    bound = get(channel)
+    if not bound:
+        return True
+    src = str(page_url or "").strip()
+    if not src:
+        return True
+    return bound == src
