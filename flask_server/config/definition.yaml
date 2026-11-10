@@ -87,6 +87,21 @@ app:
       split: false
       thinking: '[class*=thinking-container]'
       userContent: .segment-container
+    perplexity:
+      assistantContent: div.prose
+      assistantMark: '[class*="group/final-text"]'
+      container: 'div[class*="max-w-threadContentWidth"][class*="gap-4"]'
+      convIdUrl: /session/([0-9a-zA-Z-]+)
+      hosts:
+      - perplexity.ai
+      - www.perplexity.ai
+      inputSelector: div[contenteditable="true"][role="textbox"]
+      item: '[class*="group/partition"]'
+      label: Perplexity
+      newConversation: ''
+      sendButton: button[aria-label="提交"]
+      split: false
+      userContent: '[class*="whitespace-pre-wrap"]'
     qianwen:
       assistantContent: .qk-markdown
       assistantItem: .chat-answers-card-wrap
