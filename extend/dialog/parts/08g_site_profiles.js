@@ -43,11 +43,11 @@
         const val = fields[k];
         if (k === 'split') { entry[k] = !!val; return; }
         if (k === 'hosts' || (D.PROFILE_FIELD_META[k] && D.PROFILE_FIELD_META[k].kind === 'list')) {
-          entry[k] = String(val == null ? '' : val).split('\n')
+          entry[k] = toText(val).split('\n')
             .map(function (s) { return s.trim(); }).filter(Boolean);
           return;
         }
-        entry[k] = (val === true || val === false) ? val : String(val == null ? '' : val);
+        entry[k] = (val === true || val === false) ? val : toText(val);
       });
       if (!entry.label) entry.label = pid;
       if (!entry.hosts) entry.hosts = [];
@@ -111,7 +111,7 @@
   function renderSiteCard(ctx, pid) {
     const draft = ctx.siteProfDraft[pid] || {};
     const expanded = !!ctx.siteProfExpanded[pid];
-    const hosts = String(draft.hosts || '').split('\n')
+    const hosts = toText(draft.hosts || '').split('\n')
       .map((s) => s.trim()).filter(Boolean);
     // 删除两步确认：3 秒内二次点击才生效（armed 态按钮变红提示）
     const delArm = ctx.siteProfDeleting[pid] &&
@@ -287,7 +287,7 @@
       Object.keys(src).forEach(function (k) {
         const val = src[k];
         if (k === 'hosts' || (D.PROFILE_FIELD_META[k] && D.PROFILE_FIELD_META[k].kind === 'list')) {
-          d[k] = Array.isArray(val) ? val.join('\n') : String(val == null ? '' : val);
+          d[k] = Array.isArray(val) ? val.join('\n') : toText(val);
           return;
         }
         d[k] = val;
