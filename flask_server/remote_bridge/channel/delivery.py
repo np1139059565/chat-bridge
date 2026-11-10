@@ -15,6 +15,10 @@
 
 卡片类型沿用既有的 qq-image / qq-file / external-call：
 抽屉早已按这些类型消费，沿用可避免前端同步改动。
+
+目标页面归属：三类卡片统一在投递层补齐 target_page。显式传入的优先；
+未传入时按来源通道查绑定表。绑定表是「哪条通道看哪个页面」的唯一事实
+来源，各网关调用点因此不必各自重复一遍查找。
 """
 import os
 
@@ -31,6 +35,66 @@ _IMAGE_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
 def log(*args):
     """统一前缀日志：终端 + 按天落盘。"""
     bridge_log.write("[bridge][delivery]", *args)
+
+
+def _resolve_target_page(source, target_page):
+    """确定卡片的目标页面地址。
+
+    显式传入的目标页优先；未传入时按来源通道查绑定表自动补齐；
+    通道未绑定时返回空串，卡片维持不限页面的行为。
+
+    @param source      通道标识（qq / wecom / weixin / web）
+    @param target_page 调用方显式指定的目标页；空串表示未指定
+    @returns {string} 目标页面地址；无法确定时为空串
+    """
+    # 显式指定的页面优先，网页版上传图片走这条
+    page = str(target_page or "").strip()
+    if page:
+        return page
+    # 未指定时以来源通道查绑定表；导入失败只记日志，不影响卡片投递
+    try:
+        import channel_binding
+        return str(channel_binding.get(source) or "").strip()
+    except Exception as e:
+        log("按通道解析目标页面失败：", e)
+        return ""
+
+
+def _take_target_page(opts):
+    """从可选扩展里取目标页面；未知键记日志后忽略。
+
+    @param opts 关键字扩展字典
+    @returns {string} 目标页面地址；未指定时为空串
+    """
+    # 只认 target_page，其余键记一条日志，避免拼错参数被静默吞掉
+    page = str((opts or {}).get('target_page') or '').strip()
+    unknown = [k for k in (opts or {}) if k != 'target_page']
+    if unknown:
+        log('投递选项含未知键，已忽略：', ','.join(unknown))
+    return page
+
+
+def _text_envelope(source, openid, text, msg_id, from_voice):
+    """拼装 external-call 信封，字段结构由前端识别，不可随意调整。
+
+    @param source     通道标识
+    @param openid     接收方标识
+    @param text       正文
+    @param msg_id     被动回复引用的用户消息 id
+    @param from_voice 是否由语音确认投递
+    @returns {dict} 信封字典
+    """
+    import time
+    return {
+        'type': 'external-call',
+        'nonce': source + '-' + str(int(time.time() * 1000)),
+        'request': text,
+        'source': source,
+        'openid': openid,
+        'msg_id': msg_id or '',
+        'from_voice': bool(from_voice),
+        'page_url': '',
+    }
 
 
 def to_data_url(img_path):
@@ -54,7 +118,8 @@ def to_data_url(img_path):
     return "data:%s;base64,%s" % (mime, base64.b64encode(raw).decode("ascii"))
 
 
-def deliver_images(source, openid, sources=None, text="", title=None, extra=None):
+def deliver_images(source, openid, sources=None, text="", title=None, extra=None,
+                   **opts):
     """把一组图片投成**一张**卡片，可附带同消息文字。
 
     多图必须合并且只投一张：拆成多张会让前端逐张贴图，
@@ -71,6 +136,7 @@ def deliver_images(source, openid, sources=None, text="", title=None, extra=None
     @param text    随图附带的文字；为空时补「用户截图」给模型上下文
     @param title   卡片标题；缺省按通道名生成
     @param extra   附加到 payload 的字段（如网页版的 image_names）
+    @param opts    可选扩展：target_page 指定目标页面，缺省按来源通道查绑定表补齐
     @returns 卡片 id；无可用图片时返回空串
     """
     # 逐个识别来源形态：data: 开头是已转好的 dataURL，其余按本地路径读取。
@@ -104,12 +170,15 @@ def deliver_images(source, openid, sources=None, text="", title=None, extra=None
     if extra:
         payload.update(extra)
     try:
+        # 目标页面：显式指定优先，未指定时按来源通道查绑定表补齐
+        page = _resolve_target_page(source, _take_target_page(opts))
         card = card_bus.bus.create(
             source=source,
             card_type="qq-image",
             title=title or (source + " 图片"),
             content="（图片，自动贴入网页 AI 输入框）",
             payload=payload,
+            target_page=page,
         )
         log("已投递图片卡片", card.id[:8], "张数=%d" % len(urls))
         return card.id
@@ -118,22 +187,25 @@ def deliver_images(source, openid, sources=None, text="", title=None, extra=None
         return ""
 
 
-def deliver_file(source, openid, path, name="", title=None):
+def deliver_file(source, openid, path, name="", title=None, **opts):
     """把一个本地文件投成卡片，卡片正文写明路径与体积。
 
     文件是二进制，模型看不见也不需要看见，它需要的是路径。
 
-    @param source 通道标识
-    @param openid 接收方标识
-    @param path   本地文件路径
-    @param name   展示用文件名；缺省取基本名
-    @param title  卡片标题；缺省按通道名生成
+    @param source      通道标识
+    @param openid      接收方标识
+    @param path        本地文件路径
+    @param name        展示用文件名；缺省取基本名
+    @param title       卡片标题；缺省按通道名生成
+    @param opts 可选扩展：target_page 指定目标页面，缺省按来源通道查绑定表补齐
     @returns 卡片 id；失败返回空串
     """
     name = name or os.path.basename(path)
     size = os.path.getsize(path) if os.path.exists(path) else 0
     body = "用户从%s发来文件：%s（%d 字节），已保存到 %s" % (source, name, size, path)
     try:
+        # 目标页面与文字、图片卡片一致，统一由投递层解析
+        page = _resolve_target_page(source, _take_target_page(opts))
         card = card_bus.bus.create(
             source=source,
             card_type="qq-file",
@@ -141,6 +213,7 @@ def deliver_file(source, openid, path, name="", title=None):
             content=body,
             payload={"kind": "qq-file", "openid": openid,
                      "path": path, "name": name, "size": size},
+            target_page=page,
         )
         log("已投递文件卡片", card.id[:8], "name=" + name)
         return card.id
@@ -149,43 +222,32 @@ def deliver_file(source, openid, path, name="", title=None):
         return ""
 
 
-def deliver_text(source, openid, text, msg_id="", title=None, from_voice=False):
+def deliver_text(source, openid, text, msg_id="", title=None, from_voice=False,
+                 **opts):
     """把一段文字投成 external-call 卡片，交给网页 AI。
 
-    卡片 content 里放的是**完整信封**（含 type / nonce / request / source 等），
-    前端按这个结构解析来源与语音标记，改动结构会破坏前端识别。
+    卡片 content 为完整信封，字段结构由前端识别，改动会破坏来源解析。
+    可选扩展 target_page 指定目标页面，缺省按来源通道查绑定表。
 
-    @param source     通道标识
-    @param openid     接收方标识
-    @param text       正文
-    @param msg_id     被动回复引用的用户消息 id
-    @param title      卡片标题；缺省按通道名生成
-    @param from_voice 是否由语音确认投递：前端据此要求回复含 voice 块
     @returns 卡片 id；失败返回空串
     """
     import json
-    import time
-    envelope = {
-        "type": "external-call",
-        "nonce": source + "-" + str(int(time.time() * 1000)),
-        "request": text,
-        "source": source,
-        "openid": openid,
-        "msg_id": msg_id or "",
-        "from_voice": bool(from_voice),
-        "page_url": "",
-    }
+    # 目标页面统一在投递层解析，三类卡片共用同一套归属规则
+    page = _resolve_target_page(source, _take_target_page(opts))
     try:
         card = card_bus.bus.create(
             source=source,
-            card_type="external-call",
-            title=title or (source + " 用户"),
-            content=json.dumps(envelope, ensure_ascii=False, indent=2),
-            payload={"source": source, "openid": openid,
-                     "msg_id": msg_id or ""},
+            card_type='external-call',
+            title=title or (source + ' 用户'),
+            content=json.dumps(
+                _text_envelope(source, openid, text, msg_id, from_voice),
+                ensure_ascii=False, indent=2),
+            payload={'source': source, 'openid': openid,
+                     'msg_id': msg_id or ''},
+            target_page=page,
         )
-        log("已投递文本卡片", card.id[:8])
+        log('已投递文本卡片', card.id[:8])
         return card.id
     except Exception as e:
-        log("投递文本卡片失败：", e)
-        return ""
+        log('投递文本卡片失败：', e)
+        return ''

@@ -23,6 +23,8 @@ if _SERVER not in sys.path:
     sys.path.insert(0, _SERVER)
 
 import pytest  # noqa: E402
+import paths  # noqa: E402,F401  触发路径引导
+import channel_binding  # noqa: E402
 
 from remote_bridge.channel import delivery  # noqa: E402
 
@@ -130,3 +132,18 @@ def test_source_labeled_on_card(_patch_bus, tmp_path):
     delivery.deliver_images("wecom", "chat-1", sources=[str(p)])
 
     assert _patch_bus.calls[0]["source"] == "wecom"
+
+
+def test_bound_image_card_targets_bound_page(_patch_bus, tmp_path):
+    """通道绑定页面后，图片卡片的 target_page 等于该页面。"""
+    p = tmp_path / "a.png"
+    p.write_bytes(b"image-bytes")
+    page = "https://chat.deepseek.com/chat/abc"
+    channel_binding.reset()
+    try:
+        channel_binding.bind("qq", page)
+        cid = delivery.deliver_images("qq", "openid-1", sources=[str(p)])
+        assert cid
+        assert _patch_bus.calls[0]["target_page"] == page
+    finally:
+        channel_binding.reset()
