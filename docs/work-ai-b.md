@@ -116,9 +116,9 @@
 2. 推送 `work/ai-b` 分支
 3. 等「更新 git」指令，由分发方逐条验收
 
-> 第三节排队槽暂无任务；1b 前端适配层待本任务定稿后按 2.5 节预下发。
+> 第三节排队槽：B-4（Q-7 has_params 收尾补丁）已下发为当前任务；1b 前端适配层改派 AI-C（C-4），不在本方排队槽。
 > 前端适配层为独立任务，范围：新建 .\extend\lib\tool-schema-adapter.js 的 toFlatParams，同步 03_custom_tools.js、05c_prompt.js、08_settings.js 与并存的 08b_settings.js 三处扁平项读取，并同步 05c_prompt.js 内 System Prompt 模板的工具使用说明；07b_params.js 只处理参数值无需改动。
-> 开工前按分发方文档第九节从当前 main（e17b4c2）同步，不直推 main。
+> 开工前按分发方文档第九节从当前 main（13f15e6）同步，不直推 main。
 
 ---
 
@@ -196,6 +196,8 @@
 - 已尝试：迁移前后实测取值对比；确认消费面仅 `list_tools` 输出。
 - 卡在：需要授权修改该文件（建议改为按 `properties` 非空判断），或另派小任务处理。
 
+- [答复] 分发方实测确认 Q-7 为真回归：`.\flask_server\tools\list_tools_impl.py` L44 / L53 / L65 用 `bool(...get("parameters"))`，空 schema 恒真。
+- [答复] 授权按 `properties` 非空判断计算 `has_params`，兼容历史数组输入；补一条空 schema 与有参数 schema 的对照用例。作为 B-4 单独一次提交，正常跑钩子、不用 `--no-verify`，不扩范围。
 ---
 
 ## 五、完成记录
@@ -343,3 +345,29 @@
 3. 若第三节已有标注「可开工」的排队任务，直接开工；否则等「更新 git」指令
 
 ---
+
+## 分发方验收结论（B-3，2026-11-11）
+
+> 结论：**代码通过**，已合入 `main`（`13f15e6`）；阶段 1b 仅记后端完成，不整体收口。
+
+| 项 | 实测 |
+|---|---|
+| 全量 | 998 passed / 4 failed，失败全在 `test_inbox_site_isolation.py`，总数 1002 与自述 997+5 一致 |
+| 结构冒烟 | `_smoke_ct.py` → `SMOKE OK` |
+| read_file | 单路径返回 `data.file`、多路径返回 `data.files`、21 个抛 `ToolParamError`「一次最多读取 20 个文件」 |
+| 声明 | `tool_meta.py` L85–103 为 `anyOf` 两支，`required: ["path"]` |
+| 钩子 | 带入 `d1722e3` 修门产物后 380 全过、七道全 Passed |
+
+**`--no-verify` 不追认为先例**：Q-6 答复原为「本次接受，常规路径仍是不绕过」；自 `d1722e3` 覆盖率存量欠账基线落地后，干净 HEAD 与交付分支均能正常过门，旧探针理由失效。后续一律正常提交。
+
+**未收口部分**：迁移清单第四节前端三项仍 `[ ]`，由 C-4 收口；Q-7 由 B-4 收尾。合入两笔时 `api-reference.md` 十六节连续、无重复。
+
+## 当前任务（B-4，2026-11-11 下发）：Q-7 has_params 收尾补丁
+
+**范围**：仅改 `.\flask_server\tools\list_tools_impl.py` 三处 `has_params` 判断，改为按 `properties` 非空判断（兼容历史数组输入）；补一条空 schema 与有参数 schema 的对照用例。
+
+**不要碰**：`.\extend\` 下任何文件（C-4 负责）、迁移清单勾选项、其它后端模块。
+
+**验收**：改前后对拍 `list_tools` 对空参数工具返回 `has_params: false`；在 `.\flask_server` 下跑 `python -m pytest tests -q`，波动项仍仅限 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过，正常提交、不用 `--no-verify`。
+
+**完成后**：推 `work/ai-b`（先 `fetch + rebase` 到当前 `main` `13f15e6`），等「更新 git」指令由分发方逐条验收；排队槽为空，不自行开工。

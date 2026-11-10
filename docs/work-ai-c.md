@@ -1,4 +1,5 @@
 # 工作对话 · AI-C
+> 当前任务见本文末节「C-4」；第二节为已通过的 C-3a 历史任务书。
 
 > 本文件是本对话的唯一任务来源与工作记录。每次开工前从头读一遍。
 > 收到「更新 git」指令时，先读本文件最后一节，再执行。
@@ -114,7 +115,7 @@
 2. 推送 `work/ai-c` 分支
 3. 等「更新 git」指令，由分发方逐条验收
 
-> C-3b（前端迁移）待本任务定稿后按 2.5 节预下发，未标注「可开工」不得动手。配置页 9.6-9.8 三起修复已落地，属设置页基建，不等于 C-3b 真源切换完成。
+> 当前任务已切换为 C-4（1b 前端适配层），任务书见本文末节，可直接开工。C-3b 待 C-4 验收收口后再拆，未标注「可开工」不得动手。配置页 9.6-9.8 三起修复已落地，属设置页基建，不等于 C-3b 真源切换完成。
 
 ---
 
@@ -124,7 +125,7 @@
 
 | 编号 | 任务 | 状态 |
 |---|---|---|
-| C-3b | 站点档案前端迁移（`08g` 等） | 暂缓：剩余面为真源从 `definition.yaml` 的 `app.profiles` 切到 C-3a 已建的 `custom_config` 寄存通道，前端读写改朝新通道、语义改「客户端注册信息」，界面保留只改定位（决策 10）；与 1b 前端适配层 `05c_prompt.js` 改动面重叠，待 B-3 与适配层收口后拆清范围再下发，未标注「可开工」不得动手 |
+| C-3b | 站点档案前端迁移（`08g` 等） | 暂缓：剩余面为真源从 `definition.yaml` 的 `app.profiles` 切到 C-3a 已建的 `custom_config` 寄存通道，前端读写改朝新通道、语义改「客户端注册信息」，界面保留只改定位（决策 10）；与 C-4 共用 `05c_prompt.js`，待 C-4 验收收口后拆清范围再下发，未标注「可开工」不得动手 |
 | C-3a | 语言包寄存通道（后端） | 已通过，见第五节 |
 
 ---
@@ -335,3 +336,35 @@
 3. 若第三节已有标注「可开工」的排队任务，直接开工；否则等「更新 git」指令
 
 ---
+
+## 当前任务（C-4，2026-11-11 下发）：1b 前端适配层
+
+> 依据：`.\docs\split-mirror-and-tools-service.md` 3.3 / 决策 8，`.\docs\tool-schema-migration.md` 第四节。
+> B-3 后端参数声明已合入 `main`（`13f15e6`），对外输出已为标准 JSON Schema，前端三处仍按旧扁平数组读取。
+
+**目标**：让设置页工具参数表与提示词占位符按新 schema 正常渲染，收口迁移清单第四节三项 `[ ]`。
+
+**可以碰的文件**：
+
+- 新建 `.\extend\lib\tool-schema-adapter.js`，导出 `toFlatParams(schema)`，把 `properties` 加顶层 `required` 还原为旧扁平项；`anyOf` 取首支作展示类型。
+- `.\extend\dialog\parts\03_custom_tools.js` L138–140：`p.type`、`p.required` 读取。
+- `.\extend\dialog\parts\05c_prompt.js` L180 占位符生成；L38 的 System Prompt 模板里「先用 get_tool_params 查询准确参数名」一段随返回结构变化同步核对。
+- `.\extend\dialog\parts\08_settings.js` L54–57、L97–100 两处参数表渲染，并同步并存的 `.\extend\dialog\parts\08b_settings.js`。
+- 相应 js 测试夹具：声明夹具由旧数组改为标准 schema。
+
+**不要碰**：
+
+- `.\flask_server\` 下任何后端文件、`.\flask_server\config\definition.yaml`。
+- `.\docs\tool-schema-migration.md` 的勾选项由分发方验收后统一勾选，执行方不自勾。
+- 不开 C-3b（站点档案真源切换），其与本任务共用 `05c_prompt.js`，待 C-4 收口后另拆。
+- `.\extend\dialog\parts\07b_params.js` 只处理参数值，无需改动。
+
+**验收**：
+
+1. `python scripts\hooks\check_js_tests.py` 全绿（380 项前端测试、28 项存量欠账在基线内）。
+2. `pre-commit run --all-files` 七道全过，正常提交、不用 `--no-verify`。
+3. 提交前 `node --check` 单文件语法校验；单文件 ≤450 行。
+4. 设置页工具参数表按新 schema 正常渲染，不出现对对象调 `.map` 的渲染中断；提示词占位符不退化。
+5. 迁移清单第四节三项由分发方验收后逐项勾选并记录验证方式。
+
+**完成后**：推 `work/ai-c` 分支（先 `fetch + rebase` 到当前 `main` `13f15e6`），等「更新 git」指令由分发方逐条验收；不自行填 `[答复]`、不自开工 C-3b。

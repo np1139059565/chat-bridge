@@ -100,8 +100,8 @@
 2. 推送 `work/ai-a` 分支
 3. 等「更新 git」指令，由分发方逐条验收
 
-> 第三节排队槽暂无「可开工」任务；C 系列与 1b 前端适配层由分发方另行排期。
-> 开工前按分发方文档第九节确认当前 main 尖端（e17b4c2）并同步；旧版维护线 legacy/old-stable 只收旧版补丁，本任务一律基于新架构主线。
+> 第三节排队槽暂无「可开工」任务；A-3 已验收通过并合入 `main`，A 方待命，不自行开工 B-4 或 C 系列。
+> 开工前按分发方文档第九节确认当前 main 尖端（13f15e6）并同步；旧版维护线 legacy/old-stable 只收旧版补丁，本任务一律基于新架构主线。
 
 ---
 
@@ -202,3 +202,17 @@
 **验收自测**：python -m pytest flask_server/tests -q → 1017 passed in 18.67s（改前基线 1002 + 新增 15，只增不减）；并发写用例连跑三次全绿——Windows 对同一目标并发 replace 会间歇拒绝访问（独立复现脚本三跑均命中），串行化后消除；scripts\quality_rules.py exit 0、零 [新增]；scripts\quality_baseline.json 未动（448 行 < 450 阈值，无新增违规无需登记）；check_doc_sync.py 通过。
 
 **提交**：本任务四文件单提交（核心 + 新测试 + 两文档），提交钩子全过、未用 SKIP；哈希以推送后分支尖端为准，见对话回复。
+
+## 分发方验收结论（A-3，2026-11-11）
+
+> 按第四节清单逐条实测，不采信执行方自述。结论：**通过**，已合入 `main`（`4d3c9da`）。
+
+| 项 | 实测 |
+|---|---|
+| 会话专项 | `tests/test_chat_sessions.py` 15 passed |
+| 全量 | 1014 passed / 3 failed，失败全在 `test_inbox_site_isolation.py` |
+| 波动定性 | 该文件单跑三次：1 failed / 1 failed / 10 passed，失败集合互异，属第七节登记的上游波动 |
+| 文件完整性 | 四文件行数正常，`chat_completions.py` 448 行 <450，无 69 行残骸 |
+| 钩子 | 带入 `d1722e3` 修门产物后，380 前端测试全过、`pre-commit` 七道全 Passed |
+
+自述 1017 passed 与实测 1014+3 总数一致；两笔交付合入 `main` 时钩子正常重跑，未用 `--no-verify`。A 方待命。
