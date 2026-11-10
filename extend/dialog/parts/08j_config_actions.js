@@ -9,6 +9,12 @@
   const M = D.methods;
   const NL = String.fromCharCode(10);
 
+  /** 悬浮明细单行：能取到母本值的原子项显示「键=母本值」，其余显示原标签。 */
+  D.diffTipLine = function (it) {
+    if (!it) return '';
+    return it.backend ? it.key + '=' + it.backend : it.label;
+  };
+
   /** 当前页面适配的档案 id：按 hosts 匹配 siteKey（hostname），未登记兜底 glm。 */
   M.currentProfileId = function () {
     const host = String(this.siteKey || '').toLowerCase();
@@ -113,21 +119,23 @@
     }
     // 单一明细源：顶部计数 / 各徽标 / 弹框列表全从这里取，数目不会再对不上。
     const items = [], seen = {};
-    function add(block, section, label, detail) {
+    function add(block, section, label, detail, key, backend) {
       const k = block + '|' + label;
       if (seen[k]) return;
       seen[k] = 1;
-      items.push({ block: block, section: section, label: label, detail: detail || '' });
+      items.push({ block: block, section: section, label: label, detail: detail || '',
+        key: key || label, backend: backend == null ? '' : String(backend) });
     }
     Object.keys(diff).forEach(function (pid) {
       Object.keys(diff[pid]).forEach(function (f) {
         add('site_profiles', 'site_profiles', '网页 AI 站点配置 · ' + pid + '.' + f,
-          '本地草稿与服务端不一致');
+          '本地草稿与服务端不一致', pid + '.' + f, D.configValueToText(diff[pid][f]));
       });
     });
     Object.keys(pd).forEach(function (k) {
       const sec = (k === 'tools' || k === 'tool_config') ? 'tools' : 'general';
-      add(sec, sec, '公共配置 · ' + (PUB_LABEL[k] || k), '整份提交，影响所有页面与电脑');
+      add(sec, sec, '公共配置 · ' + (PUB_LABEL[k] || k), '整份提交，影响所有页面与电脑',
+        k, D.configValueToText(pd[k]));
     });
     (cache.pending || []).forEach(function (w) {
       add(w.block, w.block, blockLabel(w.block) + ' · 待覆盖写入', w.path);
@@ -137,7 +145,8 @@
       Object.keys(bf[bid] || {}).forEach(function (k) {
         const e = bf[bid][k];
         if (String(e.current) !== String(e.baseline)) {
-          add(bid, bid, blockLabel(bid) + ' · ' + k, '输入未保存');
+          add(bid, bid, blockLabel(bid) + ' · ' + k, '输入未保存',
+            bid + '.' + k, D.configValueToText(e.baseline));
         }
       });
     });
@@ -264,7 +273,7 @@
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.section === section; });
     if (!list.length) return null;
-    const tip = list.map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
     return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
@@ -308,7 +317,10 @@
     const offline = !!ctx.configOffline;
     const items = ctx.configDiffItems || [];
     const n = items.length;
-    const tip = items.slice(0, 24).map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    const tip = items.slice(0, 24).map(function (it) {
+      const line = D.diffTipLine ? D.diffTipLine(it) : '';
+      return line && line !== it.label ? it.label + ' · ' + line : it.label;
+    }).join(String.fromCharCode(10));
     return h('div', { class: 'sp-config-bar' }, [
       offline ? h('span', {}, '（后端未连接：仅显示本地缓存，不做比对）')
         : (n ? h('span', { class: 'sp-diff-badge', title: tip },
@@ -390,7 +402,7 @@
   D.renderBlockBadge = function (ctx, id) {
     if (!ctx || !ctx.configBlockDirty || !ctx.configBlockDirty[id]) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === id; });
-    const tip = list.map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
     return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
@@ -402,7 +414,7 @@
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === 'site_profiles'; });
     if (!list.length) return null;
-    const tip = list.map(function (it) { return it.label; }).join(String.fromCharCode(10));
+    const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
     return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
