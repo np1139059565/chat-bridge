@@ -84,6 +84,10 @@ try:
     assert parsed[0]["parameters"][0]["name"] == "msg"
 
     # ---------- 3) 安装：应只安装 demo_echo ----------
+    # ---------- 4.1) 安装前扫描：未安装的 skill 应出现在可安装结果里 ----------
+    before_scan = ct.scan_dir(root)
+    assert any(s["skill_name"] == "demo_skill" for s in before_scan), before_scan
+
     installed = ct.install(sd)
     assert installed == ["demo_echo"], installed
 
@@ -106,9 +110,9 @@ try:
     except ValueError as e:
         pass
 
-    # ---------- 7) 扫描：默认根目录无内容，但 scan_dir 对 demo 父目录应能发现 ----------
+    # ---------- 7) 扫描：已安装的工具不再出现在扫描结果 ----------
     scanned = ct.scan_dir(root)
-    assert any(s["skill_name"] == "demo_skill" for s in scanned), scanned
+    assert not any(s["skill_name"] == "demo_skill" for s in scanned), scanned
 
     # ---------- 8) 删除：删除后不应再出现在工具表中 ----------
     assert ct.remove("demo_echo") is True

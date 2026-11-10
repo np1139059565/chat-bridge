@@ -155,12 +155,12 @@
           ctx.scanOpen
             ? ctx.scanResults.map((skill) => h('div', { class: 'scan-skill' }, [
               h('div', skill.skill_name + (skill.error ? '（解析失败：' + skill.error + '）' : '')),
-              ...(skill.tools || []).map((ts) => h('div', { class: 'scan-tool' }, [
+              // 只渲染未安装工具：后端已过滤，此处兜住插件先更新、服务未重启的版本错配
+              ...(skill.tools || []).filter((ts) => !ts.installed).map((ts) => h('div', { class: 'scan-tool' }, [
                 h('span', ts.name + ' — ' + ts.description),
                 h('button', {
-                  disabled: ts.installed,
                   onClick: () => ctx.installSkill(skill.skill_dir, ts.name)
-                }, ts.installed ? '已安装' : '安装')
+                }, '安装')
               ]))
             ]))
             : null

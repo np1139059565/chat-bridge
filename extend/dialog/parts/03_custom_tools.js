@@ -91,7 +91,7 @@
     await this.scanSkills();
   };
 
-  /** 安装指定 skill 中的某个工具，并即时更新扫描列表中的安装态。 */
+  /** 安装指定 skill 中的某个工具，并即时从扫描结果移除该工具。 */
   M.installSkill = async function (dir, name) {
     try {
       const data = await D.apiFetch(this, '/custom_tools/install', {
@@ -101,12 +101,15 @@
       if (!data.ok) throw new Error(data.error);
       await this.loadCustomTools();
       await this.fetchTools();   // 安装后刷新工具列表与技能说明段落
-      // 即时更新扫描列表中的安装态，无需重新扫描
-      this.scanResults.forEach((skill) => {
-        (skill.tools || []).forEach((ts) => {
-          if (ts.name === name) ts.installed = true;
-        });
-      });
+      // 安装成功后从扫描结果移除该工具；工具全部装完的 skill 整条移除，无需重新扫描
+      const emptied = new Set();
+      this.scanResults = (this.scanResults || []).map((skill) => {
+        const before = skill.tools || [];
+        // 没有该工具的 skill 原样保留（含说明文档型空技能与解析失败条目）
+        if (!before.some((ts) => ts.name === name)) return skill;
+        emptied.add(skill.skill_name);
+        return Object.assign({}, skill, { tools: before.filter((ts) => ts.name !== name) });
+      }).filter((skill) => !emptied.has(skill.skill_name) || (skill.tools || []).length);
       this.toast('已安装：' + name);
     } catch (e) {
       this.toast('安装失败：' + e);
