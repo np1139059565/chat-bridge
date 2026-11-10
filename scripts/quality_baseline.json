@@ -44,7 +44,7 @@
     {
       "check": "dup",
       "file": "<duplicates>",
-      "count": 91
+      "count": 94
     },
     {
       "check": "jsfunc",

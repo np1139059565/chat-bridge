@@ -826,3 +826,22 @@ site_key 与 messages（本轮合并后的完整消息序列，含 tool 结果�
 错误（HTTP 400）：{ "error": { "message", "type": "invalid_request_error",
 "code"? } }；覆盖：请求体非 JSON 对象、messages 缺失或格式非法、role 非法、
 tools 非数组、site_key 非法、stream=true。
+
+## 十五、标准提示词（/v1/system_prompt）
+
+### GET /v1/system_prompt
+
+返回标准 System Prompt 全文与分段标记（任务 A-2，数据层 flask_server/core/system_prompt.py）。
+
+- 四段固定顺序：【身份】→【规则】→【技能】→【调用前先查参数】；
+- 规则段只列规则名与读取优先级，正文由 AI 按需调用 read_rule 读取；
+- 技能段复用 GET /prompt_sections 口径，仅含已上线技能；
+- system_prompt 为完整文本（含分段标记）；sections 记录各段标记与字符数，不重复携带正文；
+- 无需鉴权（服务仅监听 127.0.0.1）。
+
+```json
+{
+  "system_prompt": "【身份】\n...\n\n【规则】\n- xxx（读取优先级：高）\n\n【技能】\n技能清单：\n- demo（工具：read_file）\n\n【调用前先查参数】\n...",
+  "sections": [ { "mark": "【身份】", "chars": 76 }, { "mark": "【规则】", "chars": 21 } ]
+}
+```
