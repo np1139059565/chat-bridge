@@ -194,3 +194,11 @@
 - 自建复核：内置指令名零泄漏、规则正文不注入、`rules/_meta.json` 改值后重新取回输出随之变化（单一真源）、技能清单与已上线口径同源；配套测试覆盖 S1–S5 八项。
 - 基线补登追认：A-2 自行把 `scripts/quality_baseline.json` 的 `dup.count` 由 91 改为 94。分发方把基线临时还原为 91 复跑闸门，exit 1 冒出 3 组 `[新增]`，均为 `scripts/qcommon.py`↔`check_hygiene.py`、`test_config_diff_items.test.js`↔`test_public_config_ui.test.js` 两处老重复块（A-1 审批时已标 `[已知]`），A-2 新增的 4 个文件零 `[新增]`。故补登内容确为存量债、未洗白新违规，**复核追认有效**；但按 2.3 节登记权归分发方，执行方自行修改属流程越权，后续存量欠账仍由分发方在 `main` 上统一登记。
 - 文档：合入时 `api-reference.md` 与 C-3a 的「十五、语言包寄存」撞号，按「保留双方新增」把 A-2 顺延为「十六、标准提示词」，章节连续，A-2 任务书预期已同步。
+
+### 任务 A-3：标准会话历史存储细化（已完成）
+
+**改了什么**：.\flask_server\core\chat_completions.py——请求入口规范化前移：_merge_assistant_fields 经新增 _sanitize_tool_calls 清洗，assistant 的 tool_calls 只保留 id / type / function（name + arguments），卡片状态、网页原文、选择器等网页场景附加字段静默剔除，请求、落盘、回灌三者形态一致（前缀比对不分叉）；load_session 损坏兜底：非法 JSON / 非列表时改名 .bad 保留 + app_log 告警，历史自空重建、接口不中断；save_session 并发安全：uuid 唯一临时文件名 + _SAVE_LOCK 串行化 replace + 失败清理临时文件。.\flask_server\tests\test_chat_sessions.py（新，15 用例）：merge_history 五分支逐条断言、网页字段不落盘（单元 + 路由级）、tool 消息标准字段与 JSON content、非 dict tool_call 条目剔除、损坏兜底两例、四线程并发写不撕裂不残留、双 site_key 隔离、模块重载后历史延续。.\docs\api-reference.md：第十四节「行为要点」内补细化口径（site_key 隔离、五分支合并、统一规范化、损坏兜底与并发写），未新增顶层章节、未改既有编号。
+
+**验收自测**：python -m pytest flask_server/tests -q → 1017 passed in 18.67s（改前基线 1002 + 新增 15，只增不减）；并发写用例连跑三次全绿——Windows 对同一目标并发 replace 会间歇拒绝访问（独立复现脚本三跑均命中），串行化后消除；scripts\quality_rules.py exit 0、零 [新增]；scripts\quality_baseline.json 未动（448 行 < 450 阈值，无新增违规无需登记）；check_doc_sync.py 通过。
+
+**提交**：本任务四文件单提交（核心 + 新测试 + 两文档），提交钩子全过、未用 SKIP；哈希以推送后分支尖端为准，见对话回复。
