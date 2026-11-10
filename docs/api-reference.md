@@ -826,3 +826,44 @@ site_key 与 messages（本轮合并后的完整消息序列，含 tool 结果�
 错误（HTTP 400）：{ "error": { "message", "type": "invalid_request_error",
 "code"? } }；覆盖：请求体非 JSON 对象、messages 缺失或格式非法、role 非法、
 tools 非数组、site_key 非法、stream=true。
+
+---
+
+## 十六、语言包寄存（/api/clients 的 custom_config）
+
+按 `.\docs\split-mirror-and-tools-service.md` 1.2、4.2 节，语言包（站点元素选择器与容器特征）由翻译员所有，寄存在工具服务的客户端注册信息里，服务端不解释其内容。
+
+本通道**复用第十一节的 `custom_config`，不新增独立入口**：`custom_config` 已支持任意嵌套 JSON 原样保管、逐字段一致取回、按 `site_key` 隔离。语言包作为其中一份私有数据存入即可，服务端不校验、不清洗、不解释字段，也不把它并入 `config_store` 的站点档案解析链。
+
+### 寄存
+
+用 `POST /api/clients`，把整份语言包放进 `custom_config`：
+
+```json
+{
+  "site_key": "glm",
+  "custom_config": {
+    "语言包": {
+      "输入框": "#search-input-box textarea",
+      "容器": ".detail.chatScrollContainer",
+      "生成态": ["aside.aside-container", ".is-main-chat.searching"],
+      "备注": null
+    }
+  },
+  "commands": []
+}
+```
+
+同一 `site_key` 重复注册时整条覆盖，不追加。中文、嵌套对象、数组、null、空字符串与特殊字符原样保留。
+
+### 取回
+
+用 `GET /api/clients?site_key=glm`，从响应的 `custom_config` 取回语言包，与存入时逐字段一致。
+
+未注册的 `site_key` 返回 HTTP 404 与 `{ "success": false, "error": "客户端未注册：..." }`，**不静默兜底到默认站点档案**（历史事故「千问档案缺失被按 GLM 解析」即由静默兜底引起）。
+
+### 边界
+
+- 服务端不解释字段含义，不调用 `sanitize_profiles` 等清洗逻辑；
+- 两个 `site_key` 的语言包互不串；
+- 站点档案真源（`.lask_server\config\definition.yaml` 的 `app.profiles`）与前端读写迁移属后续任务，本通道不改动它们。
