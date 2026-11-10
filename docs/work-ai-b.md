@@ -93,7 +93,7 @@
 **实现原则**：
 
 1. 不允许只改声明不改消费方——那样运行时会静默失效；每改一处按第六节顺序验证
-2. `get_tool_params` 是 AI 查参数的主要入口，改格式后需确认 System Prompt 的使用说明仍准确；A-2 正在写该文本，**不直接改 A 的文件**，需要协调先提问
+2. `get_tool_params` 返回结构变化会牵动 System Prompt 的工具使用说明模板；该模板位于前端适配层范围，本任务不碰前端文件，只保证对外输出结构自洽，并在迁移清单登记该联动项，由分发方随前端适配层任务验收
 3. 一个任务一次提交；提交信息只描述改动；提交前跑通 `.\flask_server` 下测试
 4. 一切取舍以 `.\docs\split-mirror-and-tools-service.md` 第 3.3 节与 `.\docs\tool-schema-migration.md` 为准
 
@@ -102,8 +102,8 @@
 | # | 项 | 期望 |
 |---|---|---|
 | 1 | 清单勾选 | 第三、五节全部 `[x]`，每项写明验证方式 |
-| 2 | 全量测试 | `python -m pytest tests -q` 全绿（当前基线 984） |
-| 3 | 前端测试 | `node --test flask_server/tests/js/*.test.js` 全绿（基线 380） |
+| 2 | 全量测试 | `python -m pytest tests -q` 全绿（以提交前实测为准） |
+| 3 | 前端测试 | `node --test flask_server/tests/js/*.test.js` 全绿（以提交前实测为准） |
 | 4 | 质量闸 | `python scripts/quality_rules.py` 无 `[新增]` 违规，`doc-sync` 通过 |
 | 5 | 两种调用 | `read_file` 单路径与多路径（≤20）两种调用均可用 |
 | 6 | AI 可见结构 | `get_tool_params` 返回标准 schema，按顶层 `required` 与 `properties` 可正确取到必填与键名 |
@@ -117,6 +117,8 @@
 3. 等「更新 git」指令，由分发方逐条验收
 
 > 第三节排队槽暂无任务；1b 前端适配层待本任务定稿后按 2.5 节预下发。
+> 前端适配层为独立任务，范围：新建 .\extend\lib\tool-schema-adapter.js 的 toFlatParams，同步 03_custom_tools.js、05c_prompt.js、08_settings.js 与并存的 08b_settings.js 三处扁平项读取，并同步 05c_prompt.js 内 System Prompt 模板的工具使用说明；07b_params.js 只处理参数值无需改动。
+> 开工前按分发方文档第九节从当前 main（e17b4c2）同步，不直推 main。
 
 ---
 
