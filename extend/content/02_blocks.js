@@ -270,7 +270,10 @@
     const base = root || document;
     const P = A.activeProfile();
     const items = base.querySelectorAll(P.item);
-    const scopes = items.length ? items : [base];
+    // 列表用 flex-col-reverse 时 DOM 是「新→旧」（如 Arena），与其它站点
+    // 「旧→新」的抓取口径相反；按档案开关反转，避免镜像时间线整体倒挂。
+    const ordered = P.reverseItems ? Array.prototype.slice.call(items).reverse() : items;
+    const scopes = ordered.length ? ordered : [base];
     const pushedQ = new Set(); // 本轮提取内去重；不可跨调用保留在 DOM 上，否则用户消息会被永久丢弃
 
     scopes.forEach(function (item) {

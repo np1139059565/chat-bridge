@@ -15,6 +15,24 @@ app:
     xinghuo.xfyun.cn: xinghuo
     yuanbao.tencent.com: yuanbao
   profiles:
+    arena:
+      assistantContent: div.prose
+      assistantMark: 'div[class*="bg-surface-primary"]'
+      container: 'ol[class*="flex-col-reverse"]'
+      convIdUrl: /c/([0-9a-zA-Z-]+)
+      historyItem: 'a[href*="/c/"]'
+      hosts:
+      - arena.ai
+      - www.arena.ai
+      inputSelector: 'textarea[class*="resize-none"]'
+      item: 'ol[class*="flex-col-reverse"] > div[class*="mx-auto"]'
+      label: Arena
+      newConversation: 'a[href="/text/direct"]'
+      reverseItems: true
+      sendButton: 'button[aria-label="Send message"]'
+      split: false
+      thinking: div.not-prose
+      userContent: div.prose
     deepseek:
       assistantContent: .ds-markdown.ds-assistant-message-main-content
       assistantMark: .ds-assistant-message-main-content

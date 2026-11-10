@@ -39,6 +39,7 @@
     hosts: { group: 'meta', label: '域名清单', kind: 'hosts', hint: '每行一个，按网址自动识别站点' },
     split: { group: 'meta', label: '问答拆分模式', hint: '一个条目内同时含提问与回答时开启' },
     container: { group: 'structure', label: '对话区容器', kind: 'selector' },
+    reverseItems: { group: 'structure', label: '消息倒序排列', kind: 'bool', hint: '列表 DOM 为「新→旧」时开启（如 flex-col-reverse）' },
     item: { group: 'structure', label: '消息条目', kind: 'selector' },
     userItem: { group: 'structure', label: '用户提问容器', kind: 'selector' },
     userContent: { group: 'structure', label: '提问正文', kind: 'selector' },
