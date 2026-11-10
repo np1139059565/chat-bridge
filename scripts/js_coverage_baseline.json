@@ -1,0 +1,149 @@
+{
+  "note": "前端覆盖率存量欠账基线：覆盖率不退化时免拦，退化与新增欠账仍拦。",
+  "thresholds": {
+    "line": 90.0,
+    "branch": 70.0
+  },
+  "entries": [
+    {
+      "file": "extend/content/00_state.js",
+      "kind": "branch",
+      "pct": 51.52
+    },
+    {
+      "file": "extend/content/02_blocks.js",
+      "kind": "line",
+      "pct": 36.07
+    },
+    {
+      "file": "extend/content/03_bridge.js",
+      "kind": "branch",
+      "pct": 50.0
+    },
+    {
+      "file": "extend/content/03_bridge.js",
+      "kind": "line",
+      "pct": 40.99
+    },
+    {
+      "file": "extend/content/04_observer.js",
+      "kind": "line",
+      "pct": 40.57
+    },
+    {
+      "file": "extend/dialog/parts/00a_api.js",
+      "kind": "line",
+      "pct": 89.39
+    },
+    {
+      "file": "extend/dialog/parts/04_sessions.js",
+      "kind": "branch",
+      "pct": 50.0
+    },
+    {
+      "file": "extend/dialog/parts/04_sessions.js",
+      "kind": "line",
+      "pct": 41.67
+    },
+    {
+      "file": "extend/dialog/parts/04b_sessions.js",
+      "kind": "branch",
+      "pct": 58.33
+    },
+    {
+      "file": "extend/dialog/parts/04b_sessions.js",
+      "kind": "line",
+      "pct": 53.95
+    },
+    {
+      "file": "extend/dialog/parts/05_messages.js",
+      "kind": "line",
+      "pct": 34.59
+    },
+    {
+      "file": "extend/dialog/parts/05c_prompt.js",
+      "kind": "branch",
+      "pct": 44.44
+    },
+    {
+      "file": "extend/dialog/parts/05c_prompt.js",
+      "kind": "line",
+      "pct": 49.84
+    },
+    {
+      "file": "extend/dialog/parts/05e_quality.js",
+      "kind": "branch",
+      "pct": 25.0
+    },
+    {
+      "file": "extend/dialog/parts/05e_quality.js",
+      "kind": "line",
+      "pct": 63.2
+    },
+    {
+      "file": "extend/dialog/parts/05g_cards.js",
+      "kind": "branch",
+      "pct": 61.25
+    },
+    {
+      "file": "extend/dialog/parts/05g_cards.js",
+      "kind": "line",
+      "pct": 74.94
+    },
+    {
+      "file": "extend/dialog/parts/05h_memory_bridge.js",
+      "kind": "line",
+      "pct": 61.03
+    },
+    {
+      "file": "extend/dialog/parts/05h_tree_query.js",
+      "kind": "branch",
+      "pct": 40.0
+    },
+    {
+      "file": "extend/dialog/parts/05h_tree_query.js",
+      "kind": "line",
+      "pct": 66.94
+    },
+    {
+      "file": "extend/dialog/parts/05j_card_sig.js",
+      "kind": "branch",
+      "pct": 56.0
+    },
+    {
+      "file": "extend/dialog/parts/05j_card_sig.js",
+      "kind": "line",
+      "pct": 78.05
+    },
+    {
+      "file": "extend/dialog/parts/05l_autoexec.js",
+      "kind": "line",
+      "pct": 44.67
+    },
+    {
+      "file": "extend/dialog/parts/08_settings.js",
+      "kind": "branch",
+      "pct": 33.33
+    },
+    {
+      "file": "extend/dialog/parts/08_settings.js",
+      "kind": "line",
+      "pct": 31.17
+    },
+    {
+      "file": "extend/dialog/parts/08e_toolconf.js",
+      "kind": "branch",
+      "pct": 60.0
+    },
+    {
+      "file": "extend/dialog/parts/08e_toolconf.js",
+      "kind": "line",
+      "pct": 74.79
+    },
+    {
+      "file": "extend/dialog/parts/08j_config_actions.js",
+      "kind": "branch",
+      "pct": 67.02
+    }
+  ]
+}

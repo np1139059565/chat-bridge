@@ -57,7 +57,7 @@ repos:
 
       - id: js-tests
         name: 前端逻辑测试（node --test）
-        description: 运行 flask_server/tests/js 下的前端纯逻辑测试；无 node 时跳过
+        description: 运行 flask_server/tests/js 下的前端纯逻辑测试；覆盖率按存量欠账基线判定，无 node 或无可解析报告时跳过
         entry: python scripts/hooks/check_js_tests.py
         language: system
         pass_filenames: false

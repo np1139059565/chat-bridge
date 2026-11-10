@@ -16,7 +16,10 @@
 用法（由 pre-commit 调用）：
     python scripts/hooks/check_js_tests.py
 
-退出码：0 = 全部通过或跳过；1 = 存在失败的测试。
+用法（登记存量欠账基线，由分发方单独执行一次）：
+    python scripts/hooks/check_js_tests.py --update-baseline
+
+退出码：0 = 全部通过或跳过；1 = 存在失败的测试、覆盖率退化或新增欠账。
 """
 import glob
 import os
@@ -27,6 +30,9 @@ import sys
 # 钩子公共能力：与其它钩子共用同一套「找 node」口径
 from hook_common import find_node as _find_node
 
+# 覆盖率欠账基线：路径归一、登记与判定，单独成模块便于复用
+import js_coverage_baseline as jcb
+
 
 
 
@@ -35,8 +41,13 @@ def _repo_root():
     return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def main():
-    """入口：找到 node 与前端测试目录，运行测试；无 node 或无测试则跳过。"""
+def main(argv):
+    """入口：找到 node 与前端测试目录，运行测试；无 node 或无测试则跳过。
+
+    带 --update-baseline 时把当前覆盖率欠账写为基线并返回 0。
+    @param argv 命令行参数
+    @returns 退出码
+    """
     node = _find_node()
     if not node:
         print("跳过前端测试：未找到 node")
@@ -70,8 +81,11 @@ def main():
         if stripped.startswith(("# tests", "# pass", "# fail",
                                 "ℹ tests", "ℹ pass", "ℹ fail")):
             print(stripped)
-    # 覆盖率门禁：低于阈值即判失败，防止覆盖率悄悄退化
-    return _check_coverage(out + err)
+    # 覆盖率门禁：登记模式写基线，否则按基线判定存量、退化与新增欠账
+    root = _repo_root()
+    if '--update-baseline' in argv:
+        return _write_baseline(root, out + err)
+    return _check_coverage(out + err, root)
 
 
 def _parse_coverage(report):
@@ -117,36 +131,84 @@ def _parse_coverage(report):
 # 覆盖率阈值：按当前实测值留出余量，既能拦住退化、又不会因小幅波动误报。
 MIN_LINE_PCT = 90.0
 MIN_BRANCH_PCT = 70.0
+# 指标类型到中文标签的映射，只用于打印，不参与判定
+_KIND_LABEL = {'line': '行覆盖率', 'branch': '分支覆盖率'}
 
 
-def _check_coverage(report):
-    """检查各被测源文件的行覆盖率与分支覆盖率是否达到阈值。
+def _write_baseline(root, report):
+    """把当前实测欠账登记为基线，供后续判定使用。
 
-    只约束「已被测试覆盖到的文件」：未被任何测试加载的文件不在报告里，
-    本门禁不对其做要求（那属于补测试的范围，不是防退化）。
+    由分发方统一执行一次；执行方不自行登记，避免合并时冲突。
+    @param root 工程根目录
     @param report 完整的命令输出
-    @returns 0 达标；1 有文件低于阈值
+    @returns 0 登记完成；1 未解析到报告
+    """
+    rows = _parse_coverage(report)
+    if not rows:
+        # 没有覆盖率数据就不覆盖已有基线，防止把基线清空
+        print('未解析到覆盖率报告，基线保持不变')
+        return 1
+    items = jcb.collect_failures(rows, MIN_LINE_PCT, MIN_BRANCH_PCT)
+    n = jcb.save_baseline(root, items, MIN_LINE_PCT, MIN_BRANCH_PCT)
+    print('已写入基线：%d 项存量欠账 -> %s' % (n, jcb.BASELINE_REL))
+    return 0
+
+
+def _collect_violations(report, root):
+    """收集覆盖率退化与新增欠账。
+
+    @param report 完整的命令输出
+    @param root 工程根目录，用于定位基线文件
+    @returns (报告是否可解析, 源文件数, 存量项数, 退化项列表, 新增项列表)
     """
     rows = _parse_coverage(report)
     if not rows:
         # 拿不到覆盖率数据（版本不支持等）：跳过而非误判失败
-        print("跳过覆盖率门禁：未解析到覆盖率报告")
+        return False, 0, 0, [], []
+    # 收集未达标项，再对照基线分成退化与新增两类
+    items = jcb.collect_failures(rows, MIN_LINE_PCT, MIN_BRANCH_PCT)
+    return True, len(rows), len(items), *jcb.split(items, jcb.load_baseline(root))
+
+
+def _print_violations(degraded, fresh):
+    """打印退化与新增欠账明细，便于定位是哪份文件变差。"""
+    if degraded:
+        print('覆盖率退化（低于基线登记值）：')
+        for path, kind, pct, known, limit in degraded:
+            # 带出登记值，便于判断是真实退化还是测试口径变化
+            print('  %s %s %.2f%%（基线 %.2f%%）< %.0f%%'
+                  % (path, _KIND_LABEL[kind], pct, known, limit))
+    if fresh:
+        print('新增覆盖率欠账（基线未登记）：')
+        for path, kind, pct, limit in fresh:
+            print('  %s %s %.2f%% < %.0f%%'
+                  % (path, _KIND_LABEL[kind], pct, limit))
+
+
+def _check_coverage(report, root):
+    """按覆盖率欠账基线判定：存量免拦，退化与新增欠账拦下。
+
+    只约束「已被测试覆盖到的文件」：未被任何测试加载的文件不在报告里，
+    本门禁不对其做要求（那属于补测试的范围，不是防退化）。
+    @param report 完整的命令输出
+    @param root 工程根目录，用于定位基线文件
+    @returns 0 达标或跳过；1 有退化或新增欠账
+    """
+    parsed, n_files, n_items, degraded, fresh = _collect_violations(report, root)
+    if not parsed:
+        print('跳过覆盖率门禁：未解析到覆盖率报告')
         return 0
-    failed = []
-    for name, line_pct, branch_pct in rows:
-        if line_pct < MIN_LINE_PCT:
-            failed.append("%s 行覆盖率 %.2f%% < %.0f%%" % (name, line_pct, MIN_LINE_PCT))
-        if branch_pct < MIN_BRANCH_PCT:
-            failed.append("%s 分支覆盖率 %.2f%% < %.0f%%" % (name, branch_pct, MIN_BRANCH_PCT))
-    if failed:
-        print("覆盖率未达标：")
-        for f in failed:
-            print("  " + f)
+    _print_violations(degraded, fresh)
+    if degraded or fresh:
         return 1
-    print("覆盖率达标：%d 个源文件（行 ≥%.0f%%、分支 ≥%.0f%%）"
-          % (len(rows), MIN_LINE_PCT, MIN_BRANCH_PCT))
+    if n_items:
+        # 存量欠账仍在册，但本次既没退化也没新增，正常放行
+        print('覆盖率达标：%d 项存量欠账在基线内，无退化与新增' % n_items)
+    else:
+        print('覆盖率达标：%d 个源文件（行 ≥%.0f%%、分支 ≥%.0f%%）'
+              % (n_files, MIN_LINE_PCT, MIN_BRANCH_PCT))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
