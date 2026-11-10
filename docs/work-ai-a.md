@@ -193,3 +193,10 @@
 **提交哈希**：功能 ffc69309b6ff09f3d3d8daa90c7077d359147acf；核验报告落档 fdd5f20fc9737607687279f958edf3a6009ee4a2；本记录随其后 docs 提交入库；origin/work/ai-a 尖端 fdd5f20fc9737607687279f958edf3a6009ee4a2。
 
 **分发方验收（2026-11-10）**：拉取 `origin/work/ai-a` 至 `6d3707e`，独立工作树实测 972 passed in 18.27s、六场景全过、统一质量闸 exit 0 且新增文件零 `[新增]` 违规、doc-sync 通过、`generate_reply` 已重构。合入 `main` 时 `api-reference.md` 与 B-2 的「十三、网页语音合成」章节号冲突，按「保留双方新增」将本接口顺延为第十四节；合并提交 `ed3d663`，八项提交钩子全过。结论：**通过**。
+
+**分发方验收结论（2026-11-10）：通过（追认）。** A-2 由并发提交 `07c2fe1` 直接推入 `main`，未走 `work/ai-a` 分支验收流程；因功能实测全绿且已合入，分发方按实测追认，后续仍按 2.2 节「推分支→验收→合并」执行，不视为改规矩。
+
+- 实测：`python -m pytest tests -q` → 997 passed in 24.87s；`quality_rules.py` exit 0；`check_doc_sync.py` 通过；`GET /v1/system_prompt` 返回 200、`{sections, system_prompt}`、正文 1116 字符，四段齐全，不含方言说明/朗读约定/选择器/代码块格式，含「调用前先查参数」通则。
+- 自建复核：内置指令名零泄漏、规则正文不注入、`rules/_meta.json` 改值后重新取回输出随之变化（单一真源）、技能清单与已上线口径同源；配套测试覆盖 S1–S5 八项。
+- 基线补登追认：A-2 自行把 `scripts/quality_baseline.json` 的 `dup.count` 由 91 改为 94。分发方把基线临时还原为 91 复跑闸门，exit 1 冒出 3 组 `[新增]`，均为 `scripts/qcommon.py`↔`check_hygiene.py`、`test_config_diff_items.test.js`↔`test_public_config_ui.test.js` 两处老重复块（A-1 审批时已标 `[已知]`），A-2 新增的 4 个文件零 `[新增]`。故补登内容确为存量债、未洗白新违规，**复核追认有效**；但按 2.3 节登记权归分发方，执行方自行修改属流程越权，后续存量欠账仍由分发方在 `main` 上统一登记。
+- 文档：合入时 `api-reference.md` 与 C-3a 的「十五、语言包寄存」撞号，按「保留双方新增」把 A-2 顺延为「十六、标准提示词」，章节连续，A-2 任务书预期已同步。
