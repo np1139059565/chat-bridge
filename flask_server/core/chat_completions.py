@@ -17,9 +17,11 @@
 import json
 import os
 import re
+import threading
 import uuid
 from pathlib import Path
 
+import app_log
 import runtime
 
 
@@ -37,6 +39,7 @@ _ALLOWED_ROLES = ("system", "user", "assistant", "tool")
 # 会话存储目录：默认为 flask_server/data/chat_sessions（运行时产物目录）。
 # 测试里通过 monkeypatch 本变量重定向到临时目录，避免污染真实数据。
 _STORE_DIR = None
+_SAVE_LOCK = threading.Lock()  # 串行化 replace，避免 Windows 并发 PermissionError
 
 
 def _store_dir():
@@ -104,13 +107,13 @@ def _normalize_item(i, m):
 
 
 def _merge_assistant_fields(i, m, item):
-    """assistant 的 tool_calls 原样保留（携带时校验为数组）。"""
+    """assistant 的 tool_calls 校验后清洗保留：只留标准字段（5.2 / 6.1）。"""
     tcs = m.get("tool_calls")
     if not tcs:
         return
     if not isinstance(tcs, list):
         raise ChatAPIError("messages[%d].tool_calls 必须是数组" % i)
-    item["tool_calls"] = tcs
+    item["tool_calls"] = _sanitize_tool_calls(tcs)
 
 
 def _merge_tool_fields(m, item):
@@ -119,6 +122,16 @@ def _merge_tool_fields(m, item):
         item["tool_call_id"] = str(m["tool_call_id"])
     if m.get("name"):
         item["name"] = str(m["name"])
+def _sanitize_tool_calls(tcs):
+    """清洗 tool_calls：只保留 id / type / function（name+arguments），丢弃网页场景附加字段。"""
+    out = []
+    for tc in tcs:
+        if not isinstance(tc, dict):
+            continue
+        fn = tc.get("function") or {}
+        out.append({"id": tc.get("id"), "type": "function",
+                    "function": {"name": fn.get("name"), "arguments": fn.get("arguments")}})
+    return out
 
 
 def declared_tool_names(tools):
@@ -391,21 +404,45 @@ def _is_tail_repeat(stored, incoming):
 
 
 def load_session(site_key):
-    """读取某 site_key 的会话历史；不存在或损坏时返回空列表。"""
+    """读取会话历史；损坏（非法 JSON / 非列表）时备份原文件并记日志，
+    返回 [] 重新累积——历史不静默丢失，接口不中断（A-3 健壮性）。"""
     fp = _store_dir() / (site_key + ".json")
     if not fp.is_file():
         return []
     try:
         data = json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as e:  # noqa: BLE001 - 读取异常统一走备份兜底
+        _backup_broken(site_key, fp, repr(e))
         return []
-    return data if isinstance(data, list) else []
+    if not isinstance(data, list):
+        _backup_broken(site_key, fp, "顶层不是列表")
+        return []
+    return data
+def _backup_broken(site_key, fp, why):
+    """损坏会话文件的诊断兜底：改名 .bad 保留 + 告警日志，不中断接口。"""
+    backup = fp.with_name(fp.name + ".bad")
+    try:
+        os.replace(str(fp), str(backup))
+    except OSError as e:
+        app_log.warn("[chat][sessions]", "损坏文件备份失败", "site_key=" + site_key, repr(e))
+        return
+    app_log.warn("[chat][sessions]", "会话文件损坏，已备份为", backup.name,
+                 "site_key=" + site_key, "原因=" + why)
 
 
 def save_session(site_key, messages):
-    """原子落盘（tmp + replace），返回存储文件路径字符串。"""
+    """原子落盘（唯一临时文件 + 串行 replace），返回存储文件路径。"""
     fp = _store_dir() / (site_key + ".json")
-    tmp = fp.with_name(fp.name + ".tmp")
-    tmp.write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(str(tmp), str(fp))
+    # 唯一临时文件名 + replace 串行化：并发写不互相覆盖
+    tmp = fp.with_name("%s.%s.tmp" % (fp.name, uuid.uuid4().hex))
+    try:
+        tmp.write_text(json.dumps(messages, ensure_ascii=False, indent=2), encoding="utf-8")
+        with _SAVE_LOCK:
+            os.replace(str(tmp), str(fp))
+    except OSError:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
     return str(fp)
