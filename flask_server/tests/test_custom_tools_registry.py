@@ -37,7 +37,8 @@ def _make_skill(root, name, tool_name):
     (d / "scripts" / "run.py").write_text("print(1)", encoding="utf-8")
     tool = {
         "name": tool_name, "description": "测试工具",
-        "script": "scripts/run.py", "interpreter": "python", "parameters": [],
+        "script": "scripts/run.py", "interpreter": "python",
+        "parameters": {"type": "object", "properties": {}},
     }
     (d / "tool.json").write_text(json.dumps(tool, ensure_ascii=False), encoding="utf-8")
     return str(d)

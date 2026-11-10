@@ -26,7 +26,8 @@ def external_providers():
         entry = {
             "name": t.get("name"),
             "description": t.get("description", ""),
-            "parameters": t.get("parameters") or [],
+            # 标准 schema（load_tools 读取时已归一化）；缺失时给空 schema
+            "parameters": t.get("parameters") or {"type": "object", "properties": {}},
         }
         if t.get("silent"):
             entry["silent"] = True
@@ -67,7 +68,8 @@ def public_meta(tool):
     meta = {
         "name": tool.get("name"),
         "description": tool.get("description", ""),
-        "parameters": tool.get("parameters") or [],
+        # 标准 schema（load_tools 读取时已归一化）；缺失时给空 schema
+        "parameters": tool.get("parameters") or {"type": "object", "properties": {}},
     }
     # silent：仅在界面不生成工具卡片；结果照常回传
     if tool.get("silent"):
@@ -106,6 +108,6 @@ def all_meta_full():
         "interpreter": t.get("interpreter", ""),
         "arg_style": t.get("arg_style", ""),
         "enabled": bool(t.get("enabled")),
-        "parameters": t.get("parameters") or [],
+        "parameters": t.get("parameters") or {"type": "object", "properties": {}},
         "fixed_args": t.get("fixed_args") or [],
     } for t in load_tools().values() if (t.get("kind") or "tool") == "tool"]

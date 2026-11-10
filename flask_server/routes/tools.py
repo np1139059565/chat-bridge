@@ -181,7 +181,8 @@ def tools_all():
         out.append({
             "name": k,
             "description": v.get("description", ""),
-            "parameters": v.get("parameters") or [],
+            # 标准 JSON Schema（tool_meta 迁移后直接透出）；缺失时给空 schema
+            "parameters": v.get("parameters") or {"type": "object", "properties": {}},
             # enabled 由配置决定；未配置时视为启用（与运行时口径一致）
             "enabled": runtime.is_tool_enabled(k),
         })

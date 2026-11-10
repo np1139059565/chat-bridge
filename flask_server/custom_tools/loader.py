@@ -13,6 +13,7 @@ from pathlib import Path
 
 import yaml_utils
 from .paths import NAME_RE, resolve_to_abs, to_project_rel
+from .params_schema import normalize_params_schema  # noqa: F401 re-export，registry 沿用旧路径
 
 
 # ---------- custom_tools.yaml：无 PyYAML 时的专用受限解析（本模块自有格式） ----------
@@ -151,7 +152,7 @@ def _dump_tool_entry(t):
     # 说明：上下线开关（enabled）是运行时状态，不入本文件，
     # 由 registry 单独写入 custom_tools_runtime.yaml（排除出版本库）。
     out += _dump_fixed_args(t.get("fixed_args") or [])
-    out += _dump_params(t.get("parameters") or [])
+    out += _dump_params(t.get("parameters") or {"type": "object", "properties": {}})
     return out
 
 
@@ -166,11 +167,35 @@ def _dump_fixed_args(fa):
 
 
 def _dump_params(params):
-    """写出 parameters 子列表；为空时返回空列表。"""
+    """写出 parameters 子列表；为空时返回空列表。
+
+    阶段 1b 后 parameters 为标准 schema；本序列化路径（与 parse_yaml 配套
+    的受限写出口，当前无调用方）把 schema 摊平为历史条目形态写出，
+    联合类型属性记为 "string | array"。实际落盘走 config_file 的 PyYAML
+    序列化，不经此处；保留仅为维持本模块自洽。
+    """
     if not params:
         return []
+    if isinstance(params, dict):
+        props = params.get("properties") or {}
+        req = set(params.get("required") or [])
+        flat = []
+        for pname, spec in props.items():
+            spec = spec if isinstance(spec, dict) else {}
+            # 联合类型在历史形态里的既有序列化写法
+            ptype = "string | array" if "anyOf" in spec else (spec.get("type") or "string")
+            flat.append({
+                "name": pname,
+                "type": ptype,
+                "required": pname in req,
+                "description": spec.get("description") or "",
+            })
+    else:
+        flat = params
+    if not flat:
+        return []
     out = ["    parameters:"]
-    for p in params:
+    for p in flat:
         out.append("      - name: " + quote(p.get("name", "")))
         if p.get("type"):
             out.append("        type: " + quote(p["type"]))
@@ -260,21 +285,8 @@ def _normalize_raw_list(spec):
 
 
 def _parse_tool_params(raw, name):
-    """解析并校验单个工具的参数表，返回规范化后的参数列表。"""
-    params = []
-    for p in (raw.get("parameters") or []):
-        pname = (p.get("name") if isinstance(p, dict) else None) or ""
-        if not pname:
-            raise ValueError("工具 %s 存在缺少 name 的参数" % name)
-        if not NAME_RE.match(pname):
-            raise ValueError("工具 %s 的参数名非法：" % name + pname)
-        params.append({
-            "name": pname,
-            "type": (p.get("type") or "string"),
-            "required": bool(p.get("required")),
-            "description": (p.get("description") or ""),
-        })
-    return params
+    """解析并校验单个工具的参数表，返回规范化后的标准 schema。"""
+    return normalize_params_schema(raw.get("parameters"), name)
 
 
 def _resolve_tool_script(raw, name, executor, provider, d):
@@ -331,12 +343,8 @@ def _resolve_interpreter(raw, script):
     return ""
 
 
-def _build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"):
-    """校验并构建单个条目的规范化字典（工具名由 _validate_tool_name 解析）。
-
-    @param kind 条目来源身份：tool（AI 工具）/ command_action（指令执行端）；
-                由调用方按所在数组传入，解析层据此天然分流。
-    """
+def _entry_basics(raw, d, provider, seen):
+    """校验并解析条目的基础字段（名称、描述、执行器与脚本路径）。"""
     name = _validate_tool_name(raw, seen)
     desc = (raw.get("description") or "").strip()
     if not desc:
@@ -345,6 +353,17 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"):
     script = (raw.get("script") or "").strip()
     # 脚本路径解析（含存在性校验与 external 分支）
     _, stored_script = _resolve_tool_script(raw, name, executor, provider, d)
+    return name, desc, executor, script, stored_script
+
+
+def _build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"):
+    """校验并构建单个条目的规范化字典（基础字段由 _entry_basics 校验解析）。
+
+    @param kind 条目来源身份：tool（AI 工具）/ command_action（指令执行端）；
+                由调用方按所在数组传入，解析层据此天然分流。
+    """
+    name, desc, executor, script, stored_script = _entry_basics(
+        raw, d, provider, seen)
     return {
         "name": name,
         "description": desc,
@@ -375,6 +394,26 @@ def _build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"):
     }
 
 
+def _tool_entries(spec, d, provider, skill_prompt, seen):
+    """解析 tools 数组为 AI 工具条目。
+
+    无 tools 键时用 _normalize_raw_list 兼容历史写法（spec 直接是列表或单对象）。
+    """
+    if isinstance(spec, dict) and "tools" in spec:
+        raw_tools = spec.get("tools") or []
+    else:
+        raw_tools = _normalize_raw_list(spec)
+    return [_build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool")
+            for raw in (raw_tools if isinstance(raw_tools, list) else [raw_tools])]
+
+
+def _action_entries(spec, d, provider, skill_prompt, seen):
+    """解析 command_actions 数组为指令执行端条目（可选，缺省视为空）。"""
+    actions = spec.get("command_actions") if isinstance(spec, dict) else None
+    return [_build_tool_entry(raw, d, provider, skill_prompt, seen, kind="command_action")
+            for raw in (actions or [])]
+
+
 def parse_skill(skill_dir):
     """解析一个 skill 目录的 tool.json，返回规范化后的条目字典列表（已校验）。
 
@@ -383,28 +422,13 @@ def parse_skill(skill_dir):
       - command_actions  → kind=command_action，指令执行端，对 AI 透明。
     两者的 kind 由所在数组自动标注，视图层据此天然分流，无需任何过滤标记。
     严禁把指令执行端放回 tools 数组，或再引入「标记字段 + 过滤」的旧写法。
+    两类条目共用同一套字段校验与执行通道，仅在「来源身份」上区分，避免重复实现。
     详见 docs/command-tool-isolation.md。
-
-    两类条目各从独立数组解析，天然分流、互不混入：
-      - tools            → kind=tool，真正的 AI 工具；
-      - command_actions  → kind=command_action，指令的执行端。
-    两者共用同一套字段校验与执行通道，仅在「来源身份」上区分，
-    从而避免重复实现，又不让指令执行端混进 AI 工具集合。
     """
     d = resolve_to_abs(skill_dir)
     spec, provider, skill_prompt = _read_tool_spec(d)
     seen = set()
-    entries = []
-    # 1) AI 工具：优先取 tools 数组；无 tools 键时用 _normalize_raw_list 兼容
-    #    历史写法（spec 直接是列表或单对象）。
-    if isinstance(spec, dict) and "tools" in spec:
-        raw_tools = spec.get("tools") or []
-    else:
-        raw_tools = _normalize_raw_list(spec)
-    for raw in (raw_tools if isinstance(raw_tools, list) else [raw_tools]):
-        entries.append(_build_tool_entry(raw, d, provider, skill_prompt, seen, kind="tool"))
-    # 2) 指令执行端：来自 command_actions 数组（可选）
-    actions = spec.get("command_actions") if isinstance(spec, dict) else None
-    for raw in (actions or []):
-        entries.append(_build_tool_entry(raw, d, provider, skill_prompt, seen, kind="command_action"))
+    # AI 工具（tools 数组）在前，指令执行端（command_actions 数组）在后
+    entries = _tool_entries(spec, d, provider, skill_prompt, seen)
+    entries += _action_entries(spec, d, provider, skill_prompt, seen)
     return entries

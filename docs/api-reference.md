@@ -17,8 +17,17 @@
 - `run_command` 额外带 `languages` 字段。
 
 ```json
-{ "tools": [ { "name": "read_file", "description": "...", "parameters": [...] } ] }
+{ "tools": [ { "name": "read_file", "description": "...",
+                "parameters": { "type": "object",
+                    "properties": { "path": { "type": "string" },
+                                    "limit": { "type": "integer" } },
+                    "required": ["path"] } } ] }
 ```
+
+- `parameters` 为标准 JSON Schema（任务 B-3 起统一）：`type` 固定 `object`；`properties` 的键即参数名；联合类型用 `anyOf`（如 `read_file` 的 `path` 接受字符串或最多 20 项的字符串数组）；顶层 `required` 为必填参数名数组；无参数工具为 `{ "type": "object", "properties": {} }`。
+- `GET /tools/all`、`get_tool_params`、`GET /custom_tools` 返回的 `parameters` 同为此结构；历史数组格式仅作为 skill `tool.json` 的输入仍被兼容（安装时归一化为 schema）。
+- extend 前端对旧数组格式的消费适配另行任务处理（见 `docs/tool-schema-migration.md` 第四节）。
+
 
 ### POST /tool
 

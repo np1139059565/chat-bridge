@@ -14,8 +14,10 @@ import subprocess
 from pathlib import Path
 
 import config_file
-from .loader import parse_skill, infer_interpreter, to_str, flag_arg
+from .loader import parse_skill, infer_interpreter, to_str, flag_arg, normalize_params_schema
 from .paths import resolve_to_abs
+# 参数名 / 必填名读取辅助（双格式兼容）：tools/ 已由 paths 引导加入 sys.path
+from tool_param_check import schema_param_names, schema_required_names
 
 # 自定义工具配置集中在两份合并文件的 custom_tools 分区（见 core/config_file.py）：
 #   definition.yaml 的 custom_tools —— 工具定义列表（入库）
@@ -34,6 +36,15 @@ def load_tools():
     out = {}
     for t in tools:
         if isinstance(t, dict) and t.get("name"):
+            # 阶段 1b：读取时把参数声明统一规范化为标准 schema。
+            # definition.yaml 的历史条目仍是数组格式（该文件不在迁移范围），
+            # 读进内存即转 schema，消费方（视图 / 校验 / 执行 / 对外输出）
+            # 只面对一种格式；落盘在用户下一次保存时自然写回新格式。
+            # 存量数据异常不阻断服务：保留原值，双格式读取辅助兜底。
+            try:
+                t["parameters"] = normalize_params_schema(t.get("parameters"), t["name"])
+            except ValueError:
+                pass
             out[t["name"]] = t
     # 合并运行时开关：定义里没有 enabled，一律以运行时分区为准
     rt = config_file.get_runtime_section("custom_tools")
@@ -89,16 +100,6 @@ def remove(name):
     return False
 
 
-def _normalize_param(p):
-    """把单个参数项规范化为统一结构。"""
-    return {
-        "name": (p.get("name") or ""),
-        "type": (p.get("type") or "string"),
-        "required": bool(p.get("required")),
-        "description": (p.get("description") or ""),
-    }
-
-
 def _apply_scalar_fields(t, patch):
     """应用标量字段：描述 / 解释器 / 参数风格（仅接受非空值）与 enabled 开关。"""
     for field in ("description", "interpreter", "arg_style"):
@@ -109,9 +110,14 @@ def _apply_scalar_fields(t, patch):
 
 
 def _apply_list_fields(t, patch):
-    """应用列表字段：参数表（逐项规范化）与固定参数。"""
-    if isinstance(patch.get("parameters"), list):
-        t["parameters"] = [_normalize_param(p) for p in patch["parameters"] if isinstance(p, dict)]
+    """应用列表字段：参数表（规范化为标准 schema）与固定参数。
+
+    parameters 接受标准 schema 对象或历史数组（前端设置页的适配层
+    另派任务，迁移期仍发数组），统一经 loader.normalize_params_schema
+    规范化后存储；非法输入抛 ValueError——显式失败优于静默吞掉。
+    """
+    if "parameters" in patch and patch["parameters"] is not None:
+        t["parameters"] = normalize_params_schema(patch["parameters"], t.get("name") or "")
     if isinstance(patch.get("fixed_args"), list):
         t["fixed_args"] = list(patch["fixed_args"])
 
@@ -176,10 +182,13 @@ def is_enabled(name):
 
 # ---------- 执行 ----------
 def _positional_args(params, declared):
-    """按声明顺序把参数值拼成位置参数（boolean 为真才追加 --名）。"""
+    """按声明顺序把参数值拼成位置参数（boolean 为真才追加 --名）。
+
+    @param declared 已声明的参数名列表（保序；schema 的 properties 键序
+                    即声明顺序，由 schema_param_names 统一读取，双格式兼容）
+    """
     out = []
-    for p in declared:
-        nm = p.get("name")
+    for nm in declared:
         if nm not in params:
             continue
         val = params[nm]
@@ -203,10 +212,9 @@ def _resolve_script_path(tool, skill_dir):
 
 
 def _flag_args(params, declared):
-    """flag 风格：每个已传参数展开为 --名 值。"""
+    """flag 风格：每个已传参数展开为 --名 值（declared 为参数名列表）。"""
     out = []
-    for p in declared:
-        nm = p.get("name")
+    for nm in declared:
         if nm in params:
             out += flag_arg(nm, params[nm])
     return out
@@ -228,7 +236,8 @@ def _build_command(tool, params, skill_dir):
     # 固定前置参数
     for a in tool.get("fixed_args") or []:
         cmd.append(to_str(a))
-    declared = tool.get("parameters") or []
+    # 参数名序列（双格式读取：schema 的 properties 键序 = 声明顺序）
+    declared = schema_param_names(tool.get("parameters"))
     if (tool.get("arg_style") or "flag") == "flag":
         cmd += _flag_args(params, declared)
     else:
@@ -237,10 +246,12 @@ def _build_command(tool, params, skill_dir):
 
 
 def _validate_required(tool, params):
-    """必填参数校验：缺失时抛 ValueError（服务端归类为 parameter）。"""
-    for p in tool.get("parameters") or []:
-        nm = p.get("name")
-        if p.get("required") and (nm not in params or params[nm] in (None, "")):
+    """必填参数校验：缺失时抛 ValueError（服务端归类为 parameter）。
+
+    必填名取自标准 schema 的顶层 required（读取辅助兼容历史数组格式）。
+    """
+    for nm in schema_required_names(tool.get("parameters")):
+        if nm not in params or params[nm] in (None, ""):
             raise ValueError("缺少必填参数 %s（工具 %s）" % (nm, tool.get("name")))
 
 
