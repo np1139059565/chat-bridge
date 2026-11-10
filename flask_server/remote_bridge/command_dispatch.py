@@ -130,6 +130,64 @@ def _maybe_attach_screenshot(payload, openid, screenshot):
     return want_shot
 
 
+def _resolve_target(action, openid):
+    """解析当前通道绑定的目标页面；取不到就回执失败并返回空串。
+
+    所有下发入口（_dispatch / _dispatch_with_result）都必须先过这一关。
+    抽成公共函数的理由：两个入口原先各自处理，_dispatch 有页面归属、
+    _dispatch_with_result 则完全没有 target_page，卡片在总线里是公开的，
+    任何页面的抽屉都能取走——比前者更危险。收在一处才不会再次分叉。
+
+    @param action 动作名（仅用于日志）
+    @param openid 发起指令的用户（失败回执的接收方）
+    @returns {string} 目标页面地址；无法确定时返回空串（此时已发过失败回执）
+    """
+    import channel_binding
+    channel = current_channel()
+    target = channel_binding.get(channel) if channel else ""
+    if target:
+        return target
+    why = ("当前通道未绑定页面" if channel else "指令来源通道未知")
+    log("拒绝下发抽屉命令", action, "原因=" + why, "通道=" + (channel or "空"))
+    # 失败必须让用户看得见。调用方在下发后普遍会紧跟一句「已下发：xxx」，
+    # 那句是假回执——卡片根本没进总线。这里在下发层直接补一条明确的失败
+    # 说明并带上绑定方法，用户才不会对着一句「已下发」干等。
+    # 组合指令期间 suppress 为真，_reply 会静默跳过，由组合层统一回执。
+    client = _client_for_channel(channel)
+    try:
+        _reply(client, openid,
+               "指令未执行：%s。\n请先发 /bind 选择一个页面后再试。" % why)
+    except Exception as e:
+        log("失败回执发送异常：", e)
+    return ""
+
+
+def _client_for_channel(channel):
+    """按通道名取对应的客户端实例，供失败回执使用。
+
+    延迟导入避免与包初始化形成循环。QQ 用 bridge.client，企微 / 微信用各自客户端。
+    网页版不受影响：openid 为 web-user 时 _reply 直接走网页出口，不碰客户端。
+
+    @param channel 通道名（qq / wecom / weixin）
+    @returns 客户端实例；取不到时为 None
+    """
+    try:
+        # 注意：包内 bridge 是模块级单例对象（__init__.py 里 bridge = RemoteBridge()），
+        # 不是子模块。写成 from . import bridge as m 再取 m.bridge 会去访问单例的
+        # .bridge 属性，必然 AttributeError，失败回执就永远发不出去。
+        # 用 import remote_bridge 后直接取模块属性，语义才正确。
+        import remote_bridge
+        inst = remote_bridge.bridge
+        if channel == "wecom":
+            return inst.wecom_client
+        if channel == "weixin":
+            return inst.wx_client
+        return inst.client
+    except Exception as e:
+        log("取通道客户端失败：", e)
+        return None
+
+
 def _dispatch(action, params=None, openid="", screenshot=False):
     """把一条抽屉命令通过卡片总线下发。
 
@@ -150,16 +208,19 @@ def _dispatch(action, params=None, openid="", screenshot=False):
                       组合指令执行期间（_reply_ctx.suppress）强制关闭，避免大量截图刷屏。
     """
     import card_bus
-    import channel_binding
+    # 页面归属：指令只投给「当前通道绑定的那个页面」，无目标页一律不下发。
+    #
+    # 为什么不再允许「未绑定就不限页面」：卡片总线的规则是 target_page 为空
+    # 时任何页面的抽屉都能取走。多开网页时，卡片会被后台标签页抢先执行，
+    # 用户眼前的页面毫无变化，手机上却收到「已执行」的回执；更糟的是指令
+    # 落到了另一个 AI 站点，操作了完全不该动的页面。
+    # 宁可失败也不兜底：找不到目标页就明确报错，让用户去绑定后再试。
+    target = _resolve_target(action, openid)
+    if not target:
+        return None
     payload = {"action": action, "params": params or {}}
+    payload["target_page"] = target
     want_shot = _maybe_attach_screenshot(payload, openid, screenshot)
-    # 页面归属：指令只投给「当前通道绑定的那个页面」。
-    # QQ 与企微都是单窗口，绑定后各看各的页面，互不干扰；
-    # 未绑定的通道不限页面（旧行为，任何页面的抽屉都能取）。
-    channel = current_channel()
-    target = channel_binding.get(channel) if channel else ""
-    if target:
-        payload["target_page"] = target
     card = card_bus.command_bus.create(
         source="bridge",
         card_type="drawer-command",
@@ -206,14 +267,22 @@ def _dispatch_with_result(action, params, openid):
     后端据此找回 openid 并转发到 QQ。
     """
     import card_bus
+    # 页面归属：与 _dispatch 同一把关。此前这里完全没设 target_page，
+    # 卡片在总线里是公开的，任何页面的抽屉都能取走——比 _dispatch 的旧行为更危险。
+    # 无目标页时 _resolve_target 已发过失败回执，这里直接返回。
+    target = _resolve_target(action, openid)
+    if not target:
+        return None
     rid = _register_pending(openid)
-    payload = {"action": action, "params": params or {}, "request_id": rid}
+    payload = {"action": action, "params": params or {}, "request_id": rid,
+               "target_page": target}
     card = card_bus.command_bus.create(
         source="bridge",
         card_type="drawer-command",
         title="远程指令",
         content=json.dumps(payload, ensure_ascii=False),
         payload=payload,
+        target_page=target,
     )
     log("已下发抽屉命令（待回传）", action, "id=" + card.id[:8], "rid=" + rid[:8])
     return card
