@@ -19,7 +19,8 @@ window.AIMirrorContent = (function () {
     observer: null,          // 对话容器的 MutationObserver
     historyObserver: null,   // 左侧会话列表的 MutationObserver
     historyEl: null,         // 当前绑定的左侧会话列表节点
-    lastPageKey: '',         // 上一次推送的结构化快照键，避免重复推送
+    lastPageKey: '',         // 上一次推送的「图片已归一化」快照键，正式去重闸
+    lastRawKey: '',          // 上一次推送的原始快照键，用于跳过重复的图片转换重活
     lastPageConvId: '',      // 上一次实际推给抽屉的会话 id：空快照时据此判断是否需要补发身份同步
     scanTimer: null,         // 静默扫描计时器：DOM 停止变动满静默期后才解析
     emptyRetryTimer: null,   // 空快照复查计时器：会话切换后 DOM 异步挂载时递增重取

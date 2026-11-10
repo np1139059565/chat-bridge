@@ -116,17 +116,25 @@
     // 已拿到非空快照：作废本会话仍在排队的空快照复查。
     A.cancelEmptyRetry();
 
-    // 去重键先按「原始解析结果」算：命中即返回，避免滚动时反复做图片转换这类重活。
-    // blob 地址在同一页面会话内稳定，故用它做键是可靠的。
-    const key = convId + '|' + JSON.stringify(messages);
-    if (!force && !convChanged && key === A.state.lastPageKey) return;
-    A.state.lastPageKey = key;
+    // 快速去重键：按「原始解析结果」先算一次，命中即返回，避免滚动时反复做
+    // 图片转换这类重活。blob 地址在同一页面会话内稳定，用它做第一道闸可靠。
+    const rawKey = convId + '|' + JSON.stringify(messages);
+    if (!force && !convChanged && rawKey === A.state.lastRawKey) return;
+    A.state.lastRawKey = rawKey;
     A.state.lastPageConvId = convId;
 
     // 图片归一化：把 blob: / http(s) 地址转成自包含的 dataURL，
     // 使抽屉镜像、抽屉消息列表、服务端三处都能取到同一张图。
     // 无图片时同步回调，行为与改造前一致。
     A.normalizeImageBlocks(messages, function (msgs) {
+      // 正式去重键：用「图片已归一化」的最终内容算。
+      // 不能用归一化前的 rawKey 锁死：首次推送若 toDataUrl 失败（跨域、blob 失效），
+      // 内容里留的是 blob 地址；下次推送原始内容相同，rawKey 命中即返回，
+      // 那张图永远失去第二次转换机会，表现为图片时有时无。
+      // 用最终内容做键，转换成功后键值随之变化，能正常再推一次。
+      const finalKey = convId + '|' + JSON.stringify(msgs);
+      if (!force && !convChanged && finalKey === A.state.lastPageKey) return;
+      A.state.lastPageKey = finalKey;
       // 逐条算消息指纹并打印：与 dialog 侧的 msgId 同源，便于对齐两边日志、
       // 区分「同一会话的多次推送」（仅凭消息条数无法分辨）。
       const fpList = msgs.map(function (m) {

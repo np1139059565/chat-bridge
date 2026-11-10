@@ -86,6 +86,17 @@
     // 无论成功失败都记为「已执行过」，切换会话 / 刷新后可据此恢复
     card.executed = true;
     card.finishedAt = Date.now();
+    // 中止复查：执行期间若用户发来新消息，abortActiveCards 会把卡片标记 skipped
+    // 并取消回传。但 _callTool 的 await 无法被打断，工具仍在后台跑完。
+    // 若不在此复查，收尾段会照常排回传——界面上显示「已跳过」，结果却仍被贴进
+    // 输入框，打断 AI 当时的输出，或挂到不相干的新问题下面。
+    // 故中止后只留痕、上报，绝不排自动回传。
+    if (card.skipped) {
+      log('卡片执行完成但已被中止：id=' + cid + '，结果不回传 AI');
+      if (this._persist) this._persist();
+      if (this.reportToBridge) this.reportToBridge('tool');
+      return;
+    }
     // 记录执行签名，供刷新后恢复「已执行」态（实现见 05g_cards）
     this._markExecutedSig(card);
     if (this._persist) this._persist();

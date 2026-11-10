@@ -6,7 +6,7 @@
 
 验证目标：
 1. 绑定表的读写、解除、批量载入；
-2. 推送过滤规则（未绑定全收、已绑定只收该页、无页面的历史消息也收）。
+2. 推送过滤规则（未绑定全收、已绑定只收该页、已绑定通道拒收无页面消息）。
 """
 import os
 import sys
@@ -96,10 +96,15 @@ class TestMatches(_BindBase):
         self.assertTrue(channel_binding.matches("wecom", GLM_PAGE))
         self.assertFalse(channel_binding.matches("wecom", DEEPSEEK_PAGE))
 
-    def test_无页面来源的消息绑定通道也接收(self):
-        """历史数据没页面标记，绑定通道也收，避免丢历史。"""
+    def test_无页面来源的消息绑定通道拒收(self):
+        """已绑定通道遇到无页面标记的消息一律拒收。
+
+        取舍：页面未知时无法确认归属，放行等于让任意页面的内容流进这条通道，
+        与「不许串台」相反。宁可漏推（消息在网页上仍在，可在电脑端查看），
+        也不让来源不明的内容混进手机端对话。
+        """
         channel_binding.bind("qq", DEEPSEEK_PAGE)
-        self.assertTrue(channel_binding.matches("qq", ""))
+        self.assertFalse(channel_binding.matches("qq", ""))
 
     def test_未绑定时无页面来源也接收(self):
         self.assertTrue(channel_binding.matches("qq", ""))

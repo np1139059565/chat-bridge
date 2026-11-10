@@ -297,7 +297,7 @@ class RemoteBridge:
         三条通道都是单窗口，同时开多个网页 AI 时若不按页面过滤，
         各页回复会混进同一个聊天窗口。绑定后各看各的（规则见
         channel_binding.matches：未绑定全收、已绑定只收该页、
-        消息无页面时也收，避免丢历史）。
+        消息无页面时已绑定通道拒收，避免来源不明的内容串台）。
 
         @param channel  通道名（qq / wecom / weixin）
         @param page_url 本条消息来源页面
@@ -306,6 +306,7 @@ class RemoteBridge:
         import channel_binding
         return channel_binding.matches(channel, page_url)
 
+    @staticmethod
     def _wants(target, channel, broadcast=False):
         """判断某个通道本轮是否该推送。
 

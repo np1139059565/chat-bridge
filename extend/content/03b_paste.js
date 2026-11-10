@@ -82,9 +82,15 @@
       } else if (e.kind === 'files') {
         A._pasteFilesToWebpageAI(e.files, e.text, e.label);
       } else {
-        // enter_only：只补回车。输入框可能已被站点/用户清空，此时回车无意义，如实放弃
+        // enter_only：只补回车。输入框可能已被站点/用户清空，此时回车无意义，如实放弃。
+        // 判空必须区分控件类型：contenteditable 编辑器（千问 Slate、元宝 Quill）
+        // 没有 value 属性，读 ta.value 得到 undefined，会被 !ta.value 误判成
+        // 「输入框已空」而放弃补发——实际内容仍在框里。富文本只能读 textContent。
         const ta2 = A.findInputBox();
-        if (!ta2 || !ta2.value) {
+        const isEmpty = !ta2 || (A.isRichEditor(ta2)
+          ? String(ta2.textContent || '').trim() === ''
+          : !ta2.value);
+        if (isEmpty) {
           A.post({ type: 'auto_send_result', ok: false, msg: '回传放弃：挂起期间输入框已空，无法补发（' + e.label + '）' });
         } else {
           A.pressEnter(ta2);
