@@ -159,9 +159,9 @@
   function fieldRestoreBtn(ctx, pid, field) {
     const d = ctx.configDiff && ctx.configDiff[pid];
     if (!d || !(field in d)) return null;
-    return h('button', { class: 'sp-restore-btn',
+    return h('button', { class: 'sp-restore-btn', title: '还原为服务端值',
       onClick: () => { if (ctx.restoreProfileField) ctx.restoreProfileField(pid, field); }
-    }, '还原');
+    }, [h('span', { class: 'sp-restore-icon' }, '↺'), ' 还原']);
   }
 
   function renderProfileField(ctx, pid, field, meta) {

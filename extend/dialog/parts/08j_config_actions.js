@@ -263,9 +263,9 @@
   };
   D.publicRestoreBtn = function (ctx, section, name, key, uiValue) {
     if (!ctx || !ctx.publicIsDiff || !ctx.publicIsDiff(section, name, key, uiValue)) return null;
-    return h('button', { class: 'sp-restore-btn',
+    return h('button', { class: 'sp-restore-btn', title: '还原为服务端值',
       onClick: () => { if (ctx.restorePublicItem) ctx.restorePublicItem(section, name, key); }
-    }, '还原');
+    }, [h('span', { class: 'sp-restore-icon' }, '↺'), ' 还原']);
   };
   /** 各公共配置区卡片头挂的小徽标，滚下去也看得见差异。 */
 
@@ -274,7 +274,7 @@
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.section === section; });
     if (!list.length) return null;
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
-    return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
+    return h('span', { class: 'sp-diff-badge', title: tip, 'data-warn-icon': '1' }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
 
@@ -403,7 +403,7 @@
     if (!ctx || !ctx.configBlockDirty || !ctx.configBlockDirty[id]) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === id; });
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
-    return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
+    return h('span', { class: 'sp-diff-badge', title: tip, 'data-warn-icon': '1' }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
 
@@ -415,7 +415,7 @@
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === 'site_profiles'; });
     if (!list.length) return null;
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
-    return h('span', { class: 'sp-diff-badge', title: tip }, list.length + ' 项未覆盖（悬浮看具体项）');
+    return h('span', { class: 'sp-diff-badge', title: tip, 'data-warn-icon': '1' }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
 

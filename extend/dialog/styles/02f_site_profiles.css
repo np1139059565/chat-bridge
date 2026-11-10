@@ -181,3 +181,16 @@ select[data-diff="1"] {
 .sp-modal-actions { display: flex; gap: 8px; }
 .sp-modal-actions button { font-size: 12px; padding: 3px 12px; }
 .sp-diff-badge[title] { cursor: help; }
+
+/* C-6b：块头黄色图标与还原按钮图标，色值全走令牌，深浅主题自动跟随 */
+.sp-diff-badge[data-warn-icon]::before {
+  content: '⚠';
+  color: var(--cb-warn);
+  margin-right: 4px;
+  font-weight: 600;
+}
+.sp-restore-btn .sp-restore-icon {
+  color: var(--cb-warn-text);
+  margin-right: 2px;
+  font-size: 12px;
+}
