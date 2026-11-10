@@ -69,20 +69,97 @@
     return Object.assign({}, backend, body);
   };
 
+  /** 把待覆盖写入的 body 统一解析成对象；字符串按 JSON 解析，失败返回空。 */
+  function parseWriteBody(w) {
+    let body = w && w.body;
+    if (typeof body === 'string') {
+      try { body = JSON.parse(body); } catch (e) { return null; }
+    }
+    return (body && typeof body === 'object' && !Array.isArray(body)) ? body : null;
+  }
+
+  /** 从 /skills/<name>/enabled 取技能名；路径不匹配返回空串。 */
+  function skillNameOf(w) {
+    const m = /^\/skills\/([^/]+)\/enabled/.exec(String((w && w.path) || ''));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  /** 从 /custom_tools/<name> 取工具名；路径不匹配返回空串。 */
+  function toolNameOf(w) {
+    const m = /^\/custom_tools\/([^/]+)/.exec(String((w && w.path) || ''));
+    return m ? decodeURIComponent(m[1]) : '';
+  }
+
+  /**
+   * 技能块待覆盖写入合并到管理视图数组行。
+   * 每条写入只改同名技能行的开关、其工具开关与上线计数，不向顶层挂字段。
+   */
+  D.applySkillsPending = function (data, writes) {
+    if (!data || !Array.isArray(data.skillsManage)) return data;
+    writes.forEach(function (w) {
+      const name = skillNameOf(w);
+      const body = parseWriteBody(w);
+      if (!name || !body || typeof body.enabled !== 'boolean') return;
+      const on = body.enabled;
+      data.skillsManage = data.skillsManage.map(function (s) {
+        if (s.name !== name) return s;
+        const row = Object.assign({}, s, { enabled: on });
+        if (Array.isArray(s.tools)) {
+          row.tools = s.tools.map(function (t) { return Object.assign({}, t, { enabled: on }); });
+          row.enabled_count = on ? row.tools.length : 0;
+        }
+        return row;
+      });
+    });
+    return data;
+  };
+
+  /**
+   * 自定义工具块待覆盖写入合并到工具数组行。
+   * 每条写入只改同名工具行；删除类写入没有 body，保持原列表。
+   */
+  D.applyCustomToolsPending = function (data, writes) {
+    if (!data || !Array.isArray(data.tools)) return data;
+    writes.forEach(function (w) {
+      const name = toolNameOf(w);
+      const body = parseWriteBody(w);
+      if (!name || !body) return;
+      data.tools = data.tools.map(function (t) {
+        return t.name === name ? Object.assign({}, t, body) : t;
+      });
+    });
+    return data;
+  };
+
+  /**
+   * 把该读端点所属区块的全部待覆盖写入合并进 GET 响应。
+   * 数组型响应（技能管理视图、自定义工具列表）按名称逐行合并；
+   * 其余区块沿用通用形状合并，保持既有端点行为。
+   */
   D.applyPendingToRead = function (ctx, path, data, block) {
     const cache = ctx && ctx.configCache;
     const list = cache && cache.pending;
     if (!list || !list.length) return data;
+    const writes = [];
+    for (let i = 0; i < list.length; i++) {
+      if (block && list[i].block === block.id) writes.push(list[i]);
+      else if (!block && list[i].path === path) writes.push(list[i]);
+    }
+    if (!writes.length) return data;
+    let out = data;
+    if (out && typeof out === 'object') {
+      try { out = JSON.parse(JSON.stringify(out)); } catch (e) { return data; }
+    }
+    if (block && block.id === 'skills') return D.applySkillsPending(out, writes);
+    if (block && block.id === 'custom_tools') return D.applyCustomToolsPending(out, writes);
     let w = null;
     for (let i = 0; i < list.length; i++) if (list[i].path === path) w = list[i];
     if (!w && block) {
       for (let i = 0; i < list.length; i++) if (list[i].block === block.id) w = list[i];
     }
-    if (!w) return data;
-    let body = w.body;
-    if (typeof body === 'string') {
-      try { body = JSON.parse(body); } catch (e) { return data; }
-    }
-    return D.mergeIntoShape(data, body);
+    if (!w) return out;
+    const body = parseWriteBody(w);
+    if (!body) return out;
+    return D.mergeIntoShape(out, body);
   };
 })();

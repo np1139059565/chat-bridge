@@ -178,3 +178,63 @@ test('状态栏：一致时不报平安；有待覆盖区块时逐块列出', ()
   assert.ok(busy.indexOf('远程桥接') >= 0);
   assert.ok(busy.indexOf('未覆盖') >= 0);
 });
+
+test('applyPendingToRead：技能上线草稿合并到 skillsManage 行，不挂顶层', () => {
+  const backend = {
+    sections: [], skills: [],
+    skillsManage: [
+      { name: 'anatomy', enabled: false, tool_count: 1, enabled_count: 0,
+        tools: [{ name: 'anatomy_illustration', enabled: false }] }
+    ]
+  };
+  const ctx = { configCache: { pending: [
+    { seq: 1, block: 'skills', path: '/skills/anatomy/enabled', method: 'PUT', body: { enabled: true } }
+  ] } };
+  const out = D.applyPendingToRead(ctx, '/prompt_sections', backend,
+    D.matchConfigBlock('/prompt_sections', 'GET', false));
+  assert.strictEqual(out.skillsManage[0].enabled, true);
+  assert.strictEqual(out.skillsManage[0].tools[0].enabled, true);
+  assert.strictEqual(out.skillsManage[0].enabled_count, 1);
+  assert.ok(!('enabled' in out));
+  assert.strictEqual(backend.skillsManage[0].enabled, false);
+});
+
+test('applyPendingToRead：多个技能待覆盖写入逐条生效', () => {
+  const backend = { sections: [], skills: [], skillsManage: [
+    { name: 'a', enabled: false, tools: [{ name: 't_a', enabled: false }] },
+    { name: 'b', enabled: false, tools: [{ name: 't_b', enabled: false }] }
+  ] };
+  const ctx = { configCache: { pending: [
+    { seq: 1, block: 'skills', path: '/skills/a/enabled', method: 'PUT', body: { enabled: true } },
+    { seq: 2, block: 'skills', path: '/skills/b/enabled', method: 'PUT', body: { enabled: true } }
+  ] } };
+  const out = D.applyPendingToRead(ctx, '/prompt_sections', backend,
+    D.matchConfigBlock('/prompt_sections', 'GET', false));
+  assert.deepStrictEqual(out.skillsManage.map((s) => s.enabled), [true, true]);
+});
+
+test('applyPendingToRead：工具上下线草稿合并到 tools 行', () => {
+  const backend = { tools: [{ name: 'foo', enabled: false, description: 'x' }], scanRoots: [] };
+  const ctx = { configCache: { pending: [
+    { seq: 1, block: 'custom_tools', path: '/custom_tools/foo', method: 'PUT', body: { enabled: true } }
+  ] } };
+  const out = D.applyPendingToRead(ctx, '/custom_tools', backend,
+    D.matchConfigBlock('/custom_tools', 'GET', false));
+  assert.strictEqual(out.tools[0].enabled, true);
+  assert.ok(!('enabled' in out));
+});
+
+test('apiFetch：技能上线草稿模式下读 /prompt_sections 保持上线态', async () => {
+  clearStore();
+  global.fetch = async () => okResp({
+    sections: [], skills: [],
+    skillsManage: [{ name: 'anatomy', enabled: false, tool_count: 1, enabled_count: 0,
+      tools: [{ name: 'anatomy_illustration', enabled: false }] }]
+  });
+  const ctx = makeCtx();
+  const r = await D.apiFetch(ctx, '/skills/anatomy/enabled', { method: 'PUT', body: { enabled: true } });
+  assert.strictEqual(r.draft, true);
+  const data = await D.apiFetch(ctx, '/prompt_sections');
+  assert.strictEqual(data.skillsManage[0].enabled, true);
+});
+
