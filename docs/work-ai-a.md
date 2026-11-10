@@ -38,76 +38,69 @@
 
 ## 二、当前任务
 
-### 任务 A-2：标准 System Prompt 生成
+### 任务 A-3：标准会话历史存储细化（阶段 1a 收尾项）
 
-**目标**：由工具服务生成并返回「标准 System Prompt 主体」，供翻译员在阶段 2 取回后再追加方言说明。内容边界以 `.\docs\split-mirror-and-tools-service.md` 第 3.2 节为准：**身份 + 规则 + 技能清单 +「调用前先查参数」通则**。
+**目标**：在 A-1 已交付的会话存储基础上，按 `.\docs\split-mirror-and-tools-service.md` 3.8、5.2、5.3、6.1 节细化「标准会话历史」：只承载标准 `messages`、与网页形态严格分离、按 `site_key` 隔离、可持久化延续。不新建第二套存储，不改接口契约。
+
+**前置**：A-1、A-2 均已验收合入 `main`。规格第七节阶段 1a 共 7 项，本项为最后一项，完成即 1a 收尾。
+
+**现状（先读再改）**：`.\flask_server\core\chat_completions.py` 已有 `load_session` / `save_session` / `merge_history` / `_is_tail_repeat`，按 `site_key` 落盘到 `flask_server/data/chat_sessions/`（运行时产物，不入库）；`merge_history` 已实现五种分支（前缀一致追加、真前缀幂等、尾部重复去重、新 user 增量、真分叉重建）。`.\docs\api-reference.md` 第十四节「行为要点」已记口径。本任务是在此基础上补强，不重写。
 
 **做什么**：
 
-1. 在 `.\flask_server\core\` 下新建模块，聚合四段内容生成完整提示词文本
-2. 在 `.\flask_server\routes\` 下新增 GET 路由（或扩展现有 `prompts.py`），对外返回该文本；路径建议 `GET /v1/system_prompt`，与 `/v1/chat/completions` 同族
-3. 身份段：工具服务自身定位，一段固定文字
-4. 规则段：只列**规则名 + 读取优先级**（取自 `.\flask_server\core\rules.py` 的清单口径），不塞规则正文；正文由 AI 按需 `read_rule` 读取
-5. 技能段：只取**已上线**技能的说明与清单（复用 `.\flask_server\core\prompt_sections.py` 的口径），指令执行端工具不进
-6. 「调用前先查参数」通则：写明调用任何工具前先用 `get_tool_params` 查准确参数名，口径同 `.\flask_server\tools\list_tools_impl.py`
-7. 在 `.\docs\api-reference.md` 补该接口说明（当前末节为第十五节「语言包寄存」，顺延为第十六节）
-8. 在 `.\flask_server\tests\` 下新建测试文件，覆盖下方验收标准
+1. 落盘前规范化 `messages`：只保留标准角色（system / user / assistant / tool）与标准字段；`tool` 消息只含 `content` 一个字符串字段，错误信封整体 JSON 化、不加额外布尔字段（6.1）；剔除卡片状态、网页原文、选择器等网页场景字段，不把它们写入历史（3.8 / 5.2）。剔除是静默规范化，**不改变请求响应契约、不返回 400**
+2. 按 `site_key` 严格隔离，不解释标识语义（5.3）；两个 `site_key` 的历史互不串
+3. 落盘健壮性：`load_session` 现在遇损坏 / 非列表文件静默返回 `[]`（会丢整段历史），改为可诊断兜底——保留损坏文件备份并记日志，接口仍不中断
+4. 并发写：`save_session` 现用固定 `*.tmp` + `os.replace`，同一 `site_key` 并发请求会撞同一临时文件；补串行化或唯一临时文件名，保证并发写不互相覆盖丢消息
+5. 补齐测试：新建 `.\flask_server\tests\test_chat_sessions.py`，逐分支断言 `merge_history` 五种语义、标准形态规范化、网页场景字段不落盘、损坏文件兜底、并发写、两 `site_key` 隔离、重启后延续
+6. 在 `.\docs\api-reference.md` **既有第十四节「行为要点」内**补细化后的口径；当前末节为「十六、标准提示词」，**不新增顶层章节、不改既有编号**（B-3 与 C 系列也在动文档）
+7. 输出摘要贴进本文件第五节
 
 **不做什么**：
 
-- 不含方言说明（调用格式、回传格式）、朗读稿约定、任何只在网页 AI 场景成立的内容
-- 不含工具全量参数清单（参数按需查，不一次塞满）
-- 不含指令类工具名（见 `.\docs\extensions.md` R1：指令不得进任何「给 AI 看的」清单）
-- 不改造 `.\extend\` 下任何文件（提示词拼装是阶段 2）
-- 不改工具参数声明格式（那是阶段 1b）
-- 不碰 A-1 已交付的 `/v1/chat/completions` 链路，除非确有必要且先提问
+- 不新建第二套会话存储，不改 `chat_sessions` 目录位置
+- 不改 `/v1/chat/completions` 的请求 / 响应契约（`choices`、`site_key`、`messages` 扩展字段保持）
+- 不接入真实模型（阶段 2 才替换占位生成器）
+- 不碰 `.\flask_server\routes\chat_api.py`、`routes\system_prompt.py`、`core\system_prompt.py`、记忆系统 `core\memory_*.py`
+- 不碰 B-3 正在改的工具参数声明文件（`.\flask_server\tools\` 下）
+- 不碰 `.\extend\`、`.\flask_server\config\definition.yaml`、`scripts\quality_baseline.json`
 
 **可以碰的文件**：
 
 | 文件 | 说明 |
 |---|---|
-| `.\flask_server\core\` 下新建模块 | 聚合四段、生成文本 |
-| `.\flask_server\routes\` 下新建路由文件，或现有 `prompts.py` | 对外 GET |
-| `.\flask_server\app.py` | 若新建蓝图则注册 |
-| `.\flask_server\tests\` 下新建测试文件 | 覆盖验收项 |
-| `.\flask_server\scripts\` 下新建验收脚本 | 可选 |
-| `.\docs\api-reference.md` | 补接口说明（第十六节） |
+| `.\flask_server\core\chat_completions.py` | 会话函数细化 |
+| `.\flask_server\tests\test_chat_sessions.py` | 新建测试 |
+| `.\docs\api-reference.md` | 第十四节内补说明 |
+| `.\docs\work-ai-a.md` | 第五节完成记录 |
 
-**不要碰**：
-
-- `.\extend\` 下任何文件
-- `.\flask_server\tools\` 下的参数声明文件（阶段 1b）
-- `.\flask_server\routes\tools.py`、`.\flask_server\routes\cards.py`
-- `.\flask_server\core\rules.py`、`.\flask_server\core\prompt_sections.py` 的现有对外行为（只读复用，不改语义）
-- `rules\`、`skills\` 下的数据本体
+**不要碰**：见「不做什么」清单；范围外先按 1.4 提问。
 
 **实现原则**：
 
-1. 四段内容全部从现有模块读数据，不复制一份常量到新模块里当第二真源
-2. 规则段只暴露清单与优先级；技能段只暴露已上线项；指令工具名一律不出现
-3. 返回结构用 `{ "system_prompt": "<文本>" }`，并附各段长度或分段标记便于断言
-4. 一切取舍以 `.\docs\split-mirror-and-tools-service.md` 第 3.2、4.3 节为准；规格没写的先提问
+1. **开工前先同步**：`git fetch origin && git rebase origin/main`。`work/ai-a` 远端尖端仍停在 `6d3707e`（A-1 收尾），A-2 是由并发提交直推 `main` 的、你的分支不含它；不同步就跑测试会得到旧基线 972 而非当前 997
+2. 改动前先跑一遍 `python -m pytest tests -q` 记下通过数，改后只增不减
+3. 按 2.2 节：一个任务一次提交，推 `work/ai-a` 分支，**不直推 `main`**（A-2 的直推是已登记的流程偏差，不沿用）
+4. 规格没写的先提问，按 1.5 处理；提交钩子全过，不用 `--no-verify`
 
 **验收标准**：
 
-| # | 场景 | 期望 |
+| # | 项 | 期望 |
 |---|---|---|
-| 1 | 四段齐全 | 返回文本含身份、规则清单、技能清单、「先查参数」通则四段 |
-| 2 | 规则正文不注入 | 输出只含规则名与优先级，不含任何规则正文全文 |
-| 3 | 已上线口径 | 下线技能、指令执行端工具名不出现在输出里 |
-| 4 | 方言隔离 | 输出不含代码块调用格式、回传格式、朗读约定、网页选择器等场景词 |
-| 5 | 参数清单不塞满 | 输出不含具体工具参数 schema，只给「先查参数」通则 |
-| 6 | 单一真源 | 改一条规则优先级或下线一个技能后，重新取回输出随之变化 |
-
-写验收脚本把六项断言跑通，输出摘要贴进本文件第五节；`python -m pytest tests -q` 全绿；提交钩子全过、不用 `--no-verify`。
+| 1 | 标准形态 | 落盘历史每条只含标准角色与标准字段，`tool` 消息 `content` 为 JSON 字符串且无额外布尔字段 |
+| 2 | 场景隔离 | 卡片状态 / 网页原文 / 选择器等字段不进入落盘历史，接口不报错 |
+| 3 | 合并语义 | 五种分支逐分支断言通过，不重复追加、不丢消息 |
+| 4 | 隔离与延续 | 两 `site_key` 互不串；重启后同一 `site_key` 历史完整延续 |
+| 5 | 健壮性 | 损坏文件不中断接口且历史不静默丢失；同 `site_key` 并发写不互相覆盖 |
+| 6 | 闸门 | 全量测试全绿（当前基线 997）、`quality_rules.py` 零 `[新增]`、`doc-sync` 通过、提交钩子全过 |
 
 **完成后**：
 
 1. 在本文件第五节追加完成记录
 2. 推送 `work/ai-a` 分支
-3. 若第三节已有标注「可开工」的排队任务，直接开工；否则等「更新 git」指令
+3. 等「更新 git」指令，由分发方逐条验收
 
-> 本任务为当前任务；A-3 待 A-2 完成后再拆，未标注「可开工」不得动手。
+> 第三节排队槽暂无「可开工」任务；C 系列与 1b 前端适配层由分发方另行排期。
 
 ---
 
@@ -118,8 +111,8 @@
 
 | 编号 | 任务 | 状态 |
 |---|---|---|
-| A-2 | 标准 System Prompt 生成 | 已下发为当前任务，见第二节 |
-| A-3 | 标准会话历史存储细化 | 待定，A-1 与 A-2 完成后再拆 |
+| A-2 | 标准 System Prompt 生成 | 已通过（追认），见第五节 |
+| A-3 | 标准会话历史存储细化 | 已下发为当前任务，见第二节 |
 
 ---
 
