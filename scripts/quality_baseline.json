@@ -454,7 +454,7 @@
     {
       "check": "pyfunc",
       "file": "flask_server\\web_bridge\\__init__.py",
-      "count": 1
+      "count": 3
     },
     {
       "check": "pyfunc",

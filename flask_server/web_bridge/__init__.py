@@ -179,12 +179,14 @@ class WebBridge:
         import json
         # 目标页面：优先取该站点已登记且在线的那一个
         target = _resolve_target_page(site_key)
-        # 指定了站点却解析不到页面：该站点此刻没有打开的抽屉。
-        # 此时必须停下——若照旧用空 target 投出去，卡片会被任意页面取走，
-        # 消息就落到别的站点去了（实测曾从 GLM 落到 DeepSeek）。
-        # 返回空串交由上层回执「站点无在线页面」，比投错更诚实也更好排查。
-        if str(site_key or "").strip() and not target:
-            log("投递文本卡片失败：站点 %s 无在线页面" % str(site_key).strip())
+        # 解析不到目标页面时一律停下，不再允许「target 为空 = 不限页面」投出去。
+        # 空 target 的卡片在总线里是公开的，任何页面的抽屉都能取走，
+        # 消息会落到别的站点（实测曾从 GLM 落到 DeepSeek）。
+        # 未指定站点（site_key 为空）同样拒绝：此时无法确定该投给哪个页面，
+        # 放行等于让内容随机落到某个打开的页面上。宁可失败并如实回执，
+        # 也不投错——投错的代价是用户在一个完全无关的对话里看到自己的消息。
+        if not target:
+            log("投递文本卡片失败：站点 %s 无在线页面" % (str(site_key or "").strip() or "(未指定)"))
             return ""
         payload = _text_payload(text, target)
         return self._create_card(
@@ -196,7 +198,7 @@ class WebBridge:
             target_page=target,
         )
 
-    def ingest_images(self, data_urls, text="", image_names=None):
+    def ingest_images(self, data_urls, text="", image_names=None, site_key=""):
         """把网页发来的一组图片（可含文字）投成一张卡片，由抽屉一次贴进网页 AI。
 
         复用 QQ 图片的逆向流程：图片转 dataURL 放进 qq-image 卡片，
@@ -205,10 +207,17 @@ class WebBridge:
         保证「图文合一」，不拆成多条消息。
         @param data_urls 图片 dataURL 数组
         @param text      随图附带的文字；为空时补「用户截图」给 AI 上下文
+        @param site_key  目标站点；用于解析目标页面，无目标页时拒绝投递
         @returns 卡片 id；失败返回空串
         """
         urls = [str(u) for u in (data_urls or []) if u]
         if not urls:
+            return ""
+        # 目标页面：与文字路径同一把门。图片卡片不带目标页时会被任意页面的
+        # 抽屉取走，图就贴进了不相干的对话。解析不到页面即拒绝。
+        target = _resolve_target_page(site_key)
+        if not target:
+            log("投递图片卡片失败：站点 %s 无在线页面" % (str(site_key or "").strip() or "(未指定)"))
             return ""
         # 拼装委托公共层：三条通道共用同一份实现，避免能力漂移。
         # image_names 是网页版特有字段（抽屉据此把图挂到对应消息上），
@@ -217,6 +226,7 @@ class WebBridge:
         return delivery.deliver_images(
             "web", "web-user", sources=urls, text=text, title="网页图片",
             extra={"image_names": [str(n) for n in (image_names or []) if n]},
+            target_page=target,
         )
 
 

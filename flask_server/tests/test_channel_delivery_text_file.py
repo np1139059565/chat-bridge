@@ -26,6 +26,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import paths  # noqa: F401  触发路径引导
+import channel_binding
 from remote_bridge.channel import delivery
 
 
@@ -177,6 +178,58 @@ class DeliverFileTest(unittest.TestCase):
         p = self._make_file()
         delivery.delivery_queue.bus = FakeBus(raise_exc=True)
         self.assertEqual(delivery.deliver_file("qq", "u", p), "")
+
+
+class TargetPageTest(unittest.TestCase):
+    """卡片归属：投递层按来源通道把目标页面补齐。"""
+
+    PAGE = "https://chat.deepseek.com/chat/abc"
+
+    def setUp(self):
+        """清空绑定并替换卡片总线。"""
+        channel_binding.reset()
+        self._orig = delivery.delivery_queue.bus
+        self.bus = FakeBus()
+        delivery.delivery_queue.bus = self.bus
+
+    def tearDown(self):
+        """还原总线并清空绑定。"""
+        delivery.delivery_queue.bus = self._orig
+        channel_binding.reset()
+
+    def test_bound_text_card_targets_bound_page(self):
+        """通道绑定页面后，文本卡片的 target_page 等于该页面。"""
+        channel_binding.bind("qq", self.PAGE)
+        delivery.deliver_text("qq", "u", "文字")
+        self.assertEqual(self.bus.calls[-1]["target_page"], self.PAGE)
+
+    def test_unbound_text_card_has_no_target(self):
+        """通道未绑定时，文本卡片不限页面。"""
+        delivery.deliver_text("qq", "u", "文字")
+        self.assertEqual(self.bus.calls[-1]["target_page"], "")
+
+    def test_bound_file_card_targets_bound_page(self):
+        """文件卡片与文本卡片共用同一套归属规则。"""
+        import shutil
+        import tempfile
+        tmpdir = tempfile.mkdtemp(prefix="deliver_target_")
+        try:
+            p = os.path.join(tmpdir, "a.txt")
+            with open(p, "wb") as f:
+                f.write(b"x")
+            channel_binding.bind("qq", self.PAGE)
+            delivery.deliver_file("qq", "u", p)
+            self.assertEqual(self.bus.calls[-1]["target_page"], self.PAGE)
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def test_explicit_target_page_wins(self):
+        """调用方显式指定的页面优先于绑定表。"""
+        channel_binding.bind("qq", self.PAGE)
+        delivery.deliver_text("qq", "u", "文字",
+                              target_page="https://chatglm.cn/main/xyz")
+        self.assertEqual(self.bus.calls[-1]["target_page"],
+                         "https://chatglm.cn/main/xyz")
 
 
 if __name__ == "__main__":
