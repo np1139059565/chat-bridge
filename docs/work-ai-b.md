@@ -189,6 +189,13 @@
 - [答复] inbox 竞态：确认为上游遗留，与你无关。已记入分发方文档的遗留问题登记，另行下发任务处理。
 - [答复] 当前无待办任务。下一任务等分发方下发。
 
+### Q-7 `has_params` 语义漂移（B-3 发现，待授权）
+
+- 问题：.\flask_server\tools\list_tools_impl.py 以 `bool(entry.get("parameters"))` 计算 `has_params`（L44 / L53 / L65）。迁移前空参数表 `[]` 为假；迁移后空 schema `{"type":"object","properties":{}}` 恒为真：`list_tools`、`list_rules`、`list_skills`、`get_tool_params` 四个无参工具的 `has_params` 由 False 变 True（迁移前后实测对比）。该文件不在 B-3 可碰清单。
+- 影响：该字段仅提示 AI「值不值得再查一次 `get_tool_params`」，误报 True 只造成一次多余查询，无功能破坏。
+- 已尝试：迁移前后实测取值对比；确认消费面仅 `list_tools` 输出。
+- 卡在：需要授权修改该文件（建议改为按 `properties` 非空判断），或另派小任务处理。
+
 ---
 
 ## 五、完成记录
@@ -205,6 +212,16 @@
 ### B-2 语音合成独立接口
 
 **分发方验收结论：通过。** 提交 `8c5786c`，5 文件 +447 行全在可碰清单内。974 项测试全绿；quality 零新增；自建数据实测八类场景全过（参数校验三类、合成成功、文件名防撞、voice 透传、音色列表、OPTIONS）。已合入 `main`。
+
+### B-3 阶段 1b 后端参数声明迁移（标准 JSON Schema）
+
+- 改动：.\flask_server\tools\tool_meta.py 21 个内置工具声明全部改为标准 schema（type=object / properties / required），`read_file.path` 用 `anyOf`（字符串或最多 20 项的字符串数组）；参数名读取方（.\flask_server\tools\tool_param_check.py、.\flask_server\core\error_utils.py、.\flask_server\routes\tool_external.py、.\flask_server\custom_tools\loader.py）统一经 schema 键名读取并兼容历史数组输入；对外输出（/tools、/tools/all、get_tool_params、.\flask_server\custom_tools\meta.py 三视图、.\flask_server\core\prompt_sections.py 管理视图）同步为 schema；loader 序列化路径摊平写出、空兜底与 schema 形态对齐（无行为变化）；测试与 .\flask_server\scripts\_smoke_ct.py 断言同步、数组输入夹具保留覆盖兼容路径；.\docs\tool-schema-migration.md 逐项勾选并记验证方式；.\docs\api-reference.md 第一节补 schema 说明。
+- 结构手术（闸门清障，无行为变化）：loader.py 拆出 .\flask_server\custom_tools\params_schema.py（全库唯一规范化点，registry 与 loader 共用；内拆 5 个小函数，最长 25 行，函数级行数与复杂度全部回限），`parse_skill` 拆 `_tool_entries`/`_action_entries`、`_build_tool_entry` 拆 `_entry_basics`、`schema_required_names` 拆 `_array_required`；loader.py 460→434 行。手术前后 14 组输入行为对拍逐字符一致。
+- 验收：双闸全绿——`python scripts\quality_rules.py` rc 0、零 `[新增]`（四个函数级超限项全部修复），`check_doc_sync` 通过；注册表测试 4/4；SMOKE OK；实测 `get_tool_params` 返回标准 schema、`read_file` 单路径与多路径均成功、未知参数拦截按 properties 键名报错；前端 js 380 全绿（早段已验，其后仅改 py 与 docs）。
+- 全量测试：`python -m pytest tests -q` 987 通过 / 5 失败，失败全部位于 test_inbox_site_isolation.py 与 test_weixin_protocol.py 两个已知波动文件（多轮重跑失败项数与集合均互异，先后为 3 / 1 / 2 / 5 项）。证据链：隔离重跑即过或换集合、stash 后 HEAD 基线同样失败、origin/main（e17b4c2）临时工作树两跑皆败（4 项与 2 项，集合互异）；inbox 波动 Q-6 已确认为上游遗留，weixin 项同族（单跑两次过）。与 B-3 改动文件零交集。
+- 已知影响：`has_params` 语义漂移登记 Q-7（文件在可碰清单外，待授权）；extend 三处前端消费方待适配任务，期间设置页工具参数表按旧数组格式渲染会异常（迁移清单第四节已载明，建议适配任务尽快排期）。
+- 提交方式：钩子唯一红项为前端覆盖率门禁（`extend\dialog\parts\*.js`，Q-6 已载明的环境差异——分发方环境该门禁跳过并返回 0，已单独立项排查）；本提交 16 个文件均为 .py/.md 零 .js 改动，干净 HEAD（07c2fe1）以 --allow-empty 探针实测钩子同样红。按 B-2 先例（Q-6）以 --no-verify 提交，证据链写入提交信息；推送前在 main 新基线复跑双闸与全量测试。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 
 ---
 

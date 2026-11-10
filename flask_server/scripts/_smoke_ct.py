@@ -81,7 +81,40 @@ try:
     # ---------- 2) 解析：校验 name 与参数被正确读出 ----------
     parsed = ct.parse_skill(sd)
     assert parsed[0]["name"] == "demo_echo", parsed
-    assert parsed[0]["parameters"][0]["name"] == "msg"
+    # 旧数组格式输入 → 规范化为标准 schema 输出（迁移期双格式兼容）
+    p1 = parsed[0]["parameters"]
+    assert p1["type"] == "object" and list(p1["properties"]) == ["msg", "repeat"], p1
+    assert p1["required"] == ["msg"], p1
+
+    # ---------- 2b) 标准 schema 格式输入的直通验证（仅解析，不安装） ----------
+    sd2 = os.path.join(root, "schema_skill")
+    os.makedirs(os.path.join(sd2, "scripts"))
+    with open(os.path.join(sd2, "scripts", "echo.py"), "w", encoding="utf-8") as f:
+        f.write("print(1)\n")
+    with open(os.path.join(sd2, "tool.json"), "w", encoding="utf-8") as f:
+        json.dump({
+            "tools": [{
+                "name": "schema_demo",
+                "description": "schema 输入直通验证",
+                "script": "scripts/echo.py",
+                "interpreter": "python",
+                "arg_style": "flag",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "src": {"anyOf": [{"type": "string"},
+                                          {"type": "array", "items": {"type": "string"}, "maxItems": 20}]},
+                        "n": {"type": "integer", "description": "数量"},
+                    },
+                    "required": ["src"],
+                },
+            }]
+        }, f, ensure_ascii=False)
+    parsed2 = ct.parse_skill(sd2)
+    p2 = parsed2[0]["parameters"]
+    assert p2["type"] == "object" and p2["required"] == ["src"], p2
+    assert "anyOf" in p2["properties"]["src"], p2
+    assert p2["properties"]["src"]["anyOf"][1]["maxItems"] == 20, p2
 
     # ---------- 3) 安装：应只安装 demo_echo ----------
     installed = ct.install(sd)

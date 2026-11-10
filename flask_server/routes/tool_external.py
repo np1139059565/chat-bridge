@@ -11,6 +11,8 @@ from flask import jsonify
 
 import runtime
 import external_tools
+# 必填参数名读取辅助（双格式兼容），位于 tools/，由 paths 引导进 sys.path
+from tool_param_check import schema_required_names
 
 
 def validate_external_params(name, ctool, params):
@@ -24,11 +26,9 @@ def validate_external_params(name, ctool, params):
     @param params 调用方传入的参数
     @returns 错误响应；参数合法返回 None
     """
+    # 必填名从标准 schema 的顶层 required 读取（读取辅助兼容历史数组格式）
     missing = []
-    for p in ctool.get("parameters") or []:
-        if not p.get("required"):
-            continue
-        pname = p.get("name")
+    for pname in schema_required_names(ctool.get("parameters")):
         val = (params or {}).get(pname)
         if val is None or (isinstance(val, str) and val.strip() == ""):
             missing.append(pname)

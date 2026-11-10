@@ -353,6 +353,7 @@ def _builtin_params(tid):
     if tid not in TOOLS:
         return None
     entry = TOOLS[tid]
+    # 内置声明在 tool_meta 已是标准 JSON Schema，直接透出
     resp = {"tool": tid, "description": entry["description"], "parameters": entry["parameters"]}
     if tid == "run_command":
         resp["languages"] = _load_run_command_languages()
@@ -369,7 +370,8 @@ def _custom_params(tid):
     return {
         "tool": tid,
         "description": ctool.get("description") or "",
-        "parameters": ctool.get("parameters") or [],
+        # custom 声明经 load_tools 读取时已归一化为标准 schema；缺失时给空 schema
+        "parameters": ctool.get("parameters") or {"type": "object", "properties": {}},
         "executor": ctool.get("executor") or "script",
         "provider": ctool.get("provider") or "",
     }

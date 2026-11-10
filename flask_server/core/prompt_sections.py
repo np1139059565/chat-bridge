@@ -89,7 +89,8 @@ def _manage_tools_by_skill():
             "enabled": bool(t.get("enabled")),
             "provider": t.get("provider", ""),
             "executor": t.get("executor", "script"),
-            "parameters": t.get("parameters") or [],
+            # 参数声明：标准 schema（load_tools 读取时已归一化），缺失时给空 schema
+            "parameters": t.get("parameters") or {"type": "object", "properties": {}},
         })
     return by_skill
 

@@ -30,29 +30,40 @@
 
 ### 3.1 参数声明本体
 
-- [ ] `flask_server/tools/tool_meta.py` — 21 个内置工具的参数声明改写，逐项核对：
+- [x] `flask_server/tools/tool_meta.py` — 21 个内置工具的参数声明改写，逐项核对：
       `list_tools`、`get_tool_params`、`list_dir`、`search_file`、`search_content`、`read_file`、
       `read_image`、`push_file`、`list_skills`、`read_skill`、`read_lints`、
       `replace_in_file`、`write_to_file`、`delete_file`、`list_rules`、`read_rule`、
       `run_command`、`command_task`、`memory_search`、`memory_inspect`、`memory_refine`
       （其中 `list_skills` 与 `list_rules` 参数为空表，迁移后应为 `{"type":"object","properties":{}}`）
-- [ ] `flask_server/custom_tools/loader.py` — skill 工具声明解析（第 265 行 `for p in raw.get("parameters")`）
-- [ ] `flask_server/custom_tools/registry.py` — `_normalize_param` 与保存逻辑（113–114、231、241 行）
+      验证：实测 GET /tools 21 个内置工具全为 schema；`list_skills`/`list_rules` 为空 schema；`read_file.path` 为 anyOf 双分支。
+- [x] `flask_server/custom_tools/loader.py` — skill 工具声明解析（第 265 行 `for p in raw.get("parameters")`）
+      验证：`normalize_params_schema` 兼容 schema/数组双输入且对 schema 幂等；`_smoke_ct.py` 数组输入冒烟通过。
+- [x] `flask_server/custom_tools/registry.py` — `_normalize_param` 与保存逻辑（113–114、231、241 行）
+      验证：声明与必填校验改经 `schema_param_names` 与 `schema_required_names`，test_custom_tools_registry 全绿。
 
 ### 3.2 参数名读取方（改格式后必须同步）
 
-- [ ] `flask_server/tools/tool_param_check.py` L32 — `[p.get("name") for p in entry.get("parameters")]`
+- [x] `flask_server/tools/tool_param_check.py` L32 — `[p.get("name") for p in entry.get("parameters")]`
       改为从 `properties` 取键名
-- [ ] `flask_server/core/error_utils.py` L43、L52 — `_declared_param_names` 同上
-- [ ] `flask_server/routes/tool_external.py` L28 — 外部工具参数读取
-- [ ] `flask_server/custom_tools/loader.py` L154 — `_dump_params`
+      验证：读取辅助双格式兼容；未知参数拦截实测按 properties 键名返回声明列表。
+- [x] `flask_server/core/error_utils.py` L43、L52 — `_declared_param_names` 同上
+      验证：`_declared_param_names` 改读 schema 键名；错误提示实测列出正确参数名。
+- [x] `flask_server/routes/tool_external.py` L28 — 外部工具参数读取
+      验证：外部工具必填校验经 `schema_required_names`；py_compile 与相关测试通过。
+- [x] `flask_server/custom_tools/loader.py` L154 — `_dump_params`
+      验证：schema 摊平为历史条目写出、anyOf 记为 "string | array"；空兜底字面量与 schema 形态对齐（无行为变化）。
 
 ### 3.3 对外输出结构（影响前端与 AI）
 
-- [ ] `flask_server/routes/tools.py` L184 — `/tools/all` 输出
-- [ ] `flask_server/tools/tools_impl.py` L354、L370 — `get_tool_params` 返回
-- [ ] `flask_server/custom_tools/meta.py` L29、L70、L109 — 三处对外视图
-- [ ] `flask_server/core/prompt_sections.py` L92 — 技能工具归集
+- [x] `flask_server/routes/tools.py` L184 — `/tools/all` 输出
+      验证：实测 GET /tools/all 21 条 parameters 均为 schema，缺失兜底空 schema。
+- [x] `flask_server/tools/tools_impl.py` L354、L370 — `get_tool_params` 返回
+      验证：实测 `get_tool_params` 返回标准 schema，顶层 required 与 properties 可正确取键。
+- [x] `flask_server/custom_tools/meta.py` L29、L70、L109 — 三处对外视图
+      验证：三处视图透传 schema、缺失兜底空 schema；相关测试全绿。
+- [x] `flask_server/core/prompt_sections.py` L92 — 技能工具归集
+      验证：仅设置页管理视图透传 schema，System Prompt 注入路径文本零变化；A-2 消费面复核不受影响。
 
 > 注意：`get_tool_params` 是 AI 查询参数的主要入口。改格式后，
 > AI 看到的结构会变——需同步确认 System Prompt 里的使用说明是否仍准确。
@@ -76,9 +87,12 @@
 
 ## 五、测试改动清单
 
-- [ ] `flask_server/tests/` 中所有构造工具声明的地方（`"parameters": [...]`）
-- [ ] `flask_server/scripts/_smoke_ct.py` L84 — 断言 `parameters[0]["name"]`
-- [ ] 前端测试中构造卡片参数的地方
+- [x] `flask_server/tests/` 中所有构造工具声明的地方（`"parameters": [...]`）
+      验证：pytest 983/984（唯一失败为既有波动，stash 基线对照证实与本次无关）；`_smoke_ct.py` L56 数组输入有意保留覆盖兼容路径。
+- [x] `flask_server/scripts/_smoke_ct.py` L84 — 断言 `parameters[0]["name"]`
+      验证：断言改为 schema 口径，SMOKE OK。
+- [x] 前端测试中构造卡片参数的地方
+      验证：卡片参数为调用值对象，不随声明迁移变化；js 380 全绿。`test_toolconf_swallow.test.js` 的声明夹具仍为数组格式，随第四节前端适配任务迁移。
 
 ## 六、验证方式
 
@@ -99,3 +113,4 @@
 | — | 建立本清单 | — |
 | 2026-11-09 | 核实清单事实：工具数 13→20 并列出名单；联合类型全量扫描确认仅 `read_file.path` 一处，策略定为 `anyOf`；基线更新为 py 942 / js 380；前端条目按实测改写并确定适配层落点 | 扫描 + 实测 |
 | 2026-11-09 | 合入 `list_tools` 后复核：工具数 20→21，基线 py 942→949 | 实测 |
+| 2026-11-10 | B-3 完成：第三节与第五节 py 侧全部勾选；loader 与 `_smoke_ct.py` 保留数组输入作兼容路径；js 声明夹具随第四节前端任务迁移；`has_params` 漂移登记 work-ai-b Q-7 | 实测 |

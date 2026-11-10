@@ -13,6 +13,9 @@ import subprocess
 import traceback
 
 import runtime
+# 参数声明双格式读取辅助：位于 tools/（sys.path 已由 runtime→paths 引导加入），
+# 本模块保持零其它工具侧依赖，避免导入顺序问题
+from tool_param_check import schema_param_names
 
 
 # ---------- 错误分类：参数问题 / 环境路径问题 / 工具内部代码缺陷 ----------
@@ -38,28 +41,22 @@ def _declared_param_names(tool_name):
     """
     if not tool_name:
         return set()
-    # 先查内置工具表
+    # 先查内置工具表（声明为标准 schema，读取辅助兼容历史数组格式）
     entry = runtime.TOOLS.get(tool_name) or {}
-    params = entry.get("parameters") or []
+    params = entry.get("parameters")
     # 内置表没查到：再查自定义 / 外部工具表。
     # 外部工具（如 debug_chrome 提供的）注册在 custom_tools 而不在 runtime.TOOLS，
     # 只查内置表会让它们声明的参数永远取不到，KeyError 一律落到保守分支，
     # 实现里的键名写错会被误报成「调用方参数写错」。
-    if not params:
+    if not schema_param_names(params):
         try:
             import custom_tools as ct
             ctool = ct.get_tool(tool_name) or {}
-            params = ctool.get("parameters") or []
+            params = ctool.get("parameters")
         except Exception:
             # 自定义工具表不可用时保持空集合，退回原有保守口径
-            params = []
-    names = set()
-    for p in params:
-        # 参数定义形如 {"name": "path", ...}；缺 name 的条目跳过
-        n = p.get("name") if isinstance(p, dict) else None
-        if n:
-            names.add(n)
-    return names
+            params = {}
+    return set(schema_param_names(params))
 
 
 def classify_error(e, tool_name=None):
