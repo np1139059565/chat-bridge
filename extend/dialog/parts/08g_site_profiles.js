@@ -201,8 +201,7 @@
           + (meta && meta.hint ? '：' + meta.hint : ''))
       ]),
       h('div', { class: 'tc-control sp-field-control' + fieldDiffClass(ctx, pid, field) }, [
-        fieldRestoreBtn(ctx, pid, field),
-        control,
+        h('div', { class: 'sp-field-main' }, [fieldRestoreBtn(ctx, pid, field), control]),
         kind && kind !== 'hosts' ? h('button', {
           class: 'sp-test-btn', disabled: testing,
           onClick: () => ctx.testProfileField(pid, field, mode)

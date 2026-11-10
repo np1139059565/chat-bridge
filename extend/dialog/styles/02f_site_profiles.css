@@ -194,3 +194,20 @@ select[data-diff="1"] {
   margin-right: 2px;
   font-size: 12px;
 }
+
+/* C-6c：逐项还原按钮与输入框同行；无还原按钮时该容器仍只含一个控件，布局不变。 */
+.sp-field-main {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 6px;
+}
+.sp-field-main > .sp-restore-btn { flex: 0 0 auto; }
+.sp-field-main > .sp-input,
+.sp-field-main > .sp-area,
+.sp-field-main > input,
+.sp-field-main > textarea {
+  flex: 1 1 0;
+  min-width: 0;
+  width: auto;
+}
