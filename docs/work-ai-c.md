@@ -210,6 +210,8 @@
   6. 文档：`.\docs\api-reference.md` 新增第十六节，说明复用 `custom_config` 的寄存与取回方式。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 
+**分发方验收结论（2026-11-10）：通过。** 拉取 `origin/work/ai-c` 至 `272d7ad`，独立工作树逐条实测：`python -m pytest tests -q` → 989 passed in 21.16s；`quality_rules.py` 统一闸门 exit 0、零 `[新增]`；`check_doc_sync.py` 通过。自建含中文、嵌套对象、数组、null、空串、特殊字符与 emoji 的语言包，经 `POST/GET /api/clients` 存一遍取一遍，深比较与同一规则序列化后 UTF-8 逐字节比较均一致；未注册 `site_key` 返回 404 且响应不含 `custom_config` / `profiles`，不兜底默认档案；两个 `site_key` 互不串、重复注册整条覆盖、重建 app 后取回不变。改动 3 文件全在可碰清单内，`clients.py`、`client_registry.py`、`definition.yaml`、`.\extend\`、`config_store.py` 一行未动。合入 `main` 时 `api-reference.md` 按「保留双方新增」把「十六、语言包寄存」重排为「十五」（A-2 尚未落地，保持编号连续），A-2 任务书预期同步改为第十六节。C-3b 保持未标注「可开工」，由分发方拆清范围后下发。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管

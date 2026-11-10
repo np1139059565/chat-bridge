@@ -50,7 +50,7 @@
 4. 规则段：只列**规则名 + 读取优先级**（取自 `.\flask_server\core\rules.py` 的清单口径），不塞规则正文；正文由 AI 按需 `read_rule` 读取
 5. 技能段：只取**已上线**技能的说明与清单（复用 `.\flask_server\core\prompt_sections.py` 的口径），指令执行端工具不进
 6. 「调用前先查参数」通则：写明调用任何工具前先用 `get_tool_params` 查准确参数名，口径同 `.\flask_server\tools\list_tools_impl.py`
-7. 在 `.\docs\api-reference.md` 补该接口说明（当前末节为第十四节，顺延为第十五节）
+7. 在 `.\docs\api-reference.md` 补该接口说明（当前末节为第十五节「语言包寄存」，顺延为第十六节）
 8. 在 `.\flask_server\tests\` 下新建测试文件，覆盖下方验收标准
 
 **不做什么**：
@@ -71,7 +71,7 @@
 | `.\flask_server\app.py` | 若新建蓝图则注册 |
 | `.\flask_server\tests\` 下新建测试文件 | 覆盖验收项 |
 | `.\flask_server\scripts\` 下新建验收脚本 | 可选 |
-| `.\docs\api-reference.md` | 补接口说明（第十五节） |
+| `.\docs\api-reference.md` | 补接口说明（第十六节） |
 
 **不要碰**：
 

@@ -829,7 +829,7 @@ tools 非数组、site_key 非法、stream=true。
 
 ---
 
-## 十六、语言包寄存（/api/clients 的 custom_config）
+## 十五、语言包寄存（/api/clients 的 custom_config）
 
 按 `.\docs\split-mirror-and-tools-service.md` 1.2、4.2 节，语言包（站点元素选择器与容器特征）由翻译员所有，寄存在工具服务的客户端注册信息里，服务端不解释其内容。
 
