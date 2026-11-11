@@ -68,7 +68,12 @@ def _site_allows_paste(url):
         if not pid:
             return True
         prof = (runtime.CONFIG.get("profiles") or {}).get(pid) or {}
-        return prof.get("filePaste") is not False
+        val = prof.get("filePaste", True)
+        # 设置页草稿可能把布尔转成文本（"false"），严格 is not False 会让禁用失效；
+        # 故一并识别字符串形态，保证「勾掉 -> 覆盖 -> 真的直返」闭环。
+        if isinstance(val, str):
+            return val.strip().lower() not in ("false", "0", "no", "off")
+        return val is not False
     except Exception:
         return True
 

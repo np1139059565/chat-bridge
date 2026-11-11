@@ -40,6 +40,11 @@ class TestFilePasteMode(unittest.TestCase):
         self._site({"filePaste": False})
         self.assertFalse(file_delivery.should_paste("a.md"))
 
+    def test_site_disabled_as_string(self):
+        file_delivery._current_host = lambda: "https://arena.ai/c/abc"
+        self._site({"filePaste": "false"})
+        self.assertFalse(file_delivery.should_paste("a.md"))
+
     def test_site_default_allows(self):
         file_delivery._current_host = lambda: "https://arena.ai/c/abc"
         self._site({})
