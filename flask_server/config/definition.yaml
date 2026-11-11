@@ -505,6 +505,418 @@ custom_tools:
     wakeup: false
     kind: tool
     enabled: true
+  - name: awade_build_config
+    description: 扫描 SVD 目录，把常见组件/属性/事件/动作固化成默认过滤链，写出 c1 配置文件。已有配置时默认不覆盖，需 force=true
+      才强制重置。
+    skill_name: awade_conctrol
+    skill_prompt: 本技能操作 AWADE 低代码工程：从 SVD 中提取手写代码为 TS，供 AI 阅读修改；改完校验结构，再反构回 SVD。改
+      TS 之前必须先读 SKILL.md，TS 带机器可读的定位锚点，改错会让反构写不回去。改完必须用 awade_ts_check 校验，再执行 awade_reverse_svd。
+    skill_dir: skills\awade_conctrol
+    script: scripts/svdkit.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - build
+    parameters:
+    - name: svd_dir
+      type: string
+      required: false
+      description: SVD 文件所在目录，默认技能内 svd/
+    - name: config
+      type: string
+      required: false
+      description: c1 配置文件输出路径，默认 templates/component_config.json
+    - name: force
+      type: boolean
+      required: false
+      description: 为真时用默认链强制覆盖已有配置
+    executor: script
+    provider: awade_control
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: awade_extract_ts
+    description: 按 c1 配置从 SVD 提取焦点代码，每个单元导出一个 TS 文件到 output/<模块>/。提取前会清理上一轮由本工具生成的
+      TS。
+    skill_name: awade_conctrol
+    skill_prompt: 本技能操作 AWADE 低代码工程：从 SVD 中提取手写代码为 TS，供 AI 阅读修改；改完校验结构，再反构回 SVD。改
+      TS 之前必须先读 SKILL.md，TS 带机器可读的定位锚点，改错会让反构写不回去。改完必须用 awade_ts_check 校验，再执行 awade_reverse_svd。
+    skill_dir: skills\awade_conctrol
+    script: scripts/svdkit.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - extract
+    parameters:
+    - name: svd_dir
+      type: string
+      required: false
+      description: SVD 文件所在目录，默认技能内 svd/
+    - name: config
+      type: string
+      required: false
+      description: c1 配置文件路径
+    - name: out
+      type: string
+      required: false
+      description: TS 输出目录，默认技能内 output/
+    - name: module
+      type: string
+      required: false
+      description: 只处理指定模块，如 OM1
+    - name: dry_run
+      type: boolean
+      required: false
+      description: 为真时只打印统计，不写任何文件
+    - name: keep_old
+      type: boolean
+      required: false
+      description: 为真时保留输出目录上一轮生成的 TS 文件
+    executor: script
+    provider: awade_control
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: awade_reverse_svd
+    description: 把 output/ 下改好的 TS 反构回 SVD。默认写到 svd/_reversed/ 供比对，确认无误后再用 in_place=true
+      覆盖原文件。
+    skill_name: awade_conctrol
+    skill_prompt: 本技能操作 AWADE 低代码工程：从 SVD 中提取手写代码为 TS，供 AI 阅读修改；改完校验结构，再反构回 SVD。改
+      TS 之前必须先读 SKILL.md，TS 带机器可读的定位锚点，改错会让反构写不回去。改完必须用 awade_ts_check 校验，再执行 awade_reverse_svd。
+    skill_dir: skills\awade_conctrol
+    script: scripts/svdkit.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - reverse
+    parameters:
+    - name: svd_dir
+      type: string
+      required: false
+      description: 原始 SVD 所在目录
+    - name: out
+      type: string
+      required: false
+      description: TS 文件所在目录
+    - name: reverse_out
+      type: string
+      required: false
+      description: 反构结果输出目录；留空写 svd/_reversed/
+    - name: in_place
+      type: boolean
+      required: false
+      description: 为真时直接覆盖 svd/ 下的原始 SVD 文件
+    executor: script
+    provider: awade_control
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: awade_make_pages
+    description: 生成两个可双击打开的配置页面：h1 过滤链编辑器、h2 规则验证台。用于人工调整提取范围。
+    skill_name: awade_conctrol
+    skill_prompt: 本技能操作 AWADE 低代码工程：从 SVD 中提取手写代码为 TS，供 AI 阅读修改；改完校验结构，再反构回 SVD。改
+      TS 之前必须先读 SKILL.md，TS 带机器可读的定位锚点，改错会让反构写不回去。改完必须用 awade_ts_check 校验，再执行 awade_reverse_svd。
+    skill_dir: skills\awade_conctrol
+    script: scripts/svdkit.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - pages
+    parameters:
+    - name: svd_dir
+      type: string
+      required: false
+      description: SVD 文件所在目录
+    - name: config
+      type: string
+      required: false
+      description: c1 配置文件路径
+    - name: out
+      type: string
+      required: false
+      description: 页面输出目录
+    executor: script
+    provider: awade_control
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: awade_ts_check
+    description: 检查 AWADE 导出的 TS 文件是否仍可反构回 SVD。校验文件骨架、unit/meta 元数据合法性、取值与代码的位置是否正确，并对照
+      SVD 校验事件名与动作定位。改完 TS 后用它自检。
+    skill_name: awade_conctrol
+    skill_prompt: 本技能操作 AWADE 低代码工程：从 SVD 中提取手写代码为 TS，供 AI 阅读修改；改完校验结构，再反构回 SVD。改
+      TS 之前必须先读 SKILL.md，TS 带机器可读的定位锚点，改错会让反构写不回去。改完必须用 awade_ts_check 校验，再执行 awade_reverse_svd。
+    skill_dir: skills\awade_conctrol
+    script: scripts/ts_check.py
+    interpreter: python
+    arg_style: flag
+    fixed_args: []
+    parameters:
+    - name: file
+      type: string
+      required: true
+      description: 待检查的 TS 文件路径
+    - name: svd_dir
+      type: string
+      required: false
+      description: SVD 源文件目录。给出时才做事件名与动作定位的锚点校验
+    - name: dir
+      type: string
+      required: false
+      description: 批量检查时传 TS 目录
+    executor: script
+    provider: awade_control
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_list_pods
+    description: 列出 zxwinmob 环境 ranoss 命名空间下的 Pod（含 IP 与节点），可按关键字过滤，如 closedloop。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_container.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - list-pods
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: keyword
+      type: string
+      required: false
+      description: Pod 名过滤关键字
+    - name: namespace
+      type: string
+      required: false
+      description: 命名空间，默认 ranoss
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_exec
+    description: 在 zxwinmob 容器内执行 shell 命令，自动补 -- 以兼容新版 kubectl。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_container.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - exec
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: pod
+      type: string
+      required: true
+      description: Pod 全名，或配合 match 传关键字
+    - name: command
+      type: string
+      required: true
+      description: 容器内要执行的命令
+    - name: match
+      type: boolean
+      required: false
+      description: 为真时把 pod 当关键字现查全名
+    - name: namespace
+      type: string
+      required: false
+      description: 命名空间，默认 ranoss
+    - name: timeout
+      type: number
+      required: false
+      description: 远端执行超时秒数，默认 45
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_ls
+    description: 列出容器工作目录（默认 /home/zxwinmob）内容。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_container.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - ls
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: pod
+      type: string
+      required: true
+      description: Pod 全名或匹配关键字
+    - name: path
+      type: string
+      required: false
+      description: 要列出的容器内路径，默认工作目录
+    - name: namespace
+      type: string
+      required: false
+      description: 命名空间，默认 ranoss
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_restart
+    description: 重启容器内 java 进程：杀掉后由 start.sh 守护循环用新 jar 自动拉起。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_container.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - restart
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: pod
+      type: string
+      required: true
+      description: Pod 全名或匹配关键字
+    - name: match
+      type: boolean
+      required: false
+      description: 为真时把 pod 当关键字现查全名
+    - name: namespace
+      type: string
+      required: false
+      description: 命名空间，默认 ranoss
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_push
+    description: 把控制器上的文件 kubectl cp 进容器工作目录。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_container.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - push
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: pod
+      type: string
+      required: true
+      description: Pod 全名或匹配关键字
+    - name: src
+      type: string
+      required: true
+      description: 控制器上的源文件绝对路径
+    - name: dest_dir
+      type: string
+      required: false
+      description: 容器内目标目录，默认工作目录
+    - name: match
+      type: boolean
+      required: false
+      description: 为真时把 pod 当关键字现查全名
+    - name: namespace
+      type: string
+      required: false
+      description: 命名空间，默认 ranoss
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_deploy_start
+    description: 在控制器后台启动一次 web 包部署（打 jar + 重启），立即返回 task_id。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_deploy.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - start
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: pod
+      type: string
+      required: true
+      description: Pod 全名或匹配关键字
+    - name: zip_name
+      type: string
+      required: true
+      description: 控制器 remote_workdir 下的安装包文件名
+    - name: zip_host
+      type: string
+      required: false
+      description: 安装包所在主机别名；与 host 不同时自动经 SFTP 中转
+    - name: match
+      type: boolean
+      required: false
+      description: 为真时把 pod 当关键字现查全名
+    - name: namespace
+      type: string
+      required: false
+      description: 命名空间，默认 ranoss
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
+  - name: zxw_deploy_status
+    description: 按 task_id 查询部署任务状态（running/SUCCESS/FAILED）与日志尾部。
+    skill_name: zxwinmob_tool
+    skill_prompt: ''
+    skill_dir: skills\zxwinmob_tool
+    script: scripts/zxw_deploy.py
+    interpreter: python
+    arg_style: flag
+    fixed_args:
+    - status
+    parameters:
+    - name: host
+      type: string
+      required: true
+      description: 主机别名 69/86/102 或 IP
+    - name: task_id
+      type: string
+      required: true
+      description: deploy_start 返回的任务号
+    executor: script
+    provider: ''
+    silent: false
+    wakeup: false
+    kind: tool
+    enabled: false
 bridge:
   intents: 0
   command_params:
