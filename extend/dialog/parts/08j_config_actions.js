@@ -397,8 +397,7 @@
     }
     cache.pending = [];
     if (D.configDraftSave) await D.configDraftSave(ctx, cache);
-    // 原端点立即执行：后端运行时改完即生效（__commit 绕过拦截层）
-    if (D.apiFetch && path) await D.apiFetch(ctx, path, { method: method, body: body, __commit: true });
+    // 改动已由后端 /config/draft 即时作用到运行时；此处绝不碰原端点/母版
     return true;
   };
 

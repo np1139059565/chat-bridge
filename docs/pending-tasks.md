@@ -482,3 +482,6 @@ split 按迭代顺序把前 58 组判为已知、其余判为新增。组数一�
   写 runtime.CONFIG（行为即变，不落 yaml）；/config/commit 才写母版并清该站草稿。
 - 前端所有请求带 X-Site-Key；queuePendingWrite 改为直接生效、不再登记队列；
   configCache 仅本次渲染按站内存；GET /config/draft 回传唯一 master + 该站 draft。
+- 收口：草稿态不再调原端点写母版；GET /config/draft 读时重放该站草稿到运行时
+  （重启后亦生效，master 先取不被污染）；profiles 合并避免删别站档案；
+  apply_to_runtime 兜底把受管区块对象并进运行时内存，全程不落 yaml。

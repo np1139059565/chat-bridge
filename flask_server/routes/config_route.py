@@ -210,7 +210,10 @@ def config_draft():
         draft_store.apply_to_runtime(body)   # 改完即生效，不写母版 yaml
         return jsonify(success=True, site=site)
     site = _site_of()
-    return jsonify(success=True, site=site, master=_config_snapshot(), draft=draft_store.load(site))
+    d = draft_store.load(site)
+    master = _config_snapshot()
+    if d: draft_store.apply_to_runtime(d)  # 读时重放：重启后打开该页即恢复，不写母版 yaml
+    return jsonify(success=True, site=site, master=master, draft=d)
 
 @bp.route("/config/commit", methods=["POST", "OPTIONS"])
 def config_commit():

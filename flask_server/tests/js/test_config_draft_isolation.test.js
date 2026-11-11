@@ -49,7 +49,7 @@ test('C-10 配置写：不排队，写该站草稿并即时发原端点生效', 
  assert.strictEqual(ctx.configCache.app_id,'x');
  const urls=calls.map(c=>c.url);
  assert.ok(urls.some(u=>u.indexOf('/config/draft')>=0),'未写该站后端草稿');
- assert.ok(urls.some(u=>u.indexOf('/api/bridge/config')>=0),'原端点未即时生效');
+ assert.ok(!urls.some(u=>u.indexOf('/api/bridge/config')>=0),'草稿态不应写原端点/母版');
  assert.ok(calls.every(c=>c.headers['X-Site-Key']==='a.com'),'请求缺 X-Site-Key');
 });
 test('C-10 源码：queuePendingWrite 清空 pending 且不再去重排队',()=>{

@@ -80,12 +80,21 @@ def apply_to_runtime(draft):
         if isinstance(prof, dict) and prof:
             try:
                 from config_store import sanitize_profiles, derive_site_profiles
-                cfg["profiles"] = sanitize_profiles(prof)
-                cfg["site_profiles"] = derive_site_profiles(cfg["profiles"])
+                merged = dict(cfg.get("profiles") or {})
+                merged.update(sanitize_profiles(prof))
+                cfg["profiles"] = merged
+                cfg["site_profiles"] = derive_site_profiles(merged)
             except Exception:
-                cfg["profiles"] = prof
+                cfg.setdefault("profiles", {}).update(prof)
         if draft.get("default_profile"):
             cfg["default_profile"] = draft["default_profile"]
+        # 兜底：受管区块对象（bridge / skills / rules 等）即时进运行时内存，不落盘
+        skip = set(("flask", "limits", "tools", "tool_config", "system_config",
+                    "profiles", "default_profile", "site_profiles", "available_tools",
+                    "pending", "blockFields", "master", "site", "site_key", "success"))
+        for k, v in draft.items():
+            if k not in skip and isinstance(v, (dict, list)):
+                cfg[k] = v
         try:
             import memory_switch
             memory_switch.invalidate()

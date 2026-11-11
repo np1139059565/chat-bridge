@@ -56,3 +56,27 @@ class TestConfigDraft(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class TestGetReplay(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.old = ds._DRAFT_DIR
+        ds._DRAFT_DIR = Path(self.tmp.name)
+        import runtime
+        self.oldv = runtime.CONFIG.get("limits", {}).get("max_json_chars")
+    def tearDown(self):
+        ds._DRAFT_DIR = self.old
+        if self.oldv is not None:
+            import runtime
+            runtime.CONFIG.setdefault("limits", {})["max_json_chars"] = self.oldv
+        self.tmp.cleanup()
+    def test_get_replays_site_draft(self):
+        import runtime
+        from flask import Flask
+        ds.save("a.com", {"limits": {"max_json_chars": 456}})
+        app = Flask(__name__); app.register_blueprint(cr.bp); c = app.test_client()
+        j = c.get("/config/draft", headers={"X-Site-Key": "a.com"}).get_json()
+        self.assertEqual(j["draft"]["limits"]["max_json_chars"], 456)
+        self.assertEqual(runtime.CONFIG["limits"]["max_json_chars"], 456, "读时未重放生效")
+        c.get("/config/draft", headers={"X-Site-Key": "b.com"})
+        self.assertIsNone(ds.load("b.com"), "B 站读到 A 站草稿")
