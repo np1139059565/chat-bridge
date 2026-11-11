@@ -96,6 +96,7 @@
         d.label + '（指令 /' + d.cmd + '）',
         h('input', {
           type: 'text', class: 'bridge-sel-input',
+          'data-cfg-key': 'cmdparam.' + d.cmd + '.' + d.key,
           value: ((ctx.bridgeCmdParams[d.cmd] || {})[d.key]) || '',
           placeholder: d.placeholder || '',
           onInput: (e) => {
@@ -103,6 +104,11 @@
             ctx.bridgeCmdParams[d.cmd][d.key] = e.target.value;
           }
         }),
+        cmdDirty(ctx, 'cmdparam.' + d.cmd + '.' + d.key)
+          ? h('button', { class: 'sp-restore-btn', title: '还原为服务端值',
+              onClick: () => restoreCmdParam(ctx, d.cmd, d.key) },
+              h('span', { class: 'sp-restore-icon' }, '↺'))
+          : null,
         d.hint ? h('span', { class: 'hint' }, d.hint) : null
       ])),
       // 采集测试：验证当前选择器能否取到内容。放参数区末尾，不单独特殊化展示。
@@ -118,12 +124,50 @@
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 编辑器节点
    */
+  /** commands 块是否有输入态差异；传 key 只查该字段。 */
+  function cmdDirty(ctx, key) {
+    const bf = ctx.configCache && ctx.configCache.blockFields;
+    const bb = bf && bf.commands;
+    if (!bb) return false;
+    function ne(k) { return !!bb[k] && String(bb[k].current) !== String(bb[k].baseline); }
+    if (key) return ne(key);
+    return Object.keys(bb).some(function (k) { return k.indexOf('cmdparam.') !== 0 && ne(k); });
+  }
+  /** 内置指令参数还原：擦回母本值、清差异与标黄。 */
+  function restoreCmdParam(ctx, cmd, key) {
+    const k = 'cmdparam.' + cmd + '.' + key;
+    const bf = ctx.configCache && ctx.configCache.blockFields;
+    const rec = bf && bf.commands && bf.commands[k];
+    if (rec) {
+      if (!ctx.bridgeCmdParams[cmd]) ctx.bridgeCmdParams[cmd] = {};
+      ctx.bridgeCmdParams[cmd][key] = rec.baseline;
+      delete bf.commands[k];
+    }
+    if (D.configCacheSet) D.configCacheSet(ctx.siteKey, ctx.configCache);
+    if (typeof document !== 'undefined') {
+      const ns = document.querySelectorAll('[data-cfg-key]');
+      for (let i = 0; i < ns.length; i++) {
+        if (ns[i].getAttribute('data-cfg-key') === k) {
+          ns[i].removeAttribute('data-diff');
+          ns[i].value = rec ? rec.baseline : '';
+        }
+      }
+    }
+    if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
+    if (ctx.$forceUpdate) ctx.$forceUpdate();
+  }
   /** 编辑态「还原」：重新从该条指令载入表单，清掉本块输入态差异，标黄与徽标一并归零。 */
   function restoreCmdEdit(ctx) {
     const idx = ctx.bridgeEditIdx;
     if (idx === null || idx === undefined) return;
     const bf = ctx.configCache && ctx.configCache.blockFields;
-    if (bf && bf.commands) delete bf.commands;
+    if (bf && bf.commands) {
+      // 只清编辑表单类差异；参数类字段由各自的 ↺ 负责
+      Object.keys(bf.commands).forEach(function (k) {
+        if (k.indexOf('cmdparam.') !== 0) delete bf.commands[k];
+      });
+      if (!Object.keys(bf.commands).length) delete bf.commands;
+    }
     if (D.configCacheSet) D.configCacheSet(ctx.siteKey, ctx.configCache);
     if (ctx.cancelEditBridgeCommand) ctx.cancelEditBridgeCommand();
     if (ctx.editBridgeCommand) ctx.editBridgeCommand(idx);
@@ -154,7 +198,7 @@
           onInput: (e) => { ctx.bridgeNewCmdLabel = e.target.value; }
         }),
         // 编辑态才有母本可还原：点一下整条重新载入，标黄与差异一并清除
-        ctx.bridgeEditIdx !== null
+        ctx.bridgeEditIdx !== null && cmdDirty(ctx)
           ? h('button', { class: 'sp-restore-btn', title: '还原为服务端值',
               onClick: () => restoreCmdEdit(ctx) },
               h('span', { class: 'sp-restore-icon' }, '↺'))

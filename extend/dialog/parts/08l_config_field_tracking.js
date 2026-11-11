@@ -27,6 +27,7 @@
     const bf = state(ctx);
     const bb = bf[blockId] || (bf[blockId] = {});
     if (!(key in bb)) bb[key] = { baseline: val, current: val };
+    else if (String(val) === String(bb[key].baseline)) delete bb[key];
     else bb[key].current = val;
     if (D.configCacheSet) D.configCacheSet(ctx.siteKey, ctx.configCache);
     if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
@@ -62,6 +63,9 @@
   const SKIP = '.tc-row, .lang-checks, [data-cfg-skip], .sp-new-site, .sp-add-field';
   function capture(el) {
     if (!el || !el.tagName || typeof el.closest !== 'function') return;
+    // baseline 只在首次见该元素时记录；focusin 反复覆盖会把改过的值当母本，
+    // 导致手动改回原值仍被判差异，标黄与徽标不消失。
+    if (BASE.has(el)) return;
     const block = el.closest('[data-cfg-block]');
     if (!block) return;
     const id = block.getAttribute('data-cfg-block');

@@ -219,8 +219,17 @@ button.sp-diff-badge { cursor: pointer; font-family: inherit; line-height: 1.4; 
 
 /* 块头差异徽标贴回标题行右侧，不再在标题外独占一行 */
 .sp-block-wrap { position: relative; }
-.sp-block-wrap > .sp-diff-badge { position: absolute; top: 6px; right: 42px; z-index: 2; margin-left: 0; }
+.sp-block-wrap > .sp-diff-badge {
+  position: absolute; top: 6px; right: 56px; z-index: 1; margin-left: 0;
+  max-width: calc(100% - 130px); overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 折叠按钮始终在徽标之上，点击区域不被盖住 */
+.sp-block-wrap .card-head button { position: relative; z-index: 3; }
 .sp-block-wrap .sp-diff-badge { white-space: nowrap; }
+.bridge-builtin-params label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bridge-builtin-params label > .bridge-sel-input { flex: 1 1 220px; min-width: 0; }
+.bridge-builtin-params label > .sp-restore-btn { flex: 0 0 auto; }
 
 /* 指令编辑态还原图标：与输入框同行，不被 flex 拉伸 */
 .bridge-cmd-new > .sp-restore-btn { flex: 0 0 auto; align-self: center; }
