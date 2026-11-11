@@ -454,3 +454,12 @@ split 按迭代顺序把前 58 组判为已知、其余判为新增。组数一�
 - 该警告不影响认证与传输，与早先 Permission denied 无关；公钥登出后推送正常。
 - 理想解：升级服务端 OpenSSH ≥9.0（9.9+ 支持 mlkem）；或按需 Match host +
   WarnWeakCrypto no-pq-kex 定向静音。签名算法无「先存后解」风险。
+
+## C-8 配置副本全局化（2026-11-11 已修）
+- 现象：改配置刷新即丢；yuanbao 页面刷新后显示 glm 档案（旧分桶快照只含 glm）。
+- 根因：08i 按 siteKey 分桶；刷新初期 siteKey 为空，改动落进 *_unknown-site，
+  applySite 拿到真实域名后读 *_<host>，两桶互不相通；旧桶还留着只有 glm 的快照。
+- 已修：Get/Set 统一走 aiMirrorConfigCache_global；一次性清理旧分站点桶；
+  configLoadAndDiff 并入后端新增档案并把历史 hosts 乱码归一为数组。
+- 口径：/config 母版本身全局一份，浏览器草稿也全局一份；会话/存档仍按 siteKey 隔离。
+- 注意：本地副本是「待覆盖草稿」，真正生效仍需点【覆盖】写回后端；刷新保留草稿而非自动落库。

@@ -8,6 +8,10 @@
   'use strict';
   const D = window.AIMirrorDialog;
   const PREFIX = 'aiMirrorConfigCache_';
+  // 后端 /config 只有一份母版，浏览器副本也必须只有一份（不再按站点分桶）。
+  // 旧版分桶：刷新初期 siteKey 为空，改动落进 *_unknown-site，
+  // applySite 拿到真实域名后读另一桶 -> 刷新丢改动、yuanbao 显示 glm。
+  const GLOBAL_KEY = PREFIX + 'global';
   const NL = String.fromCharCode(10);   // 避免多层转义：字面换行由 Python 写入会破坏 JS 字符串
   const MEM = Object.create(null);      // chrome.storage 不可用时的内存降级
 
@@ -25,7 +29,7 @@
   }
 
   D.configCacheGet = function (siteKey) {
-    const key = D.configCacheKey(siteKey);
+    const key = GLOBAL_KEY;
     const s = localStore();
     if (!s) return Promise.resolve(MEM[key] || null);
     return new Promise(function (res) {
@@ -35,7 +39,7 @@
   };
 
   D.configCacheSet = function (siteKey, cfg) {
-    const key = D.configCacheKey(siteKey);
+    const key = GLOBAL_KEY;
     MEM[key] = cfg;
     const s = localStore();
     if (!s) return Promise.resolve(true);
@@ -43,6 +47,47 @@
       try { s.set({ [key]: cfg }, function () { res(true); }); }
       catch (e) { res(false); }
     });
+  };
+
+  /** 一次性清理旧版分站点桶，避免旧 glm 快照复活；非扩展环境静默跳过。 */
+  let _legacyPurged = false;
+  D.configCachePurgeLegacy = function () {
+    if (_legacyPurged) return;
+    _legacyPurged = true;
+    const s = localStore();
+    if (!s || typeof s.get !== 'function' || typeof s.remove !== 'function') return;
+    try {
+      s.get(null, function (r) {
+        if (!r) return;
+        const ks = Object.keys(r).filter(function (k) {
+          return k.indexOf(PREFIX) === 0 && k !== GLOBAL_KEY;
+        });
+        if (ks.length) s.remove(ks, function () {});
+      });
+    } catch (e) { /* 忽略 */ }
+  };
+
+  /** 后端新增档案并入缓存；历史 hosts 写成 JSON 串或 {0:..} 对象时统一回数组。 */
+  D.mergeBackendProfiles = function (cache, backend) {
+    const bp = (backend && backend.profiles) || {};
+    if (!cache.profiles || typeof cache.profiles !== 'object') cache.profiles = {};
+    Object.keys(bp).forEach(function (id) {
+      if (!cache.profiles[id]) cache.profiles[id] = JSON.parse(JSON.stringify(bp[id]));
+    });
+    Object.keys(cache.profiles).forEach(function (id) {
+      const p = cache.profiles[id];
+      if (!p || !p.hosts) return;
+      let hs = p.hosts;
+      if (typeof hs === 'string' && hs.trim().charAt(0) === '{') {
+        try { hs = JSON.parse(hs); } catch (e) { /* 交给文本归一化 */ }
+      }
+      if (hs && !Array.isArray(hs) && typeof hs === 'object') {
+        hs = Object.keys(hs).sort(function (a, b) { return a - b; })
+          .map(function (k) { return hs[k]; });
+      }
+      if (Array.isArray(hs)) p.hosts = hs.map(function (x) { return String(x).trim(); }).filter(Boolean);
+    });
+    return cache;
   };
 
   /** 公共配置 = 除 profiles 外的全部顶层键。 */

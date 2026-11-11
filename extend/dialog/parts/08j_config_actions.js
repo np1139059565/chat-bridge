@@ -36,8 +36,11 @@
   M.configLoadAndDiff = async function (backend) {
     this.configBackend = backend;
     this.configOffline = false;
+    if (D.configCachePurgeLegacy) D.configCachePurgeLegacy();
     let cache = await D.configCacheGet(this.siteKey);
     if (!cache) cache = JSON.parse(JSON.stringify(backend));
+    // 旧逐站点快照只含 glm：并入后端新增档案并修正历史 hosts 乱码
+    if (D.mergeBackendProfiles) D.mergeBackendProfiles(cache, backend);
     // 端口/连接地址由 discoverFlask + savePort 专管，不进本地草稿：
     // 否则后端改端口后，本地旧值会被【覆盖】写回去，把服务打到空端口。
     cache.flask = JSON.parse(JSON.stringify(backend.flask || {}));
