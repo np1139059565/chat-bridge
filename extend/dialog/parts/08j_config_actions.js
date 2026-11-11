@@ -430,8 +430,6 @@
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
     return h('button', { class: 'sp-diff-badge', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原该区块的未覆盖改动', 'data-warn-icon': '1', onClick: () => D.restoreBlockDiff(ctx, 'site_profiles') }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
-
-
   /** 任意配置值稳定转文本：数组按行、对象取 hosts/value 或 JSON，杜绝 [object Object]。 */
   D.configValueToText = D.configValueToText || function (v) {
     if (v == null) return '';
