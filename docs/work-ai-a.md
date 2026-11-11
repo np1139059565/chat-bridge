@@ -100,7 +100,7 @@
 2. 推送 `work/ai-a` 分支
 3. 等「更新 git」指令，由分发方逐条验收
 
-> 第三节排队槽暂无「可开工」任务；A-3 已验收通过并合入 `main`，A 方待命，不自行开工 B-4 或 C 系列。
+> 当前任务已切换为 A-4（阶段 2 后端标准链路），任务书见本文末节，可直接开工。
 > 开工前按分发方文档第九节确认当前 main 尖端（以 fetch 后的 origin/main 为准）并同步；旧版维护线 legacy/old-stable 只收旧版补丁，本任务一律基于新架构主线。
 
 ---
@@ -216,3 +216,16 @@
 | 钩子 | 带入 `d1722e3` 修门产物后，380 前端测试全过、`pre-commit` 七道全 Passed |
 
 自述 1017 passed 与实测 1014+3 总数一致；两笔交付合入 `main` 时钩子正常重跑，未用 `--no-verify`。A 方待命。
+
+## 当前任务（A-4，2026-11-11 下发）：阶段 2 后端标准链路
+
+> 开工前 `git fetch origin && git rebase` 到 fetch 后的 `origin/main` 实时尖端，不照任何文档里印的旧提交号。
+> 依据：`.\docs\split-mirror-and-tools-service.md` 第七节阶段 2、决策 1 / 2。
+
+**可以碰**：`flask_server/core/chat_completions.py`（L161 `generate_reply` 从占位生成器换成接翻译员的标准链路，文件头注释已写明「阶段 2 接入翻译员后只需替换 generate_reply」；`tool_calls` / `tool` 消息规范化与回传）、`core/system_prompt.py`（标准四段，方言一律不进本文件，规格 4.3）、`routes/system_prompt.py`、`routes/chat_api.py`（L84 / L140 调用点）、相应 pytest 用例。
+
+**不要碰**：`.\extend\` 与 `skills\` 下任何文件（C-5 范围；`skills/anatomy` 为无关示例仓库）；`core/client_registry.py`、`routes/clients.py`、`routes/command_catalog.py`、`routes/bridge.py`、`routes/cards.py`（B-5 范围）；不新建任何切换开关（一刀切，旧代码留到阶段 3 删）、不自填 `[答复]`、不自行开工其它任务。
+
+**验收**：在 `.\flask_server` 下 `python -m pytest tests -q`，失败仅限已知波动 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过；一次提交、提交信息只描述改动、正常跑钩子不用 `--no-verify`。
+
+**完成后**：推 `origin/work/ai-a`，回「更新 git，A-4 完成，提交 <hash>」等分发方逐条验收；排队槽为空，不自行找活。

@@ -1,5 +1,5 @@
 # 工作对话 · AI-C
-> C-3b 已验收通过并合入 main；当前排队槽为空，无「可开工」任务，待命。第二节为已通过的 C-3a 历史任务书，末节为 C-3b 历史任务书。
+> 当前任务已切换为 C-5（阶段 2 翻译员本体与方言），任务书见本文末节，可直接开工；C-3b 已验收通过并合入 `main`（`09522c4`）。
 
 > 本文件是本对话的唯一任务来源与工作记录。每次开工前从头读一遍。
 > 收到「更新 git」指令时，先读本文件最后一节，再执行。
@@ -450,3 +450,25 @@
 三处主动说明裁定：① `08g` 空态仍渲染新增表单 +「暂无客户端注册信息」提示，接受，属清单内必要配套修复；② `_apply_profiles_section` 拆三函数、语义锁并入 `test_config_actions.test.js` 而非新建独立 js，接受，结构闸零新增；③ 覆盖率本机 `ℹ` 前缀解析不到按设计跳过、如实写「跳过」而非「达标」，并请分发方复验，已复验通过，处理正确。
 
 `origin/merge/bus-fixes` 远端引用已删除，关闭遗留；`legacy/old-stable` 前移按双线规则不动。当前排队槽为空，待命，不自行开工、不自填 `[答复]`。
+
+## 当前任务（C-5，2026-11-11 下发）：阶段 2 翻译员本体与方言
+
+> 开工前 `git fetch origin && git rebase` 到 fetch 后的 `origin/main` 实时尖端。
+> 依据：规格第七节阶段 2、决策 1（一个本体 + 多套语言包与方言函数，不为每站新建翻译员）、决策 2（一刀切，不保留切换开关）。
+
+**目标**：把网页 AI 回复里的 `bridge-chat-call` 代码块翻译成标准 `tool_calls`，把工具结果翻译成标准 `tool` 消息；提示词改为「取回 `/v1/system_prompt` 标准四段 + 追加方言说明」；语言包从 `/api/clients` 的 `custom_config` 取回；指令对接服务端下发的指令定义。
+
+**翻译员本体为新建**：落点由执行方按 `.\extend\` 现有模块风格选定，随交付报备，不需事先提问。`skills/` 目录整体为无关示例仓库，不在本次范围内；翻译员本体在 `extend/` 下新建，不按任何旧文档里的工具清单路径去改既有文件。
+
+**可以碰**：`.\extend\` 下新建翻译员本体与方言函数模块；`extend/dialog/parts/05c_prompt.js` 的 `M.generateSystemPrompt`（改为取回标准提示词 + 追加方言；**必须保留** C-4 刚收口的 L180 `window.AIMirrorToolSchema.toFlatParams` 调用与工具清单渲染逻辑，不回退）；`extend/content/05_index.js`、`00_state.js`；`extend/dialog/parts/01b_bridge.js`、`01c_bridge_cmd.js` 的指令取用；相应 js 测试夹具。
+
+**不要碰**：`flask_server/` 下任何 `.py`（A-4 / B-5 范围）；`skills/` 下任何文件；`08g_site_profiles.js`、`tool-schema-adapter.js`、`tool-schema-migration.md` 勾选项、`definition.yaml`；不自填 `[答复]`、不自行开工其它任务。
+
+**验收**：
+
+1. `python scripts\hooks\check_js_tests.py` 全绿。本机若输出「跳过覆盖率门禁：未解析到报告」，如实写「跳过」而非「达标」，由分发方环境统一复验（唯一判定环境＝分发方，`ℹ` 前缀差异已登记遗留）。
+2. `pre-commit run --all-files` 七道全过；在 `.\flask_server` 下 `python -m pytest tests -q`，失败仅限已知波动 `test_inbox_site_isolation.py`。
+3. 网页 AI 全流程可用、行为与改造前一致 —— 此为阶段 2 验收口径，交付时写明验证方式。
+4. 一次提交、提交信息只描述改动、正常跑钩子不用 `--no-verify`。
+
+**完成后**：推 `origin/work/ai-c`，回「更新 git，C-5 完成，提交 <hash>」等分发方逐条验收；排队槽为空，不自行找活。

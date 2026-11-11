@@ -116,7 +116,7 @@
 2. 推送 `work/ai-b` 分支
 3. 等「更新 git」指令，由分发方逐条验收
 
-> 第三节排队槽：B-4（Q-7 has_params 收尾补丁）已下发为当前任务；1b 前端适配层改派 AI-C（C-4），不在本方排队槽。
+> 当前任务已切换为 B-5（阶段 2 语言包与指令服务端），任务书见本文末节，可直接开工。
 > 前端适配层为独立任务，范围：新建 .\extend\lib\tool-schema-adapter.js 的 toFlatParams，同步 03_custom_tools.js、05c_prompt.js、08_settings.js 与并存的 08b_settings.js 三处扁平项读取，并同步 05c_prompt.js 内 System Prompt 模板的工具使用说明；07b_params.js 只处理参数值无需改动。
 > 开工前按分发方文档第九节从 fetch 后的 origin/main 同步，不直推 main。
 
@@ -386,3 +386,15 @@
 **weixin 定责**：`test_production_client_gets_ctx_path` 单文件三连 20/20/20、干净 `19b1a23` 单跑 20 passed → 存量顺序污染，非 B-4 引入，不退回。分发方并发全量曾出现 23 failed / 7 文件，与 C-3b 分支失败清单逐字相同，系同时起两个 pytest 进程抢资源所致；改串行单进程复跑后回到单一已知波动文件，该噪声不作验收依据。
 
 Q-6 例外自 `d1722e3` 起失效，后续一律正常提交。当前排队槽为空，待命，不自行开工。
+
+## 当前任务（B-5，2026-11-11 下发）：阶段 2 语言包与指令服务端
+
+> 开工前 `git fetch origin && git rebase` 到 fetch 后的 `origin/main` 实时尖端。
+
+**可以碰**：`flask_server/core/client_registry.py`、`routes/clients.py`（语言包按 `/api/clients` 的 `custom_config` 取回固化；C-3a 通道已建、`test_client_language_pack.py` 已验深比较 / 隔离 / 不兜底）；`routes/command_catalog.py`（`/api/commands` 三来源合并）、`routes/cards.py` 的 `/api/commands/pending`（执行侧取件）、`routes/bridge.py` 的 `/api/bridge/commands`（指令执行端对接服务端下发定义）；相应 pytest 用例。
+
+**不要碰**：`core/chat_completions.py`、`core/system_prompt.py`、`routes/chat_api.py`、`routes/system_prompt.py`（A-4 范围）；`.\extend\` 与 `skills\` 下任何文件（C-5 范围）；`config_route.py`、`definition.yaml`、`08g_site_profiles.js`、`05c_prompt.js`（已收口不回改）；不新建切换开关、不自填 `[答复]`、不自行开工其它任务。
+
+**验收**：在 `.\flask_server` 下 `python -m pytest tests -q`，失败仅限已知波动 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过；一次提交、正常跑钩子不用 `--no-verify`。
+
+**完成后**：推 `origin/work/ai-b`，回「更新 git，B-5 完成，提交 <hash>」等分发方逐条验收；排队槽为空，不自行找活。
