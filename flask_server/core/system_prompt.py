@@ -31,8 +31,14 @@ _IDENTITY_TEXT = (
 
 _PARAMS_TEXT = (
     "调用任何工具之前，必须先用 get_tool_params 查询该工具的准确参数名与"
-    "取值要求，再按查询结果构造调用；不确定有哪些工具时先用 list_tools "
-    "获取清单。不要凭记忆猜测参数名，也不要假设参数可选性。"
+    "取值要求，再按查询结果构造调用。不要凭记忆猜测参数名，也不要假设参数可选性。"
+    + chr(10) + "能力入口（常驻；长会话里随时用它们重新发现能力，勿凭记忆）："
+    + chr(10) + "- list_tools：列出当前可调用的全部工具"
+    + chr(10) + "- get_tool_params：查某工具的准确参数名"
+    + chr(10) + "- list_skills / read_skill：列技能 / 读技能文档"
+    + chr(10) + "- list_rules / read_rule：列规则 / 读规则正文"
+    + chr(10) + "- list_dir / search_file / search_content：列目录 / 找文件 / 搜正文"
+    + chr(10) + "- read_file：读文件正文"
 )
 
 

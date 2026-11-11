@@ -7,6 +7,13 @@
   const log = D.log;
   const M = D.methods;
 
+  // 随每次工具结果回传的能力入口短提示：防长会话里 AI 丢失发现能力。
+  // 与后端 /v1/system_prompt 的【调用前先查参数】段同源，压缩成一行。
+  D.CAPABILITY_FOOTER = String.fromCharCode(10) + String.fromCharCode(10)
+    + '能力入口：list_tools（列工具）、get_tool_params（查参数）、'
+    + 'list_skills/read_skill（技能）、list_rules/read_rule（规则）、'
+    + 'list_dir/search_file/search_content（找文件）、read_file（读正文）。';
+
   /** 生成 System Prompt：含工具清单、调用格式、规则列表与技能说明。 */
   M.generateSystemPromptLegacy = function () {
     const tools = this.tools || [];

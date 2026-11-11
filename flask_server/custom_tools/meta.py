@@ -20,6 +20,11 @@ def external_providers():
             continue
         if not t.get("enabled"):
             continue
+        _sk = (t.get("skill_name") or "").strip()
+        if _sk:
+            from .skills import is_skill_online
+            if not is_skill_online(_sk):
+                continue
         provider = (t.get("provider") or "").strip()
         if not provider:
             continue
@@ -83,8 +88,18 @@ def all_meta():
     只含 kind=tool 的条目：指令执行端（kind=command_action）对 AI 透明，
     不进 AI 工具目录。源头已在声明层分开，此处按来源身份天然分流。
     """
-    return [public_meta(t) for t in load_tools().values()
-            if t.get("enabled") and (t.get("kind") or "tool") == "tool"]
+    # 技能下线后，其工具不得出现在任何给 AI 看的清单（/tools、list_tools、外部目录）。
+    # 设置页管理视图 all_meta_full 不受此限，否则下线技能无法再上线。
+    from .skills import is_skill_online
+    out = []
+    for t in load_tools().values():
+        if not t.get("enabled") or (t.get("kind") or "tool") != "tool":
+            continue
+        skill = (t.get("skill_name") or "").strip()
+        if skill and not is_skill_online(skill):
+            continue
+        out.append(public_meta(t))
+    return out
 
 
 def all_meta_full():

@@ -8,6 +8,12 @@
 > **注意**：`/api/bridge/restart` 只重启桥接通道、不重载 Python 模块；运行中的服务仍是旧代码，
 > 需通过进程级重启（`/rs` 指令或重启 server.py）后才生效。重启前不要据此判定线上行为。
 > 步骤 ①+② 已完成：前端取 `/v1/system_prompt` 主体只追加方言，后端 skills_section 不再注入说明正文。
+
+## 六、后续增强（2026-11-11）
+
+- 能力入口常驻：主体【调用前先查参数】段列出 list_tools / get_tool_params / list_skills / read_skill / list_rules / read_rule / list_dir / search_file / search_content / read_file 的名称与一句话作用；每次文本类工具结果回传追加一行 `D.CAPABILITY_FOOTER` 短提示，防长会话失忆。
+- 技能下线联动：`custom_tools/meta.py` 的 `all_meta()` 与 `external_providers()` 统一按 `is_skill_online` 过滤，下线技能的工具不再出现在 /tools、list_tools、外部提供方目录；设置页 `all_meta_full()` 保留，仍可重新上线。
+- 边界：附件类结果（read_file 附件 / 截图）的回传 text 同时用于消息回挂匹配，未追加 footer，避免破坏按文本匹配回挂；主体常驻段已覆盖入口。
 > 记录：2026-11-11
 
 ## 一、问题

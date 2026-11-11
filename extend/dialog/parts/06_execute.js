@@ -371,7 +371,7 @@
       return;
     }
     // 其余文本结果照常回传完整 JSON。
-    D.enqueueSend({ type: 'auto_send', text: this.resultText(card) });
+    D.enqueueSend({ type: 'auto_send', text: this.resultText(card) + (D.CAPABILITY_FOOTER || '') });
   };
 
   /** 执行按钮文案：自动倒计时中显示剩余秒数，否则按是否执行过显示。 */
