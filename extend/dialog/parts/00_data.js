@@ -248,10 +248,10 @@ window.AIMirrorDialog = (function () {
       scanOpen: false,
       // 工具配置：{工具名: [声明+当前值]}，toolConfOpen 控制该区块折叠
       toolConfig: {}, toolConfOpen: false, systemConfig: [],
-      // 站点档案（网页 AI 站点配置）：真源在后端 definition.yaml 的 app.profiles。
-      // siteProfiles 是服务端快照；siteProfDraft 是编辑工作副本（保存前不被
-      // 刷新覆盖）；试运行状态与结果按 pid.field 为键。newField 是自定义字段
-      // 录入区。渲染与方法见 parts/08g_site_profiles.js。
+      // 客户端注册信息（网页 AI 站点配置）：真源为 /api/clients 的 custom_config。
+      // siteProfiles 是 GET /profiles 聚合出的快照；siteProfDraft 是编辑工作副本
+      // （保存前不被刷新覆盖）；试运行结果按 pid.field 为键。newField 是自定义
+      // 字段录入区。渲染与方法见 parts/08g_site_profiles.js。
       siteProfiles: {}, siteProfDraft: {}, siteProfOpen: false,
       // 方案 v3：本地缓存的全量配置（D3）、本次刷新拉到的后端母版、逐字段差异表、
       // 离线标记 / 未覆盖标记 / 按站点渲染开关 / 覆盖确认框。

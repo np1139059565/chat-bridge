@@ -251,19 +251,19 @@ window.AIMirrorContent = (function () {
   /**
    * 应用后端下发的站点档案（每站一份完整清单，整体替换）。
    *
-   * 真源是后端 definition.yaml 的 app.profiles；本文件内联的 PROFILES 只是
-   * 后端不可达时的出厂兜底。前端零缓存：档案不落 chrome.storage，拉取结果
-   * 只进内存（本函数就地整体替换 A.PROFILES，后端没有的站点即消失，
-   * 与「完整清单」语义一致）。
+   * 真源是客户端注册信息（/api/clients 的 custom_config，由 GET /profiles
+   * 聚合）；本文件内联的 PROFILES 只是后端不可达时的出厂兜底。前端零缓存：
+   * 档案不落 chrome.storage，拉取结果只进内存（本函数就地整体替换
+   * A.PROFILES，后端没有的站点即消失，与「完整清单」语义一致）。
    *
-   * 轻防御（后端 sanitize_profiles 已规整一遍，这里只拦传输途中的明显异常，
-   * 双保险）：档案集非对象或无有效档案则整体忽略（保持出厂兜底）；逐档案
-   * 校验 id 字符与字段类型（字符串 / 布尔 / 字符串数组），非法条目丢弃；
-   * hosts 单串转列表、逐项去空。
+   * 轻防御（服务端不解释寄存字段，这里只拦传输途中的明显异常）：档案集非
+   * 对象或无有效档案则整体忽略（保持出厂兜底）；逐档案校验 id 字符与字段
+   * 类型（字符串 / 布尔 / 字符串数组），非法条目丢弃；hosts 单串转列表、
+   * 逐项去空。
    *
    * 应用后按当前 hostname 重猜 profileId：新增站点的 hosts 立即可被
    * guessProfile 识别，无需改代码、无需刷新页面。
-   * @param {Object} backendProfiles 后端 /profiles 接口返回的档案集
+   * @param {Object} backendProfiles GET /profiles 聚合的客户端注册信息档案集
    * @returns {boolean} 是否实际应用（false = 输入无效，保持出厂兜底）
    */
   A.applyProfiles = function (backendProfiles) {

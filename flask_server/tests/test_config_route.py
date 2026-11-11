@@ -245,60 +245,75 @@ class TestSnapshotAndEndpoint:
 
 
 class TestProfilesSection:
-    """profiles 区块：整体替换、规整与轻量读取。"""
+    """profiles 区块：真源为客户端注册信息，原样寄存、聚合读取、不兜底。"""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_registry(self, monkeypatch, tmp_path):
+        """把注册表重定向到临时文件，避免触碰真实客户端注册数据。"""
+        monkeypatch.setattr(config_route.registry, "REGISTRY_PATH",
+                            tmp_path / "client_registry.json")
 
     def test_snapshot_contains_profiles(self, client):
-        """GET /config 快照带 profiles，供设置页渲染。"""
+        """GET /config 快照的 profiles 来自注册表，供设置页渲染。"""
         runtime.CONFIG["flask"] = {"host": "127.0.0.1", "port": 5000}
-        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM", "hosts": ["chatglm.cn"]}}
+        config_route.registry.register("glm", {"label": "GLM", "hosts": ["chatglm.cn"]}, [])
         data = client.get("/config").get_json()
         assert data["profiles"]["glm"]["label"] == "GLM"
 
     def test_profiles_endpoint(self, client):
-        """GET /profiles：轻量返回档案本体（内容脚本经后台中转拉取）。"""
-        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM"}}
+        """GET /profiles：聚合注册表里的档案本体（内容脚本经后台中转拉取）。"""
+        config_route.registry.register("glm", {"label": "GLM"}, [])
         data = client.get("/profiles").get_json()
         assert data["profiles"]["glm"]["label"] == "GLM"
 
     def test_post_merges_profiles_preserves_others(self, client):
-        """按档案 id 合并：未提交站点原样保留，只改请求里带的那份。"""
-        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM"}, "deepseek": {"label": "DS"}}
+        """按档案 id 寄存：未提交站点原样保留，只改请求里带的那份。"""
+        # 内存出厂种子：POST 不改写它，证明真源已不在 runtime.CONFIG。
+        runtime.CONFIG["profiles"] = {"glm": {"label": "出厂GLM"}}
+        # 内存出厂种子：POST 不改写它，证明真源已不在 runtime.CONFIG。
+        runtime.CONFIG["profiles"] = {"glm": {"label": "出厂GLM"}}
+        config_route.registry.register("glm", {"label": "GLM"}, [])
+        config_route.registry.register("deepseek", {"label": "DS"}, [])
         resp = client.post("/config", json={"profiles": {
             "glm": {"label": "GLM2", "hosts": ["chatglm.cn"], "newConversation": ""}}})
         assert resp.status_code == 200
-        assert set(runtime.CONFIG["profiles"]) == {"glm", "deepseek"}
-        assert runtime.CONFIG["profiles"]["deepseek"] == {"label": "DS"}
-        assert runtime.CONFIG["profiles"]["glm"]["label"] == "GLM2"
-        assert runtime.CONFIG["site_profiles"] == {"chatglm.cn": "glm"}
+        profs = client.get("/profiles").get_json()["profiles"]
+        assert set(profs) == {"glm", "deepseek"}
+        assert profs["deepseek"] == {"label": "DS"}
+        assert profs["glm"]["label"] == "GLM2"
         assert "profiles" in resp.get_json()["changed"]
+        # 真源不在 definition.yaml：内存出厂种子不被 POST 改写。
+        assert runtime.CONFIG["profiles"]["glm"]["label"] == "出厂GLM"
 
     def test_post_profiles_remove_only_deletes_listed(self, client):
-        """删除通道：只删 profiles_remove 列出的 id，其余保留。"""
-        runtime.CONFIG["profiles"] = {
-            "glm": {"label": "GLM"}, "deepseek": {"label": "DS"}, "kimi": {"label": "K"}}
+        """删除通道：只注销 profiles_remove 列出的 id，其余保留。"""
+        for pid, label in (("glm", "GLM"), ("deepseek", "DS"), ("kimi", "K")):
+            config_route.registry.register(pid, {"label": label}, [])
         resp = client.post("/config", json={
             "profiles": {"glm": {"label": "GLM2"}},
             "profiles_remove": ["deepseek"]})
         assert resp.status_code == 200
-        assert set(runtime.CONFIG["profiles"]) == {"glm", "kimi"}
-        assert runtime.CONFIG["profiles"]["glm"]["label"] == "GLM2"
-        assert runtime.CONFIG["site_profiles"] == {}
+        profs = client.get("/profiles").get_json()["profiles"]
+        assert set(profs) == {"glm", "kimi"}
+        assert profs["glm"]["label"] == "GLM2"
 
-    def test_post_sanitizes_entries(self, client):
-        """非法档案 id 与非法类型字段被规整丢弃，不进运行时配置。"""
-        runtime.CONFIG["profiles"] = {}
-        resp = client.post("/config", json={"profiles": {
-            "bad id!": {"label": "x"},
-            "glm": {"hosts": "chatglm.cn", "split": "yes"},
-        }})
+    def test_post_does_not_sanitize_entries(self, client):
+        """服务端不清洗：非法 id 之外的嵌套 / 数字 / null / 非布尔 split 全部原样保留。"""
+        entry = {"hosts": "chatglm.cn", "split": "yes", "maxRetry": 3,
+                 "中文": {"嵌套": None, "数组": [1, "二", True]}}
+        resp = client.post("/config", json={"profiles": {"glm": entry}})
         assert resp.status_code == 200
-        assert set(runtime.CONFIG["profiles"]) == {"glm"}
-        assert runtime.CONFIG["profiles"]["glm"]["hosts"] == ["chatglm.cn"]
-        assert "split" not in runtime.CONFIG["profiles"]["glm"]
+        assert client.get("/profiles").get_json()["profiles"]["glm"] == entry
 
     def test_non_dict_ignored(self, client):
-        """profiles 非字典时整块忽略，不动现有档案。"""
-        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM"}}
+        """profiles 非字典时整块忽略，不动已寄存档案。"""
+        config_route.registry.register("glm", {"label": "GLM"}, [])
         resp = client.post("/config", json={"profiles": "junk"})
         assert resp.status_code == 200
-        assert runtime.CONFIG["profiles"] == {"glm": {"label": "GLM"}}
+        assert client.get("/profiles").get_json()["profiles"] == {"glm": {"label": "GLM"}}
+
+    def test_empty_registry_no_fallback(self, client):
+        """注册表为空时不兜底到 definition.yaml 的出厂档案。"""
+        runtime.CONFIG["profiles"] = {"glm": {"label": "GLM", "hosts": ["chatglm.cn"]}}
+        assert client.get("/profiles").get_json()["profiles"] == {}
+        assert client.get("/config").get_json()["profiles"] == {}

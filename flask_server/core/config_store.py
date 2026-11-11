@@ -46,7 +46,11 @@ _PROFILE_ID_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
 
 def sanitize_profiles(raw):
-    """规整站点档案（每站一份完整清单，真源为 definition.yaml 的 app.profiles）。
+    """规整站点档案（仅用于读取 definition.yaml 的出厂种子，不再是真源）。
+
+    C-3b 起站点档案真源已切到 /api/clients 的 custom_config 寄存通道：
+    服务端不校验、不清洗、不解释字段，本函数不参与寄存链路，也不被
+    POST /config 调用。保留它只为 init_config 读入出厂种子时做类型归一。
 
     规则：
     - 档案 id 仅允许字母 / 数字 / 下划线，其余整条丢弃；非字典条目整条丢弃；

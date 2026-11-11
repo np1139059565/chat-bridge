@@ -150,3 +150,40 @@ test('覆盖弹窗：两栏分开列，确认/取消按钮齐全', () => {
   assert.ok(txt.indexOf('网页 AI 站点配置') >= 0);
   assert.ok(txt.indexOf('其它电脑') >= 0);
 });
+
+// ---- C-3b 真源切换语义锁（措辞与既有用例保持差异，避免重复窗口）----
+
+test('C3b 区块文案：标题保留，tooltip 改指 custom_config 寄存通道', () => {
+  const fx = require('node:fs');
+  const g = fx.readFileSync(P('08g_site_profiles.js'), 'utf8');
+  assert.ok(g.indexOf('客户端注册信息：每站一份完整清单') >= 0);
+  assert.ok(g.indexOf('/api/clients') >= 0);
+  assert.ok(g.indexOf("'网页 AI 站点配置'") >= 0);
+  assert.ok(g.indexOf('真源在后端配置文件') < 0);
+});
+
+test('C3b 空态运行期仍给出新增站点表单（首个客户端可注册）', () => {
+  require(P('08h_profile_fields.js'));
+  const c = makeCtx({ siteProfiles: {}, siteProfDraft: {}, siteProfOpen: true, siteProfShowAll: true });
+  const flat = JSON.stringify(D.renderSiteProfilesBlock(c));
+  assert.ok(flat.indexOf('暂无客户端注册信息') >= 0);
+  assert.ok(flat.indexOf('新增站点') >= 0);
+  assert.ok(flat.indexOf('站点 id') >= 0);
+});
+
+test('C3b 四个前端文件与接口文档的旧真源表述已清零', () => {
+  const fx = require('node:fs');
+  const rd = (f) => fx.readFileSync(path.join(__dirname, '..', '..', '..', f), 'utf8');
+  const g = rd('extend/dialog/parts/08g_site_profiles.js');
+  const d = rd('extend/dialog/parts/00_data.js');
+  const ix = rd('extend/content/05_index.js');
+  const st = rd('extend/content/00_state.js');
+  const doc = rd('docs/api-reference.md');
+  assert.ok(g.indexOf('/api/clients') >= 0 && g.indexOf('真源 definition.yaml') < 0);
+  assert.ok(d.indexOf('真源为 /api/clients 的 custom_config') >= 0);
+  assert.ok(ix.indexOf('c3b-client-registry') >= 0 && ix.indexOf('GET /profiles 聚合') >= 0);
+  assert.ok(st.indexOf('真源是客户端注册信息') >= 0 && st.indexOf('真源是后端 definition.yaml') < 0);
+  assert.ok(doc.indexOf('属后续任务') < 0);
+  assert.ok(doc.indexOf(String.fromCharCode(12)) < 0);
+  assert.ok(doc.indexOf('真源为客户端注册信息') >= 0 && doc.indexOf('C-3b') >= 0);
+});

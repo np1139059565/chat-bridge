@@ -9,17 +9,35 @@
 - tools.<name>.enabled           即时生效
 - tools.run_command.languages    即时生效
 - limits.max_json_chars          即时生效
-- GET  /profiles 轻量返回站点档案（内容脚本注入时经后台中转拉取）
-- profiles（站点档案）           按档案 id 合并，未提交的档案保留，即时生效
+- GET  /profiles 轻量返回站点档案（真源为客户端注册信息，内容脚本注入时经后台中转拉取）
+- profiles（站点档案）           写入 /api/clients 的 custom_config 寄存通道，未提交的档案保留
 """
 from flask import Blueprint, jsonify, request
 
 import runtime
 import tool_config
-from config_store import sanitize_profiles, save_config_to_yaml, derive_site_profiles
+from config_store import save_config_to_yaml
 from service_control import rolling_restart
+# 站点档案真源：C-3a 已建的客户端注册信息通道，只读复用其原语（与 command_catalog 同款）。
+import client_registry as registry
 
 bp = Blueprint("config_route", __name__)
+
+
+def _registry_profiles():
+    """从客户端注册表聚合站点档案集：{site_key: custom_config}。
+
+    只读复用 client_registry 的整表读取原语；不校验、不清洗、不解释
+    custom_config 的字段含义，也不并入 config_store 的档案解析链。
+    注册表为空时返回空字典，不静默兜底到 definition.yaml 的出厂档案。
+    """
+    store = registry._read_store() or {}
+    out = {}
+    for site_key, entry in store.items():
+        if isinstance(entry, dict):
+            # custom_config 原样作为该站点档案本体（可为任意 JSON 值）。
+            out[site_key] = entry.get("custom_config")
+    return out
 
 
 def _apply_flask_section(data, changed):
@@ -108,28 +126,41 @@ def _apply_tool_config_section(data, changed):
     return None
 
 
-def _apply_profiles_section(data, changed):
-    """应用 profiles 区块：站点档案按 id 合并，不再整集替换。
+def _save_profile_block(block):
+    """把 profiles 区块逐档案写入寄存通道；返回是否发生登记。"""
+    if not isinstance(block, dict):
+        return False
+    done = False
+    for pid, entry in block.items():
+        if not isinstance(pid, str) or not pid:
+            continue
+        # 覆盖登记时保留原有指令声明，避免把客户端声明一并抹掉。
+        old = registry.lookup(pid) or {}
+        registry.register(pid, entry, old.get("commands"))
+        done = True
+    return done
 
-    方案 v3（D2）：【覆盖】只提交当前站点那份档案。整集替换会让 A 电脑改
-    glm 时冲掉 B 电脑刚提交的 deepseek，故未出现在请求里带之外的档案原样保留。
-    删除须经 data["profiles_remove"] 显式列出 id，避免与「未提交」混淆。
-    合并后同步派生 site_profiles，防止内存映射与档案集漂移。
+
+def _remove_profile_keys(removed):
+    """按 profiles_remove 显式注销客户端；返回是否实际删除。"""
+    if not isinstance(removed, list):
+        return False
+    done = False
+    for pid in removed:
+        if isinstance(pid, str) and registry.unregister(pid):
+            done = True
+    return done
+
+
+def _apply_profiles_section(data, changed):
+    """应用 profiles 区块：真源为客户端注册信息（/api/clients 的 custom_config）。
+
+    每个档案 id 即一个 site_key，custom_config 原样存放该档案本体；服务端
+    不校验、不清洗、不解释字段，不回写 definition.yaml，也不并入 config_store。
     """
-    current = runtime.CONFIG.get("profiles", {})
-    merged = dict(current)
-    block = data.get("profiles")
-    if isinstance(block, dict):
-        for pid, entry in sanitize_profiles(block).items():
-            merged[pid] = entry
-    removed = data.get("profiles_remove")
-    if isinstance(removed, list):
-        for pid in removed:
-            if isinstance(pid, str) and pid in merged:
-                del merged[pid]
-    if merged != current:
-        runtime.CONFIG["profiles"] = merged
-        runtime.CONFIG["site_profiles"] = derive_site_profiles(merged)
+    saved = _save_profile_block(data.get("profiles"))
+    removed = _remove_profile_keys(data.get("profiles_remove"))
+    if saved or removed:
         changed.append("profiles")
 
 
@@ -142,7 +173,7 @@ def _config_snapshot():
         "limits": runtime.CONFIG.get("limits", {}),
         "default_profile": runtime.CONFIG.get("default_profile", "glm"),
         "site_profiles": runtime.CONFIG.get("site_profiles", {}),
-        "profiles": runtime.CONFIG.get("profiles", {}),
+        "profiles": _registry_profiles(),
         "tools": runtime.CONFIG.get("tools", {}),
         # 工具配置：声明 + 当前值，设置页按类型通用渲染
         "tool_config": tool_config.all_specs(),
@@ -183,7 +214,7 @@ def config():
     """读取（GET）或部分更新（POST）配置。
 
     POST 支持四个区块：flask（host/port）、tools（开关与语言）、limits（体积上限）、
-    profiles（站点档案按 id 合并，profiles_remove 显式删除）。仅 flask 改动需要重启服务才能生效。
+    profiles（写入客户端注册信息，profiles_remove 显式删除）。仅 flask 改动需要重启服务才能生效。
     """
     if request.method == "POST":
         return _handle_config_post()
@@ -193,12 +224,14 @@ def config():
 
 @bp.route("/profiles", methods=["GET"])
 def profiles_endpoint():
-    """轻量读取站点档案。
+    """轻量读取站点档案：真源为客户端注册信息（/api/clients 的 custom_config）。
 
     内容脚本注入时经后台中转拉取（HTTPS 页直连本地服务受混合内容策略拦截）；
-    只返回档案本体，不携带工具配置等无关字段，供前端覆盖出厂默认值。
+    按 site_key（档案 id）聚合各客户端寄存的档案本体，只返回档案集，不携带
+    工具配置等无关字段。服务端不解释字段；注册表为空时返回空档案集，
+    不静默兜底到 definition.yaml 的出厂档案（历史事故「千问档案缺失被按 GLM 解析」）。
     """
-    return jsonify({"profiles": runtime.CONFIG.get("profiles", {})})
+    return jsonify({"profiles": _registry_profiles()})
 
 
 @bp.route("/config/restart-port", methods=["POST", "OPTIONS"])

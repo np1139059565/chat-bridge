@@ -2,11 +2,12 @@
 配置文件的统一读写 —— 分区合并版本
 
 配置集中为两份文件，按「是否入库」划分（git 只能整文件忽略，故运行时必须独立）：
-- definition.yaml  全部定义，入库（站点映射、工具定义、指令、选择器、主机地址）
+- definition.yaml  全部定义，入库（工具定义、指令、主机地址等）；app.profiles 仅为出厂种子，
+                      站点档案真源已迁至客户端注册信息（/api/clients 的 custom_config）
 - runtime.yaml     全部运行时与密钥，不入库（开关、端口、QQ 凭证、工具上下线）
 
 两份文件内各含三个分区，各子系统各写各段：
-- app          主配置（flask / limits / site_profiles / tools）
+- app          主配置（flask / limits / tools；站点档案不再以本段为真源）
 - custom_tools 自定义工具
 - bridge       远程桥接
 
