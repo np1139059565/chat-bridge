@@ -14,6 +14,8 @@ app:
     wenxin.baidu.com: wenxin
     xinghuo.xfyun.cn: xinghuo
     yuanbao.tencent.com: yuanbao
+    perplexity.ai: perplexity
+    www.perplexity.ai: perplexity
   profiles:
     arena:
       assistantContent: div.prose
@@ -60,6 +62,7 @@ app:
       split: false
       thinking: .ds-think-content
       userContent: .ds-collapsible-text
+      answerWrap: ''
     glm:
       answerContent: .answer-content
       answerWrap: .answer-content-wrap
