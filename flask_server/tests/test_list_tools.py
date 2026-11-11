@@ -9,6 +9,7 @@ import unittest
 
 from app import create_app
 from tools import tools_impl
+from tools.list_tools_impl import _has_params
 from tool_meta import TOOLS
 
 
@@ -69,6 +70,35 @@ class TestListTools(unittest.TestCase):
     def test_registered_in_dispatch(self):
         """必须在派发表中登记，否则工具能列出却无法调用。"""
         self.assertIn("list_tools", tools_impl.DISPATCH)
+
+    def test_has_params_empty_schema_vs_param_schema(self):
+        """空参数 schema 判 False、有参数 schema 判 True（Q-7 回归固定）。
+
+        迁移到 JSON Schema 后，无参工具的 parameters 是空 properties 的
+        object schema，按 parameters 本身判真假会把无参工具误报成有参，
+        诱导 AI 多做一次 get_tool_params 查询。本用例固定对照口径，
+        并覆盖历史数组格式的兼容判断。
+        """
+        names = {t["name"]: t["has_params"]
+                 for t in tools_impl.t_list_tools({})["tools"]}
+        # 空参数 schema：清单/规则/技能三个无参工具不得误报有参
+        for name in ("list_tools", "list_rules", "list_skills"):
+            self.assertIn(name, names)
+            self.assertFalse(names[name],
+                              name + " 空参数 schema 应判 has_params=False")
+        # 有参数 schema：get_tool_params 要 tool_id、read_file 要 path
+        for name in ("get_tool_params", "read_file"):
+            self.assertIn(name, names)
+            self.assertTrue(names[name],
+                             name + " 有参数 schema 应判 has_params=True")
+        # 历史数组格式兼容：非空数组仍有参；空数组、空 schema、缺键均无参
+        empty_schema = {"type": "object", "properties": {}}
+        path_schema = {"type": "object", "properties": {"path": {}}}
+        self.assertTrue(_has_params({"parameters": [{"name": "path"}]}))
+        self.assertFalse(_has_params({"parameters": []}))
+        self.assertFalse(_has_params({"parameters": empty_schema}))
+        self.assertTrue(_has_params({"parameters": path_schema}))
+        self.assertFalse(_has_params({}))
 
 
 if __name__ == "__main__":
