@@ -25,33 +25,20 @@ from service_control import rolling_restart
 
 bp = Blueprint("config_route", __name__)
 
-# 后端草稿（缓存）文件：界面改动立即落此文件；【覆盖】才写母版（入库、可分发）。
-# 本机文件，不入库；master 仍是 definition.yaml + runtime.yaml。
-DRAFT_PATH = Path(__file__).resolve().parent.parent / "config" / "config_draft.json"
-_draft_lock = threading.Lock()
+# 草稿按 siteKey 隔离在后端；母版仍是唯一一份 definition.yaml + runtime.yaml。
+import config_draft_store as draft_store
 
-def _load_draft():
+def _site_of():
+    """本次请求所属页面：优先 X-Site-Key 头，其次 query，兜底 unknown-site。"""
     try:
-        if DRAFT_PATH.exists():
-            return json.loads(DRAFT_PATH.read_text(encoding="utf-8"))
+        from flask import request
+        v = request.headers.get("X-Site-Key") or request.args.get("siteKey") or request.args.get("site_key")
+        if not v:
+            j = request.get_json(force=True, silent=True)
+            v = (j or {}).get("site_key") if isinstance(j, dict) else None
+        return str(v or "unknown-site")
     except Exception:
-        pass
-    return None
-
-def _save_draft(draft):
-    with _draft_lock:
-        DRAFT_PATH.parent.mkdir(parents=True, exist_ok=True)
-        DRAFT_PATH.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
-    return True
-
-def _clear_draft():
-    with _draft_lock:
-        try:
-            DRAFT_PATH.unlink(missing_ok=True)
-        except Exception:
-            pass
-
-
+        return "unknown-site"
 
 def _apply_flask_section(data, changed):
     """应用 flask 区块（host / port）的更新；仅记录真正发生变化的项。"""
@@ -217,15 +204,19 @@ def _handle_config_post():
 def config_draft():
     """GET 一次回传 master + draft 两份；POST 把整份草稿落后端缓存文件。"""
     if request.method == "POST":
-        _save_draft(request.get_json(force=True, silent=True) or {})
-        return jsonify(success=True)
-    return jsonify(success=True, master=_config_snapshot(), draft=_load_draft())
+        body = request.get_json(force=True, silent=True) or {}
+        site = _site_of()
+        draft_store.save(site, body)
+        draft_store.apply_to_runtime(body)   # 改完即生效，不写母版 yaml
+        return jsonify(success=True, site=site)
+    site = _site_of()
+    return jsonify(success=True, site=site, master=_config_snapshot(), draft=draft_store.load(site))
 
 @bp.route("/config/commit", methods=["POST", "OPTIONS"])
 def config_commit():
     """【覆盖】：把草稿写回母版，成功后清掉缓存文件。"""
     resp = _apply_patch(request.get_json(force=True, silent=True) or {})
-    _clear_draft()
+    draft_store.clear(_site_of())
     return resp
 
 @bp.route("/config", methods=["GET", "POST", "OPTIONS"])

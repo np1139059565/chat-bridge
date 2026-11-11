@@ -17,7 +17,7 @@ test('configCache Get/Set：node 环境走内存降级，刷新不丢本地值',
   const got = await D.configCacheGet('siteA');
   assert.deepStrictEqual(got, { limits: { max_json_chars: 123 } });
   const other = await D.configCacheGet('siteB');
-  assert.deepStrictEqual(other, { limits: { max_json_chars: 123 } }) // 全局单键：任意站点读回同一份副本;
+  assert.strictEqual(other, null); // C-10：草稿按站隔离;
 });
 
 test('configPublic：剔除 profiles 与派生只读字段，其余顶层键全保留', () => {

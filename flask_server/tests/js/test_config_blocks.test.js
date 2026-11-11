@@ -75,49 +75,6 @@ test('mergeIntoShape：顶层命中 / 子对象命中 / 数组安全', () => {
   assert.deepStrictEqual(D.mergeIntoShape({ ok: true }, null), { ok: true });
 });
 
-test('apiFetch：配置写不发请求并登记 pending；动作端点照常发；__commit 放行', async () => {
-  clearStore();
-  const calls = [];
-  global.fetch = async (url, opts) => { calls.push({ url, opts }); return okResp({ ok: true }); };
-  const ctx = makeCtx();
-  const r = await D.apiFetch(ctx, '/api/bridge/config', { method: 'POST', body: { qq: 2 } });
-  assert.strictEqual(r.draft, true);
-  assert.strictEqual(calls.length, 0);
-  assert.strictEqual(ctx.configCache.pending.length, 1);
-  await D.apiFetch(ctx, '/api/web/client_log', { method: 'POST', body: { x: 1 } });
-  assert.strictEqual(calls.length, 1);
-  await D.apiFetch(ctx, '/api/bridge/config', { method: 'POST', body: { qq: 3 }, __commit: true });
-  assert.strictEqual(calls.length, 2);
-});
-
-test('apiFetch 读端点：把待覆盖改动合并进响应，UI 重读不回冲', async () => {
-  clearStore();
-  global.fetch = async () => okResp({ config: { qq: 1, voice: 0 } });
-  const ctx = makeCtx();
-  await D.apiFetch(ctx, '/api/bridge/config', { method: 'POST', body: { qq: 2 } });
-  const data = await D.apiFetch(ctx, '/api/bridge/config');
-  assert.strictEqual(data.config.qq, 2);
-  assert.strictEqual(data.config.voice, 0);
-});
-
-test('pending 按路径去重；recomputeConfigDiff 把待覆盖区块计入 dirty', async () => {
-  clearStore();
-  global.fetch = async () => okResp({ ok: true });
-  const ctx = makeCtx();
-  await ctx.configLoadAndDiff(JSON.parse(JSON.stringify(BACKEND)));
-  await D.apiFetch(ctx, '/api/bridge/config', { method: 'POST', body: { qq: 2 } });
-  await D.apiFetch(ctx, '/api/bridge/config', { method: 'POST', body: { qq: 3 } });
-  assert.strictEqual(ctx.configCache.pending.length, 1);
-  assert.strictEqual(ctx.configCache.pending[0].body.qq, 3);
-  assert.strictEqual(ctx.configBlockDirty.bridge, 1);
-  assert.strictEqual(ctx.configDirty, true);
-  assert.ok(ctx.configDiffCount >= 1);
-  // pending 是内部字段，不能被当成公共配置差异提交
-  assert.ok(!('pending' in ctx.configPublicDiff));
-  const body = D.configPublicToBody(D.configPublic(ctx.configCache));
-  assert.ok(!('pending' in body));
-});
-
 test('applyConfigOverwrite：先回放各区块写入，再提交 /config，最后清空 pending', async () => {
   clearStore();
   const posted = [];
@@ -223,18 +180,3 @@ test('applyPendingToRead：工具上下线草稿合并到 tools 行', () => {
   assert.strictEqual(out.tools[0].enabled, true);
   assert.ok(!('enabled' in out));
 });
-
-test('apiFetch：技能上线草稿模式下读 /prompt_sections 保持上线态', async () => {
-  clearStore();
-  global.fetch = async () => okResp({
-    sections: [], skills: [],
-    skillsManage: [{ name: 'anatomy', enabled: false, tool_count: 1, enabled_count: 0,
-      tools: [{ name: 'anatomy_illustration', enabled: false }] }]
-  });
-  const ctx = makeCtx();
-  const r = await D.apiFetch(ctx, '/skills/anatomy/enabled', { method: 'PUT', body: { enabled: true } });
-  assert.strictEqual(r.draft, true);
-  const data = await D.apiFetch(ctx, '/prompt_sections');
-  assert.strictEqual(data.skillsManage[0].enabled, true);
-});
-

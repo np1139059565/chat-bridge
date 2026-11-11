@@ -30,8 +30,8 @@
 
   // 前端不再用 chrome.storage 持久化配置：内存仅供本次渲染，
   // 真正的副本由后端 /config/draft 落盘，刷新时随 GET 一起回传。
-  D.configCacheGet = function () {
-    return Promise.resolve(MEM[GLOBAL_KEY] || null);
+  D.configCacheGet = function (siteKey) {
+    return Promise.resolve(MEM[String(siteKey || 'unknown-site')] || null);
   };
 
   let _draftTimer = null;
@@ -44,7 +44,8 @@
   };
 
   D.configCacheSet = function (siteKey, cfg, skipDraft) {
-    MEM[GLOBAL_KEY] = cfg;
+    const sk = String(siteKey || 'unknown-site');
+    MEM[sk] = cfg;
     const ctx = skipDraft ? null : D._cfgCtx;
     if (ctx) {
       // 界面即时改动：Vue state -> 草稿，刷新后由后端回传恢复
@@ -56,7 +57,7 @@
         if (ctx.siteProfDraft && D.serializeProfilesDraft) cfg.profiles = D.serializeProfilesDraft(ctx.siteProfDraft);
       } catch (e) { /* 草稿未就绪时跳过 */ }
       if (_draftTimer) clearTimeout(_draftTimer);
-      _draftTimer = setTimeout(function () { D.configDraftSave(ctx, MEM[GLOBAL_KEY]); }, 120);
+      _draftTimer = setTimeout(function () { D.configDraftSave(ctx, MEM[sk]); }, 120);
     }
     return Promise.resolve(true);
   };

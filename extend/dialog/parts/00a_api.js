@@ -40,6 +40,7 @@
     }
 
     opts.headers = Object.assign({}, opts.headers || {});
+    if (ctx) opts.headers['X-Site-Key'] = String(ctx.siteKey || 'unknown-site');
     if (opts.body && typeof opts.body !== 'string') {
       opts.body = JSON.stringify(opts.body);
       opts.headers['Content-Type'] = 'application/json';

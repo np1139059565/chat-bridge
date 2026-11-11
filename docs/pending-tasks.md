@@ -473,3 +473,12 @@ split 按迭代顺序把前 58 组判为已知、其余判为新增。组数一�
   definition.yaml + runtime.yaml（入库、可分发），成功后清草稿文件；
   刷新 GET /config/draft 一次回传 master + draft 两份供前端对比。
 - 会话/存档仍按 siteKey 隔离；配置母版全局一份。
+
+## C-10 草稿按页面隔离 + 改完即生效（推翻 C-9 全局草稿）
+- 用户口径：母版 definition.yaml/runtime.yaml 唯一一份、入库、可分发；草稿按 siteKey
+  每页面各一份、存后端本机、不入库；服务端取配置必须按 siteKey 选对应草稿。
+- 链路：界面 -> 草稿(按站) -> 母版(覆盖时)；清掉浏览器副本、pending 队列等中间态。
+- 后端 config_draft_store.py：config/drafts/<siteKey>.json；apply_to_runtime 把草稿即时
+  写 runtime.CONFIG（行为即变，不落 yaml）；/config/commit 才写母版并清该站草稿。
+- 前端所有请求带 X-Site-Key；queuePendingWrite 改为直接生效、不再登记队列；
+  configCache 仅本次渲染按站内存；GET /config/draft 回传唯一 master + 该站 draft。

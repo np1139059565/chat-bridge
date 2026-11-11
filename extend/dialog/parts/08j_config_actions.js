@@ -390,14 +390,16 @@
 
   /** 受管配置区块的待覆盖写入登记（由 00a_api.js 草稿拦截层调用）。 */
   D.queuePendingWrite = async function (ctx, block, path, method, body) {
+    // C-10：清掉 pending 队列中间态；改动立即生效，只留一份按站草稿快照
     const cache = ctx.configCache || (ctx.configCache = {});
-    // 同一路径只留最后一次：配置 POST 通常是整份覆盖，旧草稿无意义。
-    const list = D.pendingList(cache).filter(function (w) { return w.path !== path; });
-    list.push({ seq: Date.now() + Math.random(), block: block.id,
-      label: block.label, path: path, method: method, body: body });
-    cache.pending = list;
-    await D.configCacheSet(ctx.siteKey, cache);
-    if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      Object.keys(body).forEach(function (k) { cache[k] = body[k]; });
+    }
+    cache.pending = [];
+    if (D.configDraftSave) await D.configDraftSave(ctx, cache);
+    // 原端点立即执行：后端运行时改完即生效（__commit 绕过拦截层）
+    if (D.apiFetch && path) await D.apiFetch(ctx, path, { method: method, body: body, __commit: true });
+    return true;
   };
 
   /** 丢弃某区块的本地草稿；不写后端，重新展开后显示服务端值。 */
@@ -420,9 +422,7 @@
   };
 
 
-
   /** 站点配置块专属徽标：只数 configDiff 里的字段差异。 */
-
   D.renderSiteProfileBadge = function (ctx) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === 'site_profiles'; });
