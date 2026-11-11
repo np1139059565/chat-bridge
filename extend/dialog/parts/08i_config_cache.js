@@ -132,4 +132,9 @@
     delete out.blockFields;
     return out;
   };
+  D.pendingList = function (cache) {
+    if (!cache) return [];
+    if (!Array.isArray(cache.pending)) cache.pending = [];
+    return cache.pending;
+  };
 })();

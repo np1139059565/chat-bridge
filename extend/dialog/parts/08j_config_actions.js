@@ -77,6 +77,7 @@
     }
     this.toolConfig = cache.tool_config;
     this.systemConfig = cache.system_config;
+    if (!Array.isArray(cache.pending)) cache.pending = [];
     await D.configCacheSet(this.siteKey, cache);
     this.configCache = cache;
     this.siteProfiles = cache.profiles || {};
@@ -137,7 +138,7 @@
       add(sec, sec, '公共配置 · ' + (PUB_LABEL[k] || k), '整份提交，影响所有页面与电脑',
         k, D.configValueToText(pd[k]));
     });
-    (cache.pending || []).forEach(function (w) {
+    D.pendingList(cache).forEach(function (w) {
       add(w.block, w.block, blockLabel(w.block) + ' · 待覆盖写入', w.path);
     });
     const bf = cache.blockFields || {};
@@ -284,7 +285,7 @@
 
   M.applyConfigOverwrite = async function () {
     try {
-      const pending = ((this.configCache && this.configCache.pending) || []).slice()
+      const pending = D.pendingList(this.configCache).slice()
         .sort(function (a, b) { return a.seq - b.seq; });
       for (let i = 0; i < pending.length; i++) {
         const w = pending[i];
@@ -379,7 +380,7 @@
   D.queuePendingWrite = async function (ctx, block, path, method, body) {
     const cache = ctx.configCache || (ctx.configCache = {});
     // 同一路径只留最后一次：配置 POST 通常是整份覆盖，旧草稿无意义。
-    const list = (cache.pending || []).filter(function (w) { return w.path !== path; });
+    const list = D.pendingList(cache).filter(function (w) { return w.path !== path; });
     list.push({ seq: Date.now() + Math.random(), block: block.id,
       label: block.label, path: path, method: method, body: body });
     cache.pending = list;
@@ -390,7 +391,7 @@
   /** 丢弃某区块的本地草稿；不写后端，重新展开后显示服务端值。 */
   M.discardConfigBlock = async function (id) {
     const cache = this.configCache || (this.configCache = {});
-    cache.pending = (cache.pending || []).filter(function (w) { return w.block !== id; });
+    cache.pending = D.pendingList(cache).filter(function (w) { return w.block !== id; });
     if (D.resetBlockFields) D.resetBlockFields(this, id);
     await D.configCacheSet(this.siteKey, cache);
     this.recomputeConfigDiff();
