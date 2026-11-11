@@ -1,5 +1,5 @@
 # 工作对话 · AI-C
-> 当前任务见本文末节「C-4」；第二节为已通过的 C-3a 历史任务书。
+> 当前任务见本文末节「C-3b」；C-4 已验收通过并合入 main，第二节为已通过的 C-3a 历史任务书。
 
 > 本文件是本对话的唯一任务来源与工作记录。每次开工前从头读一遍。
 > 收到「更新 git」指令时，先读本文件最后一节，再执行。
@@ -115,7 +115,7 @@
 2. 推送 `work/ai-c` 分支
 3. 等「更新 git」指令，由分发方逐条验收
 
-> 当前任务已切换为 C-4（1b 前端适配层），任务书见本文末节，可直接开工。C-3b 待 C-4 验收收口后再拆，未标注「可开工」不得动手。配置页 9.6-9.8 三起修复已落地，属设置页基建，不等于 C-3b 真源切换完成。
+> 当前任务已切换为 C-3b（站点档案真源切换），任务书见本文末节，可直接开工。C-4 已验收通过并合入 `main`（`8313824`）。配置页 9.6-9.8 三起修复已落地，属设置页基建，不等于 C-3b 真源切换完成。
 
 ---
 
@@ -125,7 +125,7 @@
 
 | 编号 | 任务 | 状态 |
 |---|---|---|
-| C-3b | 站点档案前端迁移（`08g` 等） | 暂缓：剩余面为真源从 `definition.yaml` 的 `app.profiles` 切到 C-3a 已建的 `custom_config` 寄存通道，前端读写改朝新通道、语义改「客户端注册信息」，界面保留只改定位（决策 10）；与 C-4 共用 `05c_prompt.js`，待 C-4 验收收口后拆清范围再下发，未标注「可开工」不得动手 |
+| C-3b | 站点档案前端迁移（`08g` 等） | 已下发为当前任务，任务书见本文末节；真源从 `definition.yaml` 的 `app.profiles` 切到 `custom_config` 寄存通道，界面保留只改定位（决策 10） |
 | C-3a | 语言包寄存通道（后端） | 已通过，见第五节 |
 
 ---
@@ -357,7 +357,7 @@
 
 ---
 
-## 当前任务（C-4，2026-11-11 下发）：1b 前端适配层
+## 历史任务（C-4，已验收）：1b 前端适配层
 
 > 依据：`.\docs\split-mirror-and-tools-service.md` 3.3 / 决策 8，`.\docs\tool-schema-migration.md` 第四节。
 > B-3 后端参数声明已合入 `main`（`13f15e6`），对外输出已为标准 JSON Schema，前端三处仍按旧扁平数组读取。
@@ -388,3 +388,49 @@
 5. 迁移清单第四节三项由分发方验收后逐项勾选并记录验证方式。
 
 **完成后**：推 `work/ai-c` 分支（先 `fetch + rebase` 到当前 `main` `13f15e6`），等「更新 git」指令由分发方逐条验收；不自行填 `[答复]`、不自开工 C-3b。
+
+## 分发方验收结论（C-4，2026-11-11）
+
+> 结论：**通过**，两笔提交 `f4fa5b5` + `4a29ef8` 合入 `main`（`8313824`）。
+
+| 项 | 实测 |
+|---|---|
+| 前端测试 | 399 tests / 399 pass（380 存量 + 13 适配层 + 6 补刀用例） |
+| 语法与体积 | 7 个 js 文件 `node --check` 全过，最大 392 行 ≤450 |
+| 端到端 | `test_toolconf_swallow` 8 项、`test_public_config_ui` 11 项全过；useOf 占位符不退化 |
+| 覆盖率 | 行 49.84% → 70.26%，未覆盖行约 153 → 91；分支 44.07% 判为加行加分母稀释，非漏测 |
+| 基线 | 分发方在合入同笔刷新 `05c_prompt.js` 的 line/branch 两条登记值，脚本与 90/70 阈值未动 |
+| 边界 | 10 文件、禁区零触碰、后端 `.py` 零改动、未自勾清单、未自填 `[答复]` |
+
+三处主动说明裁定：`dialog.html` 一行挂载按「配套加载」追认（仅此一次，已补记可碰清单）；`08b_settings.js` 只补说明接受（渲染函数定义在 `08_settings.js`）；`ℹ` 前缀解析差异登记遗留，执行方本机跳过、由分发方环境统一复验。
+
+## 当前任务（C-3b，2026-11-11 下发）：站点档案真源切换
+
+> 依据：决策 10、`docs/api-reference.md` 第十一 / 十五节与第 887 行说明。
+> 开工前 `git fetch origin && git rebase origin/main`，基点 `8313824`。
+
+**目标**：把站点档案真源从 `definition.yaml` 的 `app.profiles` + `GET /profiles` + 前端 `siteProfiles` / `siteProfDraft`，切到 C-3a 已建的 `/api/clients` 的 `custom_config` 寄存通道；界面保留，语义改「客户端注册信息」（决策 10）。服务端不校验、不清洗、不解释字段，不并入 `config_store` 的站点档案解析链。
+
+**可以碰的文件**：
+
+- `docs/api-reference.md` 第十一 / 十五节相关段落，及第 887 行「属后续任务」那句说明；
+- `flask_server` 下 `/profiles` 路由、`core/config_store.py` 的 `sanitize_profiles`、`core/config_file.py` 里 `app.profiles` 描述；
+- `.\extend\dialog\parts 8g_site_profiles.js`、`.\extend\dialog\parts _data.js`（`siteProfiles` / `siteProfDraft` 状态）、`.\extend\content_index.js`（`GET /profiles` 通知）、`.\extend\content _state.js` L266 注释；
+- 相应测试用例。
+
+**不要碰**：
+
+- `origin/merge/bus-fixes` 分支（来路不明，登记待查，不整分支合并）。`definition.yaml` 以当前 `main` `8313824` 为准；若其中有未登记的 Perplexity hosts / answerWrap 行，停住并在第四节提问，不顺手改、不替它合并；
+- C-4 已建的 `.\extend\lib	ool-schema-adapter.js`、三处参数渲染、`.\extend\dialog\partsc_prompt.js` 的 System Prompt 模板（刚收口，不回改）；
+- `.\extend\dialog\partsb_params.js`；
+- `.\docs	ool-schema-migration.md` 的勾选项（分发方已统一勾）；
+- 不自填 `[答复]`、不自行开工其它任务。
+
+**验收**：
+
+1. 深比较：构造含中文、嵌套、null 的整份站点档案，存一遍取一遍逐字段一致；按 `site_key` 隔离，未注册不兜底。
+2. 设置页「网页 AI 站点配置」界面仍可编辑保存，文案改为「客户端注册信息」语义。
+3. 在 `.lask_server` 下 `python -m pytest tests -q`，失败仅限已知波动 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过。
+4. 一次提交、提交信息只描述改动、正常跑钩子、不用 `--no-verify`。
+
+**完成后**：推 `origin/work/ai-c`，回「更新 git，C-3b 完成，提交 <hash>」等分发方逐条验收；排队槽为空，不自行找活。

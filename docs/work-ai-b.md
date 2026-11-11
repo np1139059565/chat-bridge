@@ -118,7 +118,7 @@
 
 > 第三节排队槽：B-4（Q-7 has_params 收尾补丁）已下发为当前任务；1b 前端适配层改派 AI-C（C-4），不在本方排队槽。
 > 前端适配层为独立任务，范围：新建 .\extend\lib\tool-schema-adapter.js 的 toFlatParams，同步 03_custom_tools.js、05c_prompt.js、08_settings.js 与并存的 08b_settings.js 三处扁平项读取，并同步 05c_prompt.js 内 System Prompt 模板的工具使用说明；07b_params.js 只处理参数值无需改动。
-> 开工前按分发方文档第九节从当前 main（13f15e6）同步，不直推 main。
+> 开工前按分发方文档第九节从当前 main（8313824）同步，不直推 main。
 
 ---
 
@@ -370,4 +370,4 @@
 
 **验收**：改前后对拍 `list_tools` 对空参数工具返回 `has_params: false`；在 `.\flask_server` 下跑 `python -m pytest tests -q`，波动项仍仅限 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过，正常提交、不用 `--no-verify`。
 
-**完成后**：推 `work/ai-b`（先 `fetch + rebase` 到当前 `main` `13f15e6`），等「更新 git」指令由分发方逐条验收；排队槽为空，不自行开工。
+**完成后**：推 `work/ai-b` 分支（先 `fetch + rebase` 到当前 `main` `8313824`），等「更新 git」指令由分发方逐条验收；排队槽为空，不自行开工。

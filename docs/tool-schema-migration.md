@@ -70,9 +70,9 @@
 
 ## 四、前端改动清单
 
-- [ ] `extend/dialog/parts/03_custom_tools.js` L139–140 — 读 `p.type`、`p.required` 组装自定义工具参数
-- [ ] `extend/dialog/parts/05c_prompt.js` L180 — 读 `p.name`、`p.type` 生成提示词占位符
-- [ ] `extend/dialog/parts/08_settings.js` L56–57、L99–100 — 设置页参数表两处渲染 `p.type`、`p.required`
+- [x] `extend/dialog/parts/03_custom_tools.js` L139–140 — 读 `p.type`、`p.required` 组装自定义工具参数 — 验证：C-4 f4fa5b5 经 toFlatParams 读取；test_tool_schema_adapter 13 项 + 399 项前端全绿（分发方验收 2026-11-11）
+- [x] `extend/dialog/parts/05c_prompt.js` L180 — 读 `p.name`、`p.type` 生成提示词占位符 — 验证：C-4 f4fa5b5 usageOf 经适配层；test_05c_prompt_schema_coverage 6 项覆盖模板文案（分发方验收 2026-11-11）
+- [x] `extend/dialog/parts/08_settings.js` L56–57、L99–100 — 设置页参数表两处渲染 `p.type`、`p.required` — 验证：C-4 f4fa5b5 两处 render 经 toFlatParams；08b 仅补说明不重复摊平（分发方验收 2026-11-11）
 
 > 上述三处都按扁平参数项读取（`name` / `type` / `required`）。改为标准格式后，
 > 需要一层适配把 `properties` + 顶层 `required` 还原成扁平列表。
@@ -114,3 +114,5 @@
 | 2026-11-09 | 核实清单事实：工具数 13→20 并列出名单；联合类型全量扫描确认仅 `read_file.path` 一处，策略定为 `anyOf`；基线更新为 py 942 / js 380；前端条目按实测改写并确定适配层落点 | 扫描 + 实测 |
 | 2026-11-09 | 合入 `list_tools` 后复核：工具数 20→21，基线 py 942→949 | 实测 |
 | 2026-11-10 | B-3 完成：第三节与第五节 py 侧全部勾选；loader 与 `_smoke_ct.py` 保留数组输入作兼容路径；js 声明夹具随第四节前端任务迁移；`has_params` 漂移登记 work-ai-b Q-7 | 实测 |
+
+| 2026-11-11 | C-4 前端适配层验收通过并合入 `8313824`，第四节三项由分发方逐项勾选；`05c_prompt.js` System Prompt 模板同步已在 f4fa5b5 落地并随本次验收确认；阶段 1b 前端部分收口 | 分发方 |
