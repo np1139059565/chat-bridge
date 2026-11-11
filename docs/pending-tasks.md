@@ -485,3 +485,10 @@ split 按迭代顺序把前 58 组判为已知、其余判为新增。组数一�
 - 收口：草稿态不再调原端点写母版；GET /config/draft 读时重放该站草稿到运行时
   （重启后亦生效，master 先取不被污染）；profiles 合并避免删别站档案；
   apply_to_runtime 兜底把受管区块对象并进运行时内存，全程不落 yaml。
+
+## C-12 草稿默认空 / 新站拷母版 / 母版固化（补 C-11 漏项）
+- 磁盘不预建任何 config/drafts/*.json；某 siteKey 首次 GET 才 init_from_master 拷出该站草稿。
+- master 用 _MASTER_CACHE 固化，草稿态 apply_to_runtime 不污染回传母版；覆盖后置 None 重取。
+- B 站首次拿到的仍是母版，不会带 A 站改动。
+
+- 补：_master() 用深拷贝固化，草稿态改运行时不会污染回传给其它站点的母版。

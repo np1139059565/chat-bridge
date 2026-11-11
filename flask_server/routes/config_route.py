@@ -28,6 +28,16 @@ bp = Blueprint("config_route", __name__)
 # 草稿按 siteKey 隔离在后端；母版仍是唯一一份 definition.yaml + runtime.yaml。
 import config_draft_store as draft_store
 
+_MASTER_CACHE = None
+
+def _master():
+    """母版只认磁盘那份；草稿态改运行时内存，不能污染回传的 master。"""
+    global _MASTER_CACHE
+    if _MASTER_CACHE is None:
+        import copy
+        _MASTER_CACHE = copy.deepcopy(_config_snapshot())
+    return _MASTER_CACHE
+
 def _site_of():
     """本次请求所属页面：优先 X-Site-Key 头，其次 query，兜底 unknown-site。"""
     try:
@@ -206,19 +216,24 @@ def config_draft():
     if request.method == "POST":
         body = request.get_json(force=True, silent=True) or {}
         site = _site_of()
+        _master()  # 先固化母版，本次 apply 不污染后续 GET
         draft_store.save(site, body)
         draft_store.apply_to_runtime(body)   # 改完即生效，不写母版 yaml
         return jsonify(success=True, site=site)
     site = _site_of()
+    master = _master()
     d = draft_store.load(site)
-    master = _config_snapshot()
-    if d: draft_store.apply_to_runtime(d)  # 读时重放：重启后打开该页即恢复，不写母版 yaml
+    if d is None:
+        d = draft_store.init_from_master(site, master)  # 默认空，新站首次才拷母版
+    draft_store.apply_to_runtime(d)  # 首次/重启都重放到运行时，不写母版 yaml
     return jsonify(success=True, site=site, master=master, draft=d)
 
 @bp.route("/config/commit", methods=["POST", "OPTIONS"])
 def config_commit():
     """【覆盖】：把草稿写回母版，成功后清掉缓存文件。"""
     resp = _apply_patch(request.get_json(force=True, silent=True) or {})
+    global _MASTER_CACHE
+    _MASTER_CACHE = None  # 覆盖后母版变了，下次 GET 重取
     draft_store.clear(_site_of())
     return resp
 

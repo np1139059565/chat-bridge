@@ -4,6 +4,7 @@
 - 草稿 config/drafts/<siteKey>.json：每页面一份、本机、不入库。
 - 界面改 -> 存该站草稿并立即 apply 到 runtime.CONFIG；【覆盖】才写母版并清该站草稿。
 """
+import copy
 import json
 import re
 import threading
@@ -31,6 +32,12 @@ def save(site, cfg):
     with _LOCK:
         _path(site).write_text(json.dumps(cfg or {}, ensure_ascii=False, indent=2), encoding="utf-8")
     return True
+
+def init_from_master(site, master):
+    """草稿默认空：新 siteKey 首次访问，才用唯一母版拷出该站草稿。"""
+    d = copy.deepcopy(master)
+    save(site, d)
+    return d
 
 def clear(site):
     with _LOCK:
