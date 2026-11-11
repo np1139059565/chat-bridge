@@ -265,7 +265,7 @@
     if (!ctx || !ctx.publicIsDiff || !ctx.publicIsDiff(section, name, key, uiValue)) return null;
     return h('button', { class: 'sp-restore-btn', title: '还原为服务端值',
       onClick: () => { if (ctx.restorePublicItem) ctx.restorePublicItem(section, name, key); }
-    }, [h('span', { class: 'sp-restore-icon' }, '↺'), ' 还原']);
+    }, h('span', { class: 'sp-restore-icon' }, '↺'));
   };
   /** 各公共配置区卡片头挂的小徽标，滚下去也看得见差异。 */
 
@@ -274,7 +274,7 @@
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.section === section; });
     if (!list.length) return null;
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
-    return h('span', { class: 'sp-diff-badge', title: tip, 'data-warn-icon': '1' }, list.length + ' 项未覆盖（悬浮看具体项）');
+    return h('button', { class: 'sp-diff-badge', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原该区块的未覆盖改动', 'data-warn-icon': '1', onClick: () => D.restoreBlockDiff(ctx, section) }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
 
@@ -323,7 +323,7 @@
     }).join(String.fromCharCode(10));
     return h('div', { class: 'sp-config-bar' }, [
       offline ? h('span', {}, '（后端未连接：仅显示本地缓存，不做比对）')
-        : (n ? h('span', { class: 'sp-diff-badge', title: tip },
+        : (n ? h('button', { class: 'sp-diff-badge', 'data-warn-icon': '1', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原全部未覆盖改动', onClick: () => D.restoreAllDiff(ctx) },
             n + ' 项未覆盖（悬浮看具体项）') : null),
       h('button', { onClick: () => { if (ctx.toggleSiteScope) ctx.toggleSiteScope(); } },
         ctx.siteProfShowAll ? '只看当前站点' : '显示全部站点'),
@@ -403,7 +403,7 @@
     if (!ctx || !ctx.configBlockDirty || !ctx.configBlockDirty[id]) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === id; });
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
-    return h('span', { class: 'sp-diff-badge', title: tip, 'data-warn-icon': '1' }, list.length + ' 项未覆盖（悬浮看具体项）');
+    return h('button', { class: 'sp-diff-badge', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原该区块的未覆盖改动', 'data-warn-icon': '1', onClick: () => D.restoreBlockDiff(ctx, id) }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
 
@@ -415,7 +415,7 @@
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === 'site_profiles'; });
     if (!list.length) return null;
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
-    return h('span', { class: 'sp-diff-badge', title: tip, 'data-warn-icon': '1' }, list.length + ' 项未覆盖（悬浮看具体项）');
+    return h('button', { class: 'sp-diff-badge', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原该区块的未覆盖改动', 'data-warn-icon': '1', onClick: () => D.restoreBlockDiff(ctx, 'site_profiles') }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
 
 

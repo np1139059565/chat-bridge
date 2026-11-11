@@ -211,3 +211,8 @@ select[data-diff="1"] {
   min-width: 0;
   width: auto;
 }
+
+/* 块头 / 状态栏徽标为可点击按钮；还原按钮收窄为纯图标 */
+button.sp-diff-badge { cursor: pointer; font-family: inherit; line-height: 1.4; }
+.sp-restore-btn { padding: 2px 6px; min-width: 22px; text-align: center; }
+.sp-restore-btn .sp-restore-icon { margin-right: 0; }
