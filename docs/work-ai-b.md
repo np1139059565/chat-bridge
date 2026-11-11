@@ -118,7 +118,7 @@
 
 > 第三节排队槽：B-4（Q-7 has_params 收尾补丁）已下发为当前任务；1b 前端适配层改派 AI-C（C-4），不在本方排队槽。
 > 前端适配层为独立任务，范围：新建 .\extend\lib\tool-schema-adapter.js 的 toFlatParams，同步 03_custom_tools.js、05c_prompt.js、08_settings.js 与并存的 08b_settings.js 三处扁平项读取，并同步 05c_prompt.js 内 System Prompt 模板的工具使用说明；07b_params.js 只处理参数值无需改动。
-> 开工前按分发方文档第九节从当前 main（8313824）同步，不直推 main。
+> 开工前按分发方文档第九节从 fetch 后的 origin/main 同步，不直推 main。
 
 ---
 
@@ -362,7 +362,7 @@
 
 **未收口部分**：迁移清单第四节前端三项仍 `[ ]`，由 C-4 收口；Q-7 由 B-4 收尾。合入两笔时 `api-reference.md` 十六节连续、无重复。
 
-## 当前任务（B-4，2026-11-11 下发）：Q-7 has_params 收尾补丁
+## 历史任务（B-4，已验收）：Q-7 has_params 收尾补丁
 
 **范围**：仅改 `.\flask_server\tools\list_tools_impl.py` 三处 `has_params` 判断，改为按 `properties` 非空判断（兼容历史数组输入）；补一条空 schema 与有参数 schema 的对照用例。
 
@@ -370,4 +370,19 @@
 
 **验收**：改前后对拍 `list_tools` 对空参数工具返回 `has_params: false`；在 `.\flask_server` 下跑 `python -m pytest tests -q`，波动项仍仅限 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过，正常提交、不用 `--no-verify`。
 
-**完成后**：推 `work/ai-b` 分支（先 `fetch + rebase` 到当前 `main` `8313824`），等「更新 git」指令由分发方逐条验收；排队槽为空，不自行开工。
+**完成后**：推 `work/ai-b` 分支（先 `fetch + rebase` 到 fetch 后的 `origin/main`），等「更新 git」指令由分发方逐条验收；排队槽为空，不自行开工。
+
+## 分发方验收结论（B-4，2026-11-11）
+
+> 结论：**通过**，已合入 `main`（`790af6e`）；阶段 1b 随之整体收口。
+
+| 项 | 实测 |
+|---|---|
+| 串行全量 | 1017 passed / 1 failed，唯一失败在已知波动 `test_inbox_site_isolation.py` |
+| 定向 | `test_list_tools.py` 8 passed；`_has_params` 按 `properties` 非空判断、兼容历史数组 |
+| 钩子 | `pre-commit run --all-files` 七道全过，正常提交、未用 `--no-verify` |
+| 边界 | 仅 2 文件（`list_tools_impl.py` + `test_list_tools.py`），禁区零触碰 |
+
+**weixin 定责**：`test_production_client_gets_ctx_path` 单文件三连 20/20/20、干净 `19b1a23` 单跑 20 passed → 存量顺序污染，非 B-4 引入，不退回。分发方并发全量曾出现 23 failed / 7 文件，与 C-3b 分支失败清单逐字相同，系同时起两个 pytest 进程抢资源所致；改串行单进程复跑后回到单一已知波动文件，该噪声不作验收依据。
+
+Q-6 例外自 `d1722e3` 起失效，后续一律正常提交。当前排队槽为空，待命，不自行开工。
