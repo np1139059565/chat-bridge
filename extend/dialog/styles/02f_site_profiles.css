@@ -233,3 +233,15 @@ button.sp-diff-badge { cursor: pointer; font-family: inherit; line-height: 1.4; 
 
 /* 指令编辑态还原图标：与输入框同行，不被 flex 拉伸 */
 .bridge-cmd-new > .sp-restore-btn { flex: 0 0 auto; align-self: center; }
+.cmd-unified { display: flex; flex-direction: column; gap: 6px; }
+.cmd-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cmd-unified-list { display: flex; flex-direction: column; gap: 4px; }
+.cmd-row { border: 1px solid rgba(127,127,127,.25); border-radius: 6px; }
+.cmd-row-main { display: flex; align-items: center; gap: 8px; padding: 4px 8px; flex-wrap: wrap; }
+.cmd-k { font-family: monospace; font-weight: 600; }
+.cmd-d { flex: 1 1 160px; min-width: 0; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-src { font-size: 11px; padding: 1px 5px; border-radius: 4px; }
+.cmd-src.is-builtin { background: rgba(90,140,240,.18); } .cmd-src.is-custom { background: rgba(90,190,120,.18); }
+.cmd-acts { display: inline-flex; gap: 4px; } .cmd-row-btn, .cmd-add-btn { padding: 2px 8px; }
+.cmd-inline-editor { padding: 6px 8px; border-top: 1px dashed rgba(127,127,127,.3); }
+.cmd-bdesc { display: flex; align-items: center; gap: 6px; } .cmd-hidden-bar { display: flex; align-items: center; gap: 8px; }

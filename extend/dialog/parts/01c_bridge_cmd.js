@@ -34,6 +34,9 @@
     this.bridgeNewCmdKeepCollect = false;   // 内部标记，不在界面暴露
     this.bridgeNewCmdSteps = '';
     this.bridgeNewCmdInterval = '1';
+    this.bridgeNewCmdDesc = '';
+    this.bridgeCmdFormOpen = false;
+    this._cmdEditBuiltin = null;
   };
 
   /**
@@ -47,6 +50,16 @@
     const picked = this.bridgePicked;
     if (!name || !label) { this.toast('命令名与显示名必填'); return; }
     if (!name.startsWith('/')) { this.toast('命令名需以 / 开头'); return; }
+    // C-7：内置行编辑只改按站草稿的显示覆盖，不动后端 BUILTIN
+    if (this._cmdEditBuiltin) {
+      const cache = this.configCache || (this.configCache = {});
+      const ovr = cache.builtinOverrides || (cache.builtinOverrides = {});
+      ovr[this._cmdEditBuiltin] = { label: label, desc: this.bridgeNewCmdDesc || '' };
+      if (D.configCacheSet) await D.configCacheSet(this.siteKey, cache);
+      if (this.recomputeConfigDiff) this.recomputeConfigDiff();
+      this.toast('已更新内置指令显示：' + this._cmdEditBuiltin);
+      this._resetCmdForm(); return;
+    }
     // 两类指令各自的必填项：组合要步骤，点击要选择器
     let steps = [];
     if (isCombo) {
@@ -95,6 +108,8 @@
     const c = (this.bridgeCommands || [])[idx];
     if (!c) return;
     this.bridgeEditIdx = idx;
+    this._cmdEditBuiltin = null;
+    this.bridgeCmdFormOpen = false;
     this.bridgeNewCmdName = c.name || '';
     this.bridgeNewCmdLabel = c.label || '';
     // 回填：组合填步骤、点击填选择器。

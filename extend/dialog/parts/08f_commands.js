@@ -34,17 +34,8 @@
    * @returns {VNode} 区块内容节点
    */
   function renderCmdBlock(ctx) {
-    return h('div', [
-      // 先放指令编辑器与自定义指令列表，最后再列可用内置指令的提示文本：
-      // 用户添加/查看自定义指令是主要动作，内置指令说明属参考信息，放末尾不挡路。
-      renderCmdEditor(ctx),
-      renderCmdList(ctx),
-      // 内置指令参数：通用渲染，声明来自后端，前端不写死任何指令名。
-      renderBuiltinParams(ctx),
-      // 内置指令：渲染成可点击按钮，点一下即执行，便于用户逐条测试。
-      h('div', { class: 'hint' }, '可用指令（点击即执行）：'),
-      renderHelpGroups(ctx)
-    ]);
+    // C-7：内置与自定义合并成一张表，编辑表单只在行内展开
+    return h('div', [ renderCmdList(ctx), renderBuiltinParams(ctx) ]);
   }
 
   /**
@@ -291,25 +282,97 @@
   }
 
   /** 渲染自定义指令列表；无指令时给出空态提示。 */
+  /**
+   * C-7 统一指令列表：内置与自定义同表、行内编辑、顶部不再常驻表单。
+   * 内置项不直接改后端 BUILTIN（代码恒定）：显示覆盖 / 隐藏按站存 configCache，
+   * 随后端草稿持久化，改完即生效、不入库；隐藏可一键恢复。
+   */
   function renderCmdList(ctx) {
-    if (!ctx.bridgeCommands.length) return h('div', { class: 'empty' }, '（暂无自定义指令）');
-    return h('div', { class: 'bridge-cmd-list' }, ctx.bridgeCommands.map((c, i) =>
-      h('div', { class: 'bridge-cmd-item', key: i }, [
-        h('span', { class: 'bridge-cmd-name' }, c.name),
-        h('span', { class: 'bridge-cmd-label' }, c.label),
-        h('span', { class: 'bridge-cmd-sel', title: c.selector || '' },
-          (c.steps && c.steps.length)
-            ? ('组合 ' + c.steps.length + ' 步：' + c.steps.join(' → '))
-            : (c.collect
-              ? ('采集 Markdown：' + (c.selector || ''))
-              : (c.selector ? ('点击 ' + c.selector) : ''))),
-        h('button', {
-          onClick: () => ctx.editBridgeCommand(i)
-        }, '编辑'),
-        h('button', {
-          class: 'danger',
-          onClick: () => ctx.removeBridgeCommand(i)
-        }, '删除')
-      ])));
+    const cache = ctx.configCache || (ctx.configCache = {});
+    const hidden = cache.hiddenBuiltins || (cache.hiddenBuiltins = []);
+    const ov = cache.builtinOverrides || (cache.builtinOverrides = {});
+    const builtins = [];
+    (ctx.bridgeHelpGroups || []).forEach(function (g) {
+      (g.items || []).forEach(function (it) {
+        if (hidden.indexOf(it.key) >= 0) return;
+        const o = ov[it.key] || {};
+        builtins.push({ kind: 'builtin', key: it.key, name: o.label || it.name || it.key,
+          desc: o.desc || it.desc || '', group: g.group || '' });
+      });
+    });
+    const customs = (ctx.bridgeCommands || []).map(function (c, i) {
+      return { kind: 'custom', key: c.name, name: c.label || c.name, index: i,
+        desc: (c.steps && c.steps.length) ? ('组合 · ' + c.steps.length + ' 步') : (c.selector || '') };
+    });
+    const rows = builtins.concat(customs);
+    const editing = ctx.bridgeEditIdx !== null && ctx.bridgeEditIdx !== undefined;
+    const adding = !!ctx.bridgeCmdFormOpen && !editing;
+    function persist() {
+      if (D.configCacheSet) D.configCacheSet(ctx.siteKey, cache);
+      if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
+      if (ctx.$forceUpdate) ctx.$forceUpdate();
+    }
+    function acts(r) {
+      return [
+        h('button', { class: 'cmd-row-btn', title: '立即执行',
+          onClick: () => ctx.runBridgeCommand && ctx.runBridgeCommand(r.key) }, '▶'),
+        h('button', { class: 'cmd-row-btn', title: '编辑', onClick: () => {
+          if (r.kind === 'builtin') {
+            if (ctx.cancelEditBridgeCommand) ctx.cancelEditBridgeCommand();
+            ctx._cmdEditBuiltin = r.key;
+            ctx.bridgeNewCmdName = r.key;
+            ctx.bridgeNewCmdLabel = r.name;
+            ctx.bridgeNewCmdDesc = r.desc;
+            ctx.bridgeCmdFormOpen = true;
+            if (ctx.$forceUpdate) ctx.$forceUpdate();
+          } else if (ctx.editBridgeCommand) ctx.editBridgeCommand(r.index);
+        } }, '✎'),
+        h('button', { class: 'cmd-row-btn', title: r.kind === 'builtin' ? '隐藏此内置指令' : '删除',
+          onClick: () => {
+            if (r.kind === 'builtin') { hidden.push(r.key); persist(); }
+            else if (ctx.removeBridgeCommand) ctx.removeBridgeCommand(r.index);
+          } }, '✕')
+      ];
+    }
+    return h('div', { class: 'cmd-unified' }, [
+      h('div', { class: 'cmd-bar' }, [
+        h('span', { class: 'hint' }, '共 ' + rows.length + ' 条（内置 ' + builtins.length + ' · 自定义 ' + customs.length + '）'),
+        h('button', { class: 'cmd-add-btn', onClick: () => {
+          ctx._cmdEditBuiltin = null;
+          if (ctx.cancelEditBridgeCommand) ctx.cancelEditBridgeCommand();
+          ctx.bridgeCmdFormOpen = true;
+          if (ctx.$forceUpdate) ctx.$forceUpdate();
+        } }, '＋ 添加指令')
+      ]),
+      rows.length ? h('div', { class: 'cmd-unified-list' }, rows.map(function (r) {
+        const inline = r.kind === 'custom' && editing && ctx.bridgeEditIdx === r.index;
+        return h('div', { class: 'cmd-row', key: r.kind + ':' + r.key }, [
+          h('div', { class: 'cmd-row-main' }, [
+            h('span', { class: 'cmd-k' }, r.key),
+            h('span', { class: 'cmd-n' }, r.name),
+            h('span', { class: 'cmd-d' }, r.desc),
+            h('span', { class: 'cmd-src ' + (r.kind === 'builtin' ? 'is-builtin' : 'is-custom') },
+              r.kind === 'builtin' ? '内置' : '自定义'),
+            h('span', { class: 'cmd-acts' }, acts(r))
+          ]),
+          inline ? h('div', { class: 'cmd-inline-editor' }, [renderCmdEditor(ctx)]) : null
+        ]);
+      })) : h('div', { class: 'empty' }, '（暂无指令）'),
+      adding ? h('div', { class: 'cmd-inline-editor' }, [
+        ctx._cmdEditBuiltin ? h('label', { class: 'cmd-bdesc' }, [
+          '描述：', h('input', { type: 'text', class: 'bridge-sel-input',
+            value: ctx.bridgeNewCmdDesc || '',
+            onInput: (e) => { ctx.bridgeNewCmdDesc = e.target.value; } })
+        ]) : null,
+        ctx._cmdEditBuiltin ? h('span', { class: 'hint' }, '内置指令命令名固定，可改显示名与描述') : null,
+        renderCmdEditor(ctx)
+      ]) : null,
+      hidden.length ? h('div', { class: 'cmd-hidden-bar' }, [
+        h('span', { class: 'hint' }, '已隐藏 ' + hidden.length + ' 条内置指令'),
+        h('button', { class: 'cmd-row-btn', onClick: () => { hidden.length = 0; persist(); } }, '恢复默认')
+      ]) : null
+    ]);
   }
+
+
 })();
