@@ -103,14 +103,20 @@
     return cache;
   };
 
-  /** 公共配置 = 除 profiles 外的全部顶层键。 */
+  /** 公共配置 = 真正可覆盖提交的顶层键白名单。
+   * 远端把草稿改落 /config/draft 后，缓存会多出 config_draft 等派生键；
+   * 旧实现「除少数键外全收 + 整键 JSON 比对」会把它们算成假差异。
+   * 这里只认 GET /config 的 6 个真键，且去掉 flask.url 这类派生字段。
+   */
   D.configPublic = function (cfg) {
-    const out = {};
-    Object.keys(cfg || {}).forEach(function (k) {
-      if (k !== 'profiles' && k !== 'pending' && k !== 'blocks' && k !== 'overrides' && k !== 'blockFields' && k !== 'available_tools' && k !== 'site_profiles') {
-      const v = cfg[k];
-      out[k] = (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
-    }
+    const KEEP = ['flask', 'limits', 'tools', 'tool_config', 'system_config', 'default_profile'];
+    const out = {}, src = cfg || {};
+    KEEP.forEach(function (k) {
+      if (!(k in src)) return;
+      let v = src[k];
+      if (v && typeof v === 'object') v = JSON.parse(JSON.stringify(v));
+      if (k === 'flask' && v && typeof v === 'object') delete v.url;
+      out[k] = v;
     });
     return out;
   };

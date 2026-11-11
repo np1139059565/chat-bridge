@@ -21,6 +21,13 @@
     picked.forEach((it) => {
       if ((it.block === 'tools' || it.block === 'general') && it.key && backend[it.key] !== undefined) segs[it.key] = 1;
     });
+    // 公共配置区块：即使快照里没有可匹配的明细项（假差异键后端不存在），
+    // 也整组对齐服务端白名单键，保证点击还原后计数归零、警告真的消失。
+    if (bids.some(function (b) { return b === 'general' || b === 'tools'; })) {
+      ['tools', 'tool_config', 'system_config', 'limits', 'flask', 'default_profile'].forEach(function (k) {
+        if (backend[k] !== undefined) segs[k] = 1;
+      });
+    }
     Object.keys(segs).forEach((k) => {
       const v = deep(backend[k]);
       cache[k] = v;

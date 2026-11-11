@@ -284,7 +284,11 @@
 
   D.renderConfigBadge = function (ctx, section) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;
-    const list = (ctx.configDiffItems || []).filter(function (it) { return it.section === section; });
+    // 公共配置结构差异只在顶部状态条汇总一次；卡片头只认本区块真实待覆盖写入，
+    // 避免顶部与「通用配置 / 工具」卡片头重复显示同一份「N 项未覆盖」。
+    const list = (ctx.configDiffItems || []).filter(function (it) {
+      return it.section === section && it.detail !== '整份提交，影响所有页面与电脑';
+    });
     if (!list.length) return null;
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
     return h('button', { class: 'sp-diff-badge', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原该区块的未覆盖改动', 'data-warn-icon': '1', onClick: () => D.restoreBlockDiff(ctx, section) }, list.length + ' 项未覆盖（悬浮看具体项）');
