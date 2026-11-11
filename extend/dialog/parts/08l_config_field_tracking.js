@@ -22,15 +22,19 @@
     return String(bb[key].current) !== String(bb[key].baseline) ? '1' : '';
   };
   /** onInput 调用：登记当前值并立刻刷新徽标，不等重渲染。 */
-  D.markBlockField = function (ctx, blockId, key, val) {
+  D.markBlockField = function (ctx, blockId, key, val, baseline) {
     if (!ctx) return;
     const bf = state(ctx);
     const bb = bf[blockId] || (bf[blockId] = {});
-    if (!(key in bb)) bb[key] = { baseline: val, current: val };
-    else if (String(val) === String(bb[key].baseline)) delete bb[key];
-    else bb[key].current = val;
+    // onEdit 先 setBlockFieldBaseline 写入 { baseline, current }；
+    // 此处不能因「键已存在」就当无差异，必须以真实 baseline 比对当前值，
+    // 第一次改动也要立刻亮告警，不等第二次输入。
+    const base = (baseline === undefined) ? ((key in bb) ? bb[key].baseline : val) : baseline;
+    if (String(val) === String(base)) delete bb[key];
+    else bb[key] = { baseline: base, current: val };
     if (D.configCacheSet) D.configCacheSet(ctx.siteKey, ctx.configCache);
     if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
+    if (ctx.$forceUpdate) ctx.$forceUpdate();
   };
   /** 点保存后：把差异转为 pending，避免同一改动双算。 */
   D.settleBlockFields = function (ctx, blockId) {
@@ -87,7 +91,7 @@
     const ctx = D._cfgCtx;
     if (!ctx) return;
     D.setBlockFieldBaseline(ctx, rec.id, rec.key, rec.baseline);
-    D.markBlockField(ctx, rec.id, rec.key, cur);
+    D.markBlockField(ctx, rec.id, rec.key, cur, rec.baseline);
     if (ctx.$forceUpdate) ctx.$forceUpdate();
   }
   D.installConfigFieldTracking = function (ctx) {

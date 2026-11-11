@@ -134,44 +134,6 @@
           "description": "为 true 时不回传执行结果，仅执行推送。用于最后一次总结性推送，避免结果回传再次唤醒 AI"
         }
       ]
-    },
-    {
-      "name": "send_to_qianwen",
-      "description": "向千问页面发送消息并点击发送（该页抽屉在线时执行）。text 必填；wait_done 默认 false，长生成用 qianwen_state 轮询。",
-      "executor": "external",
-      "parameters": [
-        {
-          "name": "text",
-          "type": "string",
-          "required": true,
-          "description": "消息正文"
-        },
-        {
-          "name": "page_url",
-          "type": "string",
-          "required": false,
-          "description": "目标页面 URL（顶层文档主世界；缺省为抽屉所在页）"
-        },
-        {
-          "name": "wait_done",
-          "type": "boolean",
-          "required": false,
-          "description": "是否同步等待生成结束（受 15s 上限，默认 false）"
-        }
-      ]
-    },
-    {
-      "name": "qianwen_state",
-      "description": "查询千问页面生成态（idle | generating），供 send_to_qianwen 发送后轮询至完成。",
-      "executor": "external",
-      "parameters": [
-        {
-          "name": "page_url",
-          "type": "string",
-          "required": false,
-          "description": "目标页面 URL"
-        }
-      ]
     }
   ],
   "command_actions": [
