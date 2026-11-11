@@ -118,6 +118,26 @@
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 编辑器节点
    */
+  /** 编辑态「还原」：重新从该条指令载入表单，清掉本块输入态差异，标黄与徽标一并归零。 */
+  function restoreCmdEdit(ctx) {
+    const idx = ctx.bridgeEditIdx;
+    if (idx === null || idx === undefined) return;
+    const bf = ctx.configCache && ctx.configCache.blockFields;
+    if (bf && bf.commands) delete bf.commands;
+    if (D.configCacheSet) D.configCacheSet(ctx.siteKey, ctx.configCache);
+    if (ctx.cancelEditBridgeCommand) ctx.cancelEditBridgeCommand();
+    if (ctx.editBridgeCommand) ctx.editBridgeCommand(idx);
+    if (typeof document !== 'undefined') {
+      const root = document.querySelector('[data-cfg-block="commands"]');
+      if (root) {
+        const marks = root.querySelectorAll('[data-diff="1"]');
+        for (let i = 0; i < marks.length; i++) marks[i].removeAttribute('data-diff');
+      }
+    }
+    if (ctx.recomputeConfigDiff) ctx.recomputeConfigDiff();
+    if (ctx.$forceUpdate) ctx.$forceUpdate();
+  }
+
   function renderCmdEditor(ctx) {
     // 仅「点具体指令进入编辑态」才纳入覆盖检测；新建表单不检测
     const editProps = ctx.bridgeEditIdx === null ? { 'data-cfg-skip': '1' } : {};
@@ -132,7 +152,13 @@
           type: 'text', placeholder: '显示名',
           value: ctx.bridgeNewCmdLabel,
           onInput: (e) => { ctx.bridgeNewCmdLabel = e.target.value; }
-        })
+        }),
+        // 编辑态才有母本可还原：点一下整条重新载入，标黄与差异一并清除
+        ctx.bridgeEditIdx !== null
+          ? h('button', { class: 'sp-restore-btn', title: '还原为服务端值',
+              onClick: () => restoreCmdEdit(ctx) },
+              h('span', { class: 'sp-restore-icon' }, '↺'))
+          : null
       ]),
       // 类型切换：点击元素 / 组合指令
       h('div', { class: 'bridge-type-row' }, [

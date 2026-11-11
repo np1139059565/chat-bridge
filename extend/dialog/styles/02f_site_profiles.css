@@ -221,3 +221,6 @@ button.sp-diff-badge { cursor: pointer; font-family: inherit; line-height: 1.4; 
 .sp-block-wrap { position: relative; }
 .sp-block-wrap > .sp-diff-badge { position: absolute; top: 6px; right: 42px; z-index: 2; margin-left: 0; }
 .sp-block-wrap .sp-diff-badge { white-space: nowrap; }
+
+/* 指令编辑态还原图标：与输入框同行，不被 flex 拉伸 */
+.bridge-cmd-new > .sp-restore-btn { flex: 0 0 auto; align-self: center; }
