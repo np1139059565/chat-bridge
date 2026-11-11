@@ -8,7 +8,7 @@
   const M = D.methods;
 
   /** 生成 System Prompt：含工具清单、调用格式、规则列表与技能说明。 */
-  M.generateSystemPrompt = function () {
+  M.generateSystemPromptLegacy = function () {
     const tools = this.tools || [];
     // 工具列表只展示名称与描述；参数定义由 AI 在调用前通过 get_tool_params 自行查询。
     const listLines = tools.map((t, i) => {
@@ -38,6 +38,36 @@
     return `本会话通过「AI 工具调用镜像插件」与本地工具服务联动。\n\n【Tool·调用说明】\n需要调用工具时，请在一个独立的 JSON 代码块中返回，\n且必须携带 "type": "bridge-chat-call" 标记（插件仅识别带此标记的代码块）：\n\`\`\`json\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-call",\n  "parameters": { "参数名": "参数值" }\n}\n\`\`\`\n插件会自动提取该代码块、调用本地服务执行，并把执行结果作为下一条消息回传给你，请据此继续完成任务。\n结果回传为一段 JSON 文本（无代码块围栏），形如：\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-res",\n  "nonce": "本次调用唯一标记",\n  "success": true,\n  "result": ...\n}\n每次回复只允许包含一个工具调用代码块（即一个 JSON 代码块），不要并列多个，要把解释文字放到调用的上面，与卡片混在同一回复中；收到回传结果后再决定下一步，需要多步操作时每一步单独回复一个代码块。\n调用任何工具前，先用 get_tool_params 查询该工具的准确参数名（传入 tool_id = 工具名称），不要臆造参数名。\n\n【Tool·工具列表】\n${listLines}\n\n【Rule·读取说明】\n- 先调用 list_rules 查看有哪些规则（规则名 + 优先级 + 摘要）；\n- 再用 read_rule（参数 rule=规则名）读取对应规则的完整内容，并遵守它。\n每条规则前标注了读取优先级：\n- [总是]：必须读取并始终遵守，开始任务前先用 read_rule 读取其内容。\n- [按需]：在相关场景下先调用 read_rule 读取后再执行，不要凭记忆臆测。\n- （优先级为「关闭」的规则不会出现在此列表，也不应主动读取。）\n\n【Rule·规则列表】\n${ruleLines}\n\n【SKILL·读取说明】\n- 先调用 list_skills 查看本机有哪些技能（名称 + 摘要 + 所含工具）；\n- 再用 read_skill（参数 skill=技能名、path=技能内相对路径，如 SKILL.md）读取技能文档，按其规定处理。\n\n【SKILL·技能列表】\n${skillLines}${voiceBlock}`;
   };
 
+  /** 方言段：从旧版全量输出切出调用/回传协议与语音约定，协议文字不重写。 */
+  function dialectBlock(ctx) {
+    const NL = String.fromCharCode(10);
+    const full = ctx.generateSystemPromptLegacy();
+    const cut = full.indexOf('【Tool·工具列表】');
+    let head = cut >= 0 ? full.slice(0, cut) : full;
+    head = head.trimEnd();
+    const v = full.indexOf('【语音·朗读文本约定】');
+    return head + (v >= 0 ? NL + NL + full.slice(v) : '');
+  }
+
+  /** 生成 System Prompt：后端精简主体 + 前端方言；主体未就绪回退旧版全量。 */
+  M.generateSystemPrompt = function () {
+    const NL = String.fromCharCode(10);
+    if (!this.systemPromptBase) return this.generateSystemPromptLegacy();
+    return this.systemPromptBase + NL + NL + dialectBlock(this);
+  };
+
+  /** 预取后端标准主体；失败留空触发回退，不阻断初始化。__commit 跳过草稿拦截。 */
+  M.loadSystemPromptBase = async function () {
+    try {
+      const data = await D.apiFetch(this, '/v1/system_prompt', {
+        headers: { Accept: 'application/json' }, __commit: true
+      });
+      this.systemPromptBase = (data && data.system_prompt) || '';
+    } catch (e) {
+      this.systemPromptBase = '';
+    }
+    this.systemPrompt = this.generateSystemPrompt();
+  };
   /** 重新解析当前网页对话。 */
   M.reparse = function () {
     window.parent.postMessage({ type: 'request_page' }, '*');

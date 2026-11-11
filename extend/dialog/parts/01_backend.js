@@ -58,6 +58,7 @@
     await this.loadCustomTools();
     // 桥接配置要先读：语音开关决定 prompt 是否注入朗读约定，须在生成前就位。
     await this.loadBridge();   // 远程桥接配置与状态（失败不阻断其余功能）
+    await this.loadSystemPromptBase();  // 标准 System Prompt 主体（失败回退旧版全量拼装）
     await this.loadWeixin();   // 微信通道配置与登录状态（失败不阻断其余功能）
     await this.loadWecom();    // 企业微信通道配置与状态（失败不阻断其余功能）
     await this.fetchTools();   // 内部会刷新技能说明段落并生成 System Prompt
