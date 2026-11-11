@@ -70,8 +70,10 @@
 
 ### GET/POST /config
 
-- GET：读取配置（flask / limits / default_profile / site_profiles / profiles / tools / available_tools）。
-- POST：部分更新，写入配置文件（定义写 definition.yaml，运行时写 runtime.yaml）。
+- GET：读取配置（flask / limits / default_profile / site_profiles / profiles / tools / available_tools）；
+  其中 `profiles` 从客户端注册信息聚合，非 definition.yaml。
+- POST：部分更新；`profiles` 写入 `/api/clients` 的 `custom_config` 寄存通道，
+  其余区块写入配置文件（定义写 definition.yaml，运行时写 runtime.yaml）。
 
 POST 请求体示例：
 ```json
@@ -87,14 +89,15 @@ POST 请求体示例：
   `run_command` 的语言列表每次调用现读配置文件。
 
 
-### /profiles（站点档案轻量读取）
+### /profiles（站点档案轻量读取，真源为客户端注册信息）
 
-- GET：返回站点档案本体（definition.yaml 的 `app.profiles`，每站一份完整字段清单）。
+- GET：按 `site_key` 聚合各客户端 `/api/clients` 的 `custom_config`（每站一份完整档案），
+  服务端不校验、不清洗、不解释字段；注册表为空时返回空档案集，不兜底出厂档案。
   - 内容脚本注入时经扩展后台中转拉取（HTTPS 页直连本地服务会被混合内容策略拦截）；
     前端零缓存：取到即入内存覆盖出厂兜底（00_state.js 的内联 PROFILES），不落任何存储。
-- 写入走 POST /config 的 `profiles` 区块：按档案 id 合并（未提交的档案原样保留），删除须用 `profiles_remove` 显式列出 id；
-  空字段按「未配置」语义保留；设置页「网页 AI 站点配置」区块（08g_site_profiles.js）即此读写界面，
-  保存后通知当前页内容脚本重拉，无需刷新即生效。
+- 写入走 POST /config 的 `profiles` 区块：每个档案 id 即 `site_key`，写入寄存通道（未提交的档案原样保留），
+  删除须用 `profiles_remove` 显式注销；设置页「网页 AI 站点配置」区块（08g_site_profiles.js）保留，
+  定位改为编辑客户端注册信息，保存后通知当前页内容脚本重拉，无需刷新即生效。
 ### GET /prompt_sections
 
 返回各技能注入 System Prompt 的说明段落、本机技能清单与设置页管理视图。
@@ -701,6 +704,9 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 
 客户端（翻译员或标准 API 客户端）把私有配置寄存在工具服务。服务端原样保管、原样下发，不解释字段、不校验结构、不清洗内容。
 
+> C-3b 起，站点档案真源也落在本通道：每个档案 id 即一个 `site_key`，`custom_config` 原样存放该站档案本体；
+> `GET /profiles` 按 `site_key` 聚合返回，`POST /config` 的 `profiles` 区块写入本通道。详见第十五节。
+
 ### POST /api/clients
 
 注册或覆盖登记。请求：
@@ -851,7 +857,7 @@ tools 非数组、site_key 非法、stream=true。
 
 按 `.\docs\split-mirror-and-tools-service.md` 1.2、4.2 节，语言包（站点元素选择器与容器特征）由翻译员所有，寄存在工具服务的客户端注册信息里，服务端不解释其内容。
 
-本通道**复用第十一节的 `custom_config`，不新增独立入口**：`custom_config` 已支持任意嵌套 JSON 原样保管、逐字段一致取回、按 `site_key` 隔离。语言包作为其中一份私有数据存入即可，服务端不校验、不清洗、不解释字段，也不把它并入 `config_store` 的站点档案解析链。
+本通道**复用第十一节的 `custom_config`，不新增独立入口**：`custom_config` 已支持任意嵌套 JSON 原样保管、逐字段一致取回、按 `site_key` 隔离。语言包作为其中一份私有数据存入即可，服务端不校验、不清洗、不解释字段，也不把它并入 `config_store` 的站点档案解析链；C-3b 起站点档案本体亦以此为真源，界面保留、定位改为编辑客户端注册信息。
 
 ### 寄存
 
@@ -882,9 +888,10 @@ tools 非数组、site_key 非法、stream=true。
 
 ### 边界
 
-- 服务端不解释字段含义，不调用 `sanitize_profiles` 等清洗逻辑；
-- 两个 `site_key` 的语言包互不串；
-- 站点档案真源（`.lask_server\config\definition.yaml` 的 `app.profiles`）与前端读写迁移属后续任务，本通道不改动它们。
+- 服务端不解释字段含义，不调用 `sanitize_profiles` 等清洗逻辑，也不并入 `config_store` 的档案解析链；
+- 两个 `site_key` 的寄存内容互不串，未注册不兜底到默认站点档案；
+- 站点档案真源已由 `definition.yaml` 的 `app.profiles` 切换到本通道（C-3b）：每个档案 id 即 `site_key`，
+  `custom_config` 原样存放整份档案；设置页「网页 AI 站点配置」界面保留，定位改为编辑客户端注册信息。
 
 ## 十六、标准提示词（/v1/system_prompt）
 

@@ -1,8 +1,8 @@
 // 模块：extend/dialog/parts/08g_site_profiles.js
-// 用途：设置页「网页 AI 站点配置」区块——站点档案（真源 definition.yaml 的
-//       app.profiles）的可视化编辑：逐字段展示（缺失项可见、可填、可留空）、
+// 用途：设置页「网页 AI 站点配置」区块——客户端注册信息（真源 /api/clients 的
+//       custom_config）的可视化编辑：逐字段展示（缺失项可见、可填、可留空）、
 //       新增 / 删除站点、自定义字段、字段级试运行（定位 / 点击 / 试匹配）、
-//       整体保存写回后端并通知内容脚本热更新。
+//       整体保存写回寄存通道并通知内容脚本热更新。
 // 依赖：extend/dialog/parts/00_data.js（命名空间 D）、Vue 全局构建
 // 字段级试运行链路：抽屉把「当前编辑值（未保存也可测）」经 window.parent 发给
 // 内容脚本（profiles_test_field），内容脚本按模式求值后回传
@@ -57,14 +57,14 @@
   };
 
   /**
-   * 渲染「网页 AI 站点配置」区块：站点卡片列表 + 新增表单 + 保存行。
+   * 渲染「网页 AI 站点配置」区块（编辑客户端注册信息）：卡片列表 + 新增表单 + 保存行。
    * @param {Object} ctx Vue 实例
    * @returns {VNode} 区块节点
    */
   D.renderSiteProfilesBlock = function (ctx) {
     return h('div', { class: 'sp-block' }, [
       h('div', { class: 'card-head' }, [
-        h('span', { title: '站点档案：每站一份完整清单，真源在后端配置文件；保存后当前页即时生效' }, '网页 AI 站点配置'),
+        h('span', { title: '客户端注册信息：每站一份完整清单，寄存在 /api/clients 的 custom_config；保存后当前页即时生效' }, '网页 AI 站点配置'),
         D.renderSiteProfileBadge ? D.renderSiteProfileBadge(ctx) : null,
         h('button', { onClick: () => { ctx.siteProfOpen = !ctx.siteProfOpen; } },
           ctx.siteProfOpen ? '▾' : '▸')
@@ -82,7 +82,8 @@
       if (pid && allIds.indexOf(pid) >= 0) ids = [pid];
     }
     if (!ids.length && !Object.keys(ctx.siteProfiles || {}).length) {
-      return h('div', { class: 'hint' }, '（未读取到站点档案，请先连接后端）');
+      return h('div', { class: 'sp-profiles' },
+        [h('div', { class: 'hint' }, '（暂无客户端注册信息，可在下方新增站点后保存）'), renderNewSiteForm(ctx)]);
     }
     return h('div', { class: 'sp-profiles' }, [
       renderNewSiteForm(ctx),
@@ -94,7 +95,7 @@
   function renderNewSiteForm(ctx) {
     return h('div', { class: 'sp-new-site' }, [
       h('div', { class: 'hint' },
-        '新增站点：填 id 与域名后添加，字段可留空；保存后新开该站页面即自动识别'),
+        '新增站点：填 id 与域名后添加，字段可留空；保存即写入客户端注册信息，新开该站页面自动识别'),
       h('div', { class: 'sp-new-row' }, [
         h('input', { type: 'text', placeholder: '站点 id（字母/数字/下划线，如 kimi）',
           value: ctx.newSiteId, onInput: (e) => { ctx.newSiteId = e.target.value; } }),
@@ -307,7 +308,7 @@
     }, 800);
   };
 
-  /** 兼容入口：只提交【当前页面】的档案（D2 按档案 id 合并）。
+  /** 兼容入口：只提交【当前页面】的档案到客户端注册信息（POST /config 写入寄存通道）。
       公共配置的整份提交与两栏确认由 08j 的 applyConfigOverwrite 统一负责。 */
   M.saveSiteProfiles = async function () {
     const out = D.serializeProfilesDraft(this.siteProfDraft || {});
@@ -431,7 +432,7 @@
   };
 
   // 独立监听内容脚本回执（不经 05_messages 的 onPageMessage，避免碰它的分发链）：
-  // profiles_test_result = 字段试运行结果；profiles_applied = 档案热更新回执。
+  // profiles_test_result = 字段试运行结果；profiles_applied = 注册信息热更新回执。
   window.addEventListener('message', function (e) {
     const d = e.data;
     if (!d || !d.type) return;
@@ -441,7 +442,7 @@
       inst.onProfilesTestResult(d);
     } else if (d.type === 'profiles_applied' && d.reason === 'refresh') {
       // 保存后的重拉回执给出明确反馈；注入时的首次拉取不提示，避免每次开页都弹
-      inst.toast('页面已应用新档案（' + (d.count || 0) + ' 个站点）');
+      inst.toast('页面已应用客户端注册信息（' + (d.count || 0) + ' 个站点）');
     }
   });
 })();

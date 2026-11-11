@@ -11,8 +11,8 @@
   // 再刷新页面才生效；只刷新页面不够。此前排查时无法判断「跑的是新版还是旧版」，
   // 白白多查了几轮。带上标识后，控制台第一行就能确认。
   // 每次改动内容脚本时把这个标识一起改掉。
-  // 构建标识：本次改动修复「输入框选择器失配时生成态兜底失效」导致的回车拦截死锁。
-  const BUILD_TAG = '2026-11-09-genstate-emptyinput-v19';
+  // 构建标识：C-3b 站点档案真源切到客户端注册信息（GET /profiles 聚合视图）。
+  const BUILD_TAG = '2026-11-11-c3b-client-registry-v20';
   A.log('内容脚本已加载 build=' + BUILD_TAG + ' 时间=' + new Date().toISOString());
 
   /**
@@ -22,8 +22,9 @@
    * 直连 http://127.0.0.1:5000 会被混合内容策略拦截；后台 service worker
    * 运行在扩展上下文不受限（与日志转发 ext_remote_log 同一通路）。
    *
-   * 前端零缓存：拉取结果只进内存，不落 chrome.storage；后端不可达或返回
-   * 无效时保持出厂兜底（00_state.js 的内联 PROFILES），功能不中断。
+   * 前端零缓存：拉取结果只进内存，不落 chrome.storage；真源为客户端注册
+   * 信息（GET /profiles 聚合 /api/clients 的 custom_config），后端不可达时
+   * 保持出厂兜底（00_state.js 的内联 PROFILES），功能不中断。
    * @param {string} reason 拉取原因（inject / refresh），仅用于日志区分
    */
   A.fetchProfiles = function (reason) {
@@ -79,8 +80,8 @@
       });
       return;
     }
-    // 抽屉保存站点档案后的通知：重新经后台中转拉取（取数口唯一，仍走 GET /profiles，
-    // 抽屉不直接推送档案数据，避免出现第二条数据通路）。
+    // 抽屉保存客户端注册信息后的通知：重新经后台中转拉取（取数口唯一，仍走
+    // GET /profiles 聚合视图，抽屉不直接推送档案数据，避免出现第二条数据通路）。
     if (d.type === 'profiles_refresh') {
       A.fetchProfiles('refresh');
       return;
