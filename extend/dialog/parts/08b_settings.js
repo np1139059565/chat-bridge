@@ -315,6 +315,9 @@
           ctx.toolsOpen ? h('div', { class: 'tool-list' }, [
             // 用 allTools（含已下线）而非 tools（AI 目录，已滤掉下线工具）：
             // 否则工具一旦下线就从设置页消失，再也无法重新上线。
+            // 参数表渲染委托 08_settings.js 的 renderUnifiedToolRow /
+            // renderCustomToolRow；声明已由 lib/tool-schema-adapter.js 把标准
+            // schema 还原为扁平项，此处不重复读取 parameters，避免对对象调 .map 中断。
             ...(ctx.allTools || []).filter((t) => !customNames.has(t.name)).map((t) => D.renderUnifiedToolRow(ctx, t)),
             ...ctx.customTools.map((t) => D.renderCustomToolRow(ctx, t)),
             ((ctx.allTools || []).length === 0 && ctx.customTools.length === 0)
