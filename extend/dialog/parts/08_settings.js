@@ -51,7 +51,7 @@
         h('p', tool.description),
         h('table', { class: 'params' }, [
           h('thead', h('tr', [h('th', '参数'), h('th', '类型'), h('th', '必填'), h('th', '说明')])),
-          h('tbody', (tool.parameters || []).map((p) => h('tr', { key: p.name }, [
+          h('tbody', window.AIMirrorToolSchema.toFlatParams(tool.parameters).map((p) => h('tr', { key: p.name }, [
             h('td', h('code', p.name)),
             h('td', p.type),
             h('td', p.required ? '是' : '否'),
@@ -94,7 +94,7 @@
         h('p', t.description),
         h('table', { class: 'params' }, [
           h('thead', h('tr', [h('th', '参数'), h('th', '类型'), h('th', '必填'), h('th', '说明')])),
-          h('tbody', (t.parameters || []).map((p) => h('tr', { key: p.name }, [
+          h('tbody', window.AIMirrorToolSchema.toFlatParams(t.parameters).map((p) => h('tr', { key: p.name }, [
             h('td', h('code', p.name)),
             h('td', p.type),
             h('td', p.required ? '是' : '否'),

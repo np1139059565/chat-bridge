@@ -134,7 +134,8 @@
       if (typeof obj.description !== 'string' || !obj.description.trim()) {
         throw new Error('description 不能为空');
       }
-      obj.parameters = (obj.parameters || []).map((p) => ({
+      // 后端已返回标准 schema：先经适配层还原为扁平项，再按旧字段归一化保存。
+      obj.parameters = window.AIMirrorToolSchema.toFlatParams(obj.parameters).map((p) => ({
         name: String(p.name || ''),
         type: p.type || 'string',
         required: !!p.required,

@@ -5,6 +5,8 @@ const P = (f) => path.join(__dirname, '..', '..', '..', 'extend', 'dialog', 'par
 global.window = { AIMirrorDialog: { methods: {} },
   parent: { postMessage: () => {} }, addEventListener: () => {} };
 global.Vue = { h: (tag, props, children) => ({ tag, props, children }) };
+// 适配层真源：require 后把接口挂到 window.AIMirrorToolSchema，与 dialog.html 引入一致。
+require(path.join(__dirname, '..', '..', '..', 'extend', 'lib', 'tool-schema-adapter.js'));
 require(P('08h_profile_fields.js'));
 require(P('08g_site_profiles.js'));
 require(P('08i_config_cache.js'));
@@ -103,7 +105,15 @@ test('system_config 同样自愈，资源上限输入框不被吞', async () => 
 require(P('08_settings.js'));
 const TOOL = {
   name: 'read_file', description: '读取文件',
-  parameters: [{ name: 'path', type: 'string', required: true, description: '路径' }]
+  // 阶段 1b 后后端返回标准 JSON Schema；path 用 anyOf 表达联合类型。
+  parameters: {
+    type: 'object',
+    properties: {
+      path: { anyOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }], description: '路径' },
+      offset: { type: 'integer', description: '起始行' }
+    },
+    required: ['path']
+  }
 };
 function expandedCtx(c) {
   c.expanded = { read_file: true };

@@ -214,6 +214,26 @@
 
 **分发方验收结论（2026-11-10）：通过。** 拉取 `origin/work/ai-c` 至 `272d7ad`，独立工作树逐条实测：`python -m pytest tests -q` → 989 passed in 21.16s；`quality_rules.py` 统一闸门 exit 0、零 `[新增]`；`check_doc_sync.py` 通过。自建含中文、嵌套对象、数组、null、空串、特殊字符与 emoji 的语言包，经 `POST/GET /api/clients` 存一遍取一遍，深比较与同一规则序列化后 UTF-8 逐字节比较均一致；未注册 `site_key` 返回 404 且响应不含 `custom_config` / `profiles`，不兜底默认档案；两个 `site_key` 互不串、重复注册整条覆盖、重建 app 后取回不变。改动 3 文件全在可碰清单内，`clients.py`、`client_registry.py`、`definition.yaml`、`.\extend\`、`config_store.py` 一行未动。合入 `main` 时 `api-reference.md` 按「保留双方新增」把「十六、语言包寄存」重排为「十五」（A-2 尚未落地，保持编号连续），A-2 任务书预期同步改为第十六节。C-3b 保持未标注「可开工」，由分发方拆清范围后下发。
 
+### C-4 1b 前端适配层
+
+- 改动：
+  - 新建 `.\extend\lib\tool-schema-adapter.js`：导出 `toFlatParams(schema)`，把 `properties` + 顶层 `required` 还原为旧扁平项，`anyOf` 取首支作展示类型；旧数组与异常输入兜底，浏览器挂 `window.AIMirrorToolSchema`、Node 侧同时 `module.exports`。
+  - `.\extend\dialog\dialog.html`：在 `lib/dom-utils.js` 之后挂载适配层脚本（加载链必要一行；`manifest.json` 的 `web_accessible_resources` 已含 `lib/*`，无需另改）。不加这一行运行时取不到全局，三处调用会直接抛错，故属新建 lib 文件的配套加载，不新增业务结构。
+  - `.\extend\dialog\parts\03_custom_tools.js` L138–140：`saveCustom` 先经 `toFlatParams` 还原再归一化 `p.type` / `p.required`，编辑区历史数组与新 schema 都能保存。
+  - `.\extend\dialog\parts\05c_prompt.js`：L180 `usageOf` 占位符经适配层生成；L38 System Prompt 模板按 `get_tool_params` 新返回结构同步——`parameters` 已是标准 JSON Schema，参数名即 `properties` 的键、必填项见 `required`。
+  - `.\extend\dialog\parts\08_settings.js` L54–57、L97–100：两处参数表渲染改经 `toFlatParams`，不再对对象调 `.map`。
+  - `.\extend\dialog\parts\08b_settings.js`：并存副本同步。核查确认参数表渲染由 `.\extend\dialog\parts\08_settings.js` 的 `D.renderUnifiedToolRow` / `D.renderCustomToolRow` 提供，本文件只负责调用、自身不读 `parameters`，故补定位说明而非重复实现，避免两份各自摊平。
+  - `.\flask_server\tests\js\test_toolconf_swallow.test.js`：声明夹具由旧扁平数组改为标准 schema（含 `anyOf`），并 require 适配层真源。
+  - 新建 `.\flask_server\tests\js\test_tool_schema_adapter.test.js`：13 项单测覆盖标准 schema、`anyOf` 三种形态、`required` 归属、旧数组兼容与异常输入兜底。
+- 未碰：`.\flask_server` 下任何后端文件、`.\flask_server\config\definition.yaml`、`.\extend\dialog\parts\07b_params.js`、`.\docs\tool-schema-migration.md`（第四节三项勾选由分发方验收后统一勾）、C-3b 涉及的 `.\extend\dialog\parts\08g_site_profiles.js` 真源切换。C-3b 未标注「可开工」，未动手。
+- 验收（输出摘要）：
+  1. `.\scripts\hooks\check_js_tests.py`：393 tests / 393 pass / 0 fail（380 项存量 + 13 项新增适配层单测）；覆盖率报告本次未解析到，门禁按钩子设计跳过，未出现退化或新增欠账。
+  2. `pre-commit run --all-files` 七道全过（语法、卫生、结构质量、文档同步、前端逻辑、主题副本、依赖漂移）。
+  3. 八个改动文件逐个 `node --check` 全部 exit 0；单文件最大 392 行 ≤450。
+  4. 端到端实测：标准 schema（含 `anyOf`）下 `usageOf` 输出 `<string>` / `<integer>` 不退化、`renderUnifiedToolRow` 渲染成功且 VNode 含 `path` / `offset` / `string`；旧扁平数组仍兼容。设置页参数表不再对对象调 `.map` 中断。
+  5. `.\scripts\quality_rules.py` 返回 0、零 `[新增]`；`.\scripts\check_doc_sync.py` 通过。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
