@@ -141,7 +141,6 @@
       add(w.block, w.block, blockLabel(w.block) + ' · 待覆盖写入', w.path);
     });
     const bf = cache.blockFields || {};
-    if (bf.commands) delete bf.commands; // 指令编辑器是瞬态表单，不计入配置差异
     Object.keys(bf).forEach(function (bid) {
       Object.keys(bf[bid] || {}).forEach(function (k) {
         const e = bf[bid][k];

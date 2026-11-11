@@ -328,7 +328,7 @@
           D.renderSiteProfilesBlock(ctx)
         ]),
         // 指令：对所有通道生效，配置的是指令本身而非某条通道
-        h('div', { class: 'sp-block-wrap', 'data-cfg-block': 'commands', 'data-cfg-skip': '' }, [
+        h('div', { class: 'sp-block-wrap', 'data-cfg-block': 'commands' }, [
           D.renderBlockBadge(ctx, 'commands'),
           D.renderCommandBlock(ctx)
         ]),

@@ -12,9 +12,13 @@ test('块头徽标归位：容器加 sp-block-wrap，CSS 绝对定位到标题�
  assert.ok(c.indexOf('.sp-block-wrap { position: relative; }')>=0);
  assert.ok(c.indexOf('.sp-block-wrap > .sp-diff-badge')>=0);
 });
-test('指令瞬态表单排除追踪，历史残留也不计入差异',()=>{
- assert.ok(rd('extend/dialog/parts/08b_settings.js').indexOf("'data-cfg-block': 'commands', 'data-cfg-skip': ''")>=0);
- assert.ok(rd('extend/dialog/parts/08j_config_actions.js').indexOf('if (bf.commands) delete bf.commands;')>=0);
+test('指令覆盖检测：仅编辑态输入被追踪，非编辑态列表不检测',()=>{
+ const b=rd('extend/dialog/parts/08b_settings.js');
+ assert.ok(b.indexOf("'data-cfg-block': 'commands'")>=0);
+ assert.ok(b.indexOf("'data-cfg-block': 'commands', 'data-cfg-skip'")<0,'指令块仍被整体排除');
+ const j=rd('extend/dialog/parts/08j_config_actions.js');
+ assert.ok(j.indexOf('delete bf.commands')<0,'commands 差异仍被丢弃');
+ assert.ok(rd('extend/dialog/parts/08l_config_field_tracking.js').indexOf('D.markBlockField(ctx, rec.id')>=0);
 });
 test('差异字段显式进初始 state，输入后强制重渲染',()=>{
  const d=rd('extend/dialog/parts/00_data.js');
