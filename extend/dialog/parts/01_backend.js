@@ -140,9 +140,19 @@
   /** 切换网站：数据与设置都按站点隔离，互不干扰（配置是全局的，无需按站点重载）。 */
   M.applySite = function (key) {
     const k = key || 'unknown-site';
-    if (k === this.siteKey) return;
+    if (!k || k === this.siteKey) return;
     log('切换站点：', this.siteKey || '(初始)', '→', k);
     this.siteKey = k;
+    // 切站必须按新 siteKey 重读缓存并重建站点草稿，否则一直显示上一站点档案
+    const _self = this;
+    Promise.resolve(this.configBackend
+      ? this.configLoadAndDiff(this.configBackend)
+      : (this.loadConfig ? this.loadConfig() : null)).then(function () {
+        if (_self.siteKey !== k) return;
+        _self.siteProfiles = (_self.configCache && _self.configCache.profiles) || {};
+        if (_self.resetSiteProfDraft) _self.resetSiteProfDraft();
+        if (_self.recomputeConfigDiff) _self.recomputeConfigDiff();
+      }).catch(function () {});
     // 清空上一站点的数据视图，避免不同站点内容混在一起
     this.conversations = {};
     // 清掉上一站点的待写计时器：它们持有旧会话 id，稍后触发会把数据串到别的站点。

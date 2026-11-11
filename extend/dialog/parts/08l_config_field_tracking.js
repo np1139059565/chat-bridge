@@ -84,6 +84,7 @@
     if (!ctx) return;
     D.setBlockFieldBaseline(ctx, rec.id, rec.key, rec.baseline);
     D.markBlockField(ctx, rec.id, rec.key, cur);
+    if (ctx.$forceUpdate) ctx.$forceUpdate();
   }
   D.installConfigFieldTracking = function (ctx) {
     D._cfgCtx = ctx;

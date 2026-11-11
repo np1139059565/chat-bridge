@@ -258,7 +258,8 @@ window.AIMirrorDialog = (function () {
       configCache: null, configBackend: null, configDiff: {},
       configOffline: false, configDirty: false,
       siteProfShowAll: false, siteProfConfirmOpen: false,
-      configPublicDiff: {}, _configRemovedSites: [], _cfgCacheTimer: null,
+      configPublicDiff: {}, configDiffItems: [], configBlockDirty: {},
+      configDiffCount: 0, _configRemovedSites: [], _cfgCacheTimer: null,
 
       siteProfExpanded: Vue.reactive({}),
       siteProfTesting: Vue.reactive({}), siteProfTestResult: Vue.reactive({}),

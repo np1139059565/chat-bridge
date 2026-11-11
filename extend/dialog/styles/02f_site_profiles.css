@@ -216,3 +216,8 @@ select[data-diff="1"] {
 button.sp-diff-badge { cursor: pointer; font-family: inherit; line-height: 1.4; }
 .sp-restore-btn { padding: 2px 6px; min-width: 22px; text-align: center; }
 .sp-restore-btn .sp-restore-icon { margin-right: 0; }
+
+/* 块头差异徽标贴回标题行右侧，不再在标题外独占一行 */
+.sp-block-wrap { position: relative; }
+.sp-block-wrap > .sp-diff-badge { position: absolute; top: 6px; right: 42px; z-index: 2; margin-left: 0; }
+.sp-block-wrap .sp-diff-badge { white-space: nowrap; }
