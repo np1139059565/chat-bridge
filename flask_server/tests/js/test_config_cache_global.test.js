@@ -31,7 +31,7 @@ function mk(){return{siteKey:'yuanbao.tencent.com',configCache:null,configBacken
 test('全局单键：空 siteKey 写入，真实域名读回同一份副本',async function(){
  await D.configCacheSet('',{marker:'A'});
  var v=await D.configCacheGet('yuanbao.tencent.com');
- assert.ok(v&&v.marker==='A');assert.ok(S[GK]&&S[GK].marker==='A');
+ assert.ok(v&&v.marker==='A');assert.ok(!S[GK],'前端零持久化：不再写入 chrome.storage');
 });
 test('刷新不丢：本地改动与档案刷新后仍在',async function(){
  await D.configCacheSet('',{profiles:{yuanbao:{label:'腾讯元宝'}},pending:[{block:'bridge',body:{x:1}}]});

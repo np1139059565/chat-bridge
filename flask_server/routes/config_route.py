@@ -14,12 +14,43 @@
 """
 from flask import Blueprint, jsonify, request
 
+import json
+import threading
+from pathlib import Path
+
 import runtime
 import tool_config
 from config_store import sanitize_profiles, save_config_to_yaml, derive_site_profiles
 from service_control import rolling_restart
 
 bp = Blueprint("config_route", __name__)
+
+# 后端草稿（缓存）文件：界面改动立即落此文件；【覆盖】才写母版（入库、可分发）。
+# 本机文件，不入库；master 仍是 definition.yaml + runtime.yaml。
+DRAFT_PATH = Path(__file__).resolve().parent.parent / "config" / "config_draft.json"
+_draft_lock = threading.Lock()
+
+def _load_draft():
+    try:
+        if DRAFT_PATH.exists():
+            return json.loads(DRAFT_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return None
+
+def _save_draft(draft):
+    with _draft_lock:
+        DRAFT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        DRAFT_PATH.write_text(json.dumps(draft, ensure_ascii=False, indent=2), encoding="utf-8")
+    return True
+
+def _clear_draft():
+    with _draft_lock:
+        try:
+            DRAFT_PATH.unlink(missing_ok=True)
+        except Exception:
+            pass
+
 
 
 def _apply_flask_section(data, changed):
@@ -152,9 +183,8 @@ def _config_snapshot():
     }
 
 
-def _handle_config_post():
-    """POST /config：依次应用各区块，保存配置并返回响应。"""
-    data = request.get_json(force=True, silent=True) or {}
+def _apply_patch(data):
+    """把一份 patch 应用到运行时并回写母版；/config 与 /config/commit 共用。"""
     changed = []
     _apply_flask_section(data, changed)
     _apply_tools_section(data, changed)
@@ -177,6 +207,26 @@ def _handle_config_post():
     require_restart = any(c.startswith("flask.") for c in changed)
     return jsonify(success=saved, saved=saved, changed=changed, requireRestart=require_restart)
 
+
+def _handle_config_post():
+    """POST /config：兼容旧调用。"""
+    return _apply_patch(request.get_json(force=True, silent=True) or {})
+
+
+@bp.route("/config/draft", methods=["GET", "POST", "OPTIONS"])
+def config_draft():
+    """GET 一次回传 master + draft 两份；POST 把整份草稿落后端缓存文件。"""
+    if request.method == "POST":
+        _save_draft(request.get_json(force=True, silent=True) or {})
+        return jsonify(success=True)
+    return jsonify(success=True, master=_config_snapshot(), draft=_load_draft())
+
+@bp.route("/config/commit", methods=["POST", "OPTIONS"])
+def config_commit():
+    """【覆盖】：把草稿写回母版，成功后清掉缓存文件。"""
+    resp = _apply_patch(request.get_json(force=True, silent=True) or {})
+    _clear_draft()
+    return resp
 
 @bp.route("/config", methods=["GET", "POST", "OPTIONS"])
 def config():

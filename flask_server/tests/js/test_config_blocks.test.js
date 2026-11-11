@@ -133,7 +133,7 @@ test('applyConfigOverwrite：先回放各区块写入，再提交 /config，最�
   assert.ok(posted.length >= 3);
   assert.ok(posted[0].url.endsWith('/api/bridge/config'));
   assert.ok(posted[1].url.endsWith('/api/bridge/wecom/config'));
-  assert.ok(posted[posted.length - 1].url.endsWith('/config'));
+  assert.ok(posted[posted.length - 1].url.endsWith('/config/commit'));
   assert.strictEqual(ctx.configCache.pending.length, 0);
   assert.strictEqual(ctx.siteProfConfirmOpen, false);
 });

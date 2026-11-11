@@ -33,7 +33,7 @@ test('差异字段显式进初始 state，输入后强制重渲染',()=>{
 test('切站：空 siteKey 不覆盖，切换后按新站点重建配置与草稿',()=>{
  const b=rd('extend/dialog/parts/01_backend.js');
  assert.ok(b.indexOf('if (!k || k === this.siteKey) return;')>=0);
- assert.ok(b.indexOf('configLoadAndDiff(this.configBackend)')>=0);
+ assert.ok(b.indexOf('this.loadConfig()')>=0,'切站未重拉 /config/draft 两份配置');
  assert.ok(b.indexOf('resetSiteProfDraft()')>=0);
 });
 test('行数门禁：00_data / 01_backend / 08b / 08j / 08l 均不超过 450 行',()=>{

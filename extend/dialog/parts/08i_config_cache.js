@@ -28,25 +28,37 @@
     return null;
   }
 
-  D.configCacheGet = function (siteKey) {
-    const key = GLOBAL_KEY;
-    const s = localStore();
-    if (!s) return Promise.resolve(MEM[key] || null);
-    return new Promise(function (res) {
-      try { s.get([key], function (r) { res((r && r[key]) || MEM[key] || null); }); }
-      catch (e) { res(MEM[key] || null); }
-    });
+  // 前端不再用 chrome.storage 持久化配置：内存仅供本次渲染，
+  // 真正的副本由后端 /config/draft 落盘，刷新时随 GET 一起回传。
+  D.configCacheGet = function () {
+    return Promise.resolve(MEM[GLOBAL_KEY] || null);
   };
 
-  D.configCacheSet = function (siteKey, cfg) {
-    const key = GLOBAL_KEY;
-    MEM[key] = cfg;
-    const s = localStore();
-    if (!s) return Promise.resolve(true);
-    return new Promise(function (res) {
-      try { s.set({ [key]: cfg }, function () { res(true); }); }
-      catch (e) { res(false); }
-    });
+  let _draftTimer = null;
+  /** 把整份草稿写回后端缓存文件（__commit 绕过前端拦截层）。 */
+  D.configDraftSave = function (ctx, cfg) {
+    if (!ctx || typeof D.apiFetch !== 'function') return Promise.resolve(true);
+    return Promise.resolve(D.apiFetch(ctx, '/config/draft', {
+      method: 'POST', body: cfg, __commit: true
+    })).catch(function () { return true; });
+  };
+
+  D.configCacheSet = function (siteKey, cfg, skipDraft) {
+    MEM[GLOBAL_KEY] = cfg;
+    const ctx = skipDraft ? null : D._cfgCtx;
+    if (ctx) {
+      // 界面即时改动：Vue state -> 草稿，刷新后由后端回传恢复
+      try {
+        if (ctx.configTools !== undefined) cfg.tools = ctx.configTools;
+        if (ctx.toolConfig !== undefined) cfg.tool_config = ctx.toolConfig;
+        if (ctx.systemConfig !== undefined) cfg.system_config = ctx.systemConfig;
+        if (ctx.maxJsonChars !== undefined) cfg.limits = Object.assign({}, cfg.limits, { max_json_chars: ctx.maxJsonChars });
+        if (ctx.siteProfDraft && D.serializeProfilesDraft) cfg.profiles = D.serializeProfilesDraft(ctx.siteProfDraft);
+      } catch (e) { /* 草稿未就绪时跳过 */ }
+      if (_draftTimer) clearTimeout(_draftTimer);
+      _draftTimer = setTimeout(function () { D.configDraftSave(ctx, MEM[GLOBAL_KEY]); }, 120);
+    }
+    return Promise.resolve(true);
   };
 
   /** 一次性清理旧版分站点桶，避免旧 glm 快照复活；非扩展环境静默跳过。 */

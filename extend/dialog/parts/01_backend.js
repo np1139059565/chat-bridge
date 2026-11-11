@@ -146,9 +146,7 @@
     this.siteKey = k;
     // 切站必须按新 siteKey 重读缓存并重建站点草稿，否则一直显示上一站点档案
     const _self = this;
-    Promise.resolve(this.configBackend
-      ? this.configLoadAndDiff(this.configBackend)
-      : (this.loadConfig ? this.loadConfig() : null)).then(function () {
+    Promise.resolve(this.loadConfig ? this.loadConfig() : null).then(function () {
         if (_self.siteKey !== k) return;
         _self.siteProfiles = (_self.configCache && _self.configCache.profiles) || {};
         if (_self.resetSiteProfDraft) _self.resetSiteProfDraft();
@@ -178,7 +176,7 @@
   /** 刷新：拉后端母版做比对，派生 state 一律以本地缓存为准（不覆盖本地修改）。 */
   M.loadConfig = async function () {
     try {
-      const backend = await D.apiFetch(this, '/config', {
+      const backend = await D.apiFetch(this, '/config/draft', {
         headers: { 'Accept': 'application/json' }
       });
       await this.configLoadAndDiff(backend);

@@ -463,3 +463,13 @@ split 按迭代顺序把前 58 组判为已知、其余判为新增。组数一�
   configLoadAndDiff 并入后端新增档案并把历史 hosts 乱码归一为数组。
 - 口径：/config 母版本身全局一份，浏览器草稿也全局一份；会话/存档仍按 siteKey 隔离。
 - 注意：本地副本是「待覆盖草稿」，真正生效仍需点【覆盖】写回后端；刷新保留草稿而非自动落库。
+
+## C-9 配置副本后端化（2026-11-11 已修，推翻 C-8 前端缓存）
+- 现象：C-8 全局单键后站点档案不再串 glm，但界面改的配置刷新仍丢。
+- 根因：前端 chrome.storage 草稿只记 blockFields（标黄用），没把输入值同步进
+  configCache 主字段；且持久化仍在浏览器，不符合「缓存与母版都存后端」。
+- 口径：前端零持久化；后端 config/config_draft.json 存待覆盖草稿（本机、不入库）；
+  界面改值立即 POST /config/draft；【覆盖】POST /config/commit 才写
+  definition.yaml + runtime.yaml（入库、可分发），成功后清草稿文件；
+  刷新 GET /config/draft 一次回传 master + draft 两份供前端对比。
+- 会话/存档仍按 siteKey 隔离；配置母版全局一份。

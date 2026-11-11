@@ -34,11 +34,20 @@
   };
 
   M.configLoadAndDiff = async function (backend) {
-    this.configBackend = backend;
+    D._cfgCtx = null;
+    const master = backend.master || backend;
+    const remote = backend.draft || null;
+    backend = master;
+    this.configBackend = master;
     this.configOffline = false;
     if (D.configCachePurgeLegacy) D.configCachePurgeLegacy();
-    let cache = await D.configCacheGet(this.siteKey);
-    if (!cache) cache = JSON.parse(JSON.stringify(backend));
+    // 无后端草稿时用本次会话内存副本自愈（兼容旧扁平化污染），不落盘
+    let cache;
+    if (remote) cache = JSON.parse(JSON.stringify(remote));
+    else {
+      const mem = await D.configCacheGet(this.siteKey);
+      cache = mem ? JSON.parse(JSON.stringify(mem)) : JSON.parse(JSON.stringify(master));
+    }
     // 旧逐站点快照只含 glm：并入后端新增档案并修正历史 hosts 乱码
     if (D.mergeBackendProfiles) D.mergeBackendProfiles(cache, backend);
     // 端口/连接地址由 discoverFlask + savePort 专管，不进本地草稿：
@@ -88,9 +97,9 @@
       this._siteProfLoaded = true;
       this.resetSiteProfDraft();
     }
+    D._cfgCtx = this;
     this.recomputeConfigDiff();
   };
-
 
   M.recomputeConfigDiff = function () {
     const cache = this.configCache || {}, backend = this.configBackend || {};
@@ -302,11 +311,11 @@
       if (pid && out[pid]) body.profiles = { [pid]: out[pid] };
       const removed = (this._configRemovedSites || []).slice();
       if (removed.length) body.profiles_remove = removed;
-      await D.apiFetch(this, '/config', { method: 'POST', body: body, __commit: true });
+      await D.apiFetch(this, '/config/commit', { method: 'POST', body: body, __commit: true });
       cache.pending = [];
       if (D.clearBlockFields) D.clearBlockFields(this);
       this.configBackend = JSON.parse(JSON.stringify(cache));
-      await D.configCacheSet(this.siteKey, cache);
+      await D.configCacheSet(this.siteKey, cache, true);
       window.parent.postMessage({ type: 'profiles_refresh' }, '*');
       this.siteProfConfirmOpen = false;
       this.recomputeConfigDiff();

@@ -45,3 +45,4 @@ flask_server/PATH
 
 # 本机零散脚本产物（如调试用的 app_local.js），非交付物，不入库
 flask_server/app_local.js
+flask_server/config/config_draft.json
