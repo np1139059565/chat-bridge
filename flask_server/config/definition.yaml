@@ -18,6 +18,7 @@ app:
     arena:
       assistantContent: div.prose
       assistantMark: 'div[class*="bg-surface-primary"]'
+      atBottomCheck: false
       container: 'ol[class*="flex-col-reverse"]'
       convIdUrl: /c/([0-9a-zA-Z-]+)
       historyItem: 'a[href*="/c/"]'
