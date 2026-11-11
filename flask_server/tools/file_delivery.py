@@ -7,9 +7,10 @@
                         作为文件附件贴进网页 AI 输入框；
     结果直返       ——正文直接随工具结果返回。
 
-走哪一条由两个条件共同决定：设置页开关 paste_delivery 开启，
-且文件扩展名属于 file_types 的可粘贴清单。开关关闭或类型不在清单内，
-都走结果直返。
+走哪一条由三个条件共同决定：当前站点档案未禁用附件粘贴（filePaste）、
+设置页开关 paste_delivery 开启、文件扩展名属于 file_types 的可粘贴清单。
+任一不成立都走结果直返——部分网页 AI 不接收 paste 事件里的文件，
+硬贴会静默丢内容，比直返更糟。
 
 拆出本模块的原因：投递方式是一套独立的关注点，与「怎么读文件」正交；
 放进 file_read_impl 会让该文件超出仓库的行数上限。
@@ -37,15 +38,51 @@ def paste_enabled():
         return True
 
 
+def _current_host():
+    """取本次工具调用所在网页的地址（/tool 请求体的 host_page_url）。
+
+    非 HTTP 调用（QQ 指令、定时任务）没有请求上下文，返回空串；
+    此时不做站点级判定，沿用全局开关，行为与改造前一致。
+    """
+    try:
+        from flask import request
+        data = request.get_json(force=True, silent=True) or {}
+        return str(data.get("host_page_url") or data.get("page_url") or "")
+    except Exception:
+        return ""
+
+
+def _site_allows_paste(url):
+    """该站点是否支持把文件作为附件贴进输入框。
+
+    档案字段 filePaste 显式为 False 时禁用；缺省 / 为真均视为支持。
+    域名经 site_profiles 映射回档案 id，查不到就退回全局口径。
+    """
+    if not url:
+        return True
+    try:
+        import runtime
+        from urllib.parse import urlparse
+        hn = (urlparse(url if "://" in url else "//" + url).hostname or url).lower()
+        pid = (runtime.CONFIG.get("site_profiles") or {}).get(hn)
+        if not pid:
+            return True
+        prof = (runtime.CONFIG.get("profiles") or {}).get(pid) or {}
+        return prof.get("filePaste") is not False
+    except Exception:
+        return True
+
+
 def should_paste(file_path):
     """判断某文件本次是否以附件粘贴方式投递。
 
-    两个条件同时成立才走粘贴：全局开关开启，且扩展名属于可粘贴清单。
-    类型不在清单内时改走结果直返——浏览器构造这类附件容易失败，
-    退回结构体返回更稳妥。
+    三道同时成立才走粘贴：站点未禁用附件粘贴、全局开关开启、
+    扩展名属于可粘贴清单。任一不成立改走结果直返。
     @param file_path 文件路径
     @returns 走附件粘贴返回 True
     """
+    if not _site_allows_paste(_current_host()):
+        return False
     if not paste_enabled():
         return False
     from file_types import is_pasteable

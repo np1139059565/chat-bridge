@@ -56,6 +56,7 @@
     historyItem: { group: 'history', label: '会话列表条目', kind: 'selector' },
     historySelectedMark: { group: 'history', label: '选中项标记', kind: 'selector' },
     inputSelector: { group: 'input', label: '输入框', kind: 'selector' },
+    filePaste: { group: 'input', label: '支持粘贴文件附件', kind: 'bool', defaultOn: true, hint: '关闭后 read_file 正文改走结果直返（该站点不接收 paste 文件时使用）' },
     sendButton: { group: 'input', label: '发送按钮', kind: 'selector', hint: '仅定位测试（避免误发送）' },
     sendButtonDisabledMark: { group: 'input', label: '发送禁用类名', hint: '按钮未就绪时带的类名' },
     newConversation: { group: 'actions', label: '开启新对话按钮', kind: 'click', hint: '对应 /new 指令' },

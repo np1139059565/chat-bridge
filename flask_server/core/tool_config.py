@@ -209,6 +209,19 @@ def coerce(item, raw):
             v = hi
         return v
     if t == "boolean":
+        # 严格解析：bool("false") 为 True，字符串「false」会把关闭误存成开启。
+        # 前端 checkbox 传真布尔；此处兜住任何经文本化 / 草稿回流的路径。
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, str):
+            s = raw.strip().lower()
+            if s in ("true", "1", "yes", "on"):
+                return True
+            if s in ("false", "0", "no", "off", ""):
+                return False
+            raise ValueError("%s 必须是布尔值" % item.get("label"))
+        if isinstance(raw, (int, float)):
+            return bool(raw)
         return bool(raw)
     if t == "multiselect":
         if not isinstance(raw, list):
