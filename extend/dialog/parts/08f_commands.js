@@ -119,12 +119,13 @@
    * @returns {VNode} 编辑器节点
    */
   function renderCmdEditor(ctx) {
-    return h('div', [
+    // 仅「点具体指令进入编辑态」才纳入覆盖检测；新建表单不检测
+    const editProps = ctx.bridgeEditIdx === null ? { 'data-cfg-skip': '1' } : {};
+    return h('div', editProps, [
       h('div', { class: 'bridge-cmd-new' }, [
         h('input', {
           type: 'text', placeholder: '命令名（含 /，如 /deploy）',
           value: ctx.bridgeNewCmdName,
-          'data-cfg-skip': '1',
           onInput: (e) => { ctx.bridgeNewCmdName = e.target.value; }
         }),
         h('input', {

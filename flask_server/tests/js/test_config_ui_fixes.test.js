@@ -19,6 +19,9 @@ test('指令覆盖检测：仅编辑态输入被追踪，非编辑态列表不�
  const j=rd('extend/dialog/parts/08j_config_actions.js');
  assert.ok(j.indexOf('delete bf.commands')<0,'commands 差异仍被丢弃');
  assert.ok(rd('extend/dialog/parts/08l_config_field_tracking.js').indexOf('D.markBlockField(ctx, rec.id')>=0);
+ const f=rd('extend/dialog/parts/08f_commands.js');
+ assert.ok(f.indexOf('bridgeEditIdx === null')>=0,'新建态未动态排除');
+ assert.ok(f.indexOf('editProps')>=0,'编辑态属性容器缺失');
 });
 test('差异字段显式进初始 state，输入后强制重渲染',()=>{
  const d=rd('extend/dialog/parts/00_data.js');
