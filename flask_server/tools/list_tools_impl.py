@@ -16,6 +16,23 @@
 """
 
 
+def _has_params(entry):
+    """判断工具是否带参数：schema 看 properties 非空，历史数组看非空。
+
+    为什么不直接 bool(parameters)：迁移到 JSON Schema 后，无参工具的
+    parameters 是空 properties 的 object schema，schema 本身非空会把
+    无参工具误报成有参（Q-7），诱导 AI 多做一次 get_tool_params 查询；
+    历史数组格式没有 properties 可看，维持「非空即有参」。
+
+    @param entry 工具声明字典（内置/自定义/外部提供方同构）
+    @returns True 表示带参数，值得再查一次 get_tool_params
+    """
+    params = entry.get("parameters")
+    if isinstance(params, dict):
+        return bool(params.get("properties"))
+    return bool(params)
+
+
 def t_list_tools(p):
     """列出当前可调用的全部工具。
 
@@ -41,7 +58,7 @@ def t_list_tools(p):
             "name": name,
             "description": entry.get("description", ""),
             # 有无参数，便于 AI 判断值不值得再查一次 get_tool_params
-            "has_params": bool(entry.get("parameters")),
+            "has_params": _has_params(entry),
         })
 
     # 自定义工具：all_meta 已按 enabled 与 kind=tool 过滤，指令执行端不会混入
@@ -50,7 +67,7 @@ def t_list_tools(p):
         out.append({
             "name": t.get("name"),
             "description": t.get("description", ""),
-            "has_params": bool(t.get("parameters")),
+            "has_params": _has_params(t),
         })
 
     # 外部提供方工具：与 /tools 一致，已由自定义视图列出的不重复计入
@@ -62,7 +79,7 @@ def t_list_tools(p):
         out.append({
             "name": t.get("name"),
             "description": t.get("description", ""),
-            "has_params": bool(t.get("parameters")),
+            "has_params": _has_params(t),
         })
 
     # 按名称排序，结果稳定，便于阅读与比对
