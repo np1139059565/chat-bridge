@@ -14,14 +14,65 @@
   断言与续接（docs/split-mirror-and-tools-service.md 决策 14）。
 
 本文件不实现任何工具执行逻辑，不修改 tools/ 与 routes/tools.py。
+ - L10 契约入口：register_pre_dispatch_hook（工具分发前的可插拔钩子，契约见下方注释）。
 """
 
+import threading
 import time
 import uuid
 
 from flask import Blueprint, current_app, jsonify, request
 
 import chat_completions as cc
+
+# ---- L10 契约入口（A-5 新增）：标准链路的可插拔前置钩子 ----
+# 边界（docs/work-ai-a.md A-5）：只新增入口与契约测试，不改既有链路语义、
+# 不建切换开关、不引入 asyncio 依赖、不碰 remote_bridge / extend / tools。
+# 唯一固定点位：历史合并之后、待执行调用分发（_execute_pending）之前。
+_PRE_DISPATCH_HOOKS = []
+_HOOKS_LOCK = threading.Lock()
+
+
+def register_pre_dispatch_hook(fn):
+    """注册分发前钩子（L10 契约入口）；返回 fn，支持装饰器用法。
+
+    契约：
+    - fn(history) 同步调用一次；history 是合并后的完整消息 list[dict]，
+      视为只读入参（需要改动时返回新 list，不要原地改写）；
+    - 返回 None：沿用原 history；返回 list：整体替换后续各步
+      （分发输入、落盘、响应 choices/messages）使用的 history；
+    - 多个钩子按注册顺序链式执行：前一钩子的返回值是下一钩子的入参；
+    - 返回 None/list 以外的类型视为契约违约，抛 TypeError；
+      钩子内部异常不被本层捕获，沿请求向上抛（钩子作者自负健壮性）；
+    - 注册与清空线程安全；单次请求迭代用的是调用时点的注册快照。
+    """
+    with _HOOKS_LOCK:
+        _PRE_DISPATCH_HOOKS.append(fn)
+    return fn
+
+
+def clear_pre_dispatch_hooks():
+    """清空全部已注册钩子（供测试隔离；业务代码不应调用）。"""
+    with _HOOKS_LOCK:
+        _PRE_DISPATCH_HOOKS.clear()
+
+
+def _run_pre_dispatch_hooks(history):
+    """按注册顺序执行钩子，返回最终生效的 history。"""
+    with _HOOKS_LOCK:
+        hooks = list(_PRE_DISPATCH_HOOKS)
+    for fn in hooks:
+        out = fn(history)
+        if out is None:
+            continue
+        if not isinstance(out, list):
+            raise TypeError(
+                "pre-dispatch hook %r 返回 %s：契约要求 None 或 list"
+                % (getattr(fn, "__name__", fn), type(out).__name__),
+            )
+        history = out
+    return history
+
 
 bp = Blueprint("chat_api", __name__)
 
@@ -154,6 +205,7 @@ def chat_completions():
         return jsonify(_error_body(e.message, code=e.code)), 400
 
     history = cc.merge_history(cc.load_session(site_key), incoming)
+    history = _run_pre_dispatch_hooks(history)
     round_messages = _execute_pending(history)
 
     final_history = history + round_messages
