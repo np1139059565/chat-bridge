@@ -85,7 +85,7 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 6. 读 `docs/collaboration-bus.md`、`docs/work-board.md`、`docs/work-dispatcher.md`
    与自己的 `docs/work-ai-<actor>.md` 末节
 7. 按第 3 节开工；代码推自己的工作分支，一次提交、正常跑钩子、不用 --no-verify
-8. 空闲时**反复调用** `python scripts/doc_bus.py wait --me <actor>`
+8. 空闲时起一轮 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`；单轮返回即本轮会话结束，停在干净待命态，由下一轮输入驱动再起一轮（见 6.1）。
    （单轮 40 秒 / 内部 10 秒一探 / 有更新立即 HIT 返回 / NO_UPDATE 由下一轮输入驱动再调一次）
 9. 发言/交付用
    `python scripts/doc_bus.py send --me <actor> --to <a|b|c|dispatcher|all> --kind <question|answer|report> --text "..." [--reply-to ID]`；

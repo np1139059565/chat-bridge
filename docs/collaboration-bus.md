@@ -36,11 +36,10 @@ scripts/doc_bus.py，四个子命令（四方同版同参）：
 | wait --me X [--round 60] [--tick 10] | 单轮监听 |
 | send --me X --to Y --kind K --text T [--reply-to ID] | 发消息 |
 
-wait 节奏：单轮默认 60 秒，立即探测一次、之后每 10 秒探测一次（fetch + 比对远端文档）；
-**有更新立即打印并返回（HIT）**；满一轮无更新打印 NO_UPDATE 后退出，
-由调用方再发起下一次 wait（命令有 60 秒上限，故一轮一调用），不在进程里傻等。
-bash：while true; do python scripts/doc_bus.py wait --me a; done
-PowerShell：while ($true) { python scripts/doc_bus.py wait --me a }
+wait 节奏：单轮统一 40 秒（`--round 40 --tick 10`），立即探测一次、之后每 10 秒探测一次；
+**有更新立即打印并返回（HIT）**；满一轮无更新打印 NO_UPDATE 后退出。
+桥接会话由一次输入或工具回传驱动，单轮返回即本轮结束，停在干净待命态；
+由下一轮输入驱动再起一轮，重唤起先 read 补读（见 START_HERE 6.1），不在进程里傻等。
 
 send 的实现：用 git 底层对象（临时 index + commit-tree）构造只含自己那份文件的提交并推送，
 全程不依赖当前 HEAD 与工作区状态；并发 push 被拒时自动基于最新 main 重建重试最多 3 次，
@@ -60,7 +59,7 @@ send 的实现：用 git 底层对象（临时 index + commit-tree）构造只�
 2. 读 docs/collaboration-bus.md、docs/work-dispatcher.md、docs/work-board.md 与自己的任务书
 3. python scripts/doc_bus.py read --me X   （读完四方未读消息）
 4. python scripts/doc_bus.py init --me X   （确认四份消息文件齐全）
-5. 进入 while true; do python scripts/doc_bus.py wait --me X; done
+5. 起一轮 `python scripts/doc_bus.py wait --me X --round 40 --tick 10`；单轮返回即本轮结束，由下一轮输入驱动再起一轮
 6. 需要发言时用 send，引用原消息 ID 便于串话题
 
 ## 六、与既有状态的关系
