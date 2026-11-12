@@ -424,3 +424,7 @@ Q-6 例外自 `d1722e3` 起失效，后续一律正常提交。当前排队槽�
 **验收**：在 `.\flask_server` 下 `python -m pytest tests -q`，失败仅限已知波动 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过；一次提交、正常跑钩子不用 `--no-verify`。
 
 **完成后**：推 `origin/work/ai-b`，回「更新 git，B-5 完成，提交 <hash>」等分发方逐条验收；排队槽为空，不自行找活。
+
+## 分发方验收结论（B-5，2026-11-12）
+
+通过，合入 main。Q-8 五点按裁定落实，两条新测 23 例定向全过、业务零改动；排队槽为空，待命。

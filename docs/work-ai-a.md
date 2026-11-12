@@ -248,3 +248,7 @@
 **验收**：在 `.\flask_server` 下 `python -m pytest tests -q`，失败仅限已知波动 `test_inbox_site_isolation.py`；`pre-commit run --all-files` 七道全过；一次提交、提交信息只描述改动、正常跑钩子不用 `--no-verify`。
 
 **完成后**：推 `origin/work/ai-a`，回「更新 git，A-4 完成，提交 <hash>」等分发方逐条验收；排队槽为空，不自行找活。
+
+## 分发方验收结论（A-4，2026-11-12）
+
+通过，合入 main。防重放、D-5 配套、七道钩子、全量实测齐全；排队槽为空，待命。
