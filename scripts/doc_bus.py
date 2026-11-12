@@ -28,15 +28,18 @@ ENC = dict(encoding="utf-8", errors="replace", text=True)
 
 
 def git(args, cwd, timeout=20, stdin_data=None, extra_env=None):
-    kw = dict(cwd=cwd, capture_output=True, timeout=timeout, **ENC)
+    """跑 git；stdin 与输出均走 bytes，避免 Windows text 模式把 LF 写成 CRLF。"""
+    kw = dict(cwd=cwd, capture_output=True, timeout=timeout)
     if stdin_data is not None:
-        kw["input"] = stdin_data
+        kw["input"] = stdin_data.encode("utf-8") if isinstance(stdin_data, str) else stdin_data
     if extra_env:
         env = os.environ.copy()
         env.update(extra_env)
         kw["env"] = env
     p = subprocess.run(["git"] + list(args), **kw)
-    return p.returncode, (p.stdout or "") + (p.stderr or "")
+    out = (p.stdout or b"").decode("utf-8", "replace")
+    err = (p.stderr or b"").decode("utf-8", "replace")
+    return p.returncode, out + err
 
 
 def fetch(cwd):
@@ -48,8 +51,15 @@ def bus_path(who):
 
 
 def show_remote(cwd, path):
-    rc, o = git(["show", MAIN + ":" + path], cwd, timeout=15)
-    return o if rc == 0 else ""
+    """读远端对象，只取 stdout 并把 CRLF 归一为 LF（stderr 警告不混入正文）。"""
+    try:
+        p = subprocess.run(["git", "show", MAIN + ":" + path], cwd=cwd,
+                           capture_output=True, timeout=15, **ENC)
+        if p.returncode != 0:
+            return ""
+        return (p.stdout or "").replace(chr(13)+chr(10), chr(10))
+    except subprocess.TimeoutExpired:
+        return ""
 
 
 def parse_blocks(text):

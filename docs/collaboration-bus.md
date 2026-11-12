@@ -68,3 +68,14 @@ send 的实现：用 git 底层对象（临时 index + commit-tree）构造只�
 本机制只改「通信方式」，不改阶段状态：阶段 2 整体收口、阶段 3 三条前置
 （真实使用跑够时间 / 六项逐一验证 / 旧路径无调用方）仍以 docs/work-board.md 末节为准；
 A-5 / B-6 / C-6 仍为准备取证任务，删除动作三条同时满足前不下发。
+
+
+## 补记：行尾根因与 bytes stdin（2026-11-13）
+
+三层逐字节诊断确认：HEAD 与 index 中的消息文件 blob 曾为 CRLF、工作树为 LF，
+git status 因此持续判 modified。根因不在 ff-only 同步，也不在 .gitattributes，
+而在脚本 git() 封装以 text=True 向 git hash-object -w --stdin 传内容时，
+Windows 下 Python 把 LF 转成 CRLF 写进 blob —— 每次 send 都在生成 CRLF 对象。
+修复：git() 改用 bytes stdin 与 bytes 捕获（输出手动 utf-8 decode），
+show_remote 只读 stdout 并归一换行；既有四份消息文件经 git add --renormalize 统一为 LF。
+此后 send 生成的 blob、index、工作树三者同为 LF，status 保持干净。
