@@ -11,6 +11,22 @@
   const D = window.AIMirrorDialog;
   const M = D.methods;
 
+  /**
+   * 阶段 2：查某条指令在服务端下发定义里的来源；未下发时返回空串。
+   * 执行端据此对接 /api/commands 的统一清单，执行与回执通道不变。
+   * @param {string} name 指令名（可带或不带斜杠）
+   * @returns {string} builtin / custom / client 或空串
+   */
+  M.commandSource = function (name) {
+    const list = this.commandDefinitions || [];
+    const key = String(name || '');
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i] || {};
+      if (it.name === key || ('/' + it.name) === key) return it.source || '';
+    }
+    return '';
+  };
+
   /** 进入元素选择模式：请求内容脚本开始选元素。 */
   M.startPickElement = function () {
     this.bridgePicking = true;
@@ -82,6 +98,7 @@
       this.bridgeCommands = data.commands || [];
       this.toast(this.bridgeEditIdx === null ? ('已添加指令：' + name) : ('已修改指令：' + name));
       this._resetCmdForm();
+      if (this.refreshCommandDefinitions) this.refreshCommandDefinitions();
     } catch (e) {
       this.toast('保存失败：' + e);
     }
@@ -126,6 +143,7 @@
       this.bridgeCommands = data.commands || [];
       this.toast('已删除指令');
       this._resetCmdForm();
+      if (this.refreshCommandDefinitions) this.refreshCommandDefinitions();
     } catch (e) {
       this.toast('删除失败：' + e);
     }

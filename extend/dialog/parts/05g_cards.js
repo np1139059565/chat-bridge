@@ -42,7 +42,9 @@
       firstToolCard: null,    // 本轮第一张工具卡片（供重跑等旁路使用）
       // isFreshReply：本轮是否属 AI 新鲜回复（与上报同一判定）。
       // 检测/回传用它取代「reason==='generate'」，避免采集来源漂移时漏检测。
-      isFreshReply: !!isFreshReply
+      isFreshReply: !!isFreshReply,
+      // 阶段 2：本轮解析产出的标准 tool_calls（译员 toToolCalls/fromBlocks）。
+      toolCalls: []
     };
     incoming.forEach((m, mi) => {
       // 相邻消息去重的比对基准：紧邻上一条消息的卡片表（见 _buildCardForBlock）。
@@ -52,7 +54,10 @@
       this._buildCardsForOne(conv, m, mi, incoming, reason, memoryIssue, scrollOnly, autoCandidates, state);
     });
     this._decideIssueTarget(autoCandidates, state, reason, isFreshReply);
-    return { autoCandidates: autoCandidates, armedLast: state.armedLast, rerunCard: state.rerunCard };
+    return {
+      autoCandidates: autoCandidates, armedLast: state.armedLast,
+      rerunCard: state.rerunCard, toolCalls: state.toolCalls
+    };
   };
 
   /**
@@ -94,6 +99,48 @@
     blocks.forEach((b) => {
       this._buildCardForBlock(holder, m, b, mi, incoming, reason, scrollOnly, blockIssue, autoCandidates, state);
     });
+    // 阶段 2 接线：建卡后把本条助手回复翻成标准 tool_calls（nonce 在此固定）。
+    this._translateToolCalls(holder, m, blocks, state);
+  };
+
+  /**
+   * 阶段 2 接线：把本条助手回复的工具卡片翻成标准 tool_calls（规格 4.4）。
+   * card.toolCall.id = call_<nonce>，与最终回执 nonce 同源；多调用 warning
+   * 汇入 state.msgIssues，走既有 fatal → preIssue → 执行拦截 → 回传落点。
+   * @returns {Object} { calls, warning }
+   */
+  M._translateToolCalls = function (holder, m, blocks, state) {
+    const out = { calls: [], warning: '' };
+    const T = window.AIMirrorTranslator;
+    if (!T || m.role !== 'assistant') return out;
+    const protocol = [];
+    const cards = holder.cards || {};
+    blocks.forEach((b) => {
+      if (!b || b.type !== 'code' || !b.id) return;
+      const card = cards[b.id];
+      if (!card || !card.isTool) return;
+      const nonce = this.ensureNonce(card);
+      const one = { type: 'bridge-chat-call', tool: card.tool,
+        parameters: card.parameters || {}, nonce: nonce };
+      protocol.push(one);
+      const calls = T.toToolCalls(one);
+      if (calls.length) card.toolCall = calls[0];
+    });
+    const tr = T.fromBlocks(protocol);
+    out.calls = tr.calls;
+    out.warning = tr.warning;
+    state.toolCalls = (state.toolCalls || []).concat(tr.calls);
+    if (tr.warning) {
+      state.msgIssues = state.msgIssues || [];
+      const exists = state.msgIssues.some((x) =>
+        x && x.issue && x.issue.error === tr.warning && x.holder === holder);
+      if (!exists) state.msgIssues.push({ holder: holder, issue: {
+        error: tr.warning, severity: 'fatal', scope: 'block',
+        message: '本条回复包含多个工具调用代码块，请一次只返回一个调用块。',
+        msg_id: this.msgId(m)
+      } });
+    }
+    return out;
   };
 
   /**

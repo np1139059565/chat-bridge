@@ -11,8 +11,8 @@
   // 再刷新页面才生效；只刷新页面不够。此前排查时无法判断「跑的是新版还是旧版」，
   // 白白多查了几轮。带上标识后，控制台第一行就能确认。
   // 每次改动内容脚本时把这个标识一起改掉。
-  // 构建标识：C-3b 站点档案真源切到客户端注册信息（GET /profiles 聚合视图）。
-  const BUILD_TAG = '2026-11-11-c3b-client-registry-v20';
+  // 构建标识：C-5 阶段 2 翻译员本体与方言（语言包经 /profiles 取回）。
+  const BUILD_TAG = '2026-11-12-c5-translator-v21';
   A.log('内容脚本已加载 build=' + BUILD_TAG + ' 时间=' + new Date().toISOString());
 
   /**
@@ -27,6 +27,29 @@
    * 保持出厂兜底（00_state.js 的内联 PROFILES），功能不中断。
    * @param {string} reason 拉取原因（inject / refresh），仅用于日志区分
    */
+  /**
+   * 阶段 2：把 /profiles 聚合回来的 custom_config 作为当前站点语言包交给方言层。
+   * /profiles 的真源已是 /api/clients 的 custom_config（C-3b），故复用同一条
+   * background 中转，不新增第二条数据通路；服务端不解释字段，这里只做分派。
+   * 仅写入共享状态，不改既有解析 / 发送 / 生成态链路（行为与改造前一致）。
+   * @param {Object} profiles /profiles 返回的档案集
+   * @returns {Object|null} 当前站点语言包
+   */
+  A.applyLanguagePack = function (profiles) {
+    const DIA = window.AIMirrorDialects;
+    if (!DIA) return null;
+    const id = A.state.profileId || A.guessProfile(A.currentHost());
+    const raw = (profiles && profiles[id]) || null;
+    A.state.languagePack = DIA.languagePack(raw);
+    const T = window.AIMirrorTranslator;
+    if (T && typeof T.dialectFor === 'function') {
+      A.state.dialect = T.dialectFor(id);
+    }
+    A.log('语言包已应用 site=' + id + ' 键数=' +
+      (A.state.languagePack ? Object.keys(A.state.languagePack).length : 0));
+    return A.state.languagePack;
+  };
+
   A.fetchProfiles = function (reason) {
     try {
       chrome.runtime.sendMessage({ type: 'profiles_fetch' }, function (resp) {
@@ -39,6 +62,7 @@
           return;
         }
         var applied = A.applyProfiles(resp.profiles);
+        A.applyLanguagePack(resp.profiles);
         A.log('fetchProfiles(' + reason + ') ' + (applied
           ? '后端档案已应用：' + Object.keys(A.PROFILES).join(' / ')
           : '后端档案无效，保持出厂默认'));

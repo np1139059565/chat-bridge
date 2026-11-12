@@ -124,6 +124,50 @@
     } catch (e) {
       this.bridgeHelpText = '';
     }
+    // 阶段 2：取回 /v1/system_prompt 标准四段、/api/clients 的语言包与
+    // /api/commands 下发指令定义填入翻译员本体（一刀切，无切换开关）。
+    // 后端不可达时本体用兜底四段，全流程不中断；须在 fetchTools 重建 prompt 前。
+    try {
+      const T = window.AIMirrorTranslator;
+      if (T) {
+        const std = await T.fetchStandard(D.apiFetch, this);
+        const cmds = await T.fetchCommands(D.apiFetch, this);
+        const key = String(this.profileId || this.siteKey || '');
+        const pack = await T.fetchLanguagePack(D.apiFetch, this, key);
+        T.state.standard = std;
+        T.state.commands = cmds.commands;
+        T.state.commandHelp = cmds.help;
+        T.state.pack = pack;
+        T.state.siteKey = key;
+        // 阶段 2：按当前站点取方言策略（翻译员本体分派，不为每站新建本体）。
+        T.state.dialect = T.dialectFor(key);
+        this.commandDefinitions = cmds.commands;
+        this.commandHelpText = cmds.help;
+        this.systemPrompt = this.generateSystemPrompt();
+      }
+    } catch (e2) {
+      log('翻译员上下文取回失败（本体兜底继续）：' + e2);
+    }
+  };
+
+  /**
+   * 阶段 2：重取服务端下发的指令定义（自定义指令增删改后保持缓存新鲜）。
+   * 只登记定义，不改 /api/bridge/commands 的执行与回执通道。
+   * @returns {Promise<Array>} 服务端下发的指令清单
+   */
+  M.refreshCommandDefinitions = async function () {
+    const T = window.AIMirrorTranslator;
+    if (!T) return [];
+    try {
+      const cmds = await T.fetchCommands(D.apiFetch, this);
+      T.state.commands = cmds.commands;
+      T.state.commandHelp = cmds.help;
+      this.commandDefinitions = cmds.commands;
+      this.commandHelpText = cmds.help;
+      return cmds.commands;
+    } catch (e) {
+      return [];
+    }
   };
 
   /**

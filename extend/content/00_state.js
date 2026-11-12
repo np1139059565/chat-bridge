@@ -37,6 +37,8 @@ window.AIMirrorContent = (function () {
     active: false,           // 面板是否处于打开（激活）状态：未打开时不做解析、推送与轮询
     siteKey: '',             // 当前网站标识
     profileId: '',           // 当前生效的站点规则（glm / deepseek）
+    languagePack: null,      // 阶段 2：当前站点语言包（custom_config，经 /profiles 取回）
+    dialect: null,           // 阶段 2：当前站点方言策略（翻译员 dialectFor 产出）
     panelSide: 'right',      // 抽屉挂靠侧：right / left
     theme: 'light'           // 宿主页面明暗主题：light / dark（由 detectHostTheme 判定）
   };
