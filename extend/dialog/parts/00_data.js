@@ -68,7 +68,10 @@ window.AIMirrorDialog = (function () {
         if (!src || src.charAt(0) !== '{') continue;
         try {
           const obj = JSON.parse(src);
-          if (obj && obj.type === 'external-call' && obj.nonce === card.nonce) return true;
+          // 阶段 2：标准链路的回执以 bridge-chat-res 落地，同样按 nonce 配对，
+          // 避免工具卡片与其回执消息在镜像区重复出现。
+          if (obj && (obj.type === 'external-call' || obj.type === 'bridge-chat-res')
+              && obj.nonce === card.nonce) return true;
         } catch (e) { /* 非信封内容 */ }
       }
     }

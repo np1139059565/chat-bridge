@@ -144,7 +144,9 @@ test('toToolMessage / fromToolMessage：标准 tool 消息与 bridge-chat-res �
   const back = JSON.parse(text);
   assert.strictEqual(back.type, 'bridge-chat-res');
   assert.strictEqual(back.tool, 'read_file');
-  assert.strictEqual(back.nonce, 'call_9');
+  // 阶段 2 返工：标准 id 的 call_ 前缀必须剥回原始 nonce，不能吐回前端。
+  assert.strictEqual(back.nonce, '9');
+  assert.strictEqual(back.nonce.indexOf('call_'), -1);
   assert.strictEqual(back.success, true);
   assert.deepStrictEqual(back.result, { lines: 3 });
   // 失败信封：success=false 且带 error/hint

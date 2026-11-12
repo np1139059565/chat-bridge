@@ -41,6 +41,10 @@
     const id = A.state.profileId || A.guessProfile(A.currentHost());
     const raw = (profiles && profiles[id]) || null;
     A.state.languagePack = DIA.languagePack(raw);
+    const T = window.AIMirrorTranslator;
+    if (T && typeof T.dialectFor === 'function') {
+      A.state.dialect = T.dialectFor(id);
+    }
     A.log('语言包已应用 site=' + id + ' 键数=' +
       (A.state.languagePack ? Object.keys(A.state.languagePack).length : 0));
     return A.state.languagePack;

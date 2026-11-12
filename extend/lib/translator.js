@@ -106,11 +106,25 @@
     return base + '\n\n' + tail;
   }
 
+  // 标准 tool_call.id 的统一前缀：解析时用 call_<nonce>，回前端时剥回 <nonce>。
+  var CALL_PREFIX = 'call_';
+
+  /** nonce → 标准 tool_call.id（避免各处手拼前缀字符串）。 */
+  function callIdFromNonce(nonce) {
+    return CALL_PREFIX + String(nonce || '0');
+  }
+
+  /** 标准 tool_call.id → 原始 nonce；无前缀时原样返回（兼容旧 id）。 */
+  function nonceFromCallId(id) {
+    var s = String(id || '');
+    return s.indexOf(CALL_PREFIX) === 0 ? s.slice(CALL_PREFIX.length) : s;
+  }
+
   /** bridge-chat-call 代码块 → 标准 tool_calls 项。 */
   function toToolCalls(block) {
     if (!block || typeof block !== 'object') return [];
     if (block.type !== 'bridge-chat-call' || !block.tool) return [];
-    var id = 'call_' + String(block.nonce || '0');
+    var id = callIdFromNonce(block.nonce);
     var args = block.parameters && typeof block.parameters === 'object'
       ? block.parameters : {};
     return [{
@@ -143,20 +157,27 @@
     };
   }
 
-  /** 标准 tool 消息 → bridge-chat-res 文本，贴回网页对话（工具服务 → 网页 AI）。 */
-  function fromToolMessage(msg) {
+  /**
+   * 标准 tool 消息 → bridge-chat-res 文本，贴回网页对话（工具服务 → 网页 AI）。
+   * 执行信封（content）里的诊断字段整体带出，只把 tool_call_id 的 call_ 前缀
+   * 剥回原始 nonce，保证与 card.nonce / external-call.nonce 一致。
+   * @param {Object} msg 标准 tool 消息
+   * @param {boolean} [compact] 紧凑序列化（截图/附件标记用，正文越短越好）
+   * @returns {string} bridge-chat-res JSON 文本
+   */
+  function fromToolMessage(msg, compact) {
     if (!msg || msg.role !== 'tool') return '';
     var body = {};
     try { body = JSON.parse(String(msg.content || '{}')); } catch (e) { body = {}; }
-    var out = {
-      tool: String(msg.name || (body && body.tool) || ''),
-      type: 'bridge-chat-res',
-      nonce: String(msg.tool_call_id || ''),
-      success: body.success !== false
-    };
-    if (out.success) out.result = body.result == null ? body : body.result;
-    else { out.error = body.error || ''; if (body.hint) out.hint = body.hint; }
-    return JSON.stringify(out);
+    var out = {};
+    for (var k in body) {
+      if (Object.prototype.hasOwnProperty.call(body, k)) out[k] = body[k];
+    }
+    out.tool = String(msg.name || (body && body.tool) || '');
+    out.type = 'bridge-chat-res';
+    out.nonce = nonceFromCallId(msg.tool_call_id || body.nonce || '');
+    if (out.success === undefined) out.success = true;
+    return compact ? JSON.stringify(out) : JSON.stringify(out, null, 2);
   }
 
   /** 按站点取方言策略：薄包装 dialects.pick，本体不重复实现分派。 */
@@ -172,6 +193,8 @@
     fetchCommands: fetchCommands,
     defaultDialect: defaultDialect,
     composePrompt: composePrompt,
+    callIdFromNonce: callIdFromNonce,
+    nonceFromCallId: nonceFromCallId,
     toToolCalls: toToolCalls,
     fromBlocks: fromBlocks,
     toToolMessage: toToolMessage,

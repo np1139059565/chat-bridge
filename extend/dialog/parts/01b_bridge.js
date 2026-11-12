@@ -139,6 +139,8 @@
         T.state.commandHelp = cmds.help;
         T.state.pack = pack;
         T.state.siteKey = key;
+        // 阶段 2：按当前站点取方言策略（翻译员本体分派，不为每站新建本体）。
+        T.state.dialect = T.dialectFor(key);
         this.commandDefinitions = cmds.commands;
         this.commandHelpText = cmds.help;
         this.systemPrompt = this.generateSystemPrompt();
