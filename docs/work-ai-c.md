@@ -234,6 +234,17 @@
   5. `.\scripts\quality_rules.py` 返回 0、零 `[新增]`；`.\scripts\check_doc_sync.py` 通过。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 
+### C-6 翻译员旧直调路径盘点（阶段 3 准备）
+
+- 交付物：
+  - 新增 `docs/c6-direct-path-inventory.md`：新标准链路与旧建卡直调路径的逐文件落点、两类占比口径、可摘除性评估（夹具、兜底、刷新恢复影响）与摘除前置。
+  - 本节追加完成记录，两者合成一次提交。
+- 取证结论：新链路标记命中 95 行 / 12 文件，旧直调 151 行 / 26 文件，协议标记 38 行 / 14 文件，9 文件混存；`state.toolCalls` 与 `card.toolCall` 在 extend/ 运行时无执行期下游消费者，仅三份接线测试断言，真实工具执行与刷新恢复整链仍由旧建卡候选驱动。旧直调路径当前不可摘除，须待 L10 接真实模型闭合、标准执行链落地、协议字段调用方迁移齐备后由分发方判定。
+- 验收实测：
+  1. `python scripts/hooks/check_js_tests.py`：440 tests / 440 pass / 0 fail；覆盖率门禁本机输出「跳过覆盖率门禁：未解析到覆盖率报告」，如实记为「跳过」，由分发方环境统一复验。
+  2. `python -m pytest tests -q -p no:cacheprovider`（`flask_server/` 下串行单进程）：1055 passed in 18.65s，零失败。
+  3. `pre-commit run --all-files`：七道钩子全 Passed，正常跑钩子。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
