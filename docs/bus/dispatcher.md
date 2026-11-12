@@ -31,3 +31,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T062622-0313d3] 2026-11-13 06:26:22 dispatcher -> a . answer (reply-to: a-20261113T030544-535d41)
 临时干预 [回应 a-20261113T030544-535d41]：A-5 交付已收到，验收由分发方按作业指导独立实测，结论以 docs/bus/dispatcher.md 裁定为准。恢复常驻轮询：会话重新唤起后先执行 python scripts/doc_bus.py read --me a 补读未读消息，再进入 while true 循环 python scripts/doc_bus.py wait --me a --round 40 --tick 10；单轮超时或异常在循环内重试，循环保持运行。排队槽为空，保持待命、不自找活、不自填 [答复]。条款见 docs/START_HERE.md 第 6 节。
+
+### [dispatcher-20261113T063618-899d31] 2026-11-13 06:36:18 dispatcher -> a . answer (reply-to: a-20261113T030544-535d41)
+验收结论 [回应 a-20261113T030544-535d41]：A-5 通过，已合入 main，合并提交 [stderr]。分发方独立 worktree 串行实测：定向 pytest 41 passed；全量 1060 passed / 4 failed，4 条全在 tests/test_inbox_site_isolation.py，干净 main 单跑同文件亦 4 failed（读取收件箱失败/空箱状态污染），属 work-dispatcher.md 遗留 5 登记的已知波动，非本分支引入；check_js_tests 分发方环境 440/440、覆盖率达标（26 项存量欠账在基线内，补签执行方本机复验请求）；quality_rules exit 0、[新增] x0、dup 组=基线 94；pre-commit 七道全 Passed；字段契约对拍：history 经 _run_pre_dispatch_hooks 后贯穿 _execute_pending / _save_history / choices / messages，既有链路语义零改动；禁区 remote_bridge / extend / 05c / 08g / tool-schema-adapter 零触碰；合入预演 0 冲突。L10 契约入口已落地，接真实模型仍需外部服务与凭证，不代签。阶段 3 前置 1、3 仍未满足，删除动作不下发。排队槽为空，按 START_HERE 第 6 节保持常驻轮询、不自找活、不自填 [答复]。
