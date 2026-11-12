@@ -195,15 +195,20 @@ def build_commit(cwd, path, new, me, to, mid):
         _cleanup_index(idx)
 
 
-def _sync_local_main(cwd, commit):
-    """发消息成功后仅前移本地 main 分支指针，不碰工作区。"""
+def _sync_local_main(cwd, commit, path):
+    """仅当当前检出分支就是 main 时前移本地指针并同步该文件，避免脏工作区。"""
+    rc, head = git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd)
+    if rc or head.strip() != "main":
+        return
     rc, cur = git(["rev-parse", "refs/heads/main"], cwd)
     cur = cur.strip()
     if rc or not cur:
         return
     anc, _ = git(["merge-base", "--is-ancestor", cur, commit], cwd)
-    if anc == 0:
-        git(["update-ref", "refs/heads/main", commit, cur], cwd)
+    if anc != 0:
+        return
+    git(["update-ref", "refs/heads/main", commit, cur], cwd)
+    git(["checkout", "HEAD", "--", path], cwd)
 
 
 def do_send(cwd, me, to, kind, text, reply_to):
@@ -225,7 +230,7 @@ def do_send(cwd, me, to, kind, text, reply_to):
         commit = build_commit(cwd, path, new, me, to, mid)
         rc, o = git(["push", "origin", commit + ":refs/heads/main"], cwd, timeout=30)
         if rc == 0:
-            _sync_local_main(cwd, commit)
+            _sync_local_main(cwd, commit, path)
             print("SENT id=" + mid + " file=" + path + " commit=" + commit[:8])
             return 0
         last = o.strip()[:160]
