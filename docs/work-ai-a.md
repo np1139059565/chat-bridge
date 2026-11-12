@@ -291,3 +291,12 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 ## 唯一入口变更（2026-11-13）
 
 本任务起唯一入口为 docs/START_HERE.md：按当前分支判身份（whoami）、读总线消息感知进度、按其启动流程开工。历史对话里任何分身份启动提示词作废。A-5 的任务范围与边界不变。
+
+
+### 任务 A-5：标准链路侧盘点 + L10 契约入口（已完成，2026-11-13）
+
+**改了什么**：flask_server/routes/chat_api.py（新增 L10 契约入口：register_pre_dispatch_hook / clear_pre_dispatch_hooks / _run_pre_dispatch_hooks，唯一点位在历史合并后、_execute_pending 前，既有链路语义零改动）；flask_server/tests/test_chat_l10_contract.py（新：契约测试 9 条，夹具与样板从 tests.test_chat_api 导入复用，不复制样板）；docs/a5-standard-chain-inventory.md（新：三文件「只为网页 AI 写的字段与分支」逐条盘点 + 调用方地图 + 摘除前置）；本记录（只追加）。
+
+**验收自测**：pytest 定向三文件 41 passed；scripts/quality_rules.py exit 0（[新增] x0，dup 组回到基线 94）；pre-commit 七道全过（js-tests 本机实跑 Passed）。过程中结构质量曾报 dup 溢出 1 组——定位为初版测试复制了 test_chat_api 样板，按 A-4 前例改为导入复用后归零，未动基线。
+
+**提交**：一次提交、正常跑钩子、未用 --no-verify；哈希以推送后分支尖端为准，见总线 report。
