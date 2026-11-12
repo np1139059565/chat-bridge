@@ -247,18 +247,44 @@ def do_send(cwd, me, to, kind, text, reply_to):
     raise SystemExit("send failed after 3 attempts: " + last)
 
 
+def _actor_from_branch(branch):
+    """按当前分支判身份；判不出返回 unknown。"""
+    return {"main": "dispatcher", "work/ai-a": "a",
+            "work/ai-b": "b", "work/ai-c": "c"}.get((branch or "").strip(), "unknown")
+
+
+def do_whoami(cwd, branch):
+    """打印当前分支与身份；unknown 时要求停下问，不自作主张。"""
+    if not branch:
+        rc, o = git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd)
+        branch = o.strip() if rc == 0 else "(detached)"
+    actor = _actor_from_branch(branch)
+    print("branch=" + branch)
+    print("actor=" + actor)
+    if actor == "unknown":
+        print("HINT: 判不出身份，停下来问分发方，别自作主张（见 docs/START_HERE.md 第 1 节）")
+        return 2
+    print("HINT: 后续 doc_bus 命令用 --me " + actor)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Git 文档总线 v1")
-    ap.add_argument("cmd", nargs="?", default="wait", choices=["init", "send", "read", "wait"])
-    ap.add_argument("--me", required=True, choices=ACTORS)
+    ap.add_argument("cmd", nargs="?", default="wait", choices=["init", "send", "read", "wait", "whoami"])
+    ap.add_argument("--me", default="")
     ap.add_argument("--to", default="all")
     ap.add_argument("--kind", default="report", choices=KINDS)
     ap.add_argument("--text", default="")
     ap.add_argument("--reply-to", dest="reply_to", default="")
     ap.add_argument("--round", dest="round_s", type=int, default=60)
     ap.add_argument("--tick", dest="tick_s", type=int, default=10)
+    ap.add_argument("--branch", default="", help="whoami 用：覆盖当前分支（自测用）")
     a = ap.parse_args()
+    if a.cmd != "whoami" and a.me not in ACTORS:
+        ap.error("--me 必须是 a/b/c/dispatcher（whoami 不需要）")
     cwd = git(["rev-parse", "--show-toplevel"], os.getcwd())[1].strip()
+    if a.cmd == "whoami":
+        sys.exit(do_whoami(cwd, a.branch))
     if a.cmd == "init":
         do_init(cwd, a.me)
     elif a.cmd == "read":

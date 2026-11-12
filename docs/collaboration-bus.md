@@ -79,3 +79,14 @@ Windows 下 Python 把 LF 转成 CRLF 写进 blob —— 每次 send 都在生�
 修复：git() 改用 bytes stdin 与 bytes 捕获（输出手动 utf-8 decode），
 show_remote 只读 stdout 并归一换行；既有四份消息文件经 git add --renormalize 统一为 LF。
 此后 send 生成的 blob、index、工作树三者同为 LF，status 保持干净。
+
+
+## 补记：单一入口与身份判定（2026-11-13）
+
+- **唯一入口改为 docs/START_HERE.md**：历史对话里四份分身份启动提示词一律作废；
+  所有 AI 新会话只贴一句通用引导语（见 START_HERE 第 0 节）即可开工。
+- 身份不再靠提示词注入：按当前分支判定，用 `python scripts/doc_bus.py whoami` 确认；
+  main→dispatcher、work/ai-a→a、work/ai-b→b、work/ai-c→c，其它→unknown（停下问）。
+- 「感知处境与进度」= START_HERE 第 2 节快照 + 启动时 read 全部总线消息 +
+  work-board / work-dispatcher 末节台账 + fetch 后实时分支尖端，不写死提交号。
+- 本协议其余规则不变：技术问答直接对，任务/验收/合入只归分发方。
