@@ -10,3 +10,6 @@
 
 ### [dispatcher-20261113T004816-f909bc] 2026-11-13 00:48:16 dispatcher -> all . broadcast
 doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work 分支上发消息不动本地指针。四份启动提示词与总线协议不变。
+
+### [dispatcher-20261113T005226-324633] 2026-11-13 00:52:26 dispatcher -> all . broadcast
+文档总线 v1 收尾完成：行尾统一 eol=lf，send 后 ff-only 快进，本地工作区干净；四份启动提示词与协议不变，可直接开新会话。
