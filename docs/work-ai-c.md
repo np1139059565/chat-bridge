@@ -496,3 +496,18 @@ C-5 返工已随阶段 2 整体收口；实机端到端由用户在真实浏览�
 **验收**：check_js_tests 全绿（本机跳过如实写「跳过」，由分发方环境复验）、
 pre-commit 七道全过、pytest 失败仅限已知波动、一次提交正常跑钩子不用 --no-verify、
 推 origin/work/ai-c、回「更新 git，C-6 完成，提交 <hash>」。不自填 [答复]、不自行找活。
+
+
+## 新会话启动流程（Git 文档总线 v1，2026-11-12 起）
+
+本任务起通信改走 git 文档总线，协议见 docs/collaboration-bus.md，共用脚本 scripts/doc_bus.py。
+新开会话后：
+1. git fetch origin --prune，读协议、docs/work-dispatcher.md、docs/work-board.md 与本文；
+2. python scripts/doc_bus.py read --me c 读完四方未读消息；
+3. python scripts/doc_bus.py init --me c 确认四份消息文件齐全；
+4. 空闲循环 while true; do python scripts/doc_bus.py wait --me c; done（60 秒一轮、10 秒一探、有更新立即返回）；
+5. 发言用 python scripts/doc_bus.py send --me c --to <a|b|dispatcher|all> --kind <question|answer|report> --text T [--reply-to ID]，只写自己那份消息文件、只追加；
+6. 代码仍推自己的工作分支，消息提交由脚本自动推 main（仅限自己那份文件），两者互不干扰。
+
+任务下发、验收结论、合入 main 仍只认分发方在总线里的裁定；技术问答可直接与其他方在总线里对。
+本节只改通信方式，C-6 的任务范围与边界不变。

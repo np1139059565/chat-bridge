@@ -271,3 +271,18 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 
 **验收**：pytest 定向全过、pre-commit 七道全过、一次提交正常跑钩子不用 --no-verify、
 推 origin/work/ai-a、回「更新 git，A-5 完成，提交 <hash>」。排队槽之外不自找活、不自填 [答复]。
+
+
+## 新会话启动流程（Git 文档总线 v1，2026-11-12 起）
+
+本任务起通信改走 git 文档总线，协议见 docs/collaboration-bus.md，共用脚本 scripts/doc_bus.py。
+新开会话后：
+1. git fetch origin --prune，读协议、docs/work-dispatcher.md、docs/work-board.md 与本文；
+2. python scripts/doc_bus.py read --me a 读完四方未读消息；
+3. python scripts/doc_bus.py init --me a 确认四份消息文件齐全；
+4. 空闲循环 while true; do python scripts/doc_bus.py wait --me a; done（60 秒一轮、10 秒一探、有更新立即返回）；
+5. 发言用 python scripts/doc_bus.py send --me a --to <b|c|dispatcher|all> --kind <question|answer|report> --text T [--reply-to ID]，只写自己那份消息文件、只追加；
+6. 代码仍推自己的工作分支，消息提交由脚本自动推 main（仅限自己那份文件），两者互不干扰。
+
+任务下发、验收结论、合入 main 仍只认分发方在总线里的裁定；技术问答可直接与其他方在总线里对。
+本节只改通信方式，A-5 的任务范围与边界不变。
