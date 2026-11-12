@@ -172,6 +172,17 @@
 
 ---
 
+### D-5 A-4 落地涉及两处范围外文件的占位行为残留，申请授权
+
+- 现状：A-4 标准链路已按 `docs/split-mirror-and-tools-service.md` 3.1 / 3.9 / 4.4 与决策 2 落地（调用意图只来自请求侧 `assistant.tool_calls`，服务端不再生成 assistant 文本，占位生成器整体移除）。
+- 残留一：`.\flask_server\scripts\check_chat_api.py`（A-1 交付的验收脚本）场景 1/2/3/6 锁定占位行为（场景 1 断言 content 非空、场景 2/6 靠 user 文本 `write_to_file({...})` 表达调用意图、场景 3 的 tool 消息用非标准 `_id` 字段）。A-4 之后这些场景与真实行为失配，脚本不再反映链路现状。
+- 残留二：`.\docs\api-reference.md` 第十四节「行为要点」含「阶段一占位生成器」描述与旧响应语义。
+- 已确认：两文件均不在 A-4「可以碰」清单；A-4 的三项验收（pytest 全量、pre-commit 七道、doc-sync）均不受其失配影响——脚本不入 pytest 收集，doc-sync 只校验路由与工具名收录。测试侧已在授权的 `tests\test_chat_api.py` 内改为标准语义（17 用例，含并行多调用、防重放、无 id 跳过、非法 arguments 信封）。
+- 申请：授权修改上述两文件（脚本场景与第十四节行为段同步为标准链路口径），或明确由分发方处理；答复前两处保持不动。
+
+
+---
+
 ## 五、完成记录
 
 > 每个任务完成后在此追加：任务编号、改了什么、验收结果、提交哈希。
@@ -216,6 +227,14 @@
 | 钩子 | 带入 `d1722e3` 修门产物后，380 前端测试全过、`pre-commit` 七道全 Passed |
 
 自述 1017 passed 与实测 1014+3 总数一致；两笔交付合入 `main` 时钩子正常重跑，未用 `--no-verify`。A 方待命。
+
+### 任务 A-4：阶段 2 后端标准链路（已完成）
+
+**改了什么**：.\flask_server\core\chat_completions.py——占位生成器与 declared_tool_names 死代码整体移除（决策 2 一刀切，不留开关）；新增 pending_tool_calls（tool_call_id 配对防重放：重发全量历史幂等、同 id 首次为准、无 id 跳过；调用意图只来自请求侧 assistant.tool_calls，规格 3.1 / 4.4）、execute_tool_call / tool_message_from_call（完整复用 routes/tools.py 现有管线「内置→自定义→未知」；tool content 为结果信封整体 JSON 字符串，决策 10）。.\flask_server\routes\chat_api.py——调用点改为执行历史中待回填的 tool_calls；choices.message 回声合并历史末条 assistant（无则空文本占位、只进响应不落盘）；finish_reason 按本轮是否执行工具取 tool_calls / stop；tools 声明降为纯类型校验（规格 3.9 低层执行器）。.\flask_server\tests\test_chat_api.py——重写为标准链路语义 17 用例（并行多调用按序回传、同 id 防重放、全量重发不重执行、无 id 跳过、非法 arguments → ToolParamError 信封、未知工具 available 清单、回声与 finish_reason 断言）。D-5 授权配套（见第四节提问，分发方已授权）：.\flask_server\scripts\check_chat_api.py 场景 1/2/3/6 断言与消息形态同步为标准链路口径（六场景数量与结构不变）；.\docs\api-reference.md 第十四节仅更新占位相关三处（导语、model 缺省值、行为要点末条），未新增场景、未改其它章节。
+
+**验收自测**：python -m pytest tests -q → 1032 passed in 17.63s（A-3 后基线 1024 passed + 1 已知波动，本轮波动未触发，净增 7 用例零失败）；scripts\check_chat_api.py 六场景全过 exit 0；pre-commit run --all-files 七道全 Passed、quality_rules 零 [新增]（pending_tool_calls 拆出 _answered_call_ids、test_single_tool_call 拆断言助手后达标）。
+
+**提交**：本任务六文件单提交（core + routes + tests + 验收脚本 + api-reference + 本记录），提交钩子全过、未用 --no-verify；哈希以推送后分支尖端为准，见对话回复。
 
 ## 当前任务（A-4，2026-11-11 下发）：阶段 2 后端标准链路
 

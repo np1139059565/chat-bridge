@@ -97,7 +97,7 @@ def _setup_client():
 
 
 def case_plain_chat(client, work):
-    """场景 1：单轮纯文本对话 → 一条无 tool_calls 的 assistant 文本。"""
+    """场景 1：单轮纯文本对话 → 无调用意图，不执行任何工具。"""
     p = []
     r = client.post(CHAT_URL, json={
         "site_key": "acc-plain",
@@ -106,39 +106,44 @@ def case_plain_chat(client, work):
     _expect(p, r.status_code == 200, "HTTP %s" % r.status_code)
     msg = _pick_message(r)
     _expect(p, msg.get("role") == "assistant", "role=%r" % msg.get("role"))
-    _expect(p, isinstance(msg.get("content"), str) and bool(msg.get("content")),
-            "content 应为非空文本")
+    _expect(p, isinstance(msg.get("content"), str),
+            "content 应为字符串（服务端不再代生成文本）")
     _expect(p, not msg.get("tool_calls"), "不应出现 tool_calls")
     return p
 
 
 def case_tool_call(client, work):
-    """场景 2：单轮带一个工具调用 → 返回含 tool_calls 的 assistant 消息。"""
+    """场景 2：请求侧声明调用 → 服务端执行并回传 tool 结果与回声。"""
     p = []
     target = Path(work) / "scenario2.txt"
     args = json.dumps({"path": str(target), "content": "acc"}, ensure_ascii=False)
     r = client.post(CHAT_URL, json={
         "site_key": "acc-tool",
-        "messages": [_user("write_to_file(%s)" % args)],
+        "messages": [
+            _user("帮我写文件"),
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call-acc-2", "type": "function",
+                 "function": {"name": "write_to_file", "arguments": args}}]},
+        ],
         "tools": _tools_decl(),
     })
     _expect(p, r.status_code == 200, "HTTP %s" % r.status_code)
     msg = _pick_message(r)
     calls = msg.get("tool_calls") or []
-    _expect(p, len(calls) == 1, "tool_calls 应恰好 1 个，实际 %d" % len(calls))
-    if calls:
-        fn = calls[0].get("function") or {}
-        _expect(p, fn.get("name") == "write_to_file", "工具名=%r" % fn.get("name"))
-        written = target.is_file() and target.read_text(encoding="utf-8") == "acc"
-        _expect(p, written, "服务端应已真实执行写入并落盘")
+    _expect(p, len(calls) == 1, "回声 assistant 应含 1 个调用，实际 %d" % len(calls))
+    tool_msgs = [m for m in (r.get_json(silent=True) or {}).get("messages") or []
+                 if m.get("role") == "tool"]
+    _expect(p, len(tool_msgs) == 1, "服务端应回传 1 条 tool 结果，实际 %d" % len(tool_msgs))
+    written = target.is_file() and target.read_text(encoding="utf-8") == "acc"
+    _expect(p, written, "服务端应已真实执行写入并落盘")
     return p
 
 
 def case_tool_result_feedback(client, work):
-    """场景 3：传入 tool 角色结果后，能继续生成下一轮 assistant 文本。"""
+    """场景 3：已回填结果的调用不重复执行，轮次正常收尾。"""
     p = []
     msgs = [
-        _user('write_to_file({"path": "acc-scenario3"})'),
+        _user("帮我查一下再写"),
         {"role": "assistant", "content": None, "tool_calls": [
             {"id": "call-acc-3", "type": "function",
              "function": {"name": "write_to_file", "arguments": "{}"}}]},
@@ -151,10 +156,13 @@ def case_tool_result_feedback(client, work):
         "tools": _tools_decl(),
     })
     _expect(p, r.status_code == 200, "HTTP %s" % r.status_code)
+    body = r.get_json(silent=True) or {}
+    tool_msgs = [m for m in body.get("messages") or [] if m.get("role") == "tool"]
+    _expect(p, len(tool_msgs) == 1, "已回填结果的调用不应再次执行，tool 消息实际 %d" % len(tool_msgs))
     msg = _pick_message(r)
-    _expect(p, isinstance(msg.get("content"), str) and bool(msg.get("content")),
-            "工具结果之后应继续生成文本")
-    _expect(p, not msg.get("tool_calls"), "不应再次触发工具")
+    calls = msg.get("tool_calls") or []
+    _expect(p, len(calls) == 1 and calls[0].get("id") == "call-acc-3",
+            "回声应带出末条 assistant 的调用声明")
     return p
 
 
@@ -198,7 +206,12 @@ def case_tool_error_envelope(client, work):
     p = []
     r = client.post(CHAT_URL, json={
         "site_key": "acc-error",
-        "messages": [_user("write_to_file({})")],
+        "messages": [
+            _user("写文件"),
+            {"role": "assistant", "content": None, "tool_calls": [
+                {"id": "call-acc-6", "type": "function",
+                 "function": {"name": "write_to_file", "arguments": "{}"}}]},
+        ],
         "tools": _tools_decl(),
     })
     _expect(p, r.status_code == 200, "工具失败不应变成 5xx：HTTP %s" % r.status_code)

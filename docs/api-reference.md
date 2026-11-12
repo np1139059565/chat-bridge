@@ -804,8 +804,8 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 ## 十四、标准对话接口（/v1/chat/completions）
 
 任务 A-1（阶段一）的 OpenAI 风格对话入口：客户端发标准 messages / tools，
-服务端完成校验、历史合并、（占位）生成与工具执行后返回标准 choices 结构。
-路由见 `flask_server/routes/chat_api.py`；消息规范化、占位生成、工具执行
+服务端完成校验、历史合并、与工具执行后返回标准 choices 结构。
+路由见 `flask_server/routes/chat_api.py`；消息规范化、工具执行
 与会话存储的内部实现见 `flask_server/core/chat_completions.py`。
 
 ### POST /v1/chat/completions
@@ -818,7 +818,7 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 - `tools`（数组，可选）：OpenAI 风格工具声明（JSON Schema）；缺省视为空。
 - `site_key`（字符串，可选）：会话标识，仅允许字母、数字、下划线、连字符，
   长度 1-64；缺省由服务端生成并在响应中返回。
-- `model`（字符串，可选）：透传字段；缺省 "chat-bridge-placeholder"。
+- `model`（字符串，可选）：透传字段；缺省 "chat-bridge"。
 - `stream`（布尔，可选）：传 true 时明确拒绝（HTTP 400，
   code=stream_not_supported），不静默降级。
 
@@ -839,9 +839,13 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 - 存储健壮性（A-3）：会话文件损坏（非法 JSON / 非列表）时改名 .bad 保留
   并记告警日志，历史自空重建、接口不中断；同一 site_key 并发落盘采用唯一
   临时文件名 + replace 串行化，互不覆盖。
-- 阶段一未接入真实模型：assistant 轮由服务端占位生成器按可解释规则产生
-  （识别「工具名({...})」显式参数表达、防同一工具重放），阶段 2 接入
-  翻译员后仅替换生成器。
+- 阶段 2 标准链路（A-4）：调用意图只来自请求侧 assistant.tool_calls（翻译员
+  把网页 AI 的 bridge-chat-call 代码块翻译成标准 tool_calls 送入，规格
+  3.1 / 4.4）；服务端执行历史中尚未回填结果的调用并按序回传，防重放以
+  tool_call_id 配对，重发全量历史天然幂等；服务端不生成 assistant 文本
+  （占位生成器已整体移除），choices.message 回声合并历史末条 assistant
+  （无则空文本占位、不落盘），finish_reason 按本轮是否执行工具取
+  tool_calls / stop。
 
 响应（HTTP 200）：标准 choices 结构 + usage 粗估（字符数 // 4）+ 扩展字段
 site_key 与 messages（本轮合并后的完整消息序列，含 tool 结果，供客户端
