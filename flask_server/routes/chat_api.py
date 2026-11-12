@@ -1,10 +1,14 @@
-"""标准对话接口（任务 A-1）：POST /v1/chat/completions。
+"""标准对话接口（任务 A-1；A-4 接入标准链路）：POST /v1/chat/completions。
 
 职责：
 - 接收标准 OpenAI 风格请求体（messages / tools / site_key / model / stream）；
 - stream=true 时明确拒绝（HTTP 400，不静默降级，验收场景 5）；
-- 调 core/chat_completions.py 完成校验、占位生成、工具执行（完整复用
-  routes/tools.py 现有管线）、历史合并与落盘；
+- 调 core/chat_completions.py 完成校验、历史合并与工具执行（完整复用
+  routes/tools.py 现有管线）；
+- 调用意图只来自请求侧 assistant.tool_calls（翻译员把网页 AI 的
+  bridge-chat-call 代码块翻译而来，规格 3.1 / 4.4）：服务端执行历史中
+  尚未回填结果的调用，以标准 tool 消息回传；服务端不生成 assistant
+  文本（阶段 2 起占位生成器移除，决策 2）；
 - 返回标准 choices 结构，并附 site_key / messages 扩展字段：
   messages 是本轮合并后的完整消息序列（含 tool 结果），供客户端
   断言与续接（docs/split-mirror-and-tools-service.md 决策 14）。
@@ -52,14 +56,13 @@ def _parse_payload():
     return payload
 
 
-def _parse_tool_names(payload):
-    """提取并校验 tools 声明，返回其中的工具名列表。"""
+def _validate_tools(payload):
+    """tools 声明只做类型校验；服务端是低层执行器，不据其过滤执行（规格 3.9）。"""
     tools = payload.get("tools")
     if tools is None:
-        tools = []
+        return
     if not isinstance(tools, list):
         raise InvalidChatRequest("tools 必须是数组")
-    return cc.declared_tool_names(tools)
 
 
 def _resolve_session_key(payload):
@@ -73,15 +76,16 @@ def _resolve_session_key(payload):
     return site_key or cc.new_site_key()
 
 
-def _run_tool_round(history, reply, tool_names):
-    """执行 reply 的 tool_calls 并续写下一轮文本，返回本轮全部消息。"""
-    round_messages = [reply]
-    for call in reply["tool_calls"]:
+def _execute_pending(history):
+    """执行历史中尚未回填结果的调用，返回本轮新增消息（tool 结果序列）。
+
+    防重放由 cc.pending_tool_calls 按 tool_call_id 配对完成：已回填的
+    调用不再执行，重发全量历史天然幂等；并行多调用逐个执行、按序回传。
+    """
+    round_messages = []
+    for call in cc.pending_tool_calls(history):
         body = cc.execute_tool_call(call)
         round_messages.append(cc.tool_message_from_call(call, body))
-    # 工具刚执行完：续写下一轮文本回复
-    # （占位生成器遇 tool 结尾出文本，不会再次触发工具）。
-    round_messages.append(cc.generate_reply(history + round_messages, tool_names))
     return round_messages
 
 
@@ -95,20 +99,33 @@ def _save_history(site_key, final_history):
         )
 
 
-def _build_response(payload, reply, round_messages, final_history, site_key):
+def _echo_message(final_history):
+    """choices.message 回传合并历史最后一条 assistant 消息（标准链路回声）。
+
+    标准链路里 assistant 消息由客户端产生并送入；这里回声末条，客户端
+    无需自行回查。历史里没有 assistant（纯 system/user 开局）时给一条
+    空文本 assistant 结构占位回声——只进响应、不落盘（保持历史纯标准）。
+    """
+    for m in reversed(final_history):
+        if m.get("role") == "assistant":
+            return m
+    return {"role": "assistant", "content": ""}
+
+
+def _build_response(payload, round_messages, final_history, site_key):
     """组装标准 choices 响应（usage 粗估 + site_key / messages 扩展字段）。"""
     prompt_chars = sum(len(m.get("content") or "") for m in final_history)
     completion_chars = sum(len(m.get("content") or "") for m in round_messages)
-    finish_reason = "tool_calls" if reply.get("tool_calls") else "stop"
+    finish_reason = "tool_calls" if round_messages else "stop"
     return {
         "id": "chatcmpl-" + uuid.uuid4().hex[:24],
         "object": "chat.completion",
         "created": int(time.time()),
-        "model": payload.get("model") or "chat-bridge-placeholder",
+        "model": payload.get("model") or "chat-bridge",
         "choices": [
             {
                 "index": 0,
-                "message": reply,
+                "message": _echo_message(final_history),
                 "finish_reason": finish_reason,
             }
         ],
@@ -125,11 +142,11 @@ def _build_response(payload, reply, round_messages, final_history, site_key):
 
 @bp.route("/v1/chat/completions", methods=["POST"])
 def chat_completions():
-    """POST /v1/chat/completions：校验 -> 合并历史 -> 占位生成 -> 落盘 -> 响应。"""
+    """POST /v1/chat/completions：校验 -> 合并历史 -> 执行待执行调用 -> 落盘 -> 响应。"""
     try:
         payload = _parse_payload()
         incoming = cc.normalize_messages(payload.get("messages"))
-        tool_names = _parse_tool_names(payload)
+        _validate_tools(payload)
         site_key = _resolve_session_key(payload)
     except cc.ChatAPIError as e:
         return jsonify(_error_body(e.message)), e.status
@@ -137,16 +154,10 @@ def chat_completions():
         return jsonify(_error_body(e.message, code=e.code)), 400
 
     history = cc.merge_history(cc.load_session(site_key), incoming)
-    reply = cc.generate_reply(history, tool_names)
-
-    round_messages = [reply]
-    if reply.get("tool_calls"):
-        # 服务端经现有链路执行工具（实现原则 1），
-        # 结果信封 JSON 化入 tool 消息（实现原则 2、决策 10）。
-        round_messages = _run_tool_round(history, reply, tool_names)
+    round_messages = _execute_pending(history)
 
     final_history = history + round_messages
     _save_history(site_key, final_history)
     return jsonify(
-        _build_response(payload, reply, round_messages, final_history, site_key)
+        _build_response(payload, round_messages, final_history, site_key)
     )

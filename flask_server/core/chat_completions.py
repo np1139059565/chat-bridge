@@ -1,11 +1,15 @@
-"""标准对话接口的内部实现（任务 A-1）：消息转换、占位生成、会话存储。
+"""标准对话接口的内部实现（任务 A-1；A-4 接入标准链路）：消息转换、
+待执行调用提取、工具执行、会话存储。
 
 职责边界（见 docs/work-ai-a.md 与 docs/split-mirror-and-tools-service.md）：
 - 接收标准 OpenAI 风格 messages / tools，做校验与规范化；
+- 调用意图只来自请求侧 assistant.tool_calls（网页 AI 的 bridge-chat-call
+  代码块由翻译员翻成标准 tool_calls 送入本接口，规格 3.1 / 4.4）；
+  服务端执行后以标准 tool 消息回传，客户端据此续发下一轮请求；
 - 工具执行复用 routes/tools.py 的现有管线（内置 -> 自定义 -> 未知），
   不新建执行器，不改 tools/ 下任何文件；
-- 阶段一未接真实模型，assistant 轮由占位生成器按可解释规则产生，
-  阶段 2 接入翻译员后只需替换 generate_reply；
+- 服务端不生成 assistant 文本：阶段 2 起占位生成器整体移除（决策 2
+  一刀切，不留开关），assistant 轮由模型链路（经翻译员）产生；
 - 会话历史按 site_key 落盘（JSON 文件），支持多轮延续。
 
 导入风格与 routes/tools.py 一致：flask_server 目录在 sys.path 中，用顶层导入。
@@ -122,6 +126,8 @@ def _merge_tool_fields(m, item):
         item["tool_call_id"] = str(m["tool_call_id"])
     if m.get("name"):
         item["name"] = str(m["name"])
+
+
 def _sanitize_tool_calls(tcs):
     """清洗 tool_calls：只保留 id / type / function（name+arguments），丢弃网页场景附加字段。"""
     out = []
@@ -134,129 +140,45 @@ def _sanitize_tool_calls(tcs):
     return out
 
 
-def declared_tool_names(tools):
-    """从标准 tools 声明里提取工具名列表。
-
-    本任务原样接收外部传入的标准 JSON Schema（容器是对象、必填是顶层数组），
-    不依赖阶段 1b 的内部声明改造；这里只读 name 用于占位判定。
-    """
-    names = []
-    if not isinstance(tools, list):
-        return names
-    for t in tools:
-        if not isinstance(t, dict):
-            continue
-        fn = t.get("function")
-        if isinstance(fn, dict) and fn.get("name"):
-            names.append(str(fn["name"]))
-        elif t.get("name"):
-            names.append(str(t["name"]))
-    return names
+def _answered_call_ids(messages):
+    """收集历史中所有已回填结果的 tool_call_id（str 归一）集合。"""
+    return {
+        str(m["tool_call_id"])
+        for m in messages
+        if m.get("role") == "tool" and m.get("tool_call_id")
+    }
 
 
-# 占位生成器：识别「工具名({...})」形式的显式参数表达，其余按空参数处理
-_CALL_ARGS_RE = re.compile(r"([A-Za-z0-9_\-]+)\s*[\(（]\s*(\{.*?\})\s*[\)）]", re.S)
-
-
-def generate_reply(messages, tool_names):
-    """阶段一占位生成：决定本轮 assistant 消息（文本或 tool_calls）。
-
-    规则（可解释、无外部依赖，阶段 2 由真实模型替换）：
-    - 上一条消息是 tool 结果：直接出文本（工具刚执行完，该出文本了，
-      同时避免占位器对同一工具反复触发）；
-    - tools 非空且最近一条 user 文本中出现某声明工具名：返回含
-      tool_calls 的 assistant；文本里有 名字({...}) 时解析其中的 JSON
-      对象作 arguments，否则空参数 "{}"（不合法参数会走工具的参数错误
-      信封，正好覆盖验收场景 6）；
-    - 防重放：该 user 文本之后若已存在针对同一工具的 tool_calls
-      assistant（客户端在重发历史），视为重放，直接出文本；
-    - 其余：纯文本占位回复，不含 tool_calls。
-    """
-    if messages and messages[-1].get("role") == "tool":
-        return _text_reply("已收到工具结果并继续生成下一轮（阶段一未接入真实模型）。")
-    user_text = _last_user_text(messages)
-    picked = _pick_tool(user_text, tool_names) if tool_names and user_text else None
-    if picked is None:
-        return _text_reply(
-            "已收到 %d 条消息（阶段一未接入真实模型，此回复由服务端占位生成器产生）。"
-            % len(messages)
-        )
-    start = _last_user_index(messages, user_text)
-    if picked in _called_tools_after(messages, start):
-        return _text_reply("该工具已执行过，结果见历史中的 tool 消息（阶段一占位生成器）。")
-    return _tool_call_reply(picked, _parse_call_args(user_text, picked))
-
-
-def _text_reply(text):
-    """构造纯文本 assistant 占位回复。"""
-    return {"role": "assistant", "content": "[占位回复] " + text}
-
-
-def _last_user_text(messages):
-    """最近一条带内容的 user 文本；无则返回空串。"""
-    for m in reversed(messages):
-        if m.get("role") == "user" and m.get("content"):
-            return m["content"]
-    return ""
-
-
-def _pick_tool(user_text, tool_names):
-    """返回 user 文本中出现的第一个已声明工具名；无则 None。"""
-    for name in tool_names:
-        if name in user_text:
-            return name
+def _pending_key(tc, answered, seen):
+    """归一化调用 id 并判重；应跳过（无 id / 已回填 / 本轮已收）返回 None。"""
+    key = str(tc.get("id") or "")
+    if key and key not in answered and key not in seen:
+        return key
     return None
 
 
-def _last_user_index(messages, user_text):
-    """定位该 user 文本最后一次出现的位置，返回其后第一条的下标。"""
-    start = 0
-    for i, m in enumerate(messages):
-        if m.get("role") == "user" and m.get("content") == user_text:
-            start = i + 1
-    return start
+def pending_tool_calls(messages):
+    """收集历史中尚未回填 tool 结果的调用，按提交顺序返回（A-4 标准链路）。
 
-
-def _called_tools_after(messages, start):
-    """收集 messages[start:] 中 assistant 已通过 tool_calls 调过的工具名。"""
-    names = set()
-    for m in messages[start:]:
+    调用意图只来自请求侧 assistant.tool_calls；防重放以 tool_call_id 配对：
+    已回填结果的调用不再重复执行，客户端重发全量历史天然幂等；
+    同一 id 多次声明以首次为准；无 id 的调用无法与 tool 结果配对，
+    跳过——无法定位结果的调用不该执行，否则每轮都会重放。
+    """
+    answered = _answered_call_ids(messages)
+    out = []
+    seen = set()
+    for m in messages:
         if m.get("role") != "assistant":
             continue
         for tc in m.get("tool_calls") or ():
-            fn = tc.get("function") or {}
-            if fn.get("name"):
-                names.add(fn["name"])
-    return names
-
-
-def _parse_call_args(user_text, picked):
-    """解析「工具名({...})」显式参数中的 JSON 对象；无或非法返回 "{}"。"""
-    m = _CALL_ARGS_RE.search(user_text)
-    if not m or m.group(1) != picked:
-        return "{}"
-    try:
-        parsed = json.loads(m.group(2))
-    except Exception:
-        return "{}"
-    if isinstance(parsed, dict):
-        return json.dumps(parsed, ensure_ascii=False)
-    return "{}"
-
-
-def _tool_call_reply(picked, args_json):
-    """构造含 tool_calls 的 assistant 占位回复（单工具调用）。"""
-    return {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "call_" + uuid.uuid4().hex[:12],
-                "type": "function",
-                "function": {"name": picked, "arguments": args_json},
-            }
-        ],
-    }
+            if not isinstance(tc, dict):
+                continue
+            key = _pending_key(tc, answered, seen)
+            if key:
+                seen.add(key)
+                out.append(tc)
+    return out
 
 
 def _response_to_body(resp):
@@ -418,6 +340,8 @@ def load_session(site_key):
         _backup_broken(site_key, fp, "顶层不是列表")
         return []
     return data
+
+
 def _backup_broken(site_key, fp, why):
     """损坏会话文件的诊断兜底：改名 .bad 保留 + 告警日志，不中断接口。"""
     backup = fp.with_name(fp.name + ".bad")
