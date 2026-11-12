@@ -43,3 +43,5 @@
 *.ttf     binary
 *.eot     binary
 
+docs/bus/*.md text eol=lf
+scripts/doc_bus.py text eol=lf

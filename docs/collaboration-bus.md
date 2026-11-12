@@ -44,7 +44,7 @@ PowerShell：while ($true) { python scripts/doc_bus.py wait --me a }
 
 send 的实现：用 git 底层对象（临时 index + commit-tree）构造只含自己那份文件的提交并推送，
 全程不依赖当前 HEAD 与工作区状态；并发 push 被拒时自动基于最新 main 重建重试最多 3 次，
-不丢他人消息。游标按身份分文件存于 git 内部目录、不入库（同一克隆里四方各读各的，不互相吞消息），跨轮跨会话按 ID 去重；发消息成功后，仅当当前检出分支就是 main 时，脚本才前移本地 main 指针并把该文件同步到新提交（避免 index 与 HEAD 错位留下脏状态）；在 work/ai-* 等工作分支上脚本不动本地任何东西，消息由下次 fetch/rebase 自然带入。
+不丢他人消息。游标按身份分文件存于 git 内部目录、不入库（同一克隆里四方各读各的，不互相吞消息），跨轮跨会话按 ID 去重；发消息成功后，仅当当前检出分支就是 main 时，脚本用标准 git merge --ff-only 把本地 main 快进到刚推送的提交（index 与工作树一起同步）；本地有未提交改动无法快进时打印 SYNC_SKIPPED、不强行改动。仓库 .gitattributes 固定 docs/bus/*.md 与脚本为 eol=lf，消除 Windows autocrlf 行尾噪声。在 work/ai-* 等工作分支上脚本不动本地任何东西，消息由下次 fetch/rebase 自然带入。
 
 ## 四、规则边界
 

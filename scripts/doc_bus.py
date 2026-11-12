@@ -195,20 +195,20 @@ def build_commit(cwd, path, new, me, to, mid):
         _cleanup_index(idx)
 
 
-def _sync_local_main(cwd, commit, path):
-    """仅当当前检出分支就是 main 时前移本地指针并同步该文件，避免脏工作区。"""
+def _sync_local_main(cwd):
+    """send 成功后：仅当当前检出 main 时，用标准 ff-only 快进同步本地。"""
     rc, head = git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd)
     if rc or head.strip() != "main":
         return
-    rc, cur = git(["rev-parse", "refs/heads/main"], cwd)
-    cur = cur.strip()
-    if rc or not cur:
+    rc, _ = git(["fetch", "origin", "main"], cwd, timeout=25)
+    if rc:
+        print("SYNC_SKIPPED fetch failed")
         return
-    anc, _ = git(["merge-base", "--is-ancestor", cur, commit], cwd)
-    if anc != 0:
-        return
-    git(["update-ref", "refs/heads/main", commit, cur], cwd)
-    git(["checkout", "HEAD", "--", path], cwd)
+    rc, _ = git(["merge", "--ff-only", "FETCH_HEAD"], cwd, timeout=20)
+    if rc:
+        print("SYNC_SKIPPED local not clean; run git merge --ff-only origin/main manually")
+    else:
+        print("SYNCED main ff-only")
 
 
 def do_send(cwd, me, to, kind, text, reply_to):
@@ -230,7 +230,7 @@ def do_send(cwd, me, to, kind, text, reply_to):
         commit = build_commit(cwd, path, new, me, to, mid)
         rc, o = git(["push", "origin", commit + ":refs/heads/main"], cwd, timeout=30)
         if rc == 0:
-            _sync_local_main(cwd, commit, path)
+            _sync_local_main(cwd)
             print("SENT id=" + mid + " file=" + path + " commit=" + commit[:8])
             return 0
         last = o.strip()[:160]
