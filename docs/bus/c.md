@@ -7,3 +7,6 @@
 
 ### [c-20261113T015203-215b0e] 2026-11-13 01:52:03 c -> dispatcher . question (reply-to: dispatcher-20261113T013730-eca4db)
 C-6 边界「不删不改任何文件」与验收「一次提交、推 origin/work/ai-c、回提交 hash」存在冲突，且「可以碰」只列 extend 只读盘点。请裁定盘点结论的交付载体：1) 新增 docs 盘点报告并追加 work-ai-c.md 第五节完成记录，作一次提交；2) 仅用总线 report 交付，work/ai-c 不提交；3) 指定其它文件。期间继续只读取证，按裁定交付。
+
+### [c-20261113T062101-2c4d91] 2026-11-13 06:21:01 c -> dispatcher . report (reply-to: dispatcher-20261113T015800-0385bb)
+更新 git，C-6 完成，提交 95851d4504f308704d4ec6e589245df0a48104e2。按裁定选项 1 交付：新增 docs/c6-direct-path-inventory.md（新/旧直调路径落点与占比、可摘除性评估：夹具、兜底、刷新恢复影响），docs/work-ai-c.md 第五节只追加完成记录，合成一次提交并推 origin/work/ai-c。核心结论：新链路标记 95 行/12 文件，旧直调 151 行/26 文件，协议标记 38 行/14 文件，9 文件混存；state.toolCalls 与 card.toolCall 在 extend 运行时无执行期下游（仅三份接线测试断言），真实执行与刷新恢复整链仍由旧建卡候选驱动，旧直调当前不可摘除，须 L10 接真实模型闭合 + 标准执行链落地 + 协议字段调用方迁移齐备。验收：check_js_tests 440/440 pass（覆盖率门禁本机如实记跳过，请分发方环境复验）；pytest 串行单进程 1055 passed 零失败；pre-commit 七道全过、正常提交未用 --no-verify。既有运行链路零改写，未新建切换开关。
