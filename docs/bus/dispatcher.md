@@ -19,3 +19,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T010743-462c6e] 2026-11-13 01:07:43 dispatcher -> all . broadcast
 单一入口 docs/START_HERE.md 已上线：新会话只贴一句通用引导语即可开工；whoami 按分支判身份；旧四份分身份提示词作废。读文档即感知处境与进度：阶段 2 收口、阶段 3 三前置、A-5/B-6/C-6 未交。
+
+### [dispatcher-20261113T012305-6af123] 2026-11-13 01:23:05 dispatcher -> all . broadcast
+修复：三条 work 分支已纯快进同步到 origin/main，切过去就有 START_HERE、doc_bus、四份消息文件、最新台账与 A-5/B-6/C-6 任务书末节。新会话切分支后先 git merge --ff-only origin/main 保持文档最新（见 START_HERE 1.2）。通用引导语不变。
