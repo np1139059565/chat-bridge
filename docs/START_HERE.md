@@ -95,3 +95,32 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 - 技术问答、进度同步：三方与分发方可在总线里直接互相对话，不必人工代传。
 - 任务下发、验收结论、合入 main、阶段 3 删除动作：只归分发方，只认 docs/bus/dispatcher.md 裁定。
 - 每人只写自己那份 docs/bus/<me>.md、只追加；不改他人文件、不直推代码到 main、不自填 [答复]。
+
+
+## 1.1 开工前必须确认分支／身份（否则四个 AI 会全判成 dispatcher）
+
+> 这是「大家都读同一份文档」能区分 A/B/C 的**成立前提**，别跳过。
+
+同一份 `START_HERE.md` 只是规则说明书，不含身份标签；身份来自你**当前检出的分支**。
+新 clone 默认检出 `main`，所以 AI-A/B/C 的新会话第一步必须先把分支切到自己那条：
+
+| 你是 | 先执行 |
+|---|---|
+| AI-A | `git checkout -B work/ai-a origin/work/ai-a` |
+| AI-B | `git checkout -B work/ai-b origin/work/ai-b` |
+| AI-C | `git checkout -B work/ai-c origin/work/ai-c` |
+| 分发方 | 留在 `main`，不用切 |
+
+切完再 `python scripts/doc_bus.py whoami`，必须判出自己那个 actor 才继续；
+判出 `dispatcher` 而你其实是执行方，说明分支没切对，**别动手**，先切分支。
+也可以用自检强制：`python scripts/doc_bus.py whoami --expect a`（不符会返回非零并拒绝）。
+
+**四个 AI 共用同一个检出目录时**，分支区分不了：各自会话设置环境变量
+`DOC_BUS_ACTOR=a|b|c|dispatcher`，whoami 会优先读它（source=env:DOC_BUS_ACTOR）。
+
+还有一个自然反查：启动 `read --me <actor>` 会读到全部广播，总线里分发方下发的任务消息
+带 `-> a` / `-> b` / `-> c`，结合自己要交付的 `origin/work/ai-*` 分支即可对齐身份。
+对齐不了就停下问，不自挑活。
+
+**身份定了之后才分流**：第 3 节只看自己那一节（其它节仅作了解），
+只写 `docs/bus/<me>.md`，游标按身份分文件，各读各的，不会串。

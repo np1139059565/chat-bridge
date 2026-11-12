@@ -90,3 +90,14 @@ show_remote 只读 stdout 并归一换行；既有四份消息文件经 git add 
 - 「感知处境与进度」= START_HERE 第 2 节快照 + 启动时 read 全部总线消息 +
   work-board / work-dispatcher 末节台账 + fetch 后实时分支尖端，不写死提交号。
 - 本协议其余规则不变：技术问答直接对，任务/验收/合入只归分发方。
+
+
+## 补记：同一份入口文档如何区分 A/B/C（2026-11-13）
+
+- 四方读同一份 docs/START_HERE.md；身份**不靠提示词、不靠文件**，靠各自会话当前检出的 git 分支
+  （whoami：main→dispatcher、work/ai-a→a、work/ai-b→b、work/ai-c→c）。
+- 成立前提：新 clone 默认在 main，执行方必须先按 START_HERE 第 1.1 节切到自己分支再 whoami；
+  判出 dispatcher 而自己是执行方即停下，不以错身份开工。
+- 共用同一检出目录时分支区分失效：用环境变量 DOC_BUS_ACTOR 显式指定，whoami 优先读它；
+  也支持 --expect 自检（不符返回非零）。
+- 通用引导语不变，仍是一句；协议其余规则不变。

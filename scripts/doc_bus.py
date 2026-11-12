@@ -253,19 +253,46 @@ def _actor_from_branch(branch):
             "work/ai-b": "b", "work/ai-c": "c"}.get((branch or "").strip(), "unknown")
 
 
-def do_whoami(cwd, branch):
-    """打印当前分支与身份；unknown 时要求停下问，不自作主张。"""
+def _actor_from_env():
+    """显式环境变量优先；返回 (actor, source)。"""
+    v = os.environ.get("DOC_BUS_ACTOR", "").strip()
+    return (v, "env:DOC_BUS_ACTOR") if v in ACTORS else ("unknown", "branch")
+
+
+def _whoami_verdict(actor, expect):
+    """expect 不符时返回非零退出码。"""
+    if expect and expect in ACTORS and actor != expect:
+        print("MISMATCH: 期望 " + expect + " 但判出 " + actor + "；先切到自己的 work/ai-* 分支或设置 DOC_BUS_ACTOR，别以错身份开工")
+        return 2
+    return 0
+
+
+def _whoami_hints(actor):
+    """按身份打印提示；unknown 时返回 True 表示需停下。"""
+    if actor == "unknown":
+        print("HINT: 判不出身份，停下来问分发方，别自作主张（见 docs/START_HERE.md 第 1 节）")
+        return True
+    if actor == "dispatcher":
+        print("HINT: 若你是执行方 AI，说明还在默认 main 分支；按 START_HERE 第 1.1 节切到自己的 work/ai-* 再继续，不要以分发方身份动手")
+    print("HINT: 后续 doc_bus 命令用 --me " + actor)
+    return False
+
+
+def do_whoami(cwd, branch, expect=""):
+    """打印当前分支与身份；判错或判不出即停下。"""
+    actor, src = _actor_from_env()
     if not branch:
         rc, o = git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd)
         branch = o.strip() if rc == 0 else "(detached)"
-    actor = _actor_from_branch(branch)
-    print("branch=" + branch)
-    print("actor=" + actor)
     if actor == "unknown":
-        print("HINT: 判不出身份，停下来问分发方，别自作主张（见 docs/START_HERE.md 第 1 节）")
-        return 2
-    print("HINT: 后续 doc_bus 命令用 --me " + actor)
-    return 0
+        actor = _actor_from_branch(branch)
+    print("branch=" + branch)
+    print("source=" + src)
+    print("actor=" + actor)
+    rc = _whoami_verdict(actor, expect)
+    if rc:
+        return rc
+    return 2 if _whoami_hints(actor) else 0
 
 
 def main():
@@ -279,12 +306,13 @@ def main():
     ap.add_argument("--round", dest="round_s", type=int, default=60)
     ap.add_argument("--tick", dest="tick_s", type=int, default=10)
     ap.add_argument("--branch", default="", help="whoami 用：覆盖当前分支（自测用）")
+    ap.add_argument("--expect", default="", help="whoami 用：期望身份，不符则拒绝")
     a = ap.parse_args()
     if a.cmd != "whoami" and a.me not in ACTORS:
         ap.error("--me 必须是 a/b/c/dispatcher（whoami 不需要）")
     cwd = git(["rev-parse", "--show-toplevel"], os.getcwd())[1].strip()
     if a.cmd == "whoami":
-        sys.exit(do_whoami(cwd, a.branch))
+        sys.exit(do_whoami(cwd, a.branch, a.expect))
     if a.cmd == "init":
         do_init(cwd, a.me)
     elif a.cmd == "read":
