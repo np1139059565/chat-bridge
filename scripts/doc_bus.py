@@ -67,12 +67,12 @@ def parse_blocks(text):
     return out
 
 
-def cursor_file(cwd):
-    return os.path.join(cwd, ".git", "doc_bus_cursor.json")
+def cursor_file(cwd, me):
+    return os.path.join(cwd, ".git", "doc_bus_cursor_%s.json" % me)
 
 
-def load_cursor(cwd):
-    p = cursor_file(cwd)
+def load_cursor(cwd, me):
+    p = cursor_file(cwd, me)
     if not os.path.exists(p):
         return {"seen": []}
     try:
@@ -83,8 +83,8 @@ def load_cursor(cwd):
         return {"seen": []}
 
 
-def save_cursor(cwd, d):
-    p = cursor_file(cwd)
+def save_cursor(cwd, me, d):
+    p = cursor_file(cwd, me)
     try:
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "w", encoding="utf-8") as f:
@@ -120,16 +120,16 @@ def do_init(cwd, me):
     missing = [bus_path(w) for w in ACTORS if not show_remote(cwd, bus_path(w))]
     print("actor=" + me)
     print("remote=" + MAIN)
-    print("cursor=" + cursor_file(cwd))
+    print("cursor=" + cursor_file(cwd, me))
     print("bus_files_missing=" + (",".join(missing) if missing else "none"))
-    print("seen=" + str(len(load_cursor(cwd)["seen"])))
+    print("seen=" + str(len(load_cursor(cwd, me)["seen"])))
     print("INIT_OK")
 
 
 def do_read(cwd, me):
-    cur = load_cursor(cwd)
+    cur = load_cursor(cwd, me)
     changed, blocks, cur = collect_new(cwd, cur)
-    save_cursor(cwd, cur)
+    save_cursor(cwd, me, cur)
     print(render(changed, blocks) if blocks else "NO_UNREAD")
 
 
@@ -138,10 +138,10 @@ def do_wait(cwd, me, round_s, tick_s):
     n = 0
     while time.monotonic() < deadline:
         n += 1
-        cur = load_cursor(cwd)
+        cur = load_cursor(cwd, me)
         changed, blocks, cur = collect_new(cwd, cur)
         if blocks:
-            save_cursor(cwd, cur)
+            save_cursor(cwd, me, cur)
             print(render(changed, blocks))
             print("HIT probe=" + str(n))
             return 0
@@ -195,6 +195,17 @@ def build_commit(cwd, path, new, me, to, mid):
         _cleanup_index(idx)
 
 
+def _sync_local_main(cwd, commit):
+    """发消息成功后仅前移本地 main 分支指针，不碰工作区。"""
+    rc, cur = git(["rev-parse", "refs/heads/main"], cwd)
+    cur = cur.strip()
+    if rc or not cur:
+        return
+    anc, _ = git(["merge-base", "--is-ancestor", cur, commit], cwd)
+    if anc == 0:
+        git(["update-ref", "refs/heads/main", commit, cur], cwd)
+
+
 def do_send(cwd, me, to, kind, text, reply_to):
     if to not in ACTORS + ("all",):
         raise SystemExit("bad --to: " + to)
@@ -214,6 +225,7 @@ def do_send(cwd, me, to, kind, text, reply_to):
         commit = build_commit(cwd, path, new, me, to, mid)
         rc, o = git(["push", "origin", commit + ":refs/heads/main"], cwd, timeout=30)
         if rc == 0:
+            _sync_local_main(cwd, commit)
             print("SENT id=" + mid + " file=" + path + " commit=" + commit[:8])
             return 0
         last = o.strip()[:160]

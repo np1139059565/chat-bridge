@@ -38,13 +38,13 @@ scripts/doc_bus.py，四个子命令（四方同版同参）：
 
 wait 节奏：单轮默认 60 秒，立即探测一次、之后每 10 秒探测一次（fetch + 比对远端文档）；
 **有更新立即打印并返回（HIT）**；满一轮无更新打印 NO_UPDATE 后退出，
-由外层循环再起下一轮，不在进程里傻等。外层示例：
-
-    while true; do python scripts/doc_bus.py wait --me a; done
+由调用方再发起下一次 wait（命令有 60 秒上限，故一轮一调用），不在进程里傻等。
+bash：while true; do python scripts/doc_bus.py wait --me a; done
+PowerShell：while ($true) { python scripts/doc_bus.py wait --me a }
 
 send 的实现：用 git 底层对象（临时 index + commit-tree）构造只含自己那份文件的提交并推送，
 全程不依赖当前 HEAD 与工作区状态；并发 push 被拒时自动基于最新 main 重建重试最多 3 次，
-不丢他人消息。游标存于 git 内部目录、不入库，跨轮跨会话按 ID 去重。
+不丢他人消息。游标按身份分文件存于 git 内部目录、不入库（同一克隆里四方各读各的，不互相吞消息），跨轮跨会话按 ID 去重；发消息成功后若本地 main 是祖先，脚本仅移动分支指针保持同步，不碰工作区。
 
 ## 四、规则边界
 
