@@ -198,6 +198,25 @@
 
 - [答复] 分发方实测确认 Q-7 为真回归：`.\flask_server\tools\list_tools_impl.py` L44 / L53 / L65 用 `bool(...get("parameters"))`，空 schema 恒真。
 - [答复] 授权按 `properties` 非空判断计算 `has_params`，兼容历史数组输入；补一条空 schema 与有参数 schema 的对照用例。作为 B-4 单独一次提交，正常跑钩子、不用 `--no-verify`，不扩范围。
+
+### Q-8 B-5 指令侧交付口径（C-5 交付后字段级对拍，请定夺）
+
+- 背景与更新：前稿按「C-5 未开工、无可对契约」拟了三种读法；提交前预检 fetch 发现 C-5 已交付推送（`048c247`，11 文件 +673 行，看板尚未登记其验收结论），活契约已可字段级对拍，本稿按实测重写，问题随之收窄。
+- 活契约实测（`origin/work/ai-c` @ `048c247`；其改动仅 `extend/` 与 `flask_server/tests/js/`、零 `.py`——契约完全建立在既有服务端端点之上）：
+  1. `.\extend\lib\translator.js` L64-76：指令定义 = `GET /api/commands`（读 `data.commands`）+ `GET /api/commands/help`（读 `data.help`），不带过滤参数；语言包按 site_key 走 `GET /api/clients` 的 custom_config 原样取回（L52-61），后端不可达时全流程不中断。
+  2. 前端消费字段仅 name 与 source：`.\extend\dialog\parts\01c_bridge_cmd.js` 的 `commandSource`（L20-28）按 `it.name` 匹配、返回 `it.source`；夹具期望响应即 `{commands:[{name, source}]}`（`.\flask_server\tests\js\test_translator.test.js` L186-190）。
+  3. `.\extend\dialog\parts\01b_bridge.js` L153、`.\extend\dialog\parts\01c_bridge_cmd.js` L16 注释明示：只登记定义，「不改 /api/bridge/commands 的执行与回执通道」「执行与回执通道不变」。
+  4. `.\docs\work-dispatcher.md` 遗留表 #4：remote_bridge 遗留「阶段 2 期间取证，分发方自留，不占执行方任务槽」；A-4 仍未开工（origin 尖端 5c1ac26）。
+- 对拍结果：`.\flask_server\routes\command_catalog.py` 实测：`GET /api/commands` 顶层返回 `commands`，`GET /api/commands/help` 顶层返回 `help`，薄路由直接透传 `.\flask_server\core\command_catalog.py` 的清单与帮助文本（条目含 name / source / desc，client 项另带 site_key）——C-5 消费的 name / source / help 全部具备，**现状零行为改动即可支撑 C-5 全部取数**。
+- 剩余待定（请逐条定夺，或直接给目标行为清单）：
+  1. 指令侧是否即按「行为零改动 + 补齐无直接用例路由的 pytest（`/api/commands/pending`、`/api/bridge/commands`、`/api/bridge/help`、`/api/bridge/run-command`）」收口？（`/api/commands`、`/api/commands/help` 已有 test_command_catalog.py 覆盖）
+  2. client 条目是否需补全完整声明（alias / params 等）并入 `/api/commands`？C-5 现仅消费 name / source；若为后续执行端预留，需授权改 `.\flask_server\core\command_catalog.py`（C-2 交付，不在可碰清单）；若暂不需要，请明示「清单字段维持 name / source / desc / site_key」以免后续返工。
+  3. 任务书落点 `.\flask_server\routes\bridge.py` 的 `/api/bridge/commands`：C-5 已声明该通道不变，该落点在 B-5 是否零改动？若有增量，GET 响应被 `.\extend\dialog\parts\01c_bridge_cmd.js` 消费，须与 C-5 契约对齐。
+  4. 语言包侧「取回固化」：C-5 直接消费 `GET /api/clients?site_key=`（C-1 / C-3a 已交付），B-5 服务端该侧是零改动确认，还是另有增量（如过滤参数 / 取回函数）？
+  5. `handle_command` 不认 client 指令（清单可见、QQ / 网页敲下无人执行；连带设置页 `help_groups` 亦无 client 组——同属 remote_bridge 文件族）：阶段 2 是否按「清单可见、执行另期」口径接受（与分发方自留的 remote_bridge 取证一致），还是 B-5 需接（需授权改 `.\flask_server\remote_bridge\command_panel.py`）？
+- 已尝试：五个可碰文件逐个走查；remote_bridge 全目录 grep `client_registry` / `site_key` 零命中；C-5 分支翻译员 / 01b / 01c / 测试夹具逐行读毕；`.\flask_server\core\command_catalog.py` 条目构造实测（name / source / desc / site_key）；`.\flask_server\routes\command_catalog.py` 响应键与路径实测；测试目录按路由名逐条 grep 核对直接用例分布（见待定 1）。
+- 卡在：1.4「不确定先提问」——交付物范围定夺前不动第一行代码。
+
 ---
 
 ## 五、完成记录
