@@ -6,6 +6,7 @@
   const D = window.AIMirrorDialog;
   const log = D.log;
   const M = D.methods;
+  // 阶段 2：提示词由翻译员本体拼装（本体经 dialog.html / manifest.json 先行挂载）。
 
   /** 生成 System Prompt：含工具清单、调用格式、规则列表与技能说明。 */
   M.generateSystemPrompt = function () {
@@ -35,7 +36,14 @@
     const voiceBlock = voiceOn
       ? `\n\n【语音·朗读文本约定】\n你的回复正文照常书写；此外，每一轮回复都必须另用一个代码块，\n块内为 JSON，形如：{"type":"bridge-voice","text":"适合朗读的纯口语文本"}，\n供系统合成语音发回用户。要点：\n- text 内只放自然口语，不出现代码、表格、Markdown 符号、链接、括号注释；\n- 代码或术语请用口语描述其作用，而非照抄符号；\n- text 应自成一个完整、可独立听懂的口头说明；\n- 每一轮回复都必须包含且仅包含一个 bridge-voice 块。`
       : '';
-    return `本会话通过「AI 工具调用镜像插件」与本地工具服务联动。\n\n【Tool·调用说明】\n需要调用工具时，请在一个独立的 JSON 代码块中返回，\n且必须携带 "type": "bridge-chat-call" 标记（插件仅识别带此标记的代码块）：\n\`\`\`json\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-call",\n  "parameters": { "参数名": "参数值" }\n}\n\`\`\`\n插件会自动提取该代码块、调用本地服务执行，并把执行结果作为下一条消息回传给你，请据此继续完成任务。\n结果回传为一段 JSON 文本（无代码块围栏），形如：\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-res",\n  "nonce": "本次调用唯一标记",\n  "success": true,\n  "result": ...\n}\n每次回复只允许包含一个工具调用代码块（即一个 JSON 代码块），不要并列多个，要把解释文字放到调用的上面，与卡片混在同一回复中；收到回传结果后再决定下一步，需要多步操作时每一步单独回复一个代码块。\n调用任何工具前，先用 get_tool_params 查询该工具的准确参数名（传入 tool_id = 工具名称）：返回的 parameters 是标准 JSON Schema，参数名即 parameters.properties 的键，必填项见 parameters.required，不要臆造参数名。\n\n【Tool·工具列表】\n${listLines}\n\n【Rule·读取说明】\n- 先调用 list_rules 查看有哪些规则（规则名 + 优先级 + 摘要）；\n- 再用 read_rule（参数 rule=规则名）读取对应规则的完整内容，并遵守它。\n每条规则前标注了读取优先级：\n- [总是]：必须读取并始终遵守，开始任务前先用 read_rule 读取其内容。\n- [按需]：在相关场景下先调用 read_rule 读取后再执行，不要凭记忆臆测。\n- （优先级为「关闭」的规则不会出现在此列表，也不应主动读取。）\n\n【Rule·规则列表】\n${ruleLines}\n\n【SKILL·读取说明】\n- 先调用 list_skills 查看本机有哪些技能（名称 + 摘要 + 所含工具）；\n- 再用 read_skill（参数 skill=技能名、path=技能内相对路径，如 SKILL.md）读取技能文档，按其规定处理。\n\n【SKILL·技能列表】\n${skillLines}${voiceBlock}`;
+    const dialect = `本会话通过「AI 工具调用镜像插件」与本地工具服务联动。\n\n【Tool·调用说明】\n需要调用工具时，请在一个独立的 JSON 代码块中返回，\n且必须携带 "type": "bridge-chat-call" 标记（插件仅识别带此标记的代码块）：\n\`\`\`json\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-call",\n  "parameters": { "参数名": "参数值" }\n}\n\`\`\`\n插件会自动提取该代码块、调用本地服务执行，并把执行结果作为下一条消息回传给你，请据此继续完成任务。\n结果回传为一段 JSON 文本（无代码块围栏），形如：\n{\n  "tool": "工具名称",\n  "type": "bridge-chat-res",\n  "nonce": "本次调用唯一标记",\n  "success": true,\n  "result": ...\n}\n每次回复只允许包含一个工具调用代码块（即一个 JSON 代码块），不要并列多个，要把解释文字放到调用的上面，与卡片混在同一回复中；收到回传结果后再决定下一步，需要多步操作时每一步单独回复一个代码块。\n调用任何工具前，先用 get_tool_params 查询该工具的准确参数名（传入 tool_id = 工具名称）：返回的 parameters 是标准 JSON Schema，参数名即 parameters.properties 的键，必填项见 parameters.required，不要臆造参数名。\n\n【Tool·工具列表】\n${listLines}\n\n【Rule·读取说明】\n- 先调用 list_rules 查看有哪些规则（规则名 + 优先级 + 摘要）；\n- 再用 read_rule（参数 rule=规则名）读取对应规则的完整内容，并遵守它。\n每条规则前标注了读取优先级：\n- [总是]：必须读取并始终遵守，开始任务前先用 read_rule 读取其内容。\n- [按需]：在相关场景下先调用 read_rule 读取后再执行，不要凭记忆臆测。\n- （优先级为「关闭」的规则不会出现在此列表，也不应主动读取。）\n\n【Rule·规则列表】\n${ruleLines}\n\n【SKILL·读取说明】\n- 先调用 list_skills 查看本机有哪些技能（名称 + 摘要 + 所含工具）；\n- 再用 read_skill（参数 skill=技能名、path=技能内相对路径，如 SKILL.md）读取技能文档，按其规定处理。\n\n【SKILL·技能列表】\n${skillLines}${voiceBlock}`;
+    // 取回的标准四段在前，原模板整体作为方言说明追加在后（阶段 2 口径）。
+    // 取回的标准四段在前，原模板整体作为方言说明追加在后（阶段 2 口径）。
+    // 本体未挂载（旧夹具 / 异常环境）时退回原模板，行为与改造前一致；
+    // 正常运行的抽屉只走上面这一条路径，不提供任何新旧切换开关。
+    const T = window.AIMirrorTranslator;
+    if (!T || typeof T.composePrompt !== 'function') return dialect;
+    return T.composePrompt(T.state.standard, dialect);
   };
 
   /** 重新解析当前网页对话。 */

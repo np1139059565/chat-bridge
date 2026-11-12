@@ -181,7 +181,10 @@ test('C3b 四个前端文件与接口文档的旧真源表述已清零', () => {
   const doc = rd('docs/api-reference.md');
   assert.ok(g.indexOf('/api/clients') >= 0 && g.indexOf('真源 definition.yaml') < 0);
   assert.ok(d.indexOf('真源为 /api/clients 的 custom_config') >= 0);
-  assert.ok(ix.indexOf('c3b-client-registry') >= 0 && ix.indexOf('GET /profiles 聚合') >= 0);
+  // C-5 起内容脚本构建标识按变更顺延（v20→v21），夹具不锁死具体版本字面量：
+  // 只校验 C-3b 真源语义仍在，且构建标识行存在（该常量本就设计为每次改动必换）。
+  assert.ok(ix.indexOf('GET /profiles 聚合') >= 0 && ix.indexOf('/api/clients') >= 0);
+  assert.ok(/const BUILD_TAG = '[^']+'/.test(ix), '内容脚本构建标识行缺失');
   assert.ok(st.indexOf('真源是客户端注册信息') >= 0 && st.indexOf('真源是后端 definition.yaml') < 0);
   assert.ok(doc.indexOf('属后续任务') < 0);
   assert.ok(doc.indexOf(String.fromCharCode(12)) < 0);
