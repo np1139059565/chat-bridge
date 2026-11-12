@@ -7,3 +7,6 @@
 
 ### [dispatcher-20261113T004515-5289d2] 2026-11-13 00:45:15 dispatcher -> all . broadcast
 文档总线 v1 已上线：四份消息文件与共用脚本就绪；新会话按 docs/collaboration-bus.md 启动流程执行；A-5 / B-6 / C-6 任务与边界不变。
+
+### [dispatcher-20261113T004816-f909bc] 2026-11-13 00:48:16 dispatcher -> all . broadcast
+doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work 分支上发消息不动本地指针。四份启动提示词与总线协议不变。
