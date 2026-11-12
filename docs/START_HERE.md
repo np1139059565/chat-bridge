@@ -86,7 +86,7 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
    与自己的 `docs/work-ai-<actor>.md` 末节
 7. 按第 3 节开工；代码推自己的工作分支，一次提交、正常跑钩子、不用 --no-verify
 8. 空闲时**反复调用** `python scripts/doc_bus.py wait --me <actor>`
-   （单轮 60 秒 / 内部 10 秒一探 / 有更新立即 HIT 返回 / NO_UPDATE 就再调一次）
+   （单轮 40 秒 / 内部 10 秒一探 / 有更新立即 HIT 返回 / NO_UPDATE 由下一轮输入驱动再调一次）
 9. 发言/交付用
    `python scripts/doc_bus.py send --me <actor> --to <a|b|c|dispatcher|all> --kind <question|answer|report> --text "..." [--reply-to ID]`；
    完成后 send 报「更新 git，X 完成，提交 <hash>」，回监听，不自找活、不自填 [答复]
@@ -145,15 +145,14 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 之后 main 再有新文档，靠上面这条自愈，不等分发方反复同步。
 
 
-## 6. 常驻轮询与自主裁决（2026-11-13 补记）
+## 6. 轮询节奏与自主裁决（2026-11-13 补记）
 
-### 6.1 自动轮询常驻
+### 6.1 轮询与会话节奏
 
-- 四方会话在整个任务期间保持监听循环常驻，启动流程第 8 步的 `while true` 不设终止条件。
-- 完成交付、发出消息、收到裁定或临时干预后，立即回到监听循环；排队槽为空时保持待命并继续轮询。
-- 单轮统一使用 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`。`wait` 默认单轮 60 秒与本地工具服务 60 秒执行上限相等，不使用默认单轮。
-- 单轮超时或异常时在循环内重试，循环本身保持运行；会话重新唤起后先执行 `python scripts/doc_bus.py read --me <actor>` 补读未读消息，再进入监听循环。
-- 监听循环是任务下发、验收裁定与临时干预的唯一接收通道；轮询停止期间不下发新任务。
+- 每轮会话由一次用户输入或工具回传驱动；本地工具服务有 60 秒执行上限，`while true` 常驻循环在该环境下无法保持，单轮 `wait` 返回即本轮会话结束，停在干净待命态属正常，不视为违规。
+- 单轮统一使用 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`。`wait` 默认单轮 60 秒与执行上限相等，不使用默认单轮。
+- 单轮超时或异常时在下一轮重试；会话重新唤起后先 `git fetch origin --prune`、执行方 `git merge --ff-only origin/main`、再 `python scripts/doc_bus.py read --me <actor>` 补读全部未读消息，然后进入监听循环；不得凭记忆续跑。
+- 总线消息在接收方停止期间留存于 origin/main；任务下发、验收裁定与临时干预均以总线留痕为准，补读即可取回。
 
 ### 6.2 分发方自主裁决
 
@@ -162,4 +161,4 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 - 执行方收到临时干预后按裁定恢复标准流程，等待正式验收结论。
 - 全部流程判定由分发方自主作出并直接执行；不以选项清单、编号选择或征询确认的方式把决定权交回用户。
 - 对外输出保持最小必要：不重复播报状态、不罗列候选方案、不请求拍板；交付与裁定以仓库实况和总线消息为准。
-- 执行方轮询中断属流程偏差，由分发方定向临时干预，不等待用户指令。
+- 执行方重唤起后未补读即续跑、或单轮异常后未按节奏重试，属流程偏差，由分发方定向临时干预，不等待用户指令。
