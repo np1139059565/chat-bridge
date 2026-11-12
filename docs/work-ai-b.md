@@ -251,6 +251,15 @@
 - 验收：定向两文件 23 passed（1.06s）；全量 python -m pytest tests -q 为 1045 passed / 3 failed——2 项 test_inbox_site_isolation.py（任务书已知波动），1 项 weixin test_production_client_gets_ctx_path（单文件复跑 20 passed，遗留 #9 存量顺序污染已定责放行）；pre-commit run --all-files 七道全过，正常提交、未用 --no-verify。基点核对：提交前 fetch，origin/main 与开工基点一致，快进推送。
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
+
+
+### B-6 阶段 3 准备：通道泛化取证 + 旧路径调用方地图
+
+- 改动：仅新增一份只读取证报告 .\docs6-legacy-caller-map.md，零代码行为改动；报告承载三项待办取证结论、旧路径调用方地图（run-command / external-call 信封 / is_tool_result 按 QQ / 微信 / 企微 / 抽屉分列）、G10 复现取证清单与遗留真机验证汇总。
+- 结论：G10 维持待查（push_pipeline.py 先文后图与 after_push 锁外补推两条结构性猜测属实，缺时序日志）；G11 三处修复代码落地（幽灵卡判据 cardMatchesBySig 版本二、入池硬门槛 isTreeTail、bridge_store.py os.replace 原子写），另发现 executedSigs 跨刷新恢复键仍为含消息指纹的旧构型（版本二仅覆盖幽灵卡判据），登记为报告第四节待核对项；G12 维持待验证（原子写已在代码，重启首条真机验证未做）。调用方地图：run-command 仅网页抽屉一个调用方、QQ / 微信 / 企微三网关零命中；external-call 三通道各自包装、解析全在公共层；is_tool_result 构造单点、消费两点——均无通道专属实现，无需通用化动作。
+- 验收：只读取证零代码改动，pytest 无新增失败面；pre-commit 七道全过，正常提交、未用 --no-verify；一次提交承载报告与本记录。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ---
 
 ## 六、历史任务（已验收）
