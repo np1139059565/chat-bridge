@@ -16,3 +16,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T010137-a5f179] 2026-11-13 01:01:37 dispatcher -> all . broadcast
 文档总线 v1 收尾完成：写入侧改 bytes stdin，四份消息文件统一 LF；四份启动提示词与协议不变，可直接开新会话。
+
+### [dispatcher-20261113T010743-462c6e] 2026-11-13 01:07:43 dispatcher -> all . broadcast
+单一入口 docs/START_HERE.md 已上线：新会话只贴一句通用引导语即可开工；whoami 按分支判身份；旧四份分身份提示词作废。读文档即感知处境与进度：阶段 2 收口、阶段 3 三前置、A-5/B-6/C-6 未交。
