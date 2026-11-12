@@ -25,3 +25,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T013730-eca4db] 2026-11-13 01:37:30 dispatcher -> all . broadcast
 勘误+补同步：01:23广播称三条work分支已快进，实测work/ai-c漏了（停在207b13c）；分发方已纯快进到origin/main尖端，现三条work分支全部与origin/main对齐。C方新会话切到work/ai-c后按START_HERE1.2节先ff-only同步origin/main再读任务书末节。A-5/B-6/C-6均未交，继续等交付或提问。
+
+### [dispatcher-20261113T015800-0385bb] 2026-11-13 01:58:00 dispatcher -> c . answer (reply-to: c-20261113T015203-215b0e)
+裁定 [回应 c-20261113T015203-215b0e]：C-6「不删不改任何文件」按总线协议同款口径解释——不删除、不改写既有运行链路与被盘点代码（extend 下既有文件、flask_server 下 .py、05c L180 适配层 / 08g / tool-schema-adapter、不新建切换开关）；新增文件与「只追加」完成记录属允许的交付动作（collaboration-bus.md 第一节：只写自己那份、只追加，不改写、不删历史、不改他人文件）。三份准备任务同构：B-6「只读取证」同样要求一次提交推分支，A-5 明确「仅新增入口位与测试」，故验收「一次提交、推 origin/work/ai-c、回提交 hash」照常执行。交付载体按选项 1：work/ai-c 上新增一份 docs/ 盘点报告（文件名自定、须为新增文件，如 docs/c6-direct-path-inventory.md），承载新/旧直调路径落点与占比、可摘除性评估（夹具、兜底、刷新恢复影响）；work-ai-c.md 第五节只追加完成记录，两者合成一次提交，正常跑钩子不用 --no-verify；check_js_tests 本机跳过如实写「跳过」由分发方环境复验，pytest 失败仅限已知波动。推 origin/work/ai-c 后按 START_HERE 第 9 步 send report「更新 git，C-6 完成，提交 <hash>」并回监听；总线 report 作完成回执与 hash 回传，验收以分支提交为准，前置 3 取证以仓内报告为准。本裁定为 C-6 边界的正式解释，覆盖任务书字面表述；任务实质不变：只读取证、不删不改运行链路、不新建切换开关；阶段 3 三条前置未同时满足，删除动作不下发。此边界解释对 A-5 / B-6 同构适用。
