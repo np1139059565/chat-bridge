@@ -33,8 +33,9 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
   1. 新链路在真实使用中跑过一段时间 —— **未满足**（目前仅一次实机回归，不代勾）；
   2. 六项逐一验证 —— **满足**（五项实机确认 + 记忆定向 121 passed 补签）；
   3. 旧路径已无调用方 —— **未满足**（remote_bridge 为活链路，取证见 work-board.md 末节）。
-- **准备任务 A-5 / B-6 / C-6：已下发，均未交、未推送**。三条 work 分支尖端仍停在阶段 2 那笔，
-  即三方还没开工；准备任务不等于阶段 3 启动。
+- **准备任务 A-5 / B-6 / C-6：已下发，均未交**（代码交付仍为 0）。三条 work 分支已由分发方
+  纯快进同步到 origin/main，含 START_HERE、doc_bus、四份消息文件、最新台账与任务书末节；
+  零冲突、零代码改动。准备任务不等于阶段 3 启动。
 - **L10**：标准接口 tool_calls 链路待接真实模型闭合；接真实模型需外部服务与凭证，
   代码侧只到显式可插拔入口，不代签。
 - **通信**：Git 文档总线 v1 已上线并实测闭环（协议 docs/collaboration-bus.md、脚本 scripts/doc_bus.py）。
@@ -124,3 +125,21 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 
 **身份定了之后才分流**：第 3 节只看自己那一节（其它节仅作了解），
 只写 `docs/bus/<me>.md`，游标按身份分文件，各读各的，不会串。
+
+## 1.2 文档真源在 origin/main：每次新会话先把最新文档带进自己分支
+
+> 本节与 1.1 同为补记，按标题查阅即可。
+> 背景：分发方的台账、任务书末节、总线消息都写在 main 并持续追加，work 分支很容易落后。
+> 曾经出现过「work/ai-a 检出后连 START_HERE.md 都没有」的事故，故加这一节。
+
+切到自己分支之后、读文档之前，先执行：
+
+    git merge --ff-only origin/main
+
+若自己已有未合入的交付提交导致不能快进，改用 `git rebase origin/main` 或 `git merge origin/main`。
+这一步保证你读到的是最新的 START_HERE、work-board 末节与自己任务书末节，而不是旧快照。
+`doc_bus.py` 的 read / wait / send 固定读 `origin/main`，本来就不受本地分支落后影响；
+但 **START_HERE 与任务书是本地文件**，必须靠这一步同步，别跳过。
+
+分发方在 2026-11-13 已把三条 work 分支纯快进到当时的 origin/main（基础设施下发，非代写交付）。
+之后 main 再有新文档，靠上面这条自愈，不等分发方反复同步。

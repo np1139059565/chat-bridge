@@ -268,3 +268,6 @@
 
 
 | 2026-11-13 | 补「同一份 START_HERE 如何区分 A/B/C」：身份按检出分支判定，新增开工前强制切分支步骤、DOC_BUS_ACTOR 环境变量兜底（共用检出目录）、whoami --expect 自检；通用引导语不变 | 分发方 |
+
+
+| 2026-11-13 | 修复 work 分支缺 START_HERE/doc_bus/任务书末节：三条 work 分支纯快进到 origin/main（基础设施下发、零代码改动）；START_HERE 补 1.2 节「新会话先同步 origin/main」长期自愈 | 分发方 |

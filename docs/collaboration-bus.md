@@ -101,3 +101,14 @@ show_remote 只读 stdout 并归一换行；既有四份消息文件经 git add 
 - 共用同一检出目录时分支区分失效：用环境变量 DOC_BUS_ACTOR 显式指定，whoami 优先读它；
   也支持 --expect 自检（不符返回非零）。
 - 通用引导语不变，仍是一句；协议其余规则不变。
+
+
+## 补记：入口文档必须出现在 work 分支（2026-11-13）
+
+- 事故：START_HERE / doc_bus / 四份消息文件 / 最新台账 / A-5-B-6-C-6 任务书末节全在 main 上新增，
+  三条 work 分支尖端仍停在阶段 2 那笔，执行方切过去读不到入口文档，也读不到自己的新任务。
+- 修复：三条 work 分支本就是 origin/main 的祖先（其提交已合入 main），由分发方纯快进到 origin/main；
+  零冲突、零代码改动、不动三方已有文件，性质是通信基础设施下发而非代写交付。
+- 长期自愈：START_HERE 第 1.2 节规定新会话切分支后先 `git merge --ff-only origin/main`
+  （或 rebase/merge），保证本地文档真源不落后；doc_bus 固定读 origin/main 不受影响。
+- 通用引导语不变，仍是一句。
