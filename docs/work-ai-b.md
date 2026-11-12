@@ -244,6 +244,13 @@
 - 提交方式：钩子唯一红项为前端覆盖率门禁（`extend\dialog\parts\*.js`，Q-6 已载明的环境差异——分发方环境该门禁跳过并返回 0，已单独立项排查）；本提交 16 个文件均为 .py/.md 零 .js 改动，干净 HEAD（07c2fe1）以 --allow-empty 探针实测钩子同样红。按 B-2 先例（Q-6）以 --no-verify 提交，证据链写入提交信息；推送前在 main 新基线复跑双闸与全量测试。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 
+### B-5 阶段 2 语言包与指令服务端（Q-8 五点裁定后收窄：行为零改动交付）
+
+- 改动：仅新增两个测试文件，服务端行为零改动。`.\flask_server\tests\test_pending_command_route.py`（6 用例：/api/commands/pending 空表、条目未确认可反复取、target_page 定向过滤、未声明页面只取不限条目、与常规通道物理隔离、带 page 取件登记在线）；`.\flask_server\tests\test_bridge_command_routes.py`（17 用例：/api/bridge/commands 新增 / 修改 / 删除 / 落盘回读与五类负路径——非斜杠名、内置冲突、重名、组合子指令不存在、双向下标越界；/api/bridge/help 双数据同回、自定义成组、空类不产生空组；/api/bridge/run-command 空文本与非斜杠拒绝、内置 /help 与自定义指令 handled=true）。隔离：最小蓝图应用、config 双文件重定向加 _CONFIG 清缓存、routes/cards 两队列整实例替换、外部指令源清零，断言不依赖本机 skill 安装。
+- Q-8 五点裁定落实：1. 行为零改动 + 补四条零用例路由 pytest 即本交付；2. client 条目字段维持 name/source/desc/site_key，core/command_catalog.py 未动；3. /api/bridge/commands 路由本体零改动，仅补测试覆盖；4. 语言包侧零改动（client_registry.py、routes/clients.py 未动，C-3a 通道由 C-5 直接复用）；5. handle_command 不认 client 指令按「清单可见、执行另期」接受，remote_bridge 全程未触碰，归属分发方阶段 3 取证。
+- 验收：定向两文件 23 passed（1.06s）；全量 python -m pytest tests -q 为 1045 passed / 3 failed——2 项 test_inbox_site_isolation.py（任务书已知波动），1 项 weixin test_production_client_gets_ctx_path（单文件复跑 20 passed，遗留 #9 存量顺序污染已定责放行）；pre-commit run --all-files 七道全过，正常提交、未用 --no-verify。基点核对：提交前 fetch，origin/main 与开工基点一致，快进推送。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ---
 
 ## 六、历史任务（已验收）
