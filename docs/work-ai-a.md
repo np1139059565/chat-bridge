@@ -256,3 +256,18 @@
 ## 阶段 2 收口（2026-11-12）
 
 A-4 已随阶段 2 整体收口，实机回归由用户确认通过；阶段 3 前置未满足，不启动。排队槽为空，待命。
+
+## 当前任务（A-5，阶段 3 准备）：标准链路侧盘点 + L10 契约入口
+
+> 开工前 git fetch origin，rebase 到 fetch 后的 origin/main 实时尖端。
+> 性质：取证/准备，不是阶段 3 删除；三条前置未同时满足前不删任何旧链路。
+
+**可以碰**：只读盘点 flask_server/core/chat_completions.py、flask_server/routes/chat_api.py、
+flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分支」，逐条给当前调用方、
+是否可摘除、摘除前置；L10 契约侧把标准对话接口「模型未接」做成显式可插拔入口 + 契约测试
+（仅新增入口位与测试，不接真实模型、不改现有链路行为）。
+
+**不要碰**：remote_bridge 下任何文件、extend 下任何文件、不删旧建卡直调路径、不新建切换开关。
+
+**验收**：pytest 定向全过、pre-commit 七道全过、一次提交正常跑钩子不用 --no-verify、
+推 origin/work/ai-a、回「更新 git，A-5 完成，提交 <hash>」。排队槽之外不自找活、不自填 [答复]。
