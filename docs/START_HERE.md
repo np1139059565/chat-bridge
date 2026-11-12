@@ -85,8 +85,7 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 6. 读 `docs/collaboration-bus.md`、`docs/work-board.md`、`docs/work-dispatcher.md`
    与自己的 `docs/work-ai-<actor>.md` 末节
 7. 按第 3 节开工；代码推自己的工作分支，一次提交、正常跑钩子、不用 --no-verify
-8. 空闲时起一轮 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`；单轮返回即本轮会话结束，停在干净待命态，由下一轮输入驱动再起一轮（见 6.1）。
-   （单轮 40 秒 / 内部 10 秒一探 / 有更新立即 HIT 返回 / NO_UPDATE 由下一轮输入驱动再调一次）
+8. 空闲时连续起 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`；单轮返回（含 NO_UPDATE）立即起下一轮，不得因轮询次数停止，仅工作全部完成或明确停止指令可停（见 6.1）。
 9. 发言/交付用
    `python scripts/doc_bus.py send --me <actor> --to <a|b|c|dispatcher|all> --kind <question|answer|report> --text "..." [--reply-to ID]`；
    完成后 send 报「更新 git，X 完成，提交 <hash>」，回监听，不自找活、不自填 [答复]
@@ -147,10 +146,11 @@ git fetch origin --prune，然后完整读 docs/START_HERE.md。这是唯一入�
 
 ## 6. 轮询节奏与自主裁决（2026-11-13 补记）
 
-### 6.1 轮询与会话节奏
+### 6.1 轮询与会话节奏（硬约束）
 
-- 每轮会话由一次用户输入或工具回传驱动；本地工具服务有 60 秒执行上限，`while true` 常驻循环在该环境下无法保持，单轮 `wait` 返回即本轮会话结束，停在干净待命态属正常，不视为违规。
-- 单轮统一使用 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`。`wait` 默认单轮 60 秒与执行上限相等，不使用默认单轮。
+- 严禁因轮询次数、NO_UPDATE、单轮 wait 返回或空闲轮数而停止；仅两种情形可停：(1) 本身份的全部工作已完成（已下发任务全部验收合入、无待办、无在途裁定）；(2) 收到明确停止指令（分发方总线 broadcast 以「明确停止指令：」开头，或用户明确下达）。停止时按 6.3 给出可转贴正式回复。
+- 单轮统一使用 `python scripts/doc_bus.py wait --me <actor> --round 40 --tick 10`。`wait` 默认单轮 60 秒与本地工具服务 60 秒执行上限相等，不使用默认单轮；不在单个进程里一次傻等超过上限。
+- 单轮返回 NO_UPDATE 后立即起下一轮；HIT 处理完立即回监听。由连续的一轮一调用保持轮询不断，不得以「停在干净待命态」替代轮询。
 - 单轮超时或异常时在下一轮重试；会话重新唤起后先 `git fetch origin --prune`、执行方 `git merge --ff-only origin/main`、再 `python scripts/doc_bus.py read --me <actor>` 补读全部未读消息，然后进入监听循环；不得凭记忆续跑。
 - 总线消息在接收方停止期间留存于 origin/main；任务下发、验收裁定与临时干预均以总线留痕为准，补读即可取回。
 
