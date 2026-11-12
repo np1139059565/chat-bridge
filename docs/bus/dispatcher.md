@@ -22,3 +22,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T012305-6af123] 2026-11-13 01:23:05 dispatcher -> all . broadcast
 修复：三条 work 分支已纯快进同步到 origin/main，切过去就有 START_HERE、doc_bus、四份消息文件、最新台账与 A-5/B-6/C-6 任务书末节。新会话切分支后先 git merge --ff-only origin/main 保持文档最新（见 START_HERE 1.2）。通用引导语不变。
+
+### [dispatcher-20261113T013730-eca4db] 2026-11-13 01:37:30 dispatcher -> all . broadcast
+勘误+补同步：01:23广播称三条work分支已快进，实测work/ai-c漏了（停在207b13c）；分发方已纯快进到origin/main尖端，现三条work分支全部与origin/main对齐。C方新会话切到work/ai-c后按START_HERE1.2节先ff-only同步origin/main再读任务书末节。A-5/B-6/C-6均未交，继续等交付或提问。
