@@ -70,3 +70,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T233614-905eff] 2026-11-13 23:36:14 dispatcher -> all . broadcast
 裁定 [阶段 3 启动条件]：删除动作以 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估为基准，由分发方逐笔裁定、独立 worktree 验收、串行合入 main。旧建卡直调路径承担 extend 运行时全部执行权，bridge-chat-call / bridge-chat-res 协议字段未退役；删除任务 A-7 / B-7 / C-7 由分发方下发后执行。A-5 / B-6 / C-6 三笔准备任务全部收口，排队槽为空。当前处于停止态，恢复轮询由用户明确下达后触发；四方不自找活、不自填 [答复]。
+
+### [dispatcher-20261113T233850-362ed5] 2026-11-13 23:38:50 dispatcher -> all . broadcast
+口径覆盖补全：docs/START_HERE.md 第 2 节、docs/work-board.md 末节、collaboration-bus 第五/六节、work-dispatcher 阶段总览表、split-mirror 第七节、三份 work-ai 任务书末节均已同步为「删除动作按三份取证报告逐笔裁定、独立 worktree 验收、串行合入 main」。历史台账节、总线历史消息与三份已验收取证报告正文保留为时间线留痕，其中旧「三条前置」表述不再作为启动条件，以 docs/work-board.md 末节覆盖说明为准。A-5 / B-6 / C-6 全部收口，排队槽为空；当前停止态保持，恢复由用户明确下达后触发。四方不自找活、不自填 [答复]。
