@@ -124,7 +124,7 @@
         parameters: card.parameters || {}, nonce: nonce };
       protocol.push(one);
       const calls = T.toToolCalls(one);
-      if (calls.length) card.toolCall = calls[0];
+      if (calls.length) { card.toolCall = calls[0]; card.toolCallId = calls[0].id; }
     });
     const tr = T.fromBlocks(protocol);
     out.calls = tr.calls;
@@ -218,11 +218,13 @@
     holder.cards[b.id] = this._makeCard(b, call, blockIssue);
     if (!call) return;
     this._markDuplicateCard(holder, m, b, call, state);
-    // 记录归属消息指纹：刷新后代码块 id 会变，但消息指纹相对稳定，
-    // 用它拼「执行签名」判定这次调用是否已执行过（见 executeCard）。
+    // 签名键：标准 tool_call.id 优先（call_<nonce>），05j 双查回退旧 msgId 键兼容旧存档/夹具。
+    // 命中即恢复已执行态，避免刷新后卡片退回待执行、被自动流程再跑一遍。
     holder.cards[b.id].msgId = this.msgId(m);
-    // 签名命中说明这条调用此前执行过：直接恢复为已执行态，
-    // 否则刷新后卡片会退回待执行、甚至被自动流程再跑一遍。
+    const T = window.AIMirrorTranslator;
+    const cid = T && T.callIdFromNonce;
+    const nonce = holder.cards[b.id].nonce || (m && m.id) || (b && b.id) || '0';
+    holder.cards[b.id].toolCallId = call.toolCallId = cid ? cid(nonce) : ('call_' + nonce);
     const doneSig = this._executedSig(this.msgId(m), call);
     if (doneSig) {
       holder.cards[b.id].executed = true;

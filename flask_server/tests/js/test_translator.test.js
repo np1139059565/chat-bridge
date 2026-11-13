@@ -279,3 +279,11 @@ test('接线静态核对：两份挂载 + 五文件取用 + BUILD_TAG v21', () =
   assert.ok(ix.includes('A.applyLanguagePack') && ix.includes('c5-translator-v21'));
   assert.ok(ix.includes('A.applyLanguagePack(resp.profiles)'));
 });
+
+// C-7 P2 [translator]：原件新增标准 tool_call.id / tool 消息入口断言基准。
+// 旧链断言逐条保留（运行时执行权仍在旧直调路径），活链保持、旧标记不摘。
+// 唯一键断言由 _c7_standard_entry 统一提供，平行夹具保留作补充。
+require('node:test')(
+  'C-7 标准入口基准 [translator]',
+  () => require('./_c7_standard_entry').run(require('node:assert/strict'), 'translator')
+);
