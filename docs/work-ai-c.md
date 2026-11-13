@@ -533,3 +533,23 @@ pre-commit 七道全过、pytest 失败仅限已知波动、一次提交正常�
 - 阶段 3 删除动作按 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估逐笔裁定，由分发方下发、独立 worktree 验收、串行合入 main。
 - 本文历史节中「三条前置未满足、不启动」「删除动作不下发」等表述为当时口径，以本行、docs/work-board.md 末节与 docs/START_HERE.md 第 2 节为准。
 - A-5 / B-6 / C-6 准备任务全部收口，排队槽为空；轮询状态服从用户明确指令。
+
+## 当前任务（C-7，阶段 3 删除序列第三笔，2026-11-13 下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：按 docs/c6-direct-path-inventory.md，把 extend/ 下旧建卡直调路径的解析 / 建卡候选 / 执行 / 回传 / 去重 / 刷新恢复整体迁到以标准 tool_call.id 与 tool 消息为键的执行链，重建 11 份 js 夹具与兜底契约，最后摘除旧路径标记。
+
+**可以碰**：extend/ 下 dialog/parts 各文件（05f_parse.js、05g_cards.js、06_execute.js、05l_autoexec.js、05j_card_sig.js、00_data.js、01b_bridge.js、05c_prompt.js、05d_memory.js 等）、lib/translator.js、lib/dialects.js、lib/tool-schema-adapter.js、flask_server/tests/js/ 下相关夹具与测试。
+
+**任务内部执行顺序**（同一笔交付内按此落，不是开工门槛）：
+1. 可摘除性复验与逐文件摘除顺序表，9 个新旧混存文件逐一列；
+2. 夹具重建预案：11 份直接依赖的 js 测试按新入口重写，兜底契约（后端不可达 / 本体未挂载 / 站点装饰污染）逐项补签；
+3. 标准执行链接线位：接 A-7 的可注册钩子入口与 B-7 的协议字段退役结论，让 state.toolCalls / card.toolCall 成为有执行期下游的键；
+4. 旧路径标记摘除与刷新恢复键（会话 id + 工具名 + 参数，不含消息指纹）迁移，交叉点用总线 question 找分发方裁定。
+
+**边界**：不碰 flask_server 下 .py（A-7 / B-7 范围）、不碰 remote_bridge/；不新建切换开关；不自填 [答复]。旧路径当前仍承担运行时全部执行权，标准链可用之前的删除动作只落在提交里由分发方按验收裁定合入，不在本机把活链摘断。
+
+**验收**：独立 worktree 合入预演 0 冲突；check_js_tests 全量（跳过项由分发方环境复验）；串行单进程全量 pytest；pre-commit 七道全过；字段契约对拍；禁区零触碰；一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-c。
+
+**交付载体**：分支一次提交 + docs/bus/c.md 的 report 回执（回提交 hash）；验收以分支提交为准。完成后回监听，不自找活。

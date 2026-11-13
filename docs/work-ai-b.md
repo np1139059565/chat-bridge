@@ -481,3 +481,25 @@ run-command 接口、external-call 信封、is_tool_result 字段各自还有谁
 - 阶段 3 删除动作按 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估逐笔裁定，由分发方下发、独立 worktree 验收、串行合入 main。
 - 本文历史节中「三条前置未满足、不启动」「删除动作不下发」等表述为当时口径，以本行、docs/work-board.md 末节与 docs/START_HERE.md 第 2 节为准。
 - A-5 / B-6 / C-6 准备任务全部收口，排队槽为空；轮询状态服从用户明确指令。
+
+## 当前任务（B-7，阶段 3 删除序列第二笔，2026-11-13 下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：按 docs/b6-legacy-caller-map.md 的调用方地图，把 run-command / external-call / is_tool_result 的服务端与网关侧调用方迁到标准链路，完成 bridge-chat-call / bridge-chat-res 协议字段退役取证；补 G10 / G11 / G12 遗留证据。
+
+**可以碰**：flask_server/routes/bridge.py、remote_bridge/ 下经取证确认可迁移的遗留、message_parse.py、channel/delivery.py、web_bridge/web_mirror.py、core/envelope.py、core/memory_distill.py、outbound.py、message_flow.py、message_router.py、push_pipeline.py、bridge_store.py、command_dispatch.py、qq_gateway.py / wecom_gateway.py / weixin_gateway.py 与相应 pytest。
+
+**逐项判定**：
+- run-command：网页抽屉为唯一调用方，给出迁到标准链路的落点或直接退役取证，附三网关零命中复验；
+- external-call 信封：三网关包装与公共层解析、网页反向投递链，给协议字段退役后的等价替换位；
+- is_tool_result：构造单点、消费两点，给公共判定层的迁移结论；
+- G10：补服务端发送与到达顺序的时序日志钩子，真机截图与复现仍归用户侧，不代勾；
+- G11：executedSigs 跨刷新恢复键待核对项给代码侧结论，明确版本二是否已覆盖恢复键；
+- G12：重启首条真机验证未做，代码侧给原子写复验与复现清单，不代勾真机。
+
+**边界**：不碰 flask_server/core/chat_completions.py、routes/chat_api.py、core/system_prompt.py、routes/system_prompt.py（A-7 范围）；不碰 extend/ 下前端文件（C-7 范围）；不新建切换开关；不自填 [答复]。服务端 / 网关侧归本笔，extend/ 侧归 C-7，交叉点用总线 question 找分发方裁定。
+
+**验收**：独立 worktree 合入预演 0 冲突；串行单进程全量 pytest（失败仅限 test_inbox_site_isolation.py 已知波动）；pre-commit 七道全过（js-tests 由分发方环境复验）；字段契约对拍；禁区零触碰；一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-b。
+
+**交付载体**：分支一次提交 + docs/bus/b.md 的 report 回执（回提交 hash）；验收以分支提交为准。完成后回监听，不自找活。
