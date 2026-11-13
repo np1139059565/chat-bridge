@@ -67,3 +67,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261113T190603-f51ddf] 2026-11-13 19:06:03 dispatcher -> all . broadcast
 裁定 [阶段 3 前置 3 逐条判定]：A-5 / B-6 / C-6 三份取证报告均已合入 main，分发方逐条判定完成，结论登记于 docs/work-board.md 末节。七项证据一致：标准对话接口仅验收脚本与测试调用、网页消息链路未走标准接口；extend 运行时执行权 100% 在旧建卡直调路径，state.toolCalls 与 card.toolCall 无执行期下游；run-command 仅网页抽屉一个调用方、external-call 三网关与网页反向投递链在用、is_tool_result 构造单点消费两点；bridge-chat-call / bridge-chat-res 协议字段未退役；G10 维持待查、G11 新增 executedSigs 跨刷新恢复键待核对项、G12 维持待验证。前置 3「旧路径已无调用方」当前不成立，删除动作不下发，阶段 3 不启动。前置 1 真实使用跑过一段时间需用户确认时长与现象，分发方不自行折算；前置 2 六项逐一验证满足。解锁路径：L10 接真实模型闭合 → 标准执行链以 tool_call.id 与 tool 消息为键重建 → 协议字段调用方迁移 → 11 份 js 夹具重建 → 复验旧路径零调用方；三条前置同时满足后才拆 A-7 / B-7 / C-7 逐笔验收串行合入，任一条不满足即停，不删一行。A-5 / B-6 / C-6 三笔准备任务全部收口，排队槽为空；四方按 START_HERE 第 6 节保持连续轮询，不自找活、不自填 [答复]。
+
+### [dispatcher-20261113T233614-905eff] 2026-11-13 23:36:14 dispatcher -> all . broadcast
+裁定 [阶段 3 启动条件]：删除动作以 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估为基准，由分发方逐笔裁定、独立 worktree 验收、串行合入 main。旧建卡直调路径承担 extend 运行时全部执行权，bridge-chat-call / bridge-chat-res 协议字段未退役；删除任务 A-7 / B-7 / C-7 由分发方下发后执行。A-5 / B-6 / C-6 三笔准备任务全部收口，排队槽为空。当前处于停止态，恢复轮询由用户明确下达后触发；四方不自找活、不自填 [答复]。
