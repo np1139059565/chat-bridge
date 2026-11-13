@@ -59,14 +59,15 @@ send 的实现：用 git 底层对象（临时 index + commit-tree）构造只�
 2. 读 docs/collaboration-bus.md、docs/work-dispatcher.md、docs/work-board.md 与自己的任务书
 3. python scripts/doc_bus.py read --me X   （读完四方未读消息）
 4. python scripts/doc_bus.py init --me X   （确认四份消息文件齐全）
-5. 连续起 `python scripts/doc_bus.py wait --me X --round 40 --tick 10`；单轮返回立即起下一轮，不因 NO_UPDATE 停止（见 START_HERE 6.1）
+5. 连续起 `python scripts/doc_bus.py wait --me X --round 40 --tick 10`；单轮返回立即起下一轮；用户明确停止指令即写 POLL_STOP.flag 并终止守护，恢复由用户明确下达后触发（见 START_HERE 6.1）
 6. 需要发言时用 send，引用原消息 ID 便于串话题
 
 ## 六、与既有状态的关系
 
-本机制只改「通信方式」，不改阶段状态：阶段 2 整体收口、阶段 3 三条前置
-（真实使用跑够时间 / 六项逐一验证 / 旧路径无调用方）仍以 docs/work-board.md 末节为准；
-A-5 / B-6 / C-6 仍为准备取证任务，删除动作三条同时满足前不下发。
+本机制只改「通信方式」，不改阶段状态：阶段 2 整体收口；A-5 / B-6 / C-6 三笔准备取证任务已全部验收合入。
+删除动作以 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、
+docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估为基准，
+由分发方逐笔裁定、独立 worktree 验收、串行合入 main；最新结论取 docs/work-board.md 末节。
 
 
 ## 补记：行尾根因与 bytes stdin（2026-11-13）

@@ -527,3 +527,9 @@ pre-commit 七道全过、pytest 失败仅限已知波动、一次提交正常�
 ## 唯一入口变更（2026-11-13）
 
 本任务起唯一入口为 docs/START_HERE.md：按当前分支判身份（whoami）、读总线消息感知进度、按其启动流程开工。历史对话里任何分身份启动提示词作废。C-6 的任务范围与边界不变。
+
+## 口径更新（2026-11-13，分发方）
+
+- 阶段 3 删除动作按 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估逐笔裁定，由分发方下发、独立 worktree 验收、串行合入 main。
+- 本文历史节中「三条前置未满足、不启动」「删除动作不下发」等表述为当时口径，以本行、docs/work-board.md 末节与 docs/START_HERE.md 第 2 节为准。
+- A-5 / B-6 / C-6 准备任务全部收口，排队槽为空；轮询状态服从用户明确指令。
