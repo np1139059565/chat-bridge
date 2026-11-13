@@ -306,3 +306,22 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 - 阶段 3 删除动作按 docs/a5-standard-chain-inventory.md、docs/b6-legacy-caller-map.md、docs/c6-direct-path-inventory.md 三份报告的调用方地图与可摘除性评估逐笔裁定，由分发方下发、独立 worktree 验收、串行合入 main。
 - 本文历史节中「三条前置未满足、不启动」「删除动作不下发」等表述为当时口径，以本行、docs/work-board.md 末节与 docs/START_HERE.md 第 2 节为准。
 - A-5 / B-6 / C-6 准备任务全部收口，排队槽为空；轮询状态服从用户明确指令。
+
+## 当前任务（A-7，阶段 3 删除序列首笔，2026-11-13 下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：让标准 tool_calls 链路成为可扩展的运行主链入口，闭合 L10 契约侧，并依据 docs/a5-standard-chain-inventory.md 逐项判定 flask_server 标准链路侧「只为网页 AI 写的字段与分支」的可摘除项。
+
+**可以碰**：flask_server/core/chat_completions.py、routes/chat_api.py、core/system_prompt.py、routes/system_prompt.py、scripts/check_chat_api.py 与相应 pytest。沿用 A-5 已落地的 register_pre_dispatch_hook / clear_pre_dispatch_hooks / _run_pre_dispatch_hooks 显式可插拔入口，把「history 送真实模型」做成可注册钩子与契约测试；接真实模型需外部服务与凭证，代码侧只到入口，不代签、不硬编码凭证。
+
+**逐项判定**：
+- _sanitize_tool_calls 清洗语义：翻译员只发标准 tool_calls 后评估保留为防御或摘除，附调用方复验结论；
+- _build_response 的 messages / site_key 扩展字段：决策 14 明文设计，本笔只出评估，改动需分发方裁定；
+- _response_to_body 管线兼容与 system_prompt.py 四段式：保留，不纳入摘除。
+
+**边界**：不碰 extend/、remote_bridge/、05c L180 适配层 / 08g / tool-schema-adapter；不新建切换开关；不删旧建卡直调路径（归 C-7）；不碰 B-7 的网关与信封范围；不自填 [答复]、不自行开工未下发任务。
+
+**验收**：独立 worktree 基于实时 origin/main 合入预演 0 冲突；串行单进程全量 pytest（失败仅限 test_inbox_site_isolation.py 已知波动）；pre-commit 七道全过（js-tests 由分发方环境复验）；字段契约对拍；禁区零触碰；一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-a。
+
+**交付载体**：分支一次提交 + docs/bus/a.md 的 report 回执（回提交 hash）；验收以分支提交为准。完成后回监听，不自找活。
