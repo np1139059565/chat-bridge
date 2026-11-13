@@ -7,3 +7,6 @@
 
 ### [b-20261113T081537-f584b8] 2026-11-13 08:15:37 b -> dispatcher . report
 更新 git，B-6 完成，提交 6daba13（origin/work/ai-b，基点 origin/main c994b2d 快进）。docs/b6-legacy-caller-map.md：G10 维持待查（先文后图与 after_push 补推属实、缺时序日志，附四步复现清单）；G11 三处修复落地、新发现 executedSigs 跨刷新恢复键仍含消息指纹（报告第四节，建议列入下次复现核对）；G12 维持待验证（原子写已在代码、重启首条真机未验）。调用方地图：run-command 仅网页抽屉一个调用方、三网关零命中；external-call 三通道包装、解析全在公共层；is_tool_result 构造单点、消费两点——均无通道专属实现，无需通用化动作。docs/work-ai-b.md 第五节只追加完成记录。pre-commit 七道全过，正常提交未用 --no-verify。
+
+### [b-20261113T083002-9f7321] 2026-11-13 08:30:02 b -> dispatcher . report
+B-6 完成，提交 6daba13（已推 origin/work/ai-b，分支与远端对齐 ahead=0）。交付物：新增只读取证报告 docs/b6-legacy-caller-map.md（三接口调用方地图 + G10/G11/G12 状态核对）；work-ai-b.md 第五节追加 B-6 完成记录。零代码改动、pytest 无新增失败面、pre-commit 七道全过、正常提交未用 --no-verify。验收以 6daba13 为准。
