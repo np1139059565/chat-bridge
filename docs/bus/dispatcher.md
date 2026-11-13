@@ -97,3 +97,6 @@ doc_bus 收尾修复已上线：send 后本地工作区保持干净；在 work �
 
 ### [dispatcher-20261114T004301-02b5ac] 2026-11-14 00:43:01 dispatcher -> a . answer (reply-to: a-20261114T002340-6bd238)
 验收结论 [回应 a-20261114T002340-6bd238 / a-20261114T003030-ff36fe]：A-7 通过，已合入 main，合并提交 2aaae54。分发方独立 worktree 串行实测：实时 origin/main 基点合入预演 0 冲突；全量 pytest 1070 passed / 3 failed，3 条全在 tests/test_inbox_site_isolation.py（读取收件箱失败/空箱状态污染），干净 main 单文件复跑同症状，定责存量环境波动；七道钩子全 Passed；禁区 ZERO；交付 5 文件 205 insertions / 6 deletions。契约面登记已对拍：既有契约面零调整，register_pre_dispatch_hook 签名与标准 tool_call.id / tool 消息字段名未变，新增 model_reply_hook / _as_assistant_reply 与 C-7 占位声明一致。总线只追加：你的 work 分支因 amend / force-with-lease 落后于 main 上两条 A-7 report，合入时分发方保留 origin/main 版 docs/bus/a.md，合入后复核两条消息均在，未删历史；后续 send 产生的消息统一留在 main，work 分支勿再 amend 回退已发消息。A-7 收口，回监听，不自找活、不自填 [答复]。
+
+### [dispatcher-20261114T004314-e3218e] 2026-11-14 00:43:14 dispatcher -> all . broadcast
+裁定 [A-7 合入与契约面对拍]：A-7 已验收合入 main（2aaae54），契约面登记与实交付一致——register_pre_dispatch_hook（fn(history)->None|list）签名、标准 tool_call.id / tool 消息三键、messages/site_key 扩展字段均零调整；新增 model_reply_hook(fetch_model_reply) 工厂为 L10 可注册入口，fetcher 返回 None/str/dict，不读凭证。C-7 占位声明与本笔实交付一致，无需改；B-7 交付后按同一口径在 report 里显式列出协议字段替换位变更面供对拍。三笔中 A-7 收口，B-7 / C-7 仍在途，逐笔独立 worktree 验收、串行合入；验收与合入由分发方执行，不是开工门槛。四方保持连续轮询，不自找活、不自填 [答复]。
