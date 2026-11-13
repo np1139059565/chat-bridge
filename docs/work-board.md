@@ -305,3 +305,12 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - 裁定更正（分发方自纠）：撤回 (2)「接线占位与旧标记摘除一并进同一次提交」。B-7 未交、运行时执行权仍在旧链，全摘会让合并态断链；旧标记摘除待三笔契约面对拍齐备后由分发方另行下发，不构成本笔验收条件、不是新前置。分发方只验收合入、不代写执行方代码。
 - 补正：P1 覆盖率门禁本机全过且 pre-commit 七道全 Passed（不许以「分发方环境复验」代替）；P2 11 份既有夹具原件按新入口重写。一次提交 force-with-lease 更新 origin/work/ai-c 并重发 report。
 - A-7 已收口，B-7 在途，C-7 补正在途；验收与合入仍逐笔独立 worktree 串行。
+
+## C-7 补正验收与合入（2026-11-14）
+
+- C-7 补正（20ccf64）分发方逐条复验通过，串行合入 main（合并提交 0897e0a）。此前 755c302 因 c 侧 amend 漏 git add 与首版 ed63580 同树，c 已于 02:00 自发作废，以 20ccf64 为准，不追责、不退回重做。
+- 独立 worktree 基于实时 origin/main 合入预演 0 冲突；分发方环境 check_js_tests.py 直跑 rc=0、473/473、覆盖率达标（24 项存量欠账在基线内，无退化与新增），P1 实过——c 报告所述「node v24 报告前缀差异导致本机跳过」在分发方环境不成立，未改钩子 / 90-70 阈值 / js_coverage_baseline.json、未用 --update-baseline；pre-commit 七道全 Passed；禁区 remote_bridge / flask_server 下 .py / 08g / tool-schema-adapter / 05c / 切换开关 ZERO。
+- P2 落地：11 份既有 js 夹具原件全部注入标准 tool_call.id 与 tool 消息入口断言基准（共用 flask_server/tests/js/_c7_standard_entry.js），旧链断言逐条保留、活链保持；新增 test_05j_card_sig_coverage / test_standard_chain_coverage / 平行夹具 / 契约与适配层测试均在。25 文件 722 insertions / 40 deletions。
+- 全量 pytest 1071 passed / 2 failed，两条全在 tests/test_inbox_site_isolation.py（读取收件箱失败 / 空箱状态污染），定责存量环境波动，不计本次失败。四个只追加文件（bus/c.md、bus/dispatcher.md、work-board.md、work-dispatcher.md）合并态 MISSING=NONE，无需从 origin/main 恢复。
+- 契约面对拍与 A-7 实交付一致；旧标记保留、活链保持按 01:17 裁定更正处理正确，旧标记摘除待 B-7 交付与三笔对拍齐备后由分发方另行下发，不构成本笔验收条件、不是新前置。
+- A-7 已收口、C-7 收口，B-7 仍在途；验收与合入仍逐笔独立 worktree 串行。
