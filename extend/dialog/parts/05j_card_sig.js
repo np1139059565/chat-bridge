@@ -23,8 +23,10 @@
    */
   M._executedSig = function (msgId, call) {
     // 缺关键字段无法拼签名，直接返回空串表示「未执行过」
-    if (!msgId || !call || !call.tool) {
-      log('[签名诊断] 跳过：msgId=' + (msgId || '(空)') + ' tool=' + (call && call.tool));
+    const stdId = (call && (call.toolCallId || call.id)) || '';
+    const keyId = stdId || msgId;
+    if (!keyId || !call || !call.tool) {
+      log('[签名诊断] 跳过：keyId=' + (keyId || '(空)') + ' tool=' + (call && call.tool));
       return '';
     }
     // 取当前会话的执行签名库
@@ -32,12 +34,15 @@
     const store = (conv && conv.executedSigs) || {};
     // 签名键带上会话 id：消息指纹是内容摘要，相同内容的消息在不同会话里指纹相同，
     // 只用「消息指纹 + 工具 + 参数」会在跨会话时撞键，把别处执行过的调用误判成本次已执行。
-    const sig = this.activeConv + '|' + msgId + '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
+    const tail = '|' + call.tool + '|' + JSON.stringify(call.parameters || {});
+    const sigNew = this.activeConv + '|' + keyId + tail;
+    const sigOld = this.activeConv + '|' + msgId + tail;
+    const hit = store[sigNew] ? sigNew : (store[sigOld] ? sigOld : '');
     // 诊断：库里有多少签名、本次算出的签名是什么、是否命中
-    log('[签名诊断] 查 sig=' + sig + ' 库内条数=' + Object.keys(store).length
-      + ' 命中=' + !!store[sig]);
+    log('[签名诊断] 查 sig=' + sigNew + ' 旧键回退=' + !!store[sigOld] + ' 库内条数=' + Object.keys(store).length
+      + ' 命中=' + !!hit);
     // 命中返回签名本身，未命中返回空串
-    return store[sig] ? sig : '';
+    return hit;
   };
 
   /**
@@ -49,12 +54,14 @@
    */
   M._markExecutedSig = function (card) {
     // 缺会话、卡片、消息指纹或工具名，无法拼签名，直接放弃登记
-    if (!this.activeConv || !card || !card.msgId || !card.tool) return;
+    const stdId2 = (card && (card.toolCallId || (card.toolCall && card.toolCall.id))) || '';
+    const keyId2 = stdId2 || (card && card.msgId) || '';
+    if (!this.activeConv || !card || !keyId2 || !card.tool) return;
     const conv = this.ensureConv(this.activeConv);
     // 签名库不存在则先建
     if (!conv.executedSigs) conv.executedSigs = {};
     // 与 _executedSig 保持同一键格式（含会话 id），否则登记与查询对不上。
-    const sig = this.activeConv + '|' + card.msgId + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
+    const sig = this.activeConv + '|' + keyId2 + '|' + card.tool + '|' + JSON.stringify(card.parameters || {});
     log('[签名诊断] 登记 sig=' + sig);
     // 置真即登记完成
     conv.executedSigs[sig] = true;
@@ -103,10 +110,11 @@
         // 只纠正「尚未执行」的
         if (card.executed) return;
         // 缺字段无法拼签名，单独计数以区分「数据缺失」与「签名不匹配」
-        if (!card.tool || !card.msgId) { noFields += 1; return; }
+        const keyId = card.toolCallId || card.msgId;
+        if (!card.tool || !keyId) { noFields += 1; return; }
         unchecked += 1;
         // 与 _executedSig 使用完全相同的键格式，否则查不到
-        const sig = id + '|' + card.msgId + '|' + card.tool
+        const sig = id + '|' + keyId + '|' + card.tool
           + '|' + JSON.stringify(card.parameters || {});
         if (!store[sig]) return;
         // 命中签名：纠正为已执行态并标记来源

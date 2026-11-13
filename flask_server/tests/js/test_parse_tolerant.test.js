@@ -88,3 +88,11 @@ test('JSON 里独立成行的数字不被误删', () => {
   const src = '{\n  "a": [\n    1,\n    2\n  ]\n}';
   assert.strictEqual(M._stripNumberLines(src), src);
 });
+
+// C-7 P2 [parse_tolerant]：原件新增标准 tool_call.id / tool 消息入口断言基准。
+// 旧链断言逐条保留（运行时执行权仍在旧直调路径），活链保持、旧标记不摘。
+// 唯一键断言由 _c7_standard_entry 统一提供，平行夹具保留作补充。
+require('node:test')(
+  'C-7 标准入口基准 [parse_tolerant]',
+  () => require('./_c7_standard_entry').run(require('node:assert/strict'), 'parse_tolerant')
+);

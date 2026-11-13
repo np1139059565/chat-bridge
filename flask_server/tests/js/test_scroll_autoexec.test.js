@@ -153,3 +153,11 @@ test('复检：自动开关关闭时不放行', () => {
   M._maybeAutoExecOnScroll.call(ctx, card, true);
   assert.strictEqual(executed, null, '开关关闭不应放行');
 });
+
+// C-7 P2 [scroll_autoexec]：原件新增标准 tool_call.id / tool 消息入口断言基准。
+// 旧链断言逐条保留（运行时执行权仍在旧直调路径），活链保持、旧标记不摘。
+// 唯一键断言由 _c7_standard_entry 统一提供，平行夹具保留作补充。
+require('node:test')(
+  'C-7 标准入口基准 [scroll_autoexec]',
+  () => require('./_c7_standard_entry').run(require('node:assert/strict'), 'scroll_autoexec')
+);
