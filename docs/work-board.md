@@ -297,3 +297,11 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - 契约面对拍：A-7 report 声明既有契约面零调整，register_pre_dispatch_hook 签名与标准 tool_call.id / tool 消息字段名均未变，与 C-7 占位声明一致；B-7 交付后按同一口径对拍。
 - 总线只追加：a 分支因 amend / force-with-lease 落后于 main 的两条 A-7 report，合入时从 origin/main 恢复 docs/bus/a.md 并复核两条消息仍在，未删历史。
 - B-7 / C-7 仍在途，逐笔独立 worktree 验收、串行合入。
+
+## C-7 首次验收结论（2026-11-14，不通过 / 定向补正）
+
+- C-7（ed63580）分发方独立 worktree 实测：合入预演 0 冲突；check_js_tests 452/452 用例全 pass，覆盖率门禁 rc=1（05j_card_sig.js 行 77.91% 低于基线 78.05%、分支 50.00% 低于基线 56.00%；新增 standard_chain_adapter.js 分支 52.63% / standard_chain_contract.js 分支 50.00% 均低于 70%）；pre-commit 七道因 js-tests 未全过；全量 pytest 1071 passed / 2 failed（test_inbox_site_isolation.py 已知波动，不计）；禁区 ZERO；docs/bus/c.md 三方合并后两条消息完整。
+- 交付面与裁定 (2) 有出入：11 份既有 js 夹具原件未重写，仅新增 test_standard_chain_fixtures.test.js 平行夹具；旧标记未摘，adapter 为 declared-placeholder 纯声明骨架不装配运行时。c report 如实标注，不记违规。
+- 裁定更正（分发方自纠）：撤回 (2)「接线占位与旧标记摘除一并进同一次提交」。B-7 未交、运行时执行权仍在旧链，全摘会让合并态断链；旧标记摘除待三笔契约面对拍齐备后由分发方另行下发，不构成本笔验收条件、不是新前置。分发方只验收合入、不代写执行方代码。
+- 补正：P1 覆盖率门禁本机全过且 pre-commit 七道全 Passed（不许以「分发方环境复验」代替）；P2 11 份既有夹具原件按新入口重写。一次提交 force-with-lease 更新 origin/work/ai-c 并重发 report。
+- A-7 已收口，B-7 在途，C-7 补正在途；验收与合入仍逐笔独立 worktree 串行。
