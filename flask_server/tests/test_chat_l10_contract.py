@@ -12,6 +12,11 @@
 - 钩子内部异常不被入口捕获：请求失败且无部分副作用（不执行工具、不落盘）；
 - 注册表是进程级状态，用例之间不得泄漏（夹具前后清空）。
 
+A-7 追加（契约 9-17）：cc.model_reply_hook(fetch) 把「history 送真实模型」
+包装为可注册钩子。fetcher 返回 None（不代签）/ str（assistant 文本）/
+dict（assistant 轮，可带 tool_calls）；回复经规范化追加，分发、落盘、
+回声同步生效；违约抛 TypeError、异常上抛且无部分副作用。
+
 样板来源：夹具（store_dir / client / _init_runtime_tables）、常量与辅助
 函数一律从 tests.test_chat_api 导入复用，不在本文件复制——质量闸门对
 跨文件连续 5 行重复计数，复制样板会顶爆 dup 基线（本文件初版曾因此
@@ -41,6 +46,7 @@ from tests.test_chat_api import (  # noqa: E402
     tool_messages,
 )
 import routes.chat_api as chat_api  # noqa: E402
+import chat_completions as cc  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -232,3 +238,136 @@ def test_hooks_do_not_leak_between_requests(client, store_dir):
     r2 = post(client, {"site_key": "t-l10-6b", "messages": [{"role": "user", "content": "r2"}]})
     assert r2.status_code == 200
     assert r2.get_json()["messages"] == [{"role": "user", "content": "r2"}], "清空后钩子不再生效"
+
+# ---------- A-7 契约 9：model_reply_hook——fetcher 返回 None 不代签 ----------
+
+def test_model_hook_none_keeps_chain_untouched(client, store_dir):
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(lambda h: None))
+    r = post(client, {"site_key": "t-mr-none", "messages": [{"role": "user", "content": "你好"}]})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["messages"] == [{"role": "user", "content": "你好"}], "None 不代签：链路行为与现状一致"
+    assert data["choices"][0]["message"]["content"] == ""
+    assert data["choices"][0]["finish_reason"] == "stop"
+
+
+# ---------- A-7 契约 10：str 回复追加为 assistant 轮，回声 / 落盘同步 ----------
+
+def test_model_hook_str_reply_appends_assistant(client, store_dir):
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(lambda h: "模型回答"))
+    r = post(client, {"site_key": "t-mr-str", "messages": [{"role": "user", "content": "问"}]})
+    assert r.status_code == 200
+    data = r.get_json()
+    assert data["messages"] == [
+        {"role": "user", "content": "问"},
+        {"role": "assistant", "content": "模型回答"},
+    ]
+    assert data["choices"][0]["message"]["content"] == "模型回答", "回声取末条 assistant 即模型回复"
+    assert data["choices"][0]["finish_reason"] == "stop"
+    stored = json.loads((store_dir / "t-mr-str.json").read_text(encoding="utf-8"))
+    assert stored == data["messages"], "模型回复同步落盘"
+
+
+# ---------- A-7 契约 11：fetcher 收到的是合并后累积历史 ----------
+
+def test_model_hook_fetcher_sees_merged_history(client, store_dir):
+    post(client, {"site_key": "t-mr-see", "messages": [{"role": "user", "content": "第一问"}]})
+    captured = []
+
+    def fetch(history):
+        captured.append([dict(m) for m in history])
+        return None
+
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(fetch))
+    r = post(client, {"site_key": "t-mr-see", "messages": [{"role": "user", "content": "第二问"}]})
+    assert r.status_code == 200
+    assert [m["content"] for m in captured[0]] == ["第一问", "第二问"], "fetcher 入参是合并后的完整历史"
+
+
+# ---------- A-7 契约 12：dict 回复带 tool_calls——模型声明意图，服务端执行 ----------
+
+def test_model_hook_dict_with_tool_calls_dispatches(client, store_dir, tmp_path):
+    target = tmp_path / "by_model.txt"
+
+    def fetch(history):
+        return assistant_call(
+            "call_m1", "write_to_file",
+            json.dumps({"path": target.as_posix(), "content": "from model"}),
+        )
+
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(fetch))
+    r = post(client, {"site_key": "t-mr-tc", "messages": [{"role": "user", "content": "写文件"}],
+                      "tools": TOOLS_DECL})
+    assert r.status_code == 200
+    data = r.get_json()
+    tms = tool_messages(data)
+    assert [m["tool_call_id"] for m in tms] == ["call_m1"], "模型声明的调用进入标准执行管线"
+    assert target.read_text(encoding="utf-8") == "from model", "调用被真实执行"
+    assert data["choices"][0]["finish_reason"] == "tool_calls"
+
+
+# ---------- A-7 契约 13：多轮循环闭合（模型回复落盘后可续轮） ----------
+
+def test_model_hook_two_round_loop_closes(client, store_dir):
+    replies = iter(["第一答", "第二答"])
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(lambda h: next(replies)))
+    r1 = post(client, {"site_key": "t-mr-loop", "messages": [{"role": "user", "content": "一"}]})
+    r2 = post(client, {"site_key": "t-mr-loop", "messages": [{"role": "user", "content": "二"}]})
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert r2.get_json()["messages"] == [
+        {"role": "user", "content": "一"},
+        {"role": "assistant", "content": "第一答"},
+        {"role": "user", "content": "二"},
+        {"role": "assistant", "content": "第二答"},
+    ], "模型回复落盘续轮，第二轮 fetcher 见累积历史"
+
+
+# ---------- A-7 契约 14：dict 回复的网页附加字段被规范化清洗 ----------
+
+def test_model_hook_dict_reply_sanitized(client, store_dir):
+    def fetch(history):
+        return {"role": "assistant", "content": "回",
+                "page_url": "http://x" , "selector": "#a"}
+
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(fetch))
+    r = post(client, {"site_key": "t-mr-san", "messages": [{"role": "user", "content": "x"}]})
+    assert r.status_code == 200
+    assert r.get_json()["messages"][-1] == {"role": "assistant", "content": "回"}, "附加字段被清洗"
+
+
+# ---------- A-7 契约 15：fetcher 返回非法类型 → TypeError，无副作用 ----------
+
+def test_model_hook_bad_return_type_fails_cleanly(client, store_dir):
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(lambda h: 42))
+    with pytest.raises(TypeError):
+        post(client, {"site_key": "t-mr-bad", "messages": [{"role": "user", "content": "x"}]})
+    assert not (store_dir / "t-mr-bad.json").is_file(), "违约请求不得落盘"
+
+
+# ---------- A-7 契约 16：dict 回复 role 非 assistant → TypeError ----------
+
+def test_model_hook_dict_requires_assistant_role(client, store_dir):
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(
+        lambda h: {"role": "user", "content": "x"}))
+    with pytest.raises(TypeError):
+        post(client, {"site_key": "t-mr-role", "messages": [{"role": "user", "content": "x"}]})
+    assert not (store_dir / "t-mr-role.json").is_file()
+
+
+# ---------- A-7 契约 17：fetcher 异常原样上抛，无部分副作用 ----------
+
+def test_model_hook_fetcher_error_propagates(client, store_dir, tmp_path):
+    target = tmp_path / "never-mr.txt"
+
+    def fetch(history):
+        raise RuntimeError("model down")
+
+    chat_api.register_pre_dispatch_hook(cc.model_reply_hook(fetch))
+    with pytest.raises(RuntimeError, match="model down"):
+        post(client, {"site_key": "t-mr-err", "messages": [
+            {"role": "user", "content": "写"},
+            assistant_call("call_merr", "write_to_file",
+                           json.dumps({"path": target.as_posix(), "content": "x"})),
+        ], "tools": TOOLS_DECL})
+    assert not target.exists(), "fetcher 失败时工具不得已执行"
+    assert not (store_dir / "t-mr-err.json").is_file(), "fetcher 失败时历史不得已落盘"

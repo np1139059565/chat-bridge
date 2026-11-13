@@ -325,3 +325,15 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 **验收**：独立 worktree 基于实时 origin/main 合入预演 0 冲突；串行单进程全量 pytest（失败仅限 test_inbox_site_isolation.py 已知波动）；pre-commit 七道全过（js-tests 由分发方环境复验）；字段契约对拍；禁区零触碰；一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-a。
 
 **交付载体**：分支一次提交 + docs/bus/a.md 的 report 回执（回提交 hash）；验收以分支提交为准。完成后回监听，不自找活。
+
+### 任务 A-7：标准链路模型接入入口（已完成，2026-11-13）
+
+**改了什么**：flask_server/core/chat_completions.py（新增 model_reply_hook(fetch_model_reply) 工厂 + _as_assistant_reply 规范化辅助：把「history 送真实模型」包装为 L10 可注册钩子；fetcher 返回 None/str/dict，dict 为 assistant 轮可带 tool_calls——模型声明的调用意图交服务端标准管线执行；回复经 _normalize_item 规范化追加，分发、落盘、响应 messages 三步一致；违约或 fetcher 异常上抛、请求失败且无部分副作用；本模块不做网络请求、不读凭证——接真实模型是外部服务的事，代码侧只到入口）；flask_server/routes/chat_api.py（仅补装配指引注释，链路本体零改动）；flask_server/tests/test_chat_l10_contract.py（追加契约 9-17 共 9 条：None 不代签 / str 回复落盘回声 / fetcher 见合并后完整历史 / dict 带 tool_calls 进执行管线 / 两轮循环闭合 / 网页附加字段随规范化清洗 / 违约 TypeError / 异常上抛无副作用 / 用例间不泄漏）。
+
+**逐项判定（依据 docs/a5-standard-chain-inventory.md，逐项附复验结论）**：
+1. `_sanitize_tool_calls` 清洗语义 → **保留为防御**。复验（2026-11-13，A-7 时点）：翻译员 toToolCalls（extend/lib/translator.js L124-133）构造的 tool_calls 只含 id / type / function{name, arguments}，无附加字段；清洗当前无实际丢弃对象。但 POST body 可直写 history，历史项内容不受信，normalize_messages 唯一入口的防篡改层不动。摘除前置照 A-5：三前置同时满足 + 旧直调路径无调用方复验，本笔不删。
+2. `_build_response` 的 messages / site_key 扩展字段 → **不可摘**。决策 14 明文设计（回传合并后完整历史供断言与续接 + 会话键回传）；当前调用方：测试断言、验收脚本、翻译员未来续接。摘除需分发方修订决策 14 并下发，本笔只出评估不改代码。
+3. `_response_to_body` 管线兼容与 system_prompt.py 四段式 → **保留，不纳入摘除**。Response/元组兼容属管线通用（_dispatch_tool 复用 routes/tools.py 管线）；translator.js 实调 /v1/system_prompt，四段式内容与场景无关。
+
+**验收自测**：定向三文件 50 passed（41 存量 + 9 新增）；全量 1073 passed；scripts/check_chat_api.py 六场景 PASS；quality_rules 十二项无 [新增]（model_reply_hook 初版 39 行触发 pyfunc 超标，拆出 _as_assistant_reply 后 23/20 行归零，未动基线）；pre-commit 七道全过；一次提交（amend 收口，未用 --no-verify），哈希见总线 report。完成后回监听，不自找活。
+
