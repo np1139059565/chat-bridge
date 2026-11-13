@@ -288,3 +288,12 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - A-7（work/ai-a）、B-7（work/ai-b）、C-7（work/ai-c）任务书分别见三份 work-ai-*.md 末节，总线定向 task 各一条。
 - 文件范围：A-7 限 flask_server 标准链路侧；B-7 限服务端 / 网关 / remote_bridge 侧；C-7 限 extend/ 前端与 js 夹具；交叉点由分发方裁定。
 - 用户明确下达恢复：POLL_STOP.flag 已删除，单实例守护已重启；分发方本会话按轮真发 wait 并续轮。
+
+## A-7 验收与合入（2026-11-14）
+
+- A-7（6b2be25）分发方逐条验收通过，串行合入 main（合并提交 2aaae54）。合入脚本首次 push 因验收期间 origin/main 新增两笔总线提交而非快进被拒，已从实时基点重建合并并推送。
+- 独立 worktree 基于实时 origin/main 合入预演 0 冲突；串行单进程全量 pytest 1070 passed / 3 failed，3 条全在 tests/test_inbox_site_isolation.py（读取收件箱失败/空箱状态污染），干净 main 单文件复跑 4 failed / 6 passed 同症状，定责存量环境波动；七道钩子全 Passed；禁区 remote_bridge / extend / 05c / 08g / tool-schema-adapter / 切换开关 ZERO。
+- 交付面：core/chat_completions.py 新增 model_reply_hook / _as_assistant_reply（history 送真实模型包装为 L10 可注册钩子，fetcher 返回 None/str/dict，不读凭证不做网络请求）；routes/chat_api.py 仅补装配指引注释；test_chat_l10_contract.py 追加契约 9-17；work-ai-a.md 完成记录与三项逐项判定（_sanitize_tool_calls 保留为防御、messages/site_key 扩展字段按决策 14 保留、_response_to_body 与 system_prompt 保留）。
+- 契约面对拍：A-7 report 声明既有契约面零调整，register_pre_dispatch_hook 签名与标准 tool_call.id / tool 消息字段名均未变，与 C-7 占位声明一致；B-7 交付后按同一口径对拍。
+- 总线只追加：a 分支因 amend / force-with-lease 落后于 main 的两条 A-7 report，合入时从 origin/main 恢复 docs/bus/a.md 并复核两条消息仍在，未删历史。
+- B-7 / C-7 仍在途，逐笔独立 worktree 验收、串行合入。
