@@ -11,6 +11,9 @@
 - 服务端不生成 assistant 文本：阶段 2 起占位生成器整体移除（决策 2
   一刀切，不留开关），assistant 轮由模型链路（经翻译员）产生；
 - 会话历史按 site_key 落盘（JSON 文件），支持多轮延续。
+- model_reply_hook（A-7）：把「history 送真实模型」包装为可注册的分发前钩子
+  工厂，与 routes/chat_api.py 的 L10 入口配套；本模块不做网络请求、不持有
+  凭证——接真实模型由外部服务负责，代码侧只到入口。
 
 导入风格与 routes/tools.py 一致：flask_server 目录在 sys.path 中，用顶层导入。
 注意 conftest.py 提到的双导入路径陷阱（core/ 也在 sys.path）：
@@ -324,6 +327,52 @@ def _is_tail_repeat(stored, incoming):
         and stored[-len(incoming):] == incoming
     )
 
+
+def _as_assistant_reply(fetcher, reply):
+    """把 fetcher 返回值规范化为 assistant 消息 dict；None 原样返回。
+
+    str 视为模型文本回复，包装为 {role: assistant, content: str}；
+    dict 校验 role 必须是 assistant；其它类型是契约违约，抛 TypeError。
+    """
+    if reply is None:
+        return None
+    if isinstance(reply, str):
+        reply = {"role": "assistant", "content": reply}
+    if not isinstance(reply, dict):
+        raise TypeError(
+            "model fetcher %r 返回 %s：契约要求 None、str 或 dict"
+            % (getattr(fetcher, "__name__", fetcher), type(reply).__name__))
+    if reply.get("role") != "assistant":
+        raise TypeError(
+            "模型回复的 role 必须是 assistant，实际 %r" % reply.get("role"))
+    return reply
+
+
+def model_reply_hook(fetch_model_reply):
+    """把「history 送真实模型」包装为 L10 分发前钩子（A-7）。
+
+    用法（接真实模型的一方装配时注册，凭证由外部服务持有）：
+
+        register_pre_dispatch_hook(model_reply_hook(fetch_reply))
+
+    fetch_reply(history) 契约：入参是合并后完整消息快照（只读）；返回
+    None / str / dict（assistant 轮，可带 tool_calls——模型声明的调用
+    意图交服务端标准管线执行）；违约或 fetcher 自身异常都让请求失败且
+    无部分副作用（不执行工具、不落盘）。
+
+    模型回复经 _normalize_item 规范化追加到 history 尾部，分发、落盘、
+    回声同步生效（网页附加字段随规范化清洗）。本函数不做网络请求、
+    不读凭证——接真实模型是外部服务的事，代码侧只到入口（A-7 边界）。
+    """
+
+    def hook(history):
+        reply = _as_assistant_reply(
+            fetch_model_reply, fetch_model_reply(history))
+        if reply is None:
+            return None
+        return list(history) + [_normalize_item(len(history), reply)]
+
+    return hook
 
 def load_session(site_key):
     """读取会话历史；损坏（非法 JSON / 非列表）时备份原文件并记日志，

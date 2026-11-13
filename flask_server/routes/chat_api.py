@@ -74,6 +74,11 @@ def _run_pre_dispatch_hooks(history):
     return history
 
 
+# 「history 送真实模型」的装配式用法（A-7，工厂见 core 层）：
+#     register_pre_dispatch_hook(cc.model_reply_hook(fetch_reply))
+# fetch_reply 由持有外部模型服务与凭证的一方提供；本路由不读配置、
+# 不建切换开关、不硬编码凭证。
+
 bp = Blueprint("chat_api", __name__)
 
 
