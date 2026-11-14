@@ -322,3 +322,11 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - B-7 不拆、不退回、不重做（避免与他笔撞车）；其交付后若仍有余面，拆成后续小片续派，不再一次性压给单方。
 - 本轮下发：A-8（a，验收波动面 test_inbox_site_isolation.py 治理，干净 main 单文件连续 ≥10 次全绿）、C-8（c，A-7×C-7 契约对拍矩阵与装配面只读推演，不装配运行时、不依赖 B-7）。两笔均基于实时 origin/main 新建提交，勿 amend 已合入历史（A-7 / C-7 曾因 amend 漏 add 与分支落后返工）。
 - 旧标记摘除仍按 01:17 裁定更正，待 B-7 交付与三笔对拍齐备后另行下发，不构成本两笔验收条件、不是新前置。A-7 / C-7 已收口，B-7 在途。
+
+## C-8 验收与合入 + 小片化策略首例闭环（2026-11-14）
+
+- C-8（6394fbf）分发方独立 worktree 验收通过，串行合入 main（合并提交 17a8b32）。这是 10:24 分发策略修订后「下发→交付→验收→合入→立即续派」的首个完整闭环：10:23 下发 C-8，11:15 交付，验收通过后本轮合入并同轮续派 C-9，c 不再空等。
+- 交付面：extend/lib/standard_chain_field_matrix.md（A-7 实交付签名 × C-7 占位声明 14 条逐项对拍，一致 10 / 待对拍 4 / 不一致 0）、端到端装配面九步只读推演（每步标落点 / declared-placeholder / 依赖 B-7）、flask_server/tests/js/test_standard_chain_field_matrix.test.js（6 条契约断言夹具）。3 文件 152 insertions，未碰 05g/05j/05c 等运行时、未改 core/chat_completions.py 与 routes/chat_api.py、未碰 B-7 面。
+- 独立 worktree 实测：实时 origin/main 基点合入预演 0 冲突；分发方环境 check_js_tests.py 直跑 rc=0、479/479、覆盖率达标（24 项存量欠账在基线内无退化与新增）；pre-commit 七道全 Passed；禁区 ZERO；四个只追加文件合并态 MISSING=NONE；全量 pytest 1069 passed / 4 failed 全在 test_inbox_site_isolation.py 已知波动（A-8 正在治理，不计）。
+- 同轮续派 C-9（c）：六段占位接口边界/异常语义契约 + 断言夹具，只新增 extend/lib/ 文档与 flask_server/tests/js/ 夹具，不装配运行时、不碰 B-7 面、不依赖他笔、不切活链；单面自带实测，完成回监听后分发方再续派。
+- 三方在途：a=A-8（验收波动面治理）、b=B-7（不拆不退回）、c=C-9；均衡由分发方在途队列维持。旧标记摘除仍按 01:17 更正待 B-7 交付与三笔对拍齐备后另行下发。
