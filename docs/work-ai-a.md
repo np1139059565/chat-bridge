@@ -351,3 +351,13 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 
 **验收自测**：治理后干净基点（实时 origin/main 0e83fdd）单文件连续复跑 10 次全绿（12 passed × 10）；全量 pytest 1075 passed / 0 failed；quality_rules exit 0（无 [新增]）；pre-commit 七道逐个 Passed、未用 --no-verify；diff --check 干净。基于实时 origin/main 新建提交，未 amend 已合入历史。
 结构质量钩子（单函数行数上限）下，setUp 拆为 _quiesce_background_writer / _redirect_paths / _install_sync_write 三个 helper、复现脚本拆出 _patch_slow_write / _wait_truncated，语义不变；.py 以无 BOM UTF-8 重写以过语法钩子（PowerShell Set-Content -Encoding UTF8 默认带 BOM 所致）。最终代码复验：单文件 10 连跑全绿、全量 pytest 全 pass、quality 无 [新增]。
+
+### 任务 A-9：test_chat_l10_contract.py 边界契约断言补强（已完成，2026-11-14）
+
+**拆分依据（实测）**：任务书字面为只碰 test_chat_l10_contract.py，但四条契约并入后合并态实测 476 行 / 40 个函数定义，同时超过两个硬闸门：行数 476 > 450（scripts/quality_extra.py FILE_LINE_LIMIT，check_hygiene.py 同阈值）、函数个数 40 > 35（scripts/quality_rules.py check_func_count，经 ast.walk 计入测试体内嵌套 def——contract 现状 33 个 = 19 顶层（18 条测试 + _clear_hooks）+ 14 嵌套，四条新契约即使全部零嵌套也到 37 仍超限）。单文件物理不可行，故拆出姊妹文件 test_chat_l10_edges.py，test_chat_l10_contract.py 零改动；提交基于实时 origin/main（先 fetch 后 rebase 同步）新建，未 amend 已合入历史。
+
+**改了什么**：flask_server/tests/test_chat_l10_edges.py（新，101 行，契约 18-21 四条）——契约 18：fetcher 返回 dict 带空 tool_calls 视为未声明，不进分发、finish_reason=stop；契约 19：None→str→dict 交替循环两轮以上，历史逐步累积闭合；契约 20：网页附加字段（page_url/selector）随 _normalize_item 清洗后分发/落盘/响应 messages 三步一致（真实执行 write_to_file：断言目标文件内容、tool 消息 tool_call_id、落盘文件与响应逐字相等）；契约 21：fetcher 违约（返回 42→TypeError）与异常（RuntimeError 上抛）两轮均不落盘、无残留副作用，清钩子后后续请求正常闭合。样板一律导入复用不复制（沿 A-5 先例，dup 闸门对跨文件连续 5 行重复计数）：夹具与常量来自 tests.test_chat_api（含 _init_runtime_tables——test_chat_api 的 autouse 夹具，import 即对本模块生效，负责把 write_to_file 装进运行时工具注册表；本笔初版漏此 import 曾致契约 20 报 UnknownTool，补齐后闭合，分发管线本身无恙）、钩子清理复用 contract 的 _clear_hooks；sys.path 引导变量改名 _ROOT 避开与 contract 的既有重复窗口。
+
+**验收自测（各轮独立实测）**：edges 单文件连续 10 次全绿（4 passed × 10）；contract 单文件连续 10 次全绿（18 passed × 10）；两文件合跑 22 passed；全量 python -m pytest flask_server/tests -q → 1079 passed in 19.28s；scripts/quality_rules.py exit 0、零 [新增]；amend 收口提交时 pre-commit 钩子全过、未用 --no-verify；git diff --check 干净。
+
+**提交**：哈希以推送后分支尖端为准，见总线 report。
