@@ -337,3 +337,17 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 
 **验收自测**：定向三文件 50 passed（41 存量 + 9 新增）；全量 1073 passed；scripts/check_chat_api.py 六场景 PASS；quality_rules 十二项无 [新增]（model_reply_hook 初版 39 行触发 pyfunc 超标，拆出 _as_assistant_reply 后 23/20 行归零，未动基线）；pre-commit 七道全过；一次提交（amend 收口，未用 --no-verify），哈希见总线 report。完成后回监听，不自找活。
 
+
+### 任务 A-8：test_inbox_site_isolation.py 波动治理（已完成，2026-11-14）
+
+**根因（实测定位，两个竞态都在「测试基类 × web_inbox_store 后台异步写盘线程」，业务代码无问题）**：
+1. RC1 读撞异步写盘——「读取收件箱失败，按空箱处理」波动。后台写线程不持 web_inbox._lock 执行 Path.write_text（先截断后写入、非原子），读取落在截断窗口内会解析出半截 JSON，read_state 按空箱兜底并覆盖内存缓存，表现为「append 成功、紧接读取却是空箱」。
+2. RC2 迟到写盘跨用例泄漏——站点过滤/计数波动。基类换临时路径从不与后台写线程同步、也不清 _pending；上一用例排队的写若在换路径后才被调度，会按「写盘时刻」解析 paths.WEB_INBOX_PATH，把旧状态写进下一用例的新临时目录。
+确定性复现：新增 flask_server/tests/_inbox_race_repro.py（下划线开头、不进 pytest 收集）。未治理代码上 RC1 稳定读到 0 条消息（健康应为 2），RC2 稳定泄漏前序状态到新目录；本机治理前自然时序单文件 6 次全绿未能复现（分发方环境 2-4 failed 与复现脚本症状一致，属调度时序差异）。
+
+**治理（只动测试侧，flask_server/tests/ 下两个文件；业务代码 / hooks / 阈值零触碰）**：
+- test_inbox_site_isolation.py 基类 setUp：先以带完成信号的 _write_state_now 排空在途 _pending（写到换路径前的旧路径并等落盘），再丢弃遗留 _pending 并把 writer 休眠——根除 RC2；换路径、清缓存后，用例期间以同步写替换 write_state（append / append_many 全程持 web_inbox._lock、同线程完成读-改-写，不存在截断窗口）——根除 RC1；tearDown 按序恢复全部钩子与路径。原 10 条用例语义未动，新增 TestAsyncWriteGovernance 两条治理回归（写后立读 20 轮不落空箱；新用例目录无前序泄漏且同步落盘内容完整）。
+- _inbox_race_repro.py 作为根因证据与回归参照直存仓库；业务层是否补原子写（临时文件 + rename）属后续独立议题，不在本笔范围。
+
+**验收自测**：治理后干净基点（实时 origin/main 0e83fdd）单文件连续复跑 10 次全绿（12 passed × 10）；全量 pytest 1075 passed / 0 failed；quality_rules exit 0（无 [新增]）；pre-commit 七道逐个 Passed、未用 --no-verify；diff --check 干净。基于实时 origin/main 新建提交，未 amend 已合入历史。
+结构质量钩子（单函数行数上限）下，setUp 拆为 _quiesce_background_writer / _redirect_paths / _install_sync_write 三个 helper、复现脚本拆出 _patch_slow_write / _wait_truncated，语义不变；.py 以无 BOM UTF-8 重写以过语法钩子（PowerShell Set-Content -Encoding UTF8 默认带 BOM 所致）。最终代码复验：单文件 10 连跑全绿、全量 pytest 全 pass、quality 无 [新增]。
