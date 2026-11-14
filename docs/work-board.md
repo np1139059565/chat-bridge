@@ -363,3 +363,10 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - 旧标记摘除前置改写：由「待 B-7 交付与三笔对拍齐备」改为「待 B-8/B-9 逐片验收合入 + 逐项对拍完毕 + b 现状说明收口」后由分发方另行下发，不是新增前置。
 - 队列重排：a=A-10（17:46 已派，与 B-8 串行不堆单）、b=B-7 收口片、c=C-12（受理中，合入后接 B-9，C-12 的 M1-M8 清单作核对基线）。分发方恢复逐轮 wait 与主动受理，不再把「不催」执行成「不接回执」。
 - 更正：此前进度报告称「a/c 在做未落分支」不准确；a 交完 A-9 回监听、c 交完 C-12 回监听，均在等分发方受理与续派，进程未停；真正的断点是分发侧 17:46:53 后未接上远端新回执，叠加 b 单笔跨天堵点。
+
+## C-12 验收合入、docs 倒挂兜底与一次断言误报更正（2026-11-14）
+
+- C-12（23a0328）分发方独立 worktree 验收通过并合入 main（合并提交 e9e3844）：合入预演 0 冲突、禁区 ZERO、分发方环境 check_js_tests.py 直跑 rc=0 / 514/514 / 覆盖率达标（24 项存量欠账在基线内无退化与新增）、全量 pytest 1079 passed、pre-commit 七道全过、diff --check rc=0。核心只新增 extend/lib/standard_chain_replacement_map.md（M1-M8 八槽位）与 flask_server/tests/js/test_standard_chain_replacement_map.test.js。
+- 合入时显式 restore docs/ 基点倒挂：C-12 分支基点早于拆片台账 3f1c6dd 与 6 条消息，merge 预演会把 docs/ 下四份文件当删除带进来；脚本对 docs/ 下所有 M/D 文件无条件 git checkout origin/main -- 恢复，并复验 6 条消息 id、B-8/B-9 任务书正文、台账真实串、C-12 report 与两个新文件齐全后才提交。19:25 拆片决定与任务书未丢。
+- 更正一次误报：首次合入脚本把校验关键字「B-7 拆片」错用在 docs/work-dispatcher.md 上（该串只存在于 docs/work-board.md 章节标题，台账真实串是「用户授权拆 B-7：余面拆 B-8→a…B-9→c…」），导致 PRE/POST 均 False、在 git commit 之前 ABORT。无提交、无 push、无消息发出，本地曾停在 merge --no-commit 中间态；重跑先 merge --abort 清态，改用真实关键字多项复验后通过。上一轮把该 MISSING 解读为「提前检出内容被抹」不准确，实为断言字符串误报；倒挂与 restore 本身确实存在且必要。
+- M1-M8 清单正式入 main，作 B-8/B-9 与三笔对拍的核对基线；同轮向 c 发正式定向裁定并提示 B-9 开工。队列：a=A-10/B-8 串行、b=B-7 收口片、c=B-9。
