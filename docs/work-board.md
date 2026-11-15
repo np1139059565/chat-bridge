@@ -391,3 +391,9 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - B-9（c，e3aa27b）分发方独立 worktree 实测通过并合入 main：实时基点合入预演 0 冲突 / UNMERGED=none、禁区 ZERO、只追加 MISSING=NONE；分发方环境 node v20 check_js_tests.py rc=0 / 545 pass / 覆盖率达标（本机 v24 前缀「跳过」不作达标依据，未改 hooks / 90-70 / baseline、未 --update-baseline）；七道钩子逐个 Passed、quality 零[新增]、diff --check rc=0、全量 pytest 1079 passed。五槽齐全、STATUS 恒 declared-placeholder、唯一键标准 tool_call.id 与 tool 消息三键、M8 compatibleOnly 纯描述、C-12 M1-M8 只读引用、两片独立命名无撞车，契约对拍逐项为真。
 - b 的 B-7 收口片（663397a，docs/b7-protocol-retirement-status.md + work-ai-b.md 只追加、零代码）已受理，下一轮独立 worktree 串行验收；本轮四条总线消息（a/c/b 定向 + 全体广播）已定向同步。
 - 队列重排：a=A-10 正式续派（09:28 裁定的顺延片，原任务书 dispatcher-20261114T174615-cf9d8d 不作废、不重发）、c=C-13 续派（B-8×B-9 八槽交叉一致性索引 + 反查夹具，单面自带实测、不依赖 b、不碰活链、不预设摘除结论）、b=收口片验收中。旧标记摘除前置仍为「B-8/B-9 逐片验收合入 + 逐项对拍完毕 + b 现状说明收口」，逐片合入已达成，对拍与 b 收口待分发方裁定，未满足前不下发摘除动作。
+
+## B-7 收口片合入、S1-S4 逐项对拍与旧标记摘除裁定（2026-11-15）
+
+- B-7 收口片（b，663397a，docs/b7-protocol-retirement-status.md + work-ai-b.md 只追加、零代码）分发方独立 worktree 实测通过并合入 main（合并提交 ae0b1cb）：实时基点合入预演 0 冲突 / UNMERGED=none、禁区 ZERO、只追加 MISSING=NONE（a B-8 report、b 本笔 report、c B-9 report、dispatcher 09:57 四条、board 双笔章节与两笔裁定章节全保留）；七道钩子逐个 Passed、quality 零[新增]、diff --cached --check rc=0、分发方环境 js-tests rc=0 / 545 pass / 覆盖率达标、全量 pytest 1079 passed。报告 M1-M8 八槽逐项含字段路径 / 旧字段名 / 新字段名 / 活调用方状态，S4 显式声明仅运行时标记，三网关按 b6 结论零遗留，G10/G11/G12 代码侧结论与真机遗留分列。
+- 逐项对拍结论（分发方按 C-10 S1-S4 判态）：S1（#4 fetcher 跨侧）契约侧 A-7×C-7 对拍一致，L10 接真实模型缺外部服务与凭证另行排期；S2（#7 tool_calls 意图执行）装配面九步第 5 步仍 declared-placeholder，方案 A 不装配运行时 M，判待对拍 / 未齐备；S3（#13 协议字段退役）八槽四项齐全、三网关零遗留、与 C-12 落点类型及 B-8/B-9 两片纯函数层逐槽对齐，判一致；S4（#14 旧标记摘除）运行时执行权仍绑旧链（bridge-chat-call / bridge-chat-res / is_tool_result 活链多文件命中）、摘除任务书未下发、c6 九文件顺序表未执行，判保持现状不摘除。「逐项对拍完毕」以本轮逐槽判态登记为准；「运行时执行权已由旧链迁到标准链且分发方验收」硬前置未满足，旧标记摘除动作不下发，阶段 3 不进入摘除步。
+- 队列：a=A-10（L10 钩子生命周期与请求间隔离边界契约，09:57 续派）、b=B-10（旧标记摘除前置就绪度与 c6 九文件顺序表复核，只读取证、10:05 续派）、c=C-13（B-8×B-9 八槽交叉一致性索引与反查夹具，09:57 续派）；三片独立命名、互不撞车、均不碰活链。同轮三条总线消息（b 验收结论 / b task / 全体广播）已发，台账只追加留痕。
