@@ -268,6 +268,15 @@
 - 验收：全量 python -m pytest tests -q 实测 1078 passed / 1 failed，唯一失败 test_weixin_protocol.py::test_production_client_gets_ctx_path 为存量顺序污染（单文件复跑即过，Q-8 与 B-4 验收已定责放行），与本笔零代码改动无交集；pre-commit 七道全过、正常提交、未用 --no-verify；一次提交收口。
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
+### B-10 旧标记摘除前置就绪度报告（只读取证）
+
+- 交付物：docs/b10-removal-readiness-report.md（新增 1 份，66 行）。三件交付：S1-S4 逐槽就绪度表、c6 九文件顺序表逐行复核、显式结论五条（旧标记摘除当前不下发、前置未满足，不实装、不摘除、不预设裁定时点）。零代码、零测试改动。
+- 证据基线：origin/main 34e6029；引用 docs/c6-direct-path-inventory.md、docs/c7-standard-chain-migration-plan.md、docs/b6-legacy-caller-map.md、docs/b7-protocol-retirement-status.md 与 10:05:32 广播。九文件结论：全部存在、全部活链、零摘除；登记 c7 顺序表两处口径差异（01c 无旧标记、05d 未单列行）供分发方复核，不构成新前置。
+- 边界：未跟踪文件 extend/dialog/AUDIT.md 非本任务产物，未纳入提交、未改动；未碰任何代码、测试与三网关。
+- 验收（2026-11-15 收口轮实测）：pre-commit 七道全过；全量 python -m pytest tests -q（flask_server/ 下串行单进程）1078 passed / 1 failed，唯一失败 test_weixin_protocol.py::TestClientContract::test_production_client_gets_ctx_path，与 B-7 记录载明的已知失败一致，非本任务引入；check_js_tests.py 545/545 全过、覆盖率达标；quality_rules.py 无 [新增]；git diff --check 干净。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
+
 ---
 
 ## 六、历史任务（已验收）
