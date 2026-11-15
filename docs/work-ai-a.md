@@ -398,3 +398,21 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 **验收自测（基点 cdbcf96 实测）**：单文件连续 10 次全绿（6 passed × 10）；contract/edges/lifecycle 三文件合跑 28 passed；全量 pytest 1085 passed（分发方基线 1079 + 本笔 6）；scripts/quality_rules.py exit 0 零 [新增]；pre-commit 七道逐个 Passed 未用 --no-verify（本笔提交时钩子实测）；git diff --check rc=0；js-tests 本机 node v24 覆盖率报告前缀「跳过」不作达标依据，分发方环境直跑为准。
 
 **提交**：哈希以推送后分支尖端为准，见总线 report。
+
+## A-11 reply 单点边界反查夹具与 C-9 / C-14 状态标注对拍片（2026-11-15，只读取证）
+
+- 任务书：dispatcher-20261115T203520-749f39（阶段 3 续派，reply 单段圈定，
+  不扩 restore / 其它四段 / 九步余面）。
+- 交付：docs/a11-reply-boundary-inventory.md（新增报告，零差异结论）、
+  flask_server/tests/js/test_standard_chain_a11_reply_boundary.test.js
+  （新增反查夹具 8 用例：导出面 / 形状恰四键 / 缺键归一 / role 硬编码 /
+  幂等新对象 / C-9 对拍 / C-14 对拍 / 运行期零调用方）、本台账只追加。
+- 基点：origin/main e87642d 新建提交；A-10 c227999 在其祖先链（实测）。
+- 实测：单文件 10 连跑全绿（8 tests / 8 pass × 10）、全量 js 586/586 rc=0
+  （覆盖率门禁本机未解析到报告按既有逻辑跳过、不作达标依据）、
+  全量 pytest 1085 passed rc=0、pre-commit 七道逐个 Passed 未用 --no-verify、
+  diff --check rc=0。
+- 边界：零代码改动；不改已合入 .md / 源码本体；零反斜杠零正则；
+  不改 hooks / 90-70 阈值 / js_coverage_baseline.json / 不用 --update-baseline；
+  不碰 C-15 / B-12 / B-8 / B-9 文件；不翻任何 STATUS；docs 只追加。
+- 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
