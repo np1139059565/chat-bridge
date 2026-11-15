@@ -277,6 +277,15 @@
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
 
+### B-11 摘除顺序表口径差异归并与九文件影响面夹具清单（只读复核）
+
+- 交付物：docs/b11-order-table-reconciliation.md（新增 1 份）。三件交付：①两处口径差异逐项复核——01c_bridge_cmd.js 实测宽口径协议标记零命中（列名、无旧标记可摘，唯一远程面为 /api/bridge/commands 管理面，调用方 dialog.html L42 挂载 + 08f_commands.js 四处 UI 调用）、05d_memory.js 仅 2 处注释级命中（运行时真依赖是 05f_parse.msgSource，自身不构造不解析协议字串，夹具直接+间接引用全零），均给只读归并建议（01c 列名跳过 / 05d 归并步骤 3 分组），建议仅为分发方复核输入、不代拍板、不改 c6/c7 原文；②九文件影响面夹具清单按 B-10 第三节序逐行列直接夹具数（3/3/1/5/0/6/4/4/2，与 B-10 实测一致）、是否属协议标记面、摘除时夹具侧最小动作、刷新恢复/去重/兜底影响标记——夹具影响集中在 05f（6 份最重）/05c（信封与兜底）/05g/05j（恢复链与执行权、覆盖率门禁敏感）；③显式结论：两处口径差异不构成新前置、不触发摘除动作，摘除硬前置沿用 S4 三项（执行权迁移+任务书下发+按表执行）与 10:05 广播判态，当前均未满足。
+- 证据基线：origin/main e284557（B-10 验收合入 f2ccb87 之后）；行号本轮实仓实测。
+- 边界：零代码、零测试改动；不碰 flask_server/tests、extend/lib 源码与 .md 既有内容、不碰 extend/dialog/parts/ 与 remote_bridge/ 活链；不装配运行时 M、不建切换开关、不新增运行期探测分支、不摘除任何旧标记、不把 declared-placeholder 翻成已装配；未跟踪文件 extend/dialog/AUDIT.md 非本任务产物，未纳入提交、未改动。
+- 验收（本机实测）：check_js_tests.py rc=0、554/554 全过、覆盖率达标（24 项存量欠账基线内无退化与新增）；quality_rules.py rc=0、零 [新增]；git diff --check rc=0；全量 python -m pytest tests -q -p no:cacheprovider（flask_server/ 下单进程串行）1078 passed / 1 failed，唯一失败 test_weixin_protocol.py::TestClientContract::test_production_client_gets_ctx_path（本机环境凭证缺失类存量波动，单文件复跑 20 passed），与 B-10 记录载明的同项波动一致，非本笔引入；分发方环境复跑为准。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
+
 ---
 
 ## 六、历史任务（已验收）
