@@ -245,6 +245,13 @@
   2. `python -m pytest tests -q -p no:cacheprovider`（`flask_server/` 下串行单进程）：1055 passed in 18.65s，零失败。
   3. `pre-commit run --all-files`：七道钩子全 Passed，正常跑钩子。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+### C-15 B-12 后 S2 余面与九步后续单点面判定片（阶段 3 续派，2026-11-15 下发）
+
+- 交付物：新增 `docs/c15-s2-remaining-surface-inventory.md`（逐面判定报告：①C-9 六段除 execute 外五段当前态与 C-14 签名总表 / 边界契约第四节对拍；②C-8 九步推演除第 5 步外各步落点 / 当前态 / 活调用方 / 依赖 / 禁区；③C-10 S1-S4 与 b10 五层前置表 B-12 后逐槽核对；④下一合法可验收单点面排序建议与可实测口径）；新增 `flask_server/tests/js/test_standard_chain_c15_inventory.test.js`（C-14 形态反查夹具，零反斜杠零正则、按字符码 10 切行、只读引用已合入 lib 与契约文档）；本节只追加完成记录。
+- 取证结论：S2 第 5 步 execute 单点已闭合（B-12，a0cb2f0）；模块 STATUS 恒 declared-placeholder，其余五段仍声明态且与 C-14 / C-9 逐项一致，EXECUTE_STATUS 保持独立导出、作用域不变；C-8 第二节第 5 步行与边界契约抬头为只追加保留的历史标注，与 B-12 实装登记并存；S4 三项硬前置未全满足，阶段 3 不进入摘除步。
+- 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 前缀差异打印「跳过」，由分发方环境复验。
+- 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
