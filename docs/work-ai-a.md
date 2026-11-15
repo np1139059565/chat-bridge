@@ -383,3 +383,18 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 **验收自测**：单文件连续 10 次全绿（24 passed x 10）；check_js_tests 538/538 rc=0；quality_rules rc=0 无新增；hygiene / syntax / doc-sync / deps-sync / host-theme --check 全过；全量 pytest 结果见当轮输出。
 
 **提交**：哈希以推送后分支尖端为准，见总线 report。
+
+
+### 任务 A-10：L10 钩子生命周期与请求间隔离边界契约（已完成，2026-11-15）
+
+**口径基点**：dispatcher-20261115T095719-dde1af 正式续派（09:28 裁定顺延片，原任务书 dispatcher-20261114T174615-cf9d8d 不作废不重发）。分支基于实时 origin/main cdbcf96 fetch 后新建提交、未 amend 已合入历史，单笔提交。
+
+**改动（一个新测试文件，业务与活链零改动）**：flask_server/tests/test_chat_l10_lifecycle.py（新，206 行、6 用例、契约 22-27）——22：重复注册 fetcher 为叠加不是替换，两钩子回复按注册顺序逐个追加（实测语义写死，不预设）；23：fetcher 违约（返回 42→TypeError）与自身异常（RuntimeError 上抛）后钩子不自动摘除、注册表仍为 1、两轮均不落盘，显式 clear 后注册表为空无残留、后续请求回无钩子基线（不代生成 assistant）；24：clear 幂等（两个清一次即空、空表连清三次不抛、清理后注册表可复用再注册即生效）；25：多请求间 fetcher 状态不泄漏（每请求恰好触发一次、历史按次累积闭合）；26：注册快照（中途注册的钩子当次请求零触发、下次生效）；27：带 tool_calls 的分发轮 fetcher 恰好触发一次（工具执行与 fetcher 轮次解耦）。
+
+**样板与闸门**：导入复用沿 A-5/A-9 先例（夹具/常量/运行时工具表装配均经 tests.test_chat_api 导入链生效，文件头 import 区可查）；双闸门 206 ≤ 450 行、16 ≤ 35 函数（含嵌套 def）；dup 零新增（quality 实测 [新增]=0）。
+
+**过程如实登记**：初版契约 23 的 boom 块与 edges 契约 21 形成跨文件连续 5 行重复窗口，dup 基线配额被挤占、连带 qcommon/check_hygiene 存量对翻 [新增]（quality rc=1）；三明治对比（带文件/移走/带文件）锁定因果后只改本笔新增文件换形（broken_fetcher + 独立错误文案 + match 断言），未动基线、未动 scripts、未碰已合入文件（同 C-14 处置口径）。
+
+**验收自测（基点 cdbcf96 实测）**：单文件连续 10 次全绿（6 passed × 10）；contract/edges/lifecycle 三文件合跑 28 passed；全量 pytest 1085 passed（分发方基线 1079 + 本笔 6）；scripts/quality_rules.py exit 0 零 [新增]；pre-commit 七道逐个 Passed 未用 --no-verify（本笔提交时钩子实测）；git diff --check rc=0；js-tests 本机 node v24 覆盖率报告前缀「跳过」不作达标依据，分发方环境直跑为准。
+
+**提交**：哈希以推送后分支尖端为准，见总线 report。
