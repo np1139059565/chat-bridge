@@ -361,3 +361,25 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 **验收自测（各轮独立实测）**：edges 单文件连续 10 次全绿（4 passed × 10）；contract 单文件连续 10 次全绿（18 passed × 10）；两文件合跑 22 passed；全量 python -m pytest flask_server/tests -q → 1079 passed in 19.28s；scripts/quality_rules.py exit 0、零 [新增]；amend 收口提交时 pre-commit 钩子全过、未用 --no-verify；git diff --check 干净。
 
 **提交**：哈希以推送后分支尖端为准，见总线 report。
+
+
+### 任务 B-8：M3/M4/M5 三槽落点转换/拒绝纯函数层 + 反查夹具 + G10-G12 代码侧结论（已完成，2026-11-15）
+
+**口径基点**：分发方 2026-11-15 01:07 裁定（dispatcher-20261115T010722-ba29e3 与同轮广播）统一方案 A，B-8 与 B-9 同口径；原 19:25 任务书「改活链做落点实装」字面已撤回。分支基于实时 origin/main 6a5c203，单笔提交。
+
+**改动（两个新文件，活链零改动）**：
+- extend/lib/standard_slot_m345.js（新，182 行）：三槽「落点转换/拒绝」纯函数层。M3 run-command：旧位 POST /api/bridge/run-command 请求体 { text }（01b_bridge.js L396-404、routes/bridge.py L294-302，三网关零命中）与标准 tool_call 互转，指令文本经确定性 seed nonce 生成 call_ 键；M4 external-call：旧信封 { type, nonce, request, page_url?, source?, openid?, msg_id?, from_voice? }（delivery.py L77-100、01g_external_cards.js L238-246）与标准 tool_call 互转，nonce 即标准键来源；M5 is_tool_result：旧标记结构（outbound.py L44-47/L105-111/L128-131 构造，message_flow.py L219 / message_router.py L306 消费）与 tool 消息三键 role/tool_call_id/content 互转，content 优先 text 兜底。统一成功/拒绝形态，异常输入一律返回不落盘拒绝对象（ok:false、无 value、reason 非空、无副作用）；三槽键均不掺消息指纹。
+- flask_server/tests/js/test_standard_slot_m345.test.js（新，284 行，24 用例）：反查夹具。覆盖三槽正向/反向/往返/拒绝全路径、确定性 id、严格 true 语义、参数摆放兼容（顶层 arguments / function.arguments / call.name 兜底）、STATUS 分层不变量（恒 declared-placeholder）、拒绝无残留、与 C-7 standard_chain_contract 的 nonce 互认（nonceFromToolCallId / makeToolCallId）、C-12 replacement_map 基线对齐（只读引用 M3/M4/M5 槽位与三类旧字段登记）。
+
+**STATUS 分层**：纯函数层返回值中的 status 仅回显映射层 declared-placeholder，可实测不等于已实装、不翻 STATUS；不装配运行时 M、不建切换开关、不切活链、不新增运行期探测分支；三槽对应活链文件与三网关包装文件零改动。
+
+**覆盖率口径（按裁定如实报）**：被测 JS 源按真实形态计 1（本夹具直接 import 纯函数层）。本机 check_js_tests.py rc=0：538/538 passed（C-12 后 514 + 本笔 24），覆盖率门禁本机未解析到报告按既有逻辑跳过；不改 hooks / 90-70 阈值 / baseline、不 --update-baseline。新源逐行逐分支与用例对照均覆盖（含各 if 两侧、nonceOf 前缀两态、textOrEmpty 空值两态、M5 content/text 兜底两态），分发方环境直跑验收。
+
+**G10-G12 代码侧结论（当前 main 6a5c203 实测；相关文件自 b6 基点 6691558 零改动，b6 行号全部有效）**：
+- G10 push_pipeline.py（369 行）：adapter 四接口维持——send_text 必选，push_media / before_push / after_push 以 hasattr 探测可选（L121-122 / L249 / L260 / L268-271 / L368）；test_push_pipeline_branches.py（203 行）已覆盖分支。b6 结论维持，本笔零触碰。
+- G11 05j_card_sig.js（172 行）：C-7（20ccf64）已把恢复键迁为「标准 id 优先 + msgId 旧键回退」双查形态——_executedSig L24-39（stdId=call.toolCallId||call.id 优先、sigOld 回退查询）、_markExecutedSig L55-63 同键登记、_restoreExecutedCards L86-116、cardMatchesBySig L146- 只按 tool+parameters 不掺指纹。b6 报告「恢复键仍含消息指纹」按当前 main 已过时：主键已落标准 id，msgId 仅回退兼容。G11 迁移主体已在 C-7 完成，本笔零触碰；M5 纯函数层键形态与之对齐。
+- G12 bridge_store.py _write_state L252-272：tmp + os.replace 原子替换、读改写合并、可重入锁，b6 结论维持；command_dispatch.py _register_pending L237-249 UUID 会话键 + 超期清理。本笔零触碰。
+
+**验收自测**：单文件连续 10 次全绿（24 passed x 10）；check_js_tests 538/538 rc=0；quality_rules rc=0 无新增；hygiene / syntax / doc-sync / deps-sync / host-theme --check 全过；全量 pytest 结果见当轮输出。
+
+**提交**：哈希以推送后分支尖端为准，见总线 report。
