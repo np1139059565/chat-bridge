@@ -403,3 +403,10 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - C-13（c，7305d3f，B-8×B-9 八槽交叉一致性索引 standard_chain_c13_crossref_index.md + 反查夹具 9 条）分发方独立 worktree 串行验收通过并合入 main（合并提交 8124227）：实时基点合入预演 0 冲突 / UNMERGED=none、禁区 ZERO、只追加 MISSING=NONE（a B-8 / b B-7 / c B-9·C-13 report、dispatcher 10:05 三条、board 双笔章节与 B-7 对拍章节、b7 报告、两片纯函数全保留）；分发方环境 node v20 check_js_tests.py rc=0 / 554 pass / 覆盖率达标（24 项存量欠账内无退化与新增，本机 v24 前缀「跳过」不作达标依据、未改 hooks / 90-70 / baseline、未 --update-baseline）；七道钩子逐个 Passed、quality 零[新增]、diff --cached --check rc=0、全量 pytest 1079 passed。契约面逐项为真：M1-M8 八槽齐全、两片独立命名无交集、STATUS 恒 declared-placeholder、唯一键标准 tool_call.id 与 tool 消息三键、S1-S4 与 #4/#7/#13/#14 编号封闭、C-12 只读引用、零新增 lib 源码形态如实报且覆盖率按真实形态达标。
 - 同轮续派 C-14（c）：已合入契约面字段签名总表与反查夹具（逐文件列 STATUS / KEY / TOOL_MESSAGE_KEYS / SLOTS 八槽 id / 六段接口 / S1-S4 / 矩阵编号 / call_<nonce> 唯一键，反查夹具断言所有已合入 lib 导出一致、编号封闭、不 import 未合入模块），单面自带实测、不依赖他笔、不碰活链、不装配运行时、不预设摘除结论；覆盖率按真实形态如实报（本笔新增被测 JS 源 0）。
 - 队列：a=A-10、b=B-10、c=C-14；三片独立命名、互不撞车、均不碰活链。旧标记摘除仍按 10:05 广播不下发，阶段 3 不进入摘除步。同轮三条总线消息（c 验收结论 / c task / 全体广播）已发，台账只追加留痕。
+
+## B-10 验收合入、B-11 续派与 C-14 受理（2026-11-15）
+
+- B-10（b，76ebb08，docs/b10-removal-readiness-report.md + work-ai-b.md 只追加、零代码零测试改动）分发方独立 worktree 串行验收通过并合入 main（合并提交 f2ccb87）：实时基点合入预演 0 冲突 / UNMERGED=none、禁区 ZERO、只追加 MISSING=NONE（a B-8、b B-7/B-10、c B-9/C-13 五条 report、dispatcher 10:05 与 10:18 六条、board 三章节、b7 报告、两片纯函数与 C-13 索引全保留）；七道钩子逐个 Passed、quality 零[新增]、diff --cached --check rc=0、分发方环境 js-tests rc=0 / 554 pass / 覆盖率达标、全量 pytest 1079 passed。本机 1078 passed / 1 failed（test_weixin_protocol.py 环境凭证缺失）如实标注、分发方环境同口径全绿，归因存量环境波动不计失败；未跟踪 AUDIT.md 非本笔产物、未纳入提交。
+- 交付三项核对为真：S1-S4 逐槽就绪度表（当前态/缺口/触发条件/裁定点）、c6 九文件逐行复核（存在/活链/调用方/摘除前置/影响面，01c_bridge_cmd.js 与 05d_memory.js 两处顺序表口径差异如实登记）、显式结论五条 + 活链零摘除声明；「旧标记摘除当前不下发、前置未满足」与 10:05 广播一致，分发方确认，阶段 3 不进摘除步。
+- 同轮续派 B-11（b）：c6/c7 摘除顺序表口径差异与九文件影响面夹具清单只读复核，单面自带实测、不碰活链、不摘除标记、不预设下发时点；全体广播同步。c 的 C-14（10:56 回执）已收到，下一轮逐笔独立 worktree 串行验收。
+- 队列：a=A-10（在途）、b=B-11（本轮续派）、c=C-14（受理中）；三片独立命名、互不撞车、均不碰活链。旧标记摘除仍按 10:05 广播不下发。
