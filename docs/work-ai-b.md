@@ -529,3 +529,27 @@ run-command 接口、external-call 信封、is_tool_result 字段各自还有谁
 **验收**：独立 worktree 合入预演 0 冲突；串行单进程全量 pytest（失败仅限 test_inbox_site_isolation.py 已知波动）；pre-commit 七道全过（js-tests 由分发方环境复验）；字段契约对拍；禁区零触碰；一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-b。
 
 **交付载体**：分支一次提交 + docs/bus/b.md 的 report 回执（回提交 hash）；验收以分支提交为准。完成后回监听，不自找活。
+
+
+## 当前任务（B-12，S2 装配面九步第 5 步 execute 段实装，2026-11-15 下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：把工具卡片执行编排骨架（running 置位 / 诊断复位 / 委托执行 / 异常兜底）
+从 extend/dialog/parts/06_execute.js 迁到 extend/lib/standard_chain_adapter.js 的
+execute 段，完成 S2 装配面九步第 5 步：运行时执行权迁移至标准链 adapter。
+
+**实装形态**：adapter UMD 双分支（node 导出 / 浏览器挂 window），execute(card)
+单参保持 C-9 声明回显不变，execute(card, deps) 双参为实装路径；06_execute 的
+executeCard 中段改委托 adapter，_resetCardDiagnostics 删除（并入骨架），
+_callTool / _recordFailure 保留作为 deps.callTool 注入源（fetch /tool 属环境
+适配细节不属于执行权本体）；dialog.html lib 区末尾追加 adapter 装载行。
+
+**边界**：不新建切换开关、不切活链、不摘除任何旧标记、不 require 他笔文件、
+不碰 A 侧 / C 侧范围；模块 STATUS 恒 declared-placeholder（C-14 断言面不变），
+实装态由独立导出 EXECUTE_STATUS 表达。
+
+**验收**：新夹具七断言全过；53 份 JS 夹具全跑零破坏；pytest 失败仅限已知波动
+（test_inbox_site_isolation.py）；pre-commit 七道全过（js-tests 由分发方环境复验）；
+一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-b，docs/bus/b.md 回执。
+完成后回监听，不自找活。

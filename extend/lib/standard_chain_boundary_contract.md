@@ -110,3 +110,33 @@
 - 提交：基于实时 `origin/main` 新建提交，勿 amend 已合入历史、
   勿 force-with-lease 回退已发总线消息；一次提交收口，
   `force-with-lease` 更新 `origin/work/ai-c`，`send report` 回 hash 与实测。
+
+## 四、execute 段实装登记（B-12，S2 装配面九步第 5 步，2026-11-15）
+
+> 本节只追加，不改上方历史表格与文字；六段中 execute 的 STATUS 仍为
+> declared-placeholder（C-14 总表断言面不变），实装态由 adapter 独立导出
+> EXECUTE_STATUS = 'implemented-S2-step5' 表达，与模块 STATUS 不可混淆。
+
+**形态**：execute(card) 单参保持 C-9 声明回显不变；execute(card, deps) 双参
+为实装路径，deps = { callTool: asyncFunction(card) }，由装配侧（06_execute）
+注入环境执行函数。骨架顺序：诊断复位（error / result / stack / errorType /
+origin / location / hint 七字段）→ card.status = 'running' → 委托
+deps.callTool(card) → 异常兜底（写 error 不外抛）→ resolve 状态影子
+{ by, card, status: EXECUTE_STATUS, executed: true, phase }。
+
+**与旧链等价性**：executeCard 中段三行（running 置位 / _resetCardDiagnostics /
+_callTool）改由 adapter.execute 编排；_resetCardDiagnostics 定义删除（并入
+adapter 骨架，七字段直写）；_callTool / _recordFailure 保留在 06_execute
+作为 deps.callTool 注入源（fetch /tool 属环境适配细节，不属于执行权本体）。
+旧链不再持有执行编排骨架，运行时执行权迁移至标准链 adapter。
+
+**UMD 同源**：浏览器分支挂 window.AIMirrorStandardChainAdapter，node 分支
+module.exports 导出；既有契约夹具（C-9 / C-14）走 node 分支，六段回显
+语义不变（53 份夹具全跑 rc=0 零破坏）。
+
+**新增夹具**：flask_server/tests/js/test_standard_chain_adapter_execute.test.js
+（七断言：单参回显 / 双参成功 / 失败 / 异常 / 诊断复位 / deps 非函数边界 /
+导出面），新夹具只读 require adapter，不装配 M、不建开关、不切活链。
+
+**装载**：extend/dialog/dialog.html lib 区末尾追加
+standard_chain_adapter.js 装载行（translator 之后、parts 之前）。

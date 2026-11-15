@@ -108,3 +108,21 @@
 - 夹具全文规避反斜杠与正则，按字符码 10 切行、普通 indexOf / split 反查。
 - 提交：基于实时 origin/main 新建提交，勿 amend 已合入历史、勿 force-with-lease 回退已发消息；
   一次提交收口，更新 origin/work/ai-c，send report 回 hash 与实测。
+
+
+## 六、execute 段实装登记（B-12，2026-11-15 追加）
+
+> 只追加登记，不改上方历史表格；模块 STATUS 恒 declared-placeholder，
+> 实装态由 adapter 独立导出 EXECUTE_STATUS 表达，declaration 语义不变。
+
+| 签名项 | 所在文件 | 实际值 | 是否一致 | STATUS |
+| --- | --- | --- | --- | --- |
+| execute 段实装 | standard_chain_adapter.js | execute(card, deps) 双参持执行编排骨架，06_execute 注入 _callTool；单参回显不变 | 一致 | declared-placeholder |
+| EXECUTE_STATUS 导出 | standard_chain_adapter.js | implemented-S2-step5，独立于 STATUS，不进 C-14 六段断言面 | 一致 | declared-placeholder |
+| 执行权迁移落点 | 06_execute.js / dialog.html | executeCard 中段委托 adapter.execute，_resetCardDiagnostics 并入骨架；lib 区末尾追加装载行 | 一致 | declared-placeholder |
+
+- 新增夹具：test_standard_chain_adapter_execute.test.js 七断言（单参回显 / 双参
+  成功 / 失败 / 异常 / 诊断复位 / deps 边界 / 导出面），只读 require adapter；
+- 53 份 JS 夹具全跑 rc=0 零破坏；新夹具不引入新分母（adapter 已在库、
+  不在 js_coverage_baseline.json 欠账清单）；
+- 详细登记见 standard_chain_boundary_contract.md 第四节。
