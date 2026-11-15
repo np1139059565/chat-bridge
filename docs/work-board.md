@@ -384,3 +384,10 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - 取证：git fetch 后三条 work/ai-* 相对 main 均无未合入提交，main 工作树干净；a 01:02（a-20261115T010258-2ae70c）为 question 而非 report，c 的 B-9 question 已于 01:07:22 裁定，b 收口片无新回执。故本轮按 01:07:50 承诺给正式裁定，不是受理/验收结论；待 B-8 提交到账再走逐笔独立 worktree 串行验收。
 - 裁定：批准 A-10 顺延、B-8 为 a 当前唯一在途优先片，A-10 任务书不作废、不自行开工，B-8 收口验收合入后由分发方下一轮续派；B-8 统一适用方案 A（与 01:07:37 广播、01:07:22 B-9 裁定同口径，显式答复 a 的「同口径是否适用 B-8」，不重复裁定、不再 question）；STATUS 分层、覆盖率按真实形态如实报、G10-G12 随片收口、不造网关文件、不等 b 现状说明，以已合入 C-12 M1-M8 为「新位生效」定义源。
 - 队列：a=B-8（优先，A-10 顺延）、b=B-7 收口片（现状+替换位列全说明，不受方案 A 影响）、c=B-9（收到 01:07:22 裁定即开工）。旧标记摘除仍待 B-8/B-9 逐片验收合入 + 逐项对拍完毕 + b 现状说明收口后由分发方另行下发。
+
+## B-8 / B-9 方案 A 双笔验收合入与队列重排（2026-11-15）
+
+- B-8（a，0ccd0c7）分发方独立 worktree 实测通过并合入 main：合入预演 0 冲突、禁区 ZERO、分发方环境 check_js_tests.py rc=0 / 538 pass / 覆盖率达标（24 项存量欠账内无退化与新增）、七道钩子全过、quality 零[新增]、diff --check rc=0、全量 pytest 1079 passed；M3/M4/M5 三槽纯函数层、STATUS 分层、唯一键、C-12 对齐、G10-G12 代码侧结论齐备。push 首次非快进，rebase 后 origin/main 尖端 5b2c1df 与 origin/work/ai-a 0ccd0c7 同树异 hash，内容已全部入 main、非未合入交付，登记形态避免执行方误判重做。
+- B-9（c，e3aa27b）分发方独立 worktree 实测通过并合入 main：实时基点合入预演 0 冲突 / UNMERGED=none、禁区 ZERO、只追加 MISSING=NONE；分发方环境 node v20 check_js_tests.py rc=0 / 545 pass / 覆盖率达标（本机 v24 前缀「跳过」不作达标依据，未改 hooks / 90-70 / baseline、未 --update-baseline）；七道钩子逐个 Passed、quality 零[新增]、diff --check rc=0、全量 pytest 1079 passed。五槽齐全、STATUS 恒 declared-placeholder、唯一键标准 tool_call.id 与 tool 消息三键、M8 compatibleOnly 纯描述、C-12 M1-M8 只读引用、两片独立命名无撞车，契约对拍逐项为真。
+- b 的 B-7 收口片（663397a，docs/b7-protocol-retirement-status.md + work-ai-b.md 只追加、零代码）已受理，下一轮独立 worktree 串行验收；本轮四条总线消息（a/c/b 定向 + 全体广播）已定向同步。
+- 队列重排：a=A-10 正式续派（09:28 裁定的顺延片，原任务书 dispatcher-20261114T174615-cf9d8d 不作废、不重发）、c=C-13 续派（B-8×B-9 八槽交叉一致性索引 + 反查夹具，单面自带实测、不依赖 b、不碰活链、不预设摘除结论）、b=收口片验收中。旧标记摘除前置仍为「B-8/B-9 逐片验收合入 + 逐项对拍完毕 + b 现状说明收口」，逐片合入已达成，对拍与 b 收口待分发方裁定，未满足前不下发摘除动作。
