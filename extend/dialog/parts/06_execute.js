@@ -1,7 +1,9 @@
 // 模块：extend/dialog/parts/06_execute.js
 // 用途：工具卡片的执行与自动回传：手动执行、全局自动开关、
 //       执行 / 回传倒计时、跳过卡片。
-// 依赖：extend/dialog/parts/00_data.js（命名空间 D）
+// 依赖：extend/dialog/parts/00_data.js（命名空间 D）、
+//       extend/lib/standard_chain_adapter.js（S2 装配面九步第 5 步：
+//       执行编排骨架已迁标准链，本文件注入环境执行函数 _callTool）
 (function () {
   'use strict';
   const D = window.AIMirrorDialog;
@@ -77,9 +79,12 @@
       card.status = 'pending';
       return;
     }
-    card.status = 'running';
-    this._resetCardDiagnostics(card);
-    await this._callTool(card);
+    // S2 装配面九步第 5 步（执行权迁移）：running 置位 / 诊断复位 / 委托执行
+    // / 异常兜底改由标准链 adapter.execute 编排；本组件只注入环境执行函数
+    // _callTool（fetch /tool 等环境细节），旧链不再持有执行编排骨架。
+    await window.AIMirrorStandardChainAdapter.execute(card, {
+      callTool: (c) => this._callTool(c)
+    });
     // 结果概览：只记一行，避免把大段 result 打进控制台
     log('卡片执行结束：id=' + cid + ' 工具=' + (card.tool || '(非工具)')
       + ' 状态=' + card.status + (card.error ? (' 错误=' + card.error) : ''));
@@ -158,20 +163,6 @@
     if (store[key]) return false;
     store[key] = true;
     return true;
-  };
-
-  /**
-   * 复位卡片的运行状态与失败诊断字段，准备新一轮执行。
-   * @param {Object} card 工具卡片
-   */
-  M._resetCardDiagnostics = function (card) {
-    card.error = null;
-    card.result = null;
-    card.stack = null;
-    card.errorType = '';
-    card.origin = '';
-    card.location = null;
-    card.hint = '';
   };
 
   /**
