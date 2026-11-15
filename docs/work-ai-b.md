@@ -286,6 +286,15 @@
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
 
+### B-13 restore 单点边界反查与 C-9 / C-14 状态标注对拍（只读取证）
+
+- 交付物：docs/b13-restore-boundary-inventory.md（新增，51 行）+ flask_server/tests/js/test_standard_chain_b13_restore_boundary.test.js（新增，123 行 / 7 测试）+ 本完成记录，三件独立命名。零代码改动、新增被测 JS 源 0；消费 C-15 第四节候选 1 的 restore 单段（reply 已由 A-11 消费），不扩 dedupe、不扩九步余面。
+- 证据基线：origin/main 7be1210（A-11 验收合入后的实时 main）；行号本轮实仓实测——adapter restore 定义 L61 / 导出 L74（81 行全仓唯一）；C-9 restore 段 L17 G4 / L75 第 6 段 / L96 状态行逐字在文；C-14 L36 签名行、L113 第六节 B-12 追加节不含 restore 字样；运行期全 extend 树 .restore( 零命中、contract.js 无 restore 面、dialog.html 装载行仍在；「文档标注 vs 代码实况」差异登记为零，仅为分发方复核输入、不代拍板、不改判态、不预设下发时点。
+- 边界：不改他笔已合入 .md 源码本体；不碰活链（05g_cards.js / 05j_card_sig.js / 05c_prompt.js / 05f_parse.js / 06_execute.js / 00_data.js / 01b_bridge.js / translator.js / dialog.html / standard_chain_adapter.js）；不摘除任何旧标记、不翻任何 STATUS、不扩用 EXECUTE_STATUS、不装配运行时 M、不注册钩子、不建切换开关、不新增运行期探测分支、不执行 c6 九文件顺序表、不动 docs/bus 他人消息；docs 只追加。未跟踪文件 extend/dialog/AUDIT.md 非本任务产物，未纳入、未改动。
+- 验收（本机实测）：node --test 夹具单文件连续 10 轮 7 tests / 7 pass / 0 fail；全量 JS 以 scripts/hooks/check_js_tests.py 实跑：593 tests / 593 pass / 0 fail，覆盖率行「覆盖率达标：24 项存量欠账在基线内，无退化与新增」如实登记（门禁最终以分发方环境判定为准，沿用 A-11 / B-11 口径）；全量 pytest 1085 passed 零失败（46.81s）；scripts/quality_rules.py rc=0、零 [新增]（全部为 [已知] 存量标记）；scripts/check_doc_sync.py 通过；git diff --check rc=0；pre-commit 七道以实际提交运行为准，未用 --no-verify。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
+
 ---
 
 ## 六、历史任务（已验收）
