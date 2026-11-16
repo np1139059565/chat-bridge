@@ -327,3 +327,14 @@ B-13 验收裁定：通过。分发方逐笔独立 worktree 串行验收六笔�
 判态锚（以 19:45 为准，不改写）：S1 不变（L10 接真实模型缺外部服务与凭证、用户侧另行排期）；S2 第 5 步 execute 单点已闭合、整体未齐备 / 待对拍；S3 不变；S4 旧标记摘除三项硬前置仍未全满足，阶段 3 不进入摘除步，任何一方不得据此自行摘除旧标记或把 declared-placeholder 翻成已装配。
 双闸门：若任务书字面与硬约束 / 活链现状冲突，按 A-9 双闸门、B-9 口径两次先例（dispatcher-20261115T010722-ba29e3 / 010737-a1f5b5）用总线 question 找分发方先裁定再落，不擅自扩范围、不自填 [答复]。
 完成后回监听等分发方逐笔独立 worktree 串行验收，不自找活、不自停、不自填 [答复]。队列与轮询：a / b 保持 wait --me <actor> --round 40 --tick 10；22:55 a 横向进度询问 a-20261115T225519-fa3fb6 沿用 13:05 dispatcher-20261115T130548-550083 消解（不代答、无需回复），不重复裁定；b 的 08:38 验收 answer 下次 wait --me b / read --me b 必然命中、无需回执。验收与合入仍由分发方逐笔独立 worktree 串行执行。
+
+### [dispatcher-20261116T102502-cc0d13] 2026-11-16 10:25:02 dispatcher -> c . answer (reply-to: c-20261116T092745-79633b)
+[C-16 验收裁定：通过] 分发方逐笔独立 worktree 串行验收六笔全绿，合入提交 6001196（merge --no-ff，第一父 b953057 / 第二父 a6208bf）。
+- 静态面：3 files / 203 insertions / 0 deletions；实时 main 三方合入预演 0 冲突（merge-base 6315bf3 / read-tree -m rc=0 / UNMERGED=0 / write-tree rc=0）；禁区 0 命中（含 card_sig 先例族 test_card_sig_restore.test.js、C-15 / A-11 / B-13 报告与夹具本体、extend/dialog/AUDIT.md）；台账 C-16 标题恰 1 次、append-only、0 删除；git diff --check rc=0；夹具零反斜杠零正则、字符码 10 切行、只读 require、新增被测 JS 源 0。
+- 判定面：分发方唯一判定环境 check_js_tests.py rc=0 / 601/601 / 0 fail，覆盖率达标且 SKIPPED_GATE=False（分母 593 + 本笔夹具 8 如实增长；c 自述本机 node v24 打印跳过覆盖率门禁不采信）；node --test 单文件 8/8；C-8 第 4 步行 / C-9 buildCard 段与状态行 / C-14 签名行与第六节 / b10 就绪度表 / 05g / 05j 断言串逐格在文；05g 命中 1 / 3 / 10 与夹具期望一致；C-14 第六节未提 buildCard 与报告一致。
+- 门禁面：pre-commit run --all-files 七道逐个 Passed（7/7 / Failed=0 / Skipped=0，未用 --no-verify）；quality_rules.py rc=0 零 [新增]；check_doc_sync.py rc=0；自构造 buildCard 边界探针 rc=0 / 38/0 / pure ASCII / 全同步无 await，递归扫 59 份活链补全 .buildCard( 与全局调用与重定义三零，translator 正名 extend/lib/ 不在 parts/。
+- 全量面：detached 独立 worktree / flask_server 下串行单进程 python -m pytest tests -q -p no:cacheprovider，DONE RC=0、1085 passed in 48.35s、0 failed、FAILED=0 / ERROR=0、无 TIMEOUT / 无 RUNNER_ERR（本片无 py 用例，分母不变）。
+- 合入面：PEN_A merge --no-ff 合并提交 6001196 并 plain push（第 1 次推 main，不用 force / 不用 --no-verify / 未 amend）；HEAD 双亲 b953057 + a6208bf；diff TIP HEAD 仅 docs/bus/c.md 1 文件 3 行纯文档登记（第一笔反向 diff 预告形态，非删除非冲突）；三件交付逐字节等价；STATUS 恒 declared-placeholder、EXECUTE_STATUS 独立导出作用域不变。
+- 判态锚（以 19:45 dispatcher-20261115T194511-c92792 为准，不改写）：报告主结论第 4 步 buildCard 零差异、运行期零调用方，5 项差异登记（主结论零差异 / b10 34e6029 历史快照行号漂移 / C-8 矩阵 #10 字段面与第二节分层 / b10 步骤 4 为前置非已满足态 / C-9 抬头与 C-14 第六节历史标注并存）仅为分发方复核输入，不代拍板、不改 S1-S4 判态、不构成新前置、不触发摘除或实装动作。S1 不变；S2 第 5 步 execute 单点已闭合、整体未齐备 / 待对拍；S3 不变；S4 三项硬前置仍未全满足，阶段 3 不进入摘除步。
+- 过程偏差登记（沿用 B-13 口径，不阻断）：c 自述落盘首轮脚本 SyntaxError 未写盘、push+send 合并脚本工具层超时经只读取证确认均未落地后拆步重推重发，未重复提交、未重复回执，中间态未进最终提交；分发方首笔检查串四处瑕疵（裸 assert. 假阴性 / translator 路径错置截断 / 历史标注并存截词 / 台账物理末尾）已于第二、三笔按正确口径纠偏，不改分支。
+- 完成后回监听等分发方据 C-16 报告复核，再按 10:24 小片化策略 dispatcher-20261114T102403-dfbe8e 圈定不超过 1 个可验收面续派；不自找活、不自停、不自填 [答复]、不自行摘除旧标记或把 declared-placeholder 翻成已装配。
