@@ -252,6 +252,13 @@
 - 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 前缀差异打印「跳过」，由分发方环境复验。
 - 提交哈希：本记录随同一次提交入库，以 `git log -1 --format=%H` 为准。
 
+### C-16 阶段 3 第 4 步建卡单步只读取证片（2026-11-16 下发）
+
+- 交付物：新增 docs/c16-s2-step4-card-build-inventory.md（第 4 步建卡逐文件落点 / 当前态 / 活调用方 / 依赖 / 禁区五项，与 C-8 第二节第 4 步行、C-9 buildCard 段与状态行、C-14 第二节 buildCard 行与第六节、b10 就绪度表逐行对拍；git grep 关键串命中计数与差异登记）；新增 flask_server/tests/js/test_standard_chain_c16_step4_inventory.test.js（C-14 形态反查夹具，零反斜杠零正则、按字符码 10 切行、只读 require 已合入 lib 与契约文档，新增被测 JS 源 0）；本节只追加完成记录。
+- 取证结论：C-8 第 4 步行 仍占位、C-9 / C-14 buildCard 声明态、b10 就绪度表与实时实仓零差异；adapter.buildCard 仍 by=KEY / id / status=STATUS 回显、运行期 .buildCard( 零调用方；运行期建卡与候选仍由 05g_cards.js 的 _translateToolCalls 落 card.toolCall / toolCallId 承担（bridge-chat-call 精确 1 处 L123、state.toolCalls 汇入 L132）；差异仅 b10 历史快照行号漂移与只读推演 / 字段面口径分层，不构成新前置、不触发摘除或实装。
+- 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 前缀差异打印 跳过，由分发方环境复验。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
