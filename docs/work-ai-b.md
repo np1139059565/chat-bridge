@@ -295,6 +295,14 @@
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
 
+### B-14 dedupe 单点边界反查与 C-9 / C-14 / C-15 / b10 状态标注对拍（只读取证）
+
+- 交付物：docs/b14-dedupe-boundary-inventory.md（新增，78 行）+ flask_server/tests/js/test_standard_chain_b14_dedupe_boundary.test.js（新增，164 行 / 12 测试）+ 本完成记录，三件独立命名。零代码改动、新增被测 JS 源 0。
+- 证据基线：origin/main 0ad583a（提交基线；取证实测笔 55d94d0，区间 55d94d0..0ad583a 仅总线消息笔，被取证对象零变化，合并后夹具重跑 12/12 复核）；行号本轮实仓实测——C-9 第五节 dedupe 边界段四行（同 call_<nonce> id 原样回显不吞并 / 不同 id 原样回显 / 占位期不做判重决策）与 G1-G4、第二节 dedupe 状态行逐字在文；C-14 第二节 dedupe 签名行（返回 by=KEY / a / b / status=STATUS）、第六节零 dedupe 字样；C-15 第二节 | 7 | 行仅作「前端 dedupe 仍声明态」标注输入；b10 就绪度表零 dedupe 字样、S2 行原样在文；adapter.dedupe 定义与导出全仓唯一，运行期 extend 树四探针串（AIMirrorStandardChainAdapter.dedupe / adapter.dedupe( / AD.dedupe( / Adapter.dedupe(）零命中，git grep 全仓唯一命中为任务书文本自身；「文档标注 vs 代码实况」差异登记为零，仅为分发方复核输入、不代拍板、不改判态、不预设下发时点。
+- 边界：不改他笔已合入 .md 源码本体；不碰活链（05g_cards.js / 05j_card_sig.js / 05c_prompt.js / 05f_parse.js / 06_execute.js / 00_data.js / 01b_bridge.js / translator.js / dialog.html / standard_chain_adapter.js / standard_chain_contract.js）；不装配运行时 M、不注册钩子、不建切换开关、不新增运行期探测分支、不摘除任何旧标记、不翻任何 STATUS、不扩用 EXECUTE_STATUS、不执行 c6 九文件顺序表、不动 docs/bus 他人消息；docs 只追加（0 删除）。
+- 验收（本机实测）：node --test 夹具单文件连续 10 轮 12 tests / 12 pass / 0 fail；全量 JS 以 scripts/hooks/check_js_tests.py 实跑：623 tests / 623 pass / 0 fail（分母 611 + 本笔 12），覆盖率行「覆盖率达标：24 项存量欠账在基线内，无退化与新增」如实登记（门禁最终以分发方环境判定为准，沿用 A-11 / B-11 / B-13 口径）；全量 pytest 1085 passed 零失败（45.18s，本片无 py 用例分母不变）；scripts/quality_rules.py rc=0 零 [新增]；scripts/quality_extra.py rc=0；scripts/hooks/check_hygiene.py rc=0；scripts/check_doc_sync.py rc=0；git diff --check rc=0；pre-commit 七道以实际提交运行为准，未用 --no-verify。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ---
 
 ## 六、历史任务（已验收）
