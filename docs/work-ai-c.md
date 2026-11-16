@@ -259,6 +259,13 @@
 - 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 前缀差异打印 跳过，由分发方环境复验。
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
+### C-17 阶段 3 九步第 7 步去重逐行取证片（2026-11-16 并行补派下发）
+
+- 交付物：新增 docs/c17-s2-step7-dedupe-inventory.md（第 7 步去重逐文件落点 / 当前态 / 活调用方 / 依赖 / 禁区五项，与 C-15 第二节第 7 行、C-9 第五节 dedupe 边界段与状态行、C-14 dedupe 签名行、b10 就绪度表逐行对拍；git grep 关键串命中计数与 6 项差异登记）；新增 flask_server/tests/js/test_standard_chain_c17_step7_dedupe_inventory.test.js（C-14 / C-16 / A-12 形态反查夹具，A-10 require 序差异化，零反斜杠零正则、按字符码 10 切行、只读 require 已合入 lib 与契约文档，新增被测 JS 源 0）；本节只追加完成记录。
+- 取证结论：C-15 第 7 行「服务端 pending_tool_calls 按 tool_call_id 配对防重放已实交付 / 前端 dedupe 仍声明态 / 前端去重由 00_data.js 与 05j_card_sig.js 承担」与实时实仓零差异；adapter.dedupe 仍 by=KEY / a / b / status=STATUS 回显、运行期五精确串全 0 命中；同面隔离按 19:08 分发方判定（九步第 7 步装配面 vs 六段 dedupe 声明函数不同可验收面），C-9 第五节与 C-14 签名行仅作标注对拍输入、不取为范围。
+- 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 打印跳过，由分发方环境复验。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
