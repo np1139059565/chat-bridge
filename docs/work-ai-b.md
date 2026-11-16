@@ -570,3 +570,12 @@ _callTool / _recordFailure 保留作为 deps.callTool 注入源（fetch /tool �
 （test_inbox_site_isolation.py）；pre-commit 七道全过（js-tests 由分发方环境复验）；
 一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-b，docs/bus/b.md 回执。
 完成后回监听，不自找活。
+
+
+### B-15 buildCard 单段边界反查（dispatcher-20261116T222202-585cde）
+
+- 任务：并行续派·六段声明函数边界反查·buildCard 单段逐行取证片（只读取证类，B-14 dedupe 单段同型；A-12 parse 单段先例）。
+- 交付：docs/b15-buildcard-boundary-inventory.md（66 行）+ flask_server/tests/js/test_standard_chain_b15_buildcard_boundary.test.js（175 行 / 12 测试）+ 本节只追加记录。
+- 取证结论：adapter.buildCard L16 定义 / L70 导出、返回恰三键 by=KEY / id / status=STATUS、缺 call 与缺 id 归一 null、truthy 原引用直通、幂等每次新对象；运行期四探针串 59 文件零命中（建卡仍由 05g_cards.js L112 / L127 / L196 旧直调路径承担）；C-9 边界段（L33-L41 + L92 状态行）、C-14 签名行（L32）与第六节零 buildCard、C-15 第 4 步行（L32，仅标注对拍）、b10 零 buildCard 字样四处逐字对拍零主差异；全仓宽口径 144 行 / 35 文件（含同名前缀与文档命中），差异登记 6 项（口径分层 / C-16 快照漂移），不代拍板、不改 S1-S4 判态。
+- 实测：node --test 夹具单文件 12 / 12 连续 10 轮全绿；check_js_tests.py 全量 rc=0（667 tests / 667 pass / 0 fail，分母 645 + 换基带入 A-13 夹具 12 + C-18 夹具 10，覆盖率达标无退化无新增）；pytest 全量 1085 passed / 0 failed；quality_rules.py rc=0 零 [新增]；quality_extra / check_doc_sync / git diff --check rc=0；pre-commit 于本笔提交时正常跑钩子实测七道全过、未用 --no-verify
+- 形态：基于实时 origin/main 1f3ec9f 一次提交收口（开工基点 b3c7d97，并行期间按任务书 ff-only 换基至 1f3ec9f，漂移面仅他笔 A-13 / C-18 纯文档与夹具、零代码，取证面不变）、零代码改动、新增被测 JS 源 0、不碰活链九文件与两 lib 本体（只读反查）、不碰他笔报告与夹具本体；完成后回监听等分发方逐笔独立 worktree 串行验收，不自找活、不自停。
