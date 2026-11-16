@@ -416,3 +416,32 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
   不改 hooks / 90-70 阈值 / js_coverage_baseline.json / 不用 --update-baseline；
   不碰 C-15 / B-12 / B-8 / B-9 文件；不翻任何 STATUS；docs 只追加。
 - 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
+## A-12 parse 单点边界反查夹具与 C-9 / C-14 状态标注对拍片（2026-11-16，只读取证）
+
+- 任务书：dispatcher-20261116T103235-72e379（阶段 3 续派，parse 单段圈定，
+  不扩 dedupe / 其余四段 / 九步余面 / S1 L10）。
+- 交付：docs/a12-parse-boundary-inventory.md（新增报告）、
+  flask_server/tests/js/test_standard_chain_a12_parse_boundary.test.js
+  （新增反查夹具 10 用例：导出面 / 形状恰三键 / 引用回显 / 缺参归一 /
+  空 block 真值 / truthy 直通幂等 / C-9 对拍 / C-14 对拍 / C-15 与 b10 对拍 /
+  运行期零调用方）、本台账只追加。
+- 基点：origin/main e7c3b44 新建提交；A-11 1ddeee1 / C-16 6001196 在其祖先链（实测）。
+- 实测：单文件 3 连跑全绿（10 tests / 10 pass / 0 fail）、全量 js 58 文件 rc=0、
+  全量 pytest 1085 passed、quality 全量 rc=0 零新增（防重窗 A-10 口径归零）、
+  check_doc_sync rc=0、diff --check rc=0；pre-commit 七道以提交轮实跑为准
+  （覆盖率报告本机 node v24 未解析到，按既有逻辑跳过、分发方环境为准）。
+- 结论零差异：adapter.parse 返回恰三键（by=tool_call.id / block / status=declared-placeholder）、
+  falsy 归一 null、空 block 真值原样回显、truthy 引用回显不读 code、不产出 tool_calls、
+  幂等新对象、入参不改写；C-9 第一节四行 + G1 / G2 / G3 + 第二节状态行、C-14 第二节 parse 行
+  与第六节（不含 parse）逐行对拍一致；运行期活链四串零命中（05f / 00_data / 05g 的 .parse(
+  全为 JSON.parse，逐文件计数恒等钉死：5 / 1 / 1）。
+- 差异登记：b10 S2 行历史快照措辞（第 5 步仍占位）按 19:45 收紧口径登记不改写；
+  任务书快照 KEY='.id' 为 B-12 时点旧示值、实时实仓 tool_call.id（A-11 / B-13 同值互证）；
+  EXECUTE_STATUS 计数 4 夹具 12 处系自身登记引用、作用域不变。
+- 边界：零代码改动；不改已合入 .md / 源码本体；零反斜杠零正则；
+  不改 hooks / 90-70 阈值 / js_coverage_baseline.json / 不用 --update-baseline；
+  不碰 C-15 / C-16 / A-11 / B-13 报告与夹具本体 / AUDIT.md；不翻任何 STATUS；docs 只追加。
+- 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
+- 防重窗：夹具头部 require 五行与 a11 同族样板构成 quality 闸跨文件重复窗（净树 94 组、
+  带夹具 95 组；闸门按组数对账，扫描序末组 qcommon/check_hygiene 被贴新增仅替身显示）；
+  已按 A-10 口径把 a12 头部 require 顺序差异化归零（quality 全量 0 新增），断言语义不变。
