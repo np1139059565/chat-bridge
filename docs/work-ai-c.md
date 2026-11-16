@@ -266,6 +266,13 @@
 - 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 打印跳过，由分发方环境复验。
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
+### C-18 阶段 3 九步第 8 步刷新恢复键逐行取证片（2026-11-16 并行续派下发）
+
+- 交付物：新增 docs/c18-s2-step8-restore-key-inventory.md（第 8 步刷新恢复键逐文件落点 / 当前态 / 活调用方 / 依赖 / 禁区五项，与 C-15 第二节第 8 行、C-9 ### 6. restore 边界段与状态行、C-14 restore 签名行、C-8 九步表第 8 行、b10 / c7 / c6 就绪度逐行对拍；git grep 关键串命中计数与 6 项差异登记）；新增 flask_server/tests/js/test_standard_chain_c18_step8_restore_key_inventory.test.js（C-14 / C-16 / A-12 / B-14 / C-17 形态反查夹具，A-10 require 序差异化，零反斜杠零正则、按字符码 10 切行、只读 require 已合入 lib 与契约文档，新增被测 JS 源 0）；本节只追加完成记录。
+- 取证结论：C-15 第 8 行「05j / 05g 已实改并保持标准键优先 + 旧 msgId 兼容双查 + 去消息指纹 / contract.execKeyFromToolCall 纯函数在码 / 运行期恢复仍走旧双查」与实时实仓零差异；adapter.restore 仍 by=KEY / sessionId / id / noMessageFingerprint=true / status=STATUS 回显、运行期五精确串全 0 命中；execKeyFromToolCall 在 parts + html + core + routes 活链运行期零命中；同面隔离按 19:08 / 22:02 分发方判定，C-9 restore 段与 C-14 签名行仅作标注对拍输入、不取为范围。
+- 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 打印跳过，由分发方环境复验。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
