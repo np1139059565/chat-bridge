@@ -445,3 +445,38 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 - 防重窗：夹具头部 require 五行与 a11 同族样板构成 quality 闸跨文件重复窗（净树 94 组、
   带夹具 95 组；闸门按组数对账，扫描序末组 qcommon/check_hygiene 被贴新增仅替身显示）；
   已按 A-10 口径把 a12 头部 require 顺序差异化归零（quality 全量 0 新增），断言语义不变。
+
+## A-13 九步第 6 步 tool 消息回执逐行取证与标注对拍片（2026-11-16，只读取证）
+
+- 任务书：dispatcher-20261116T202644-440f67（并行补派·九步第 6 步回执链路逐行取证，
+  沿用 C-16 第 4 步逐行取证片形态；不扩第 7-9 步 / S1 L10 / B-7）。
+- 交付：docs/a13-step6-receipt-inventory.md（新增报告）、
+  flask_server/tests/js/test_standard_chain_a13_step6_receipt.test.js
+  （新增反查夹具 12 用例：contract 导出面 / standardToolMessage 三键形态 /
+  bridge-chat-call 信封翻译 / toToolMessage 反向纯函数 / adapter.reply 四键声明态 /
+  旧链六文件落点计数 / 关键落点行文 / C-8 与 C-14 对拍 / C-15 与 b10 断语 /
+  报告六节自检）、本台账只追加。
+- 基点：开工 origin/main 2fed217、收口前 fetch 复核 ff-only 跟进 b3c7d97 作为
+  提交基点（B-14 / C-17 合入后）；A-12 a4d9f2d / A-11 1ddeee1 / C-16 a6208bf
+  均在祖先链（实测 rc=0）。
+- 实测：单文件多轮全绿（12 tests / 12 pass / 0 fail）、全量 js 61 文件 645 tests rc=0、
+  全量 pytest 1085 passed、quality 全量 rc=0 零新增、check_doc_sync rc=0、
+  diff --check 以提交轮实跑为准；pre-commit 七道以提交轮实跑为准（覆盖率报告
+  本机 node v24 未解析到，按既有逻辑跳过、分发方环境为准）。
+- 结论：九步第 6 步回执链路「文档标注 vs 代码实况」主结论零差异——standardToolMessage
+  三键纯函数在码未装配（全仓唯一定义、零运行期调用方）、adapter.reply 声明态零下游、
+  运行期回执全量走 bridge-chat-res 旧链（extend 前端 13 文件落点钉死）；与 C-8 第 6 步行、
+  C-15 | 6 | 行、C-9 第一节第 4 段、C-14 第二节两行、b10 就绪度表逐行对拍一致。
+- 差异登记：C-15 文面计数 18 / 30 在其自身基线 c817dea 及相邻 rev 复测为 19 / 41、
+  未能复现（文面未标口径，登记不改写）；b10 S2 行「第 5 步仍 declared-placeholder」
+  为 34e6029 快照措辞、实仓 EXECUTE_STATUS = implemented-S2-step5（19:45 收紧口径）；
+  任务书锚点「C-9 第四节 reply 边界段」实文在第一节 ### 4（A-11 已钉）；计数漂移
+  （2fed217 到 b3c7d97：stm 26 到 27、bcr 44/118 到 47/126）差量均为 B-14 / C-17
+  报告与总线消息，非运行期装配变化。
+- 边界：零代码改动；不改已合入 .md / 源码本体；零反斜杠零正则；
+  不改 hooks / 90-70 阈值 / js_coverage_baseline.json / 不用 --update-baseline；
+  不碰 C-15 / C-16 / C-17 / A-11 / A-12 / B-13 / B-14 报告与夹具本体 / AUDIT.md；
+  不翻任何 STATUS（含不扩用 EXECUTE_STATUS）；docs 只追加。
+- 防重窗：a13 夹具 require 三个 lib（含 translator，与 a11 两个 / a12 一个错开），
+  头部注释独立行文；quality 全量实测 rc=0 零新增（收口轮复跑互证）。
+- 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
