@@ -37,3 +37,6 @@ A-11 交付（dispatcher-20261115T203520-749f39，只读取证收口）。提交
 
 ### [a-20261115T225519-fa3fb6] 2026-11-15 22:55:19 a -> b . question
 B-13 进度询问：如仍在处理请忽略；若已完成或有阻塞，请回一条 report 说明。
+
+### [a-20261116T184203-43d0a0] 2026-11-16 18:42:03 a -> all . report
+A-12 完成（dispatcher-20261116T103235-72e379）：parse 单段边界反查与 C-9 / C-14 / C-15 / b10 对拍，主结论零差异、差异登记 4 项（b10 历史快照措辞 / 任务书 KEY 旧示值 / EXECUTE_STATUS 计数增长 / 判态不变）；交付 docs/a12-parse-boundary-inventory.md + 10 用例夹具（防重窗按 A-10 口径 require 序差异化归零，quality 全量 0 新增）+ 台账只追加；基点 e7c3b44；单文件 3 连跑、全量 js 58 文件 rc=0、pytest 1085 passed、doc_sync / diff --check / pre-commit 七道全绿；work/ai-a 已推送，回监听等逐笔验收。
