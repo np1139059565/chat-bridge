@@ -480,3 +480,43 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 - 防重窗：a13 夹具 require 三个 lib（含 translator，与 a11 两个 / a12 一个错开），
   头部注释独立行文；quality 全量实测 rc=0 零新增（收口轮复跑互证）。
 - 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
+## A-14 reply 单段声明函数边界反查片（2026-11-16，只读取证）
+
+- 任务书：dispatcher-20261116T232427-ee3d1f（reply 单段声明函数边界反查；沿用 A-11
+  「同一词、不同面、先后各自验收通过」先例，按 B-14 四锚口径（C-9 / C-14 / C-15 / b10）
+  在实时基线复核；不扩 S1-S4 实装、不触碰他人已合入报告与夹具本体。）
+- 交付：docs/a14-reply-segment-inventory.md（新增报告七节：范围方法 / 代码实况逐项钉死 /
+  四锚逐行对拍 / 差异登记 / 结论 / 边界与只追加记录 / 验收实测）、
+  flask_server/tests/js/test_standard_chain_a14_reply_segment.test.js（新增反查夹具 14 用例：
+  唯一定义与导出 / 返回形状恰四键 / role 硬编码 / content 不回显 / tool_call_id 回显不吞 /
+  缺键归一 / 非对象不抛错 / truthy 不比较不排序 / 幂等新对象 / falsy 归一与 truthy 直通 /
+  常量作用域 / 运行期四精确串零调用方与局部变量登记 / 四锚逐行对拍 / 报告自反）、
+  本台账只追加。
+- 基点：开工 c163e0a（b3c7d97 即 B-14 / C-17 / A-13 合入链在祖先链，实测 rc=0）；收口轮
+  fetch 发现 main 前进，ff-only 跟进 b71b86c（C-18 合入 1e3cfee + 总线与 C-19 续派登记，
+  与本片三文件零交叠）作为提交基点；未 amend 已合入历史。
+- 实测：单文件多轮全绿（14 tests / 14 pass / 0 fail rc=0，含一轮 A14-14 报告换行自修后
+  复跑全绿）；基线 b71b86c 全量实测 js 669/669（645 + C-18 10 + 本片 14）零 fail、
+  pytest 1085 passed 零 failed、quality rc=0 零 [新增]（[已知] 269 行）、doc_sync rc=0、
+  diff --check rc=0；pre-commit 七道以提交轮实跑为准（覆盖率门禁本机 node v24 未解析到、
+  按既有逻辑跳过、分发方环境为准）。
+- 结论：adapter.reply 为全仓唯一纯声明函数（L59 定义 / L72 导出），返回形状恰四键
+  （by / role / tool_call_id / status），STATUS 恒 declared-placeholder、KEY 恒 tool_call.id、
+  role 硬编码 tool 不回显、content 不回显、tool_call_id truthy 原样回显 / falsy 归一 null、
+  不抛错、不比较不排序、幂等新对象；四锚逐行对拍一致；活链九文件四精确串零命中，
+  运行期零调用方、回执仍全量走 bridge-chat-res 旧链（A-13 已钉 13 文件落点）；S4 三项硬前置
+  未全满足、不进入摘除步、不构成执行权迁移 / 新前置 / 实装授权；19:45 判态锚不变。
+- 差异登记：a11 同面复核关系（覆盖面 / falsy-truthy 边界 / truthy 不比较 / 运行期取证口径
+  差异，两片结论一致零差异）；b10 无 adapter.reply 字样为对拍方法差异非语义冲突；
+  计数漂移（c163e0a 实测 stm 31 文件 70 命中、bcr 51 文件 152 命中，对 b3c7d97 47 文件
+  126 命中差量为各片报告与总线消息登记增长、非运行期装配变化）；06_picker.js
+  const reply 局部函数 / 05g_cards.js no_reply / 05e_quality.js code_only_reply 逐文件登记
+  非调用方；C-15 文面计数未复现项沿用 A-13 登记、不重测不改写。
+- 边界：零代码改动；只新增报告与夹具、本台账只追加；零反斜杠零正则；
+  不改 hooks / 90-70 阈值 / js_coverage_baseline.json / 不用 --update-baseline；
+  不碰他人已合入报告与夹具本体 / AUDIT.md；不翻任何 STATUS（含不扩用 EXECUTE_STATUS）；
+  docs/bus 他人消息零触碰；运行时 M 未装配、零开关零切换零探测分支。
+- 防重窗：a14 夹具 require 最前置 node:assert/strict、单 lib（adapter）、全量 a14 前缀别名，
+  与 a11（双 lib）/ a12（单 lib 序不同）/ a13（三 lib）错开；头部注释独立行文；
+  quality 以提交轮全量实跑为准。
+- 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
