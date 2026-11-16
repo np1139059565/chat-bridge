@@ -273,6 +273,13 @@
 - 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 打印跳过，由分发方环境复验。
 - 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
 
+### C-19 阶段 3 九步第 9 步协议字段退役逐行取证片（2026-11-16 并行续派下发）
+
+- 交付物：新增 docs/c19-s2-step9-protocol-retirement-inventory.md（第 9 步协议字段退役逐文件落点 / 当前态 / 活调用方 / 依赖 / 禁区五项，与 C-15 第二节第 9 行完整六列、C-8 九步表第 9 行与矩阵 #13、C-9 G1 与范围声明、C-14 PROTOCOL 两签名行、C-10~C-13、b7 M1-M8、b10 S3 / S4 逐行对拍；git grep 命中计数与 8 项差异登记）；新增 flask_server/tests/js/test_standard_chain_c19_step9_protocol_retirement_inventory.test.js（C-14 / C-16 / A-12 / B-14 / C-17 / A-13 / C-18 形态反查夹具，A-10 require 序对 c18 / a13 / c17 / b14 差异化归零、c19Test( 直接调用，零反斜杠零正则、按字符码 10 切行、只读 require 已合入 lib 与契约文档，新增被测 JS 源 0）；本节只追加完成记录。
+- 取证结论：C-15 第 9 行「替换位契约面列全 / 三网关零遗留 / PROTOCOL_RETIREMENT_CONTRACT.status 仍 declared-placeholder / 运行时退役面全未动（19:45 S3 不变）」与实时实仓零差异；八槽 M1-M8 列全、B-8 三槽与 B-9 五槽互斥且未装配运行时；活链协议字串（bridge-chat-call / bridge-chat-res / is_tool_result / run-command / remote_bridge 信封）全保留；同面隔离按分发方判定，C-9 对应锚为 G1 与范围声明、C-14 第六节仅 execute 登记，均如实登记、不取为范围。
+- 验收实测：见报告第六节，以收口轮本机实跑为准；覆盖率门禁本机 node v24 打印跳过，由分发方环境复验。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
+
 ## 六、历史任务（已验收）
 
 ### 任务 C-1：客户端注册接口与自定义配置保管
