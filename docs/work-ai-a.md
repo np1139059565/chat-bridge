@@ -547,3 +547,9 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
   pre-commit 七道全过。
 - 边界：零业务代码改动；不碰 hooks/baseline/STATUS；不碰 b/c 范围；不推 main；
   回执已 send（reply-to d0f61c），回 wait 监听，不自找活、不自停。
+## R0 完成记录（2026-11-18，dispatcher-20261118T025047-6d5ccb）
+
+- 交付：docs/r0-config-8hop-matrix.md（八跳×三版本 blob 矩阵、五重点失效清单、合流风险、四锚核验、D2 根因、反查夹具、分母/限度）。
+- 结论：现役失效 0/5——4 项全链健康；F1 长度上限三版从未实现（断跳 1，仅提示层）；F5 yuanbao filePaste 为 bus 独有修复，移交 R1-1。运行时消费端（跳 8）三版同 blob 零分叉。
+- 四锚核验：old/main 双仓 is-ancestor 全 exit 0、bus 四笔均无，任务书断言成立；bus 平行笔对照 4/4（blob 级 old=bus）。
+- 边界：零代码改动；不碰 b/c 范围、基线门、STATUS；prompt_sections.py L92 挂起；回执 send（reply-to dispatcher-20261118T025047-6d5ccb）。
