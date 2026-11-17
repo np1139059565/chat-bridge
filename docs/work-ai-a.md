@@ -534,3 +534,16 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 **验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-a；完成后 send --me a --to dispatcher --kind report --reply-to dispatcher-20261117T220214-d0f61c 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
 
 **本任务总线 id**：`dispatcher-20261117T220214-d0f61c`；回执 kind=report 且 reply-to 填 `dispatcher-20261117T220214-d0f61c`。
+
+## G-A 完成记录（2026-11-18，dispatcher-20261117T220214-d0f61c）
+
+- 交付：flask_server/tests/test_ga_acceptance.py（新增 189 行，S1-S6+SP 七场景端到端夹具）、
+  test_system_prompt.py（+24 纯追加，补齐其 docstring 声称的路由层与单一真源两用例）、
+  docs/ga-1a-backend-acceptance.md（验收报告）。
+- 分母：验收项 7/7 PASS（含 6.1 信封逐键断言）；新增用例 9/9；G-A 面四文件定向 49 passed；
+  全量 pytest 18 failed / 1100 passed，失败集合与 origin/main 基线逐条一致
+  （六文件溯源 e48087c，web/config 侧合入既有，不代归因、归属待裁）。
+- quality rc=0 零新增（首轮 3 条 dup 连带经新夹具换形归零，未改基线/钩子/他人文件）；
+  pre-commit 七道全过。
+- 边界：零业务代码改动；不碰 hooks/baseline/STATUS；不碰 b/c 范围；不推 main；
+  回执已 send（reply-to d0f61c），回 wait 监听，不自找活、不自停。

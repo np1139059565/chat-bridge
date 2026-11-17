@@ -132,3 +132,27 @@ def test_s5_no_param_schema(rule_env, skill_env):
     for w in ("properties", "required", '"type": "object"', "anyOf"):
         assert w not in text, "参数 schema 泄漏：%s" % w
     assert "get_tool_params" in text
+
+# ---------- 场景 6：路由层与单一真源（G-A 补齐 docstring 声称覆盖） ----------
+
+def test_s6_route_endpoint(rule_env, skill_env):
+    """GET /v1/system_prompt：200、JSON 结构、与数据层输出一致。"""
+    app = Flask(__name__)
+    app.register_blueprint(system_prompt_bp)
+    app.config["TESTING"] = True
+    r = app.test_client().get("/v1/system_prompt")
+    assert r.status_code == 200
+    data = r.get_json()
+    expected = sp.build_system_prompt()
+    assert data["system_prompt"] == expected["system_prompt"]
+    assert data["sections"] == expected["sections"]
+
+
+def test_s6_single_source_no_cache(rule_env, skill_env, monkeypatch):
+    """单一真源：patch 上游后输出随之变化，证明无第二份常量缓存。"""
+    before = sp.build_system_prompt()["system_prompt"]
+    monkeypatch.setattr(prompt_sections, "sections",
+                        lambda: [{"skill": "late_skill", "text": "后注入的说明。"}])
+    after = sp.build_system_prompt()["system_prompt"]
+    assert "后注入的说明。" in after, "上游 patch 后输出应随之变化"
+    assert after != before
