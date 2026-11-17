@@ -588,3 +588,17 @@ pre-commit 七道全过、pytest 失败仅限已知波动、一次提交正常�
 **验收**：独立 worktree 合入预演 0 冲突；check_js_tests 全量（跳过项由分发方环境复验）；串行单进程全量 pytest；pre-commit 七道全过；字段契约对拍；禁区零触碰；一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-c。
 
 **交付载体**：分支一次提交 + docs/bus/c.md 的 report 回执（回提交 hash）；验收以分支提交为准。完成后回监听，不自找活。
+
+## 当前任务（G-C，前端翻译员验收，2026-11-17 分发方自主下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：按规格第七节阶段 2 五项与 4.1-4.6 逐项实跑：取回标准提示词+追加方言说明、bridge-chat-call↔标准 tool_calls、标准 tool 消息↔bridge-chat-res、语言包从 /api/clients 取回、指令执行端对接；产出《阶段 2 翻译员验收报告》含 pass/fail 与缺口清单；yuanbao 识别与独立工具配置页并入缺口面；不碰 a/b 后端范围。
+
+**可以碰**：extend/dialog/parts/、extend/lib/、flask_server/tests/js/ 下相关夹具。
+
+**边界**：只改自己分支；不改结论文档、不碰他方范围、不自填 [答复]、不新建切换开关、不推 main。
+
+**验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-<me>；完成后 send --me <me> --to dispatcher --kind report --reply-to <本 task id> 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
+
+**本任务总线 id**：`dispatcher-20261117T220241-bb1485`；回执 kind=report 且 reply-to 填此 id。

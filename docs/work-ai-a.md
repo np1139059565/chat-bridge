@@ -520,3 +520,17 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
   与 a11（双 lib）/ a12（单 lib 序不同）/ a13（三 lib）错开；头部注释独立行文；
   quality 以提交轮全量实跑为准。
 - 回执：send report 追加 docs/bus/a.md；完成后回监听等分发方逐笔验收。
+
+## 当前任务（G-A，后端标准接口与会话验收，2026-11-17 分发方自主下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：按规格第七节 1a 第 1/2/3 项与 6.1 工具结果约定逐项实跑：正常对话、工具调用、工具结果回灌、多轮、错误回传、stream=true 明确报错、/v1/system_prompt 四段边界；产出《1a 后端验收报告》含每条 pass/fail 与缺口清单；零新增切换开关、不碰 b/c 范围。
+
+**可以碰**：flask_server/routes/chat_api.py、flask_server/core/chat_completions.py、flask_server/routes/system_prompt.py、flask_server/core/prompt_sections.py、flask_server/routes/tools.py 与相应 pytest。
+
+**边界**：只改自己分支；不改结论文档、不碰他方范围、不自填 [答复]、不新建切换开关、不推 main。
+
+**验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-<me>；完成后 send --me <me> --to dispatcher --kind report --reply-to <本 task id> 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
+
+**本任务总线 id**：`dispatcher-20261117T220214-d0f61c`；回执 kind=report 且 reply-to 填此 id。

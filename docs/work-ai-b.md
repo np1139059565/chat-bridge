@@ -578,3 +578,17 @@ _callTool / _recordFailure 保留作为 deps.callTool 注入源（fetch /tool �
 - 取证结论：adapter.buildCard L16 定义 / L70 导出、返回恰三键 by=KEY / id / status=STATUS、缺 call 与缺 id 归一 null、truthy 原引用直通、幂等每次新对象；运行期四探针串 59 文件零命中（建卡仍由 05g_cards.js L112 / L127 / L196 旧直调路径承担）；C-9 边界段（L33-L41 + L92 状态行）、C-14 签名行（L32）与第六节零 buildCard、C-15 第 4 步行（L32，仅标注对拍）、b10 零 buildCard 字样四处逐字对拍零主差异；全仓宽口径 144 行 / 35 文件（含同名前缀与文档命中），差异登记 6 项（口径分层 / C-16 快照漂移），不代拍板、不改 S1-S4 判态。
 - 实测：node --test 夹具单文件 12 / 12 连续 10 轮全绿；check_js_tests.py 全量 rc=0（667 tests / 667 pass / 0 fail，分母 645 + 换基带入 A-13 夹具 12 + C-18 夹具 10，覆盖率达标无退化无新增）；pytest 全量 1085 passed / 0 failed；quality_rules.py rc=0 零 [新增]；quality_extra / check_doc_sync / git diff --check rc=0；pre-commit 于本笔提交时正常跑钩子实测七道全过、未用 --no-verify
 - 形态：基于实时 origin/main 1f3ec9f 一次提交收口（开工基点 b3c7d97，并行期间按任务书 ff-only 换基至 1f3ec9f，漂移面仅他笔 A-13 / C-18 纯文档与夹具、零代码，取证面不变）、零代码改动、新增被测 JS 源 0、不碰活链九文件与两 lib 本体（只读反查）、不碰他笔报告与夹具本体；完成后回监听等分发方逐笔独立 worktree 串行验收，不自找活、不自停。
+
+## 当前任务（G-B，后端公共服务与注册验收，2026-11-17 分发方自主下发）
+
+> 开工前 git fetch origin --prune，git merge --ff-only origin/main 同步文档真源。
+
+**目标**：按规格第七节 1a 第 4/5/6/7 项与 1b 全项逐项实跑：客户端注册自定义配置原样存取（含中文/嵌套/null 深比较）、语音独立接口、投递队列发送即结束、指令收归、21 工具参数声明全为 JSON Schema 且 read_file.path 为 anyOf、迁移清单 20 项复核；产出《1a/1b 后端验收报告》含 pass/fail 与缺口清单；配置刷新被还原并入缺口面。
+
+**可以碰**：flask_server/routes/clients.py、flask_server/core/client_registry.py、flask_server/routes/voice.py、flask_server/core/delivery_queue.py、flask_server/core/command_catalog.py、docs/tool-schema-migration.md 与相应 pytest/js 夹具。
+
+**边界**：只改自己分支；不改结论文档、不碰他方范围、不自填 [答复]、不新建切换开关、不推 main。
+
+**验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-<me>；完成后 send --me <me> --to dispatcher --kind report --reply-to <本 task id> 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
+
+**本任务总线 id**：`dispatcher-20261117T220227-b3825d`；回执 kind=report 且 reply-to 填此 id。

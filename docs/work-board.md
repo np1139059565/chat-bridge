@@ -446,3 +446,15 @@ L10：接真实模型需外部服务与凭证，代码侧只到 A-5 的显式可
 - 裁定：契约 / 索引 / 签名 / 替换位列全 / 摘除就绪度 / 顺序表口径 / 九文件影响面 / L10 生命周期契约面全部逐笔验收合入、三条 work 分支 IS_MERGED=True、无未受理尾，分发方按既定流程自主出阶段裁定，解除时间冻结、阶段 3 进入实装任务书下发态；由分发方出、不是代拍板、不改 11:54 技术判态。S1-S4 判态不变，旧标记摘除硬前置三项仍未满足，本笔只做第 5 步单点迁移，不摘除、不执行顺序表、不翻其它 STATUS、不进摘除步。
 - 派工：单笔不拆指派 b（c6/c7 顺序表与九文件影响面只读取证连续完成方），a / c 契约面已收口、本笔不涉、继续回监听等后续裁定。任务书以已合入文档为只读基线，不套用 B-8/B-9 方案 A「活链零改动」字面（本笔属实装），保留 A-9 / B-9 两次「字面与硬约束冲突用总线 question 先裁定再落」通道。
 - 流程口径：分发方按既定流程自主推进阶段裁定，不以等待外部裁决作为停留理由；消息在前、台账在后、串行推送，幂等检查避免重复写。
+
+## 大改优先重排与并发派单（2026-11-17，分发方自主推进）
+
+- 结论源校正：docs/00-STATUS.md、docs/START_HERE.md、docs/pending-tasks.md、docs/pending-verify.md 四份旧复核块称「生产标准接口 0 / 客户端注册 0 / 独立工具页 0」，判据用错（/v1/messages 与 clients/register 非规格接口名）。实仓：/v1/chat/completions 命中 6 文件、routes/chat_api.py + core/chat_completions.py 已实现并经 app.py 注册；/api/clients 由 routes/clients.py + core/client_registry.py 实现；/v1/system_prompt、/api/voice/tts、tool_calls、site_key、delivery_queue 成片存在。旧「只写了文档和测试、生产没动」更正为「1a/1b 主体已落 main，待逐项脚本化验收与缺口补齐」。[高]
+- 顺序裁决：大改（翻译员/工具服务剥离）置为唯一主线；old/bus 合并逐笔对拍整体后置到大改验收之后。无人值守，分发方自主裁决与派单，不抛选项、不等待确认。
+- 并发派单（互不撞车）：G-A→a 后端标准接口与会话验收；G-B→b 后端公共服务与注册验收；G-C→c 前端翻译员验收。三笔均以 docs/split-mirror-and-tools-service.md 第七节为验收清单，只改各自分支，回执走 docs/bus/<me>.md 的 report 并引用 task id。
+- 冻结项：配置刷新被还原 / yuanbao 识别 / 独立工具配置页 三项并入 G-B 与 G-C 的缺口面，不在本轮单独开工。
+
+## 并发任务 id 对齐（2026-11-17 22:02）
+
+- G-A→a：`dispatcher-20261117T220214-d0f61c`；G-B→b：`dispatcher-20261117T220227-b3825d`；G-C→c：`dispatcher-20261117T220241-bb1485`。三笔回执均须 reply-to 对应 id；全体广播 `dispatcher-20261117T220254-f30deb` 同步顺序口径。
+
