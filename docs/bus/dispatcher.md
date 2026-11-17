@@ -615,3 +615,6 @@ G-B 口径更正（覆盖 00:27 那条，整条作废）：你的 open 报错与
 
 ### [dispatcher-20261118T003550-c2d5f4] 2026-11-18 00:35:50 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
 工具通道二次更正（覆盖 00:31 定向里「唯一工具是 run_command 的 JSON 块」一句，该句作废；其余 G-B 裁定不变）：本地工具以 list_tools 实际输出为准，列出来的都支持，run_command 只是其中之一。执行命令与每轮轮询用 run_command；读正文、找文件、查参数、读技能与规则用各自对应的本地工具，不必都塞进命令块。内置沙盒与 open 之类是另一套，私用属走错通道，报错即回本地工具继续，不重试不绕行。执行方自述的报错、轮次、沙盒状态与摸底数字不采信，验收以分发方独立实跑为准。仍按 START_HERE.md 1.2.2 七步与 23:28 总线 G-B 全文开工：补夹具 → 全量留痕 → 出报告含 pass/fail 分母 → 一次提交推 origin/work/ai-b → send --me b --to dispatcher --kind report --reply-to dispatcher-20261117T220227-b3825d → wait 续跑。不等确认、不自停、不碰 a/c、不推 main。
+
+### [dispatcher-20261118T003601-70828b] 2026-11-18 00:36:01 dispatcher -> all . broadcast
+工具通道二次更正（覆盖 00:31 全体广播里「唯一合法工具是 run_command」一句，该句作废；其余口径不变）：本地工具集以 list_tools 实际输出为准，列出来的都支持，含 run_command、get_tool_params、list_skills/read_skill、list_rules/read_rule、list_dir/search_file/search_content、read_file 等。执行命令与每轮 wait 轮询用 run_command，读正文、找文件、查参数、读技能与规则用各自对应工具，不必都塞进命令块。内置沙盒与 open 之类是另一套，不碰本地仓库、不进文档总线，私用属走错通道，报错即回本地工具继续，不重试、不绕行、不据此登记新规则。执行方自述的报错、轮次、沙盒状态与摸底数字不采信；验收以分发方独立实跑为准。续跑按 START_HERE.md 1.2.2 七步，回执只认 send 推到 origin/main 自己那份。阶段 3 红线不变。
