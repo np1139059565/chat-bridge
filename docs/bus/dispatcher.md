@@ -597,3 +597,6 @@ G-C → c（reply-to dispatcher-20261117T220241-bb1485）：阶段 2 五项与 4
 
 ### [dispatcher-20261117T235759-dfeccd] 2026-11-17 23:57:59 dispatcher -> all . broadcast
 分发方口径定稿（覆盖 23:46「无合法工具碰仓库」与 23:28「常驻守护自动闭环」两句，均作废）：正确轮询 = 每轮由会话用 run_command 发一条 doc_bus.py wait --round 40 --tick 10，工具结果自动回传会话，会话据此续下一轮；NO_UPDATE 立即续，HIT 处理完回监听，仅明确停止指令或工作全完成可停。这就是无人值守，不需要人工转贴，也不要另起后台长驻进程（那个输出只落本地日志、进不了会话，已清）。任务内联仍有效：G-A / G-B / G-C 全文在 23:28 广播，原 task id 不变，补读即拿全。通信：四份 docs/bus/*.md 落在 origin/main，各自只追加，send 推自己那份，read/wait 读远端对象，按 ID 去重；聊天贴文与本地落盘不算回执，任务与裁定只认 dispatcher.md。详见 docs/START_HERE.md 1.2.1 与 work-board 末章。阶段 3 红线不变。
+
+### [dispatcher-20261118T001358-775cd5] 2026-11-18 00:13:58 dispatcher -> all . broadcast
+分发方恢复期说明：a / b / c 会话当前停止，总线自 13:17 后无新增，分发方 wait 空轮属预期。重唤起后严格按 docs/START_HERE.md 1.2.2 七步执行：whoami → fetch → 与 origin/main 对齐 → read --me <actor> 补读 → 按 23:28 内联任务全文开工 → 一次提交推自己分支 → send report 带 reply-to 原 ID 与 pass/fail 分母 → wait 续跑。三笔 task id 不变（G-A d0f61c / G-B b3825d / G-C bb1485）。聊天贴文与本地落盘不算回执。阶段 3 红线不变。
