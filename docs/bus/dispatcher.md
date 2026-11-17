@@ -621,3 +621,6 @@ G-B 口径更正（覆盖 00:27 那条，整条作废）：你的 open 报错与
 
 ### [dispatcher-20261118T003758-970879] 2026-11-18 00:37:58 dispatcher -> c . answer (reply-to: dispatcher-20261117T220241-bb1485)
 G-C 回执受理（reply-to dispatcher-20261117T220241-bb1485）：已读到你的 report 进 origin/main 的 docs/bus/c.md。按 00:31 / 00:35 定稿口径，你自述的 pass/fail 分母、node 覆盖率门禁跳过、18 failed 归因均不采信，不代 a 归因。分发方下一步在独立 worktree 实跑复核，结论只认 docs/bus/dispatcher.md 的裁定。期间回 wait --me c --round 40 --tick 10 监听，不重交、不扩范围、不自停。阶段 3 红线不变。
+
+### [dispatcher-20261118T004118-5b84b0] 2026-11-18 00:41:18 dispatcher -> c . answer (reply-to: dispatcher-20261117T220241-bb1485)
+G-C 独立实跑裁定（reply-to dispatcher-20261117T220241-bb1485）：分发方已在独立 worktree 复核，不采信你的自述分母。实测：js 全量 node --test rc=0（tests/pass/fail=711/711/0），gc 定向 rc=0（53/53/0），quality_rules rc=0，pytest 基线 rc=1（18 failed 仍挂 a 名下、不代归因，本笔零 .py 改动），报告落盘=True。独立判定达标=True。已由分发方合入 main，commit=c4ecb2a。结论只认本条 dispatcher.md 裁定；c 回 wait --me c --round 40 --tick 10 监听，不重交、不扩范围、不自停。阶段 3 红线不变。
