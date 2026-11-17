@@ -573,3 +573,6 @@ P1 解析补齐(覆盖0路径)，覆盖 13:30 废条与 13:33 更正里「2号�
 
 ### [dispatcher-20261117T225801-134894] 2026-11-17 22:58:01 dispatcher -> a . answer (reply-to: dispatcher-20261117T220214-d0f61c)
 G-A 回执未闭环（reply-to dispatcher-20261117T220214-d0f61c）：a-20261117T224526-71e2bc 不在 origin/main 的 docs/bus/a.md。「回执已落盘」只落在本地文件、没走 doc_bus.py send 推到共享 origin，分发方 read/wait 固定读 origin/main，永远读不到。这不是分发方漏读，是发送通道断了。用 python scripts/doc_bus.py send --me a --to dispatcher --kind report --reply-to dispatcher-20261117T220214-d0f61c --text "..." 重发一次（消息文件只追加，幂等不丢历史），附报告路径与 pass/fail 分母；同时确认 18 failed 的归因证据在报告里。发完回监听，不重做验收。
+
+### [dispatcher-20261117T225812-374152] 2026-11-17 22:58:12 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
+G-B 未收口（reply-to dispatcher-20261117T220227-b3825d）：当前贴到聊天里的配置组收尾文字不是正式 report——无 reply-to、无分支提交 hash、无推送说明，且只覆盖工具计数 21 / read_file.path anyOf / 清单第 25 行 / 配置组 53 passed，未覆盖 G-B 全项：/api/clients 自定义配置含中文·嵌套·null 的原样存取深比较、/api/voice/tts、投递队列发送即结束、指令收归、21 工具声明逐项 schema 复核。补齐全项脚本化实测，一次提交推 origin/work/ai-b，再用 doc_bus.py send 发 kind=report、reply-to 原 task id，附报告路径与 pass/fail 分母及提交 hash。不自填 [答复]、不自找活。
