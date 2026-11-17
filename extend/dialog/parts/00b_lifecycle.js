@@ -16,26 +16,58 @@
    */
   D.startCountdown = function (ctx, card, phase, onDone) {
     if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
-    const secs = Math.max(1, Math.round((ctx.autoSendDelay || 3000) / 1000));
+    if (card._cdDisplay) { clearTimeout(card._cdDisplay); card._cdDisplay = null; }
+    // 拟人化：设定值以内随机（0.7~1.0 倍），毫秒级；界面仍显示整秒。
+    const base = Math.max(1, (ctx.autoSendDelay || 3000) / 1000);
+    const rnd = (typeof D.random === 'function') ? D.random() : Math.random();
+    const actual = base * (0.7 + 0.3 * rnd);
+    D.log('[拟人化] 倒计时设定=' + base.toFixed(2) + 's 实际=' + actual.toFixed(3)
+      + 's 随机因子=' + rnd.toFixed(3));
     card.phase = phase;
-    card.countdown = secs;
-    const tick = () => {
-      card.countdown -= 1;
-      if (card.countdown > 0) {
-        card._cdTimer = setTimeout(tick, 1000);
-        return;
-      }
-      card._cdTimer = null;
-      card.countdown = 0;
-      card.phase = '';
-      onDone();
+    card.countdown = Math.max(1, Math.ceil(actual));
+    card._cdReal = actual;
+    // 显示递减只是视觉效果；真正到点执行由一次性定时器负责，二者互不叠加。
+    let left = card.countdown;
+    const display = () => {
+      left -= 1;
+      card.countdown = left;
+      if (left > 0) card._cdDisplay = setTimeout(display, 1000);
     };
-    card._cdTimer = setTimeout(tick, 1000);
+    if (left > 1) card._cdDisplay = setTimeout(display, 1000);
+    card._cdTimer = setTimeout(() => {
+      if (card._cdDisplay) { clearTimeout(card._cdDisplay); card._cdDisplay = null; }
+      card._cdTimer = null; card.countdown = 0; card.phase = '';
+      onDone();
+    }, Math.round(actual * 1000));
+  };
+
+  /** 频率超限：顺延 10~20 秒随机后重试，顺延期间仍显示倒计时。 */
+  D.startDeferredCountdown = function (ctx, card, phase, onDone) {
+    if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
+    if (card._cdDisplay) { clearTimeout(card._cdDisplay); card._cdDisplay = null; }
+    const rnd = (typeof D.random === 'function') ? D.random() : Math.random();
+    const defer = 10 + 10 * rnd;
+    D.log('[拟人化] 频率超限，顺延 ' + defer.toFixed(2) + 's（随机因子 ' + rnd.toFixed(3) + '）');
+    card.phase = phase;
+    card.countdown = Math.ceil(defer);
+    let left = card.countdown;
+    const display = () => {
+      left -= 1;
+      card.countdown = left;
+      if (left > 0) card._cdDisplay = setTimeout(display, 1000);
+    };
+    if (left > 1) card._cdDisplay = setTimeout(display, 1000);
+    card._cdTimer = setTimeout(() => {
+      if (card._cdDisplay) { clearTimeout(card._cdDisplay); card._cdDisplay = null; }
+      card._cdTimer = null; card.countdown = 0; card.phase = '';
+      onDone();
+    }, Math.round(defer * 1000));
   };
 
   /** 取消卡片上正在进行的倒计时，并复位阶段与计数。 */
   D.cancelCountdown = function (card) {
     if (card._cdTimer) { clearTimeout(card._cdTimer); card._cdTimer = null; }
+    if (card._cdDisplay) { clearTimeout(card._cdDisplay); card._cdDisplay = null; }
     card.countdown = 0;
     card.phase = '';
   };

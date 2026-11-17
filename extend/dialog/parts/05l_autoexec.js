@@ -71,6 +71,12 @@
    */
   M._finalizeAutoExec = function (collected, notInTree, scrollOnly, atBottom, generatingAtPush) {
     const autoCandidates = collected.autoCandidates;
+    // 拟人化频率闸：滚动 60s 窗口，上限从按站草稿读，超限本轮转顺延
+    this._autoExecWindow = (this._autoExecWindow || []).filter(t => Date.now() - t < 60000);
+    const cfg = this.configCache || {};
+    const cap = cfg.autoExecLimitEnabled ? Math.max(1, cfg.autoExecPerMinute || 60) : Infinity;
+    const overCap = this._autoExecWindow.length >= cap;
+    if (overCap) D.log('[拟人化] 每分钟上限 ' + cap + ' 已到，本轮转顺延');
     const runnable = this._collectAutoExecCandidates(collected, notInTree, generatingAtPush);
     // 自动执行决策留痕：这是排查「自动流程停止」的核心断点，逐条件说明为何执行/不执行。
     if (generatingAtPush) {
@@ -104,7 +110,10 @@
       } else {
         log('自动执行决策：执行最新卡片 id=' + (newest.id || '(无)')
           + ' 工具=' + (newest.tool || '(非工具)') + '（候选=' + runnable.length + '）');
-        if (newest && !newest.skipped) this.scheduleExecute(newest);
+        if (newest && !newest.skipped) {
+          if (typeof this._gateAutoExec === 'function') this._gateAutoExec(newest, overCap);
+          else this.scheduleExecute(newest);
+        }
       }
     } else if (scrollOnly) {
       this._maybeAutoExecOnScroll(collected.armedLast, atBottom);
@@ -144,7 +153,27 @@
     log('自动执行复检（滚动）：自动开关=' + this.autoSendEnabled
       + '，在底部=' + atBottom + '，末尾卡片待执行=' + armedOk
       + ' → ' + (pass ? '放行执行' : '不执行'));
-    if (pass) this.scheduleExecute(armedLast);
+    if (pass) {
+      const n2 = Date.now();
+      this._autoExecWindow = (this._autoExecWindow || []).filter(t => n2 - t < 60000);
+      const c2 = (this.configCache || {}).autoExecLimitEnabled
+        ? Math.max(1, (this.configCache || {}).autoExecPerMinute || 60) : Infinity;
+      if (typeof this._gateAutoExec === 'function') this._gateAutoExec(armedLast, this._autoExecWindow.length >= c2);
+      else this.scheduleExecute(armedLast);  // 兼容未挂闸门的旧上下文
+    }
+  };
+
+  /** 闸门：未超限记窗口并立即排倒计时；超限顺延后重试仍过闸。 */
+  M._gateAutoExec = function (card, overCap) {
+    if (overCap) {
+      D.startDeferredCountdown(this, card, 'exec', () => this._gateAutoExec(card, false));
+      return;
+    }
+    const now = Date.now();
+    this._autoExecWindow = (this._autoExecWindow || []).filter(t => now - t < 60000);
+    this._autoExecWindow.push(now);
+    D.log('[拟人化] 窗口内已放行 ' + this._autoExecWindow.length + ' 次');
+    this.scheduleExecute(card);
   };
 
 })();

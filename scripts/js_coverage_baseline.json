@@ -36,6 +36,16 @@
       "pct": 89.39
     },
     {
+      "file": "extend/dialog/parts/00b_lifecycle.js",
+      "kind": "branch",
+      "pct": 56.25
+    },
+    {
+      "file": "extend/dialog/parts/00b_lifecycle.js",
+      "kind": "line",
+      "pct": 58.21
+    },
+    {
       "file": "extend/dialog/parts/04_sessions.js",
       "kind": "branch",
       "pct": 50.0
@@ -63,12 +73,12 @@
     {
       "file": "extend/dialog/parts/05c_prompt.js",
       "kind": "branch",
-      "pct": 44.07
+      "pct": 58.23
     },
     {
       "file": "extend/dialog/parts/05c_prompt.js",
       "kind": "line",
-      "pct": 70.26
+      "pct": 84.62
     },
     {
       "file": "extend/dialog/parts/05e_quality.js",
@@ -79,16 +89,6 @@
       "file": "extend/dialog/parts/05e_quality.js",
       "kind": "line",
       "pct": 63.2
-    },
-    {
-      "file": "extend/dialog/parts/05g_cards.js",
-      "kind": "branch",
-      "pct": 61.25
-    },
-    {
-      "file": "extend/dialog/parts/05g_cards.js",
-      "kind": "line",
-      "pct": 74.94
     },
     {
       "file": "extend/dialog/parts/05h_memory_bridge.js",
@@ -106,24 +106,14 @@
       "pct": 66.94
     },
     {
-      "file": "extend/dialog/parts/05j_card_sig.js",
-      "kind": "branch",
-      "pct": 56.0
-    },
-    {
-      "file": "extend/dialog/parts/05j_card_sig.js",
-      "kind": "line",
-      "pct": 78.05
-    },
-    {
       "file": "extend/dialog/parts/05l_autoexec.js",
       "kind": "line",
-      "pct": 44.67
+      "pct": 48.6
     },
     {
       "file": "extend/dialog/parts/08_settings.js",
       "kind": "branch",
-      "pct": 33.33
+      "pct": 50.0
     },
     {
       "file": "extend/dialog/parts/08_settings.js",
@@ -143,7 +133,17 @@
     {
       "file": "extend/dialog/parts/08j_config_actions.js",
       "kind": "branch",
-      "pct": 67.02
+      "pct": 67.38
+    },
+    {
+      "file": "extend/dialog/parts/09_skills.js",
+      "kind": "branch",
+      "pct": 61.54
+    },
+    {
+      "file": "extend/dialog/parts/09_skills.js",
+      "kind": "line",
+      "pct": 42.25
     }
   ]
 }
