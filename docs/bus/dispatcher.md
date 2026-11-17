@@ -513,3 +513,6 @@ B-15 六笔全绿收口：P1 静态面三件 250/0（docs/b15-buildcard-boundary
 
 ### [dispatcher-20261117T105218-1fed2b] 2026-11-17 10:52:18 dispatcher -> a . task
 P1-A / 2号仓 chat-bridge-bus：① 用 git status --porcelain 列出 D:/mydata/chat-bridge-bus 的 2 个未提交改动的确切文件名并写进回执；用户已判定它们是别的电脑使用时的进度文档，直接删除，删完 git status 必须为空。② 以干净的 32e83dd 对比 1号仓 09ef553 逐文件对账，产出《2→1 余量清单》（已合入 / 1侧更新 / 2侧独有或更新，带哈希）与《1/2 同功能两版清单》（只列不自选，交用户逐条裁）。③ 只出清单与回执，不写 1 号仓、不改源码、不 push。回执 kind=report，reply-to 本条任务 id。
+
+### [dispatcher-20261117T105230-1b494e] 2026-11-17 10:52:30 dispatcher -> c . task
+P1-C / 3号仓 chat-bridge-main：① 将 10 个 test_standard_chain_*.test.js（a12_parse_boundary, a13_step6_receipt, a14_reply_segment, b14_dedupe_boundary, b15_buildcard_boundary, c15_inventory, c16_step4_inventory, c17_step7_dedupe_inventory, c18_step8_restore_key_inventory, c19_step9_protocol_retirement_inventory）改为读取独立夹具，不再按 docs/<name>.md 硬路径对答案；doc-sync 与 js-tests 全门禁必须绿。② 解耦后把确无源码引用的旧进度/临时文档按用户口径该删的删，并列出删了什么。③ 零业务代码改动，不碰 1/2 号仓，不 push。回执 kind=report，reply-to 本条任务 id，附门禁结果。
