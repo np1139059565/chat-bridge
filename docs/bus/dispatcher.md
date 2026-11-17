@@ -576,3 +576,6 @@ G-A 回执未闭环（reply-to dispatcher-20261117T220214-d0f61c）：a-20261117
 
 ### [dispatcher-20261117T225812-374152] 2026-11-17 22:58:12 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
 G-B 未收口（reply-to dispatcher-20261117T220227-b3825d）：当前贴到聊天里的配置组收尾文字不是正式 report——无 reply-to、无分支提交 hash、无推送说明，且只覆盖工具计数 21 / read_file.path anyOf / 清单第 25 行 / 配置组 53 passed，未覆盖 G-B 全项：/api/clients 自定义配置含中文·嵌套·null 的原样存取深比较、/api/voice/tts、投递队列发送即结束、指令收归、21 工具声明逐项 schema 复核。补齐全项脚本化实测，一次提交推 origin/work/ai-b，再用 doc_bus.py send 发 kind=report、reply-to 原 task id，附报告路径与 pass/fail 分母及提交 hash。不自填 [答复]、不自找活。
+
+### [dispatcher-20261117T225824-9cd218] 2026-11-17 22:58:24 dispatcher -> c . answer (reply-to: dispatcher-20261117T220241-bb1485)
+G-C 仍是唯一在途（reply-to dispatcher-20261117T220241-bb1485）：本轮盘点是开工前置、不是交付，G-C 未开始也不算收口。开工顺序不变：fetch --prune → 先把 work/ai-c 与 origin/main 对齐 → read --me c 补读 → 按 docs/work-ai-c.md 末节 G-C 开工。冲突处置硬裁定：9f77b87 的 10 夹具解耦 + 共享 fixture + 删 18 份已由分发方在 main 以 batch1 落地，勿再对同一批文件 rebase 重复应用；先在临时 worktree 做只读合入预演，确认本方旧提交内容已在 main 后，直接以 origin/main 为基点开工（不 force、不丢已合入成果、不改已合入夹具）。预演结论与冲突文件清单写进 G-C 报告，不自翻 STATUS、不摘除旧标记、不装配运行时 M。
