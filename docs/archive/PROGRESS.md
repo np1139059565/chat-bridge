@@ -11,11 +11,11 @@
 
 ## 任务背景
 
-在 qianwen 页面（https://www.qianwen.com/chat/be908b9836694d32b49e8f3f95dc4d48）调试一个把外部消息投递进网页 AI 输入框的适配器。工具侧已验证的能力：exec_js 在页面主世界执行 JS。
+在 qianwen 页面（http本机路径略 AI 输入框的适配器。工具侧已验证的能力：exec_js 在页面主世界执行 JS。
 
 ## 已验证事实
 
-1. 目标页面 URL：https://www.qianwen.com/chat/be908b9836694d32b49e8f3f95dc4d48
+1. 目标页面 URL：http本机路径略
 2 . exec_js 可用：tool=exec_js，parameters 含 page_url + code，返回 success/res。
 3. 工具目录已获取（28 个工具），关键项：
    - get_tool_params：调用任何工具前查参数（tool_id=工具名）
@@ -74,4 +74,4 @@
 - 超时（取走前）根因：命令轮询由宿主页面内容脚本承担（content/03_heartbeat.js，抽屉所在页面轮询取命令），宿主标签页后台化遭 Chrome 定时器节流即停摆——非代码缺陷；已登记 pending-tasks。
 - send_to_qianwen「未知工具」：前轮判定有误，特此更正——「未知工具」文案不在扩展代码内（来自服务侧目录校验），09 按设计作为内容脚本注册（分发在 05_tool-handlers.js），manifest 移除尝试被 JSON 校验正确拦下；真因为服务侧工具目录未声明，已在 skills/debug_chrome/tool.json 补 send_to_qianwen / qianwen_state（executor: external）。注册表生效（同晚）：install 以 names 过滤仅装入新增两条并启用（13→15 条），绕开裸 install 重装重置既有开关的副作用（已登记 pending-tasks）；load_tools 每次读盘，服务侧无需重启。 端到端实测（同晚）：send_to_qianwen 首呼成功（HTTP 200，sent 回读一致，随后 qianwen_state=idle），qianwen 原生工具链路全通，exec_js 手动注入路径对该页退役。
 - editorLeftover 返回「间干间搜间」为反爬混淆 placeholder 误报，已登记待修。
-- 运行侧动作（需用户配合）：chrome://extensions 重载 debug_chrome 扩展，确保运行 v1.2.0（旧实例无 09 注册，服务目录放行后仍会报未知）；轮询修复落地前保持宿主页面前台。
+- 运行侧动作（需用户配合）：chrom本机路径略 重载 debug_chrome 扩展，确保运行 v1.2.0（旧实例无 09 注册，服务目录放行后仍会报未知）；轮询修复落地前保持宿主页面前台。

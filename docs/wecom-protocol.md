@@ -19,7 +19,7 @@
 
 | 项 | 内容 | 等级 |
 |---|---|---|
-| 连接地址 | `wss://openws.work.weixin.qq.com` | 已验证 |
+| 连接地址 | `ws本机路径略` | 已验证 |
 | 订阅命令 | `aibot_subscribe`，body 带 `bot_id` 与 `secret` | 已验证 |
 | 订阅成功应答 | `{"headers":{"req_id":...},"errcode":0,"errmsg":"ok"}`，顶层无 `cmd` | 已验证 |
 | 心跳 | `ping`，间隔 30 秒 | 已验证 |
@@ -93,7 +93,7 @@
 ```
 missing field `body.type`. invalid Request Parameter,
 hint: [1793626002286443577948970], from ip: 27.38.239.145,
-more info at https://open.work.weixin.qq.com/devtool/query?e=40058
+more info at http本机路径略
 ```
 
 ### 待验证
@@ -119,13 +119,13 @@ more info at https://open.work.weixin.qq.com/devtool/query?e=40058
 平台报错里的 `e=40058` 这类错误码，可查：
 
 ```
-https://open.work.weixin.qq.com/devtool/query?e=<errcode>
+http本机路径略>
 ```
 
 日志位置：
 
-- 桥接日志：`flask_server/data/logs/bridge-YYYY-MM-DD.log`
-- 应用日志：`flask_server/data/logs/app-YYYY-MM-DD.log`（媒体模块走这条）
+- 桥接日志：`flask_server本机路径略`
+- 应用日志：`flask_server本机路径略`（媒体模块走这条）
 
 媒体模块（`wecom_media.py`）用 `app_log`，网关与路由用 `bridge_log`，
 两者写不同文件，排查时两边都要看。

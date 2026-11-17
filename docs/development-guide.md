@@ -22,11 +22,11 @@ cd flask_server
 pip install -r requirements.txt
 python server.py
 ```
-默认 `http://127.0.0.1:5000`。改端口：编辑 `runtime.yaml` 的 `flask.port` 并重启，或用 `start_server.cmd --port <端口>` 临时覆盖。
+默认 `htt本机路径略`。改端口：编辑 `runtime.yaml` 的 `flask.port` 并重启，或用 `start_server.cmd --port <端口>` 临时覆盖。
 
 ### 镜像插件
 
-1. `chrome://extensions` → 开启开发者模式。
+1. `chrom本机路径略` → 开启开发者模式。
 2. 「加载已解压的扩展程序」→ 选择 `extend/` 目录。
 3. 点工具栏图标显示 / 隐藏抽屉。
 
@@ -135,7 +135,7 @@ Access ... blocked by CORS policy: Permission was denied for this request
 - service worker 里 `proxy-fetch` 分支代发请求并回传结果。
 - **不要**在内容脚本里直接写 `fetch(...)`。新增请求时改走 `proxyFetch`。
 
-**抽屉 iframe 例外**：抽屉挂在 `chrome-extension://` 源下，不受此限制，可直接 fetch。
+**抽屉 iframe 例外**：抽屉挂在 `chrome-extensio本机路径略` 源下，不受此限制，可直接 fetch。
 chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 
 **内容脚本里的消息收发注意**：用 `chrome.runtime.sendMessage(msg, callback)` 接收后台的
@@ -151,7 +151,7 @@ chat-bridge 扩展的所有请求都在抽屉 iframe 里，故无需改造。
 结果换机器时指令跟着凭证一起丢失。
 
 **现状**：桥接配置不再独立成文件，而是集中在两份主配置的 `bridge` 分区里
-（`flask_server/config/` 与 `flask_server/data/` 下）：
+（`flask_server/config/` 与 `flask_server本机路径略` 下）：
 
 | 文件 | 分区内容 | 是否入库 |
 |---|---|---|

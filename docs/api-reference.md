@@ -1,6 +1,6 @@
 # 接口参考（本地工具服务）
 
-基地址：`http://127.0.0.1:<config.flask.port>`（默认 5000）。
+基地址：`htt本机路径略>`（默认 5000）。
 所有响应带 CORS 头，且 `Cache-Control: no-store`。
 工具类接口统一返回 `{ success: bool, ... }`。
 
@@ -35,7 +35,7 @@
 
 请求：
 ```json
-{ "tool": "read_file", "parameters": { "path": "E:/projects/demo/README.md" } }
+{ "tool": "read_file", "parameters": { "path": "README.md" } }
 ```
 
 成功：
@@ -327,7 +327,7 @@ POST 请求体示例：
 
 ## 七、记忆系统
 
-结构化记忆系统的 HTTP 接口。数据落 `flask_server/data/memory/memory.db`（单文件 SQLite）。
+结构化记忆系统的 HTTP 接口。数据落 `flask_server本机路径略`（单文件 SQLite）。
 所有响应统一 `{ success: bool, ... }`。
 
 ### 会话（前端走后端查询）
@@ -565,7 +565,7 @@ piper 读本地模型文件、edge_tts 取内置音色清单。
 ### 企业微信通道（/api/bridge/wecom）
 
 企业微信智能机器人通道，与 QQ、微信并列的第三条通道。
-走 WebSocket 长连接（`wss://openws.work.weixin.qq.com`），凭证为手工填写的
+走 WebSocket 长连接（`ws本机路径略`），凭证为手工填写的
 BotID / Secret，支持主动推送、图片、文件与群聊。
 
 #### GET /api/bridge/wecom/status
@@ -827,7 +827,7 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 - 服务端按「内置 -> 自定义 -> 未知」顺序复用现有工具管线执行 tool_calls，
   结果信封整体 JSON 化为 tool 角色 content（含 success / error / errorType /
   origin / hint），工具失败不产生 HTTP 5xx；
-- 会话历史按 site_key 落盘（flask_server/data/chat_sessions/，运行时产物
+- 会话历史按 site_key 落盘（flask_server本机路径略
   不入库），按标识严格隔离、不解释标识语义（5.3），两个 site_key 的历史
   互不串；多轮延续以服务端已存历史为权威合并，五种分支：前缀一致只追加
   新增、真前缀幂等、尾部重复去重、新 user 增量追加、真分叉以请求重建；

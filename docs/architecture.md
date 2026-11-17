@@ -177,7 +177,7 @@ chat-bridge/
 | `memory_text.py` | 消息块文本抽取（共享） |
 | `routes/memory_graph.py` / `memory_graph_page.py` | 记忆系统 HTTP 接口与图谱页面 |
 
-数据落 `flask_server/data/memory/memory.db`（不入库）；图谱页在 `flask_server/static/memory_graph.html`（入库）。
+数据落 `flask_server本机路径略`（不入库）；图谱页在 `flask_server/static/memory_graph.html`（入库）。
 
 
 ---

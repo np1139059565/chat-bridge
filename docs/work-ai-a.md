@@ -44,7 +44,7 @@
 
 **前置**：A-1、A-2 均已验收合入 `main`。规格第七节阶段 1a 共 7 项，本项为最后一项，完成即 1a 收尾。
 
-**现状（先读再改）**：`.\flask_server\core\chat_completions.py` 已有 `load_session` / `save_session` / `merge_history` / `_is_tail_repeat`，按 `site_key` 落盘到 `flask_server/data/chat_sessions/`（运行时产物，不入库）；`merge_history` 已实现五种分支（前缀一致追加、真前缀幂等、尾部重复去重、新 user 增量、真分叉重建）。`.\docs\api-reference.md` 第十四节「行为要点」已记口径。本任务是在此基础上补强，不重写。
+**现状（先读再改）**：`.\flask_server\core\chat_completions.py` 已有 `load_session` / `save_session` / `merge_history` / `_is_tail_repeat`，按 `site_key` 落盘到 `flask_server本机路径略`（运行时产物，不入库）；`merge_history` 已实现五种分支（前缀一致追加、真前缀幂等、尾部重复去重、新 user 增量、真分叉重建）。`.\docs\api-reference.md` 第十四节「行为要点」已记口径。本任务是在此基础上补强，不重写。
 
 **做什么**：
 

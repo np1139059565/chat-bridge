@@ -15,7 +15,7 @@ A-14 / B-15 / C-19 三链收口后的 inventory / report 归属登记。
 
 ## item 8 清理口径
 
-`D:\mydata` 根层 61 个 `_cb_*` 临时/进度/输出文件、13 个 `_cb_verify_*` worktree、
+`本机路径略` 根层 61 个 `_cb_*` 临时/进度/输出文件、13 个 `_cb_verify_*` worktree、
 25 个缓存目录、0 字节 `flask_server/PATH` 已在前轮删净（`REMAIN_CB_ITEMS=0`）。
 本目录这些是 **git tracked 正式文档**，非临时文件，不可删；清理以登记 + 无引用件归档交付。
 
