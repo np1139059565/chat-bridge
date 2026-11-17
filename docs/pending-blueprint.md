@@ -1,6 +1,5 @@
 # 进行中的施工蓝图
 
-> 从 `docs/pending-tasks.md` 迁出的批次级实施蓝图，含具体锚点与步骤。
 > 施工时直接照此执行。
 
 ## 批 5 准备（2026-11-08 收尾登记：下次开工直接照此执行，无需重新取证）
@@ -89,7 +88,6 @@
 - js-tests：# tests 279 / # pass 279 / # fail 0（含远端随提交新增 test_apply_profiles_container 与 test_item_marks_mark 系测试文件，266→279），但红 12 文件，基线外新红 = extend/content/00_state.js、extend/content/02_blocks.js（恰为远端并行会话改动的两文件）；
 - pytest 893 全绿（888→893，远端新增 test_config_store 用例）。
 
-**归因结论**：本会话暂存仅 docs/pending-tasks.md，全部失败项所在文件本会话零触碰；quality 另经 stash 实证（暂存收起后在干净 HEAD 复跑，失败一致复现）→ 闸债 100% 来自远端并行合并（1c0f8aa/f0ecb43/f188d61/44f627f/2942c99），非本会话引入；js 项为逻辑归因（.md 不参与覆盖率，红文件零触碰）。
 
 **批 5 首项（P0 闸债，先于任务 A/B 执行）**：
 1. 消重复：skills\debug_chrome\extension\content\01_config.js L73/L74/L75 ↔ 05_tool-handlers.js L316/L317/L318 三对（含已知存量 L73↔L316）一并收敛（提取共享常量或改单处引用），修后 quality_rules.py 应回 exit 0；
