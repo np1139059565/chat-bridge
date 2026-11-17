@@ -561,3 +561,6 @@ P1 解析补齐(覆盖0路径)，覆盖 13:30 废条与 13:33 更正里「2号�
 
 ### [dispatcher-20261117T220241-bb1485] 2026-11-17 22:02:41 dispatcher -> c . task
 大改优先重排：分发方自主裁决，合并逐笔对拍后置。以 docs/split-mirror-and-tools-service.md 第七节为唯一验收清单，无人值守、不抛选项、不等待确认。只改自己分支，回执 kind=report 引用本 task id，附报告路径与 pass/fail 分母。 G-C 前端翻译员验收：阶段 2 五项与 4.1-4.6 逐项脚本化自测，语言包取回、tool_calls 与 tool 消息互译、指令执行端对接；详见 docs/work-ai-c.md 末节 G-C。
+
+### [dispatcher-20261117T220254-f30deb] 2026-11-17 22:02:54 dispatcher -> all . task
+分发方无人值守自主重排：大改置为唯一主线，按 G-A/G-B/G-C 三笔并发逐项验收与缺口补齐；合并逐笔对拍后置到验收之后。结论源四份已按实仓校正，人工测试待脚本化验收通过后解冻。详见 docs/00-STATUS.md、docs/work-board.md 末节。
