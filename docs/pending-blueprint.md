@@ -1,5 +1,6 @@
 # 进行中的施工蓝图
 
+> 从 `docs/pending-tasks.md` 迁出的批次级实施蓝图，含具体锚点与步骤。
 > 施工时直接照此执行。
 
 ## 批 5 准备（2026-11-08 收尾登记：下次开工直接照此执行，无需重新取证）
@@ -25,7 +26,6 @@
 > **开工顺序调整（覆盖原「下轮首步」）**：先实机验证 7bf1c3f 效果——重载扩展 → 触发一次卡片执行回传，观察粘贴后是否自动发送；若已修复，任务 B 直接关闭，登记验证结果即可；若仍复现，再按原蓝图实机取证定案（控制台三类日志 + 现场截图）与修复方向②（回车落空自检兜底）。
 > **锚点提醒**：03_bridge.js 因 7bf1c3f 行号再漂移，回传链定位一律以函数名 grep 为准（writeInputValue / pasteToWebpageAI / waitSendReady / pressEnter），行号仅参考。
 > **批4·l 证据更正（2026-11-09，7bf1c3f diff 细读后；上条「疑似已被覆盖」与「现盘复核…迁移未彻底」两表述作废）**：①7bf1c3f 修复对象是千问（Slate）与元宝（Quill）的 contenteditable 编辑器——原症状「setter 抛 Illegal invocation、框里没字、根本没办法输入」；GLM 输入框是 textarea（inputSelector＝「#search-input-box textarea, textarea.scroll-display-none」，isRichEditor 判 false），走原生 setter 分支，该分支 7bf1c3f 仅加 try/catch 兜底（GLM setter 从不抛错，兜底不触发），行为零变化。②用户症状「文本已粘贴进框、仅不发送」与该修复症状不同类——任务 B 未被 7bf1c3f 覆盖；上条「先验证 7bf1c3f、已修复则关闭」顺序作废，恢复原蓝图：实机复现取证定案（控制台三类留痕+现场截图）→ 修复方向②（回车落空自检兜底）首选。③批4·d 实现事实「原生 setter 写入」对 GLM（textarea）仍成立，上条「据此过时」范围收窄为仅富文本站点（现走 paste）。④上条「现盘复核」的「仍并存（迁移未彻底或双路径）」系检测口径误判：ClipboardEvent 在 03_bridge 本就用于附件粘贴，现为按输入框类型分流的既定设计（新增 03c_rich_editor.js：isRichEditor/writeRichEditor/clearRichEditor）。⑤方向② 的「查输入框 value」判据仅对 textarea（GLM）有效，富文本站点需另行判据（参考 03c 的 isRichEditor / clearRichEditor）。
-
 
 
 症状：自动回传链路（卡片 auto_send → 05_index.js L84 → A.pasteToWebpageAI）在 GLM 页面经常完成粘贴但发送未触发，间歇复现 → 工具结果停在输入框、GLM 收不到 [TOOL_RESULT]、整条工具调用链中断。
@@ -88,6 +88,7 @@
 - js-tests：# tests 279 / # pass 279 / # fail 0（含远端随提交新增 test_apply_profiles_container 与 test_item_marks_mark 系测试文件，266→279），但红 12 文件，基线外新红 = extend/content/00_state.js、extend/content/02_blocks.js（恰为远端并行会话改动的两文件）；
 - pytest 893 全绿（888→893，远端新增 test_config_store 用例）。
 
+**归因结论**：本会话暂存仅 docs/pending-tasks.md，全部失败项所在文件本会话零触碰；quality 另经 stash 实证（暂存收起后在干净 HEAD 复跑，失败一致复现）→ 闸债 100% 来自远端并行合并（1c0f8aa/f0ecb43/f188d61/44f627f/2942c99），非本会话引入；js 项为逻辑归因（.md 不参与覆盖率，红文件零触碰）。
 
 **批 5 首项（P0 闸债，先于任务 A/B 执行）**：
 1. 消重复：skills\debug_chrome\extension\content\01_config.js L73/L74/L75 ↔ 05_tool-handlers.js L316/L317/L318 三对（含已知存量 L73↔L316）一并收敛（提取共享常量或改单处引用），修后 quality_rules.py 应回 exit 0；

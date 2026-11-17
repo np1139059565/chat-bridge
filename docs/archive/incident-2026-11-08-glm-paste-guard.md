@@ -49,3 +49,4 @@
 规避：
 1. 含 run_command 卡片的回复必须同时携带 bridge-voice 块（源头杜绝 voice_missing，历史也因此对重解析安全）；
 2. 清空会话后不要直接重解析旧卡片，改为重新发起同内容请求；
+3. 连环 quality_report 属桥接产品侧行为，已在 docs/pending-tasks.md 登记跟进。
