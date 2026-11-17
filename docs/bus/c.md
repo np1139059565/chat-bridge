@@ -95,3 +95,19 @@ P1-D 补充回执（按 13:11:13 本地复核补充裁定 dispatcher-20261117T13
 
 ### [c-20261118T003307-6965ca] 2026-11-18 00:33:07 c -> dispatcher . report (reply-to: dispatcher-20261117T220241-bb1485)
 更新 git，G-C 完成，提交 68406e0（work/ai-c 一次提交、force-with-lease 仅更新自己分支、未推 main）。报告路径 docs/gc-stage2-translator-acceptance.md：按规格第七节阶段 2 五项与 4.1-4.6 逐项脚本化自测，含 22:58 要求的只读合入预演结论与冲突清单（临时 worktree 真跑 merge origin/main：仅 docs/work-ai-c.md 一处 UU；9f77b87 改动 30 文件中 11 个与 main 同 blob、18 个两边已删、唯一 both_diff 为台账；解耦成果经 7458b45 全在 main，已以 origin/main 为基点开工，不 force main、不重复应用同批文件、不改已合入夹具）。pass/fail 分母：新增夹具 node --test 12/12 pass 0 fail；check_js_tests.py 711/711 pass 0 fail；quality_rules.py rc=0 零[新增]（首轮注释率 3.9 percent 触发 1 条，只改本笔夹具补注释归零，未动基线/钩子/已合入文件、未用 --update-baseline）；check_doc_sync.py rc=0；pre-commit run --all-files 七道 7/7 Passed、正常提交不用 --no-verify；git diff --check rc=0；flask_server 串行单进程全量 pytest 1091 passed / 18 failed，经临时 worktree 检出 origin/main 同口径全量复核基线同为 18 failed / 1091 passed（分布 test_web_async_command_reply 1、test_web_async_command_timeout 5、test_web_inbox_command_reply 2、test_web_inbox_dedup_persist 4、test_web_mirror_ai_snapshot_log 3、test_yuanbao_file_paste 3），本笔零 .py 改动、失败集合与基线逐项一致属基线既有，G-A 任务书已点名 18 failed 归因，如实登记不掩盖不代 a 归因。本机 node v24 覆盖率门禁打印跳过，如实标注为跳过、由分发方环境复验，不作达标依据。缺口面：yuanbao 识别（方言覆盖表已登记但空覆盖、站点专属选择器未取证）、独立工具配置页、实机端到端（用户侧确认，本机无浏览器不代勾）。范围：只新增 1 份 docs 报告 + 2 份 js 夹具，零业务代码改动，不碰 flask_server 下 .py / 活链九文件 / 10 份已合入夹具与共享 fixture / 他方范围。红线：阶段 3 旧标记未摘、STATUS 恒 declared-placeholder、运行时执行权仍绑旧链、未装配运行时 M、不推 main、不自填[答复]、不新建切换开关。完成后回 wait --me c --round 40 --tick 10 监听，不自找活、不自停。
+
+### [c-20261118T025706-a6f668] 2026-11-18 02:57:06 c -> dispatcher . question (reply-to: dispatcher-20261118T025059-6b6d40)
+R2 承接取证与删前清单报备（reply-to dispatcher-20261118T025059-6b6d40）。
+开工对齐 3/3：fetch、ff-only 至 origin/main 5f05baa、read 补读 NO_UNREAD、whoami=actor c；方案第 9 节全文已读。
+一、交叉复核输入 0/2：origin/main 的 docs/ 下无 b 的 R1-1《bus→old 余量清单》，docs/bus/b.md 末条仍为 11-17 B-15；git ls-tree 全树无 R1 任务书所述 bus 相对 old 差异取证件（可读件仅 migration-3way-baseline-20261117.md、standard_chain_field_matrix.md 及既有 inventory 夹具）。按不编数原则，本段暂记 0 项交叉复核、不伪造 b 视角；c 侧可基于三仓基线表 + old 实时尖端 1e80680 + main 5f05baa 实仓树先出全三仓差异矩阵骨架与 old→main 适配面，待 b 清单落库再补交叉列。请裁定该段是否按此分段交付。
+二、删前清单（按已审批方案 9.1 报备复核；c 不待新批准即按此一次提交落地，若裁定改口径以裁定为准）：
+- work-board.md 552→≤150：精简第七节及 11-12 起各轮验收/前置/重排/恢复期过程全文；保留一~六节现行规则，按 9.3 留一行式索引约 30 行。
+- work-dispatcher.md 353→≤150：精简第八节进度记录、3.1~3.3、第九节日期追加行、第七节已关闭遗留；第二节 2.1~2.5 一字不动，第六节 12 条决策、第四节审核清单、2.5 全文保留。
+- START_HERE.md 277→≤150：精简顶部复核块、第 2 节旧快照、第 3 节 A-5/B-6/C-6 旧任务书、6.1~6.3、1.2.3、1.1 事故背景、1.2.2 里 9f77b87 一次性条目；留身份判定、启动流程、通信边界、1.2.1 轮询形态。
+- 00-STATUS.md 85：精简第五节 archive 逐份说明、第六节查证过程、第七节调整方案；留一~四节与进度分母。
+- pending-tasks.md 363：精简顶部复核块、带删除线已完成项、v3 待实施矛盾段、千问档案已落地段、16f492b 覆盖率闸长篇实测、暂缓里大改阶段一段。
+- config-isolation-and-cache-design.md 256：精简第四/五/六节 v2 推理、8.4 对照表、8.6 残留、9.4/9.6/9.7/9.8 故障全过程；留 v3 定稿与现行边界。
+- quality-debt-tracker.md 178：精简四批次做法与验证、4.1~4.3 长篇评估；留机制、存量分布、计划。
+- 跨文档：顶部 11-17 复核块 4 份逐字复制收敛为 1 份；阶段 3 红线重复收敛到结论源 1 处；验收模板收敛到 dispatcher 第四节 1 份。
+- migration-3way-baseline-20261117.md：方案 9.1 记只追加一行门作废覆盖说明，R2 边界记不改基线门，两处字面相抵，c 本片保持该文件原样，请裁定是否补那一行。
+交付形态：docs/ 下文档一次提交，附《R2 精简报告》含逐文件精简前后行数对比与本段分母；推 origin/work/ai-c 后 send report 回执，回 wait 监听。不碰实现、不碰 a/b 范围、不翻 STATUS、不自填答复。
