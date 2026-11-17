@@ -1,0 +1,19 @@
+{
+  "icenter": {
+    "emp_no": "6396000838",
+    "password": "Np337586~1!8*9(0)",
+    "auth_url": "http://uac.zte.com.cn/uaccommauth/auth/comm/verify.serv",
+    "api_base_1_0": "https://icenterapi.zte.com.cn/zte-rd-icenter-contents",
+    "api_base_2_0": "https://icenterapi.zte.com.cn/zte-rdcloud-space-content",
+    "default_system": "space-1921407097",
+    "default_environment": "browser",
+    "default_tenant": "ZTE",
+    "default_lang": "zh_CN",
+    "request_timeout": 30,
+    "api_timeout": 10
+  },
+  "download": {
+    "default_local_dir": "./",
+    "max_filename_length": 200
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "tools": [
+    {
+      "name": "icenter_export",
+      "description": "将 iCenter 页面导出为完整 Markdown，并内联所有 Reference 引用宏以还原表格。解决 handler 直接导出时表格丢失、内容不全的问题。",
+      "script": "scripts/inline_reference_macros.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "parameters": [
+        { "name": "url", "type": "string", "required": true, "description": "iCenter 页面 URL" },
+        { "name": "output", "type": "string", "required": true, "description": "输出 Markdown 文件路径" },
+        { "name": "title", "type": "string", "required": false, "description": "文档标题，默认不添加标题行" },
+        { "name": "handler_dir", "type": "string", "required": false, "description": "handler.py 所在目录，默认为本技能 scripts 目录" }
+      ]
+    },
+    {
+      "name": "icenter_create_page",
+      "description": "在 iCenter 指定空间与父页面下新建页面，正文为 HTML 片段，返回新页面的 content_id 与访问地址。",
+      "script": "scripts/handler.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "parameters": [
+        { "name": "title", "type": "string", "required": true, "description": "页面标题" },
+        { "name": "content", "type": "string", "required": true, "description": "页面正文 HTML 片段" },
+        { "name": "space-id", "type": "string", "required": true, "description": "目标空间 ID" },
+        { "name": "parent-id", "type": "string", "required": true, "description": "父页面 ID" },
+        { "name": "version", "type": "string", "required": false, "description": "API 版本 1.0 或 2.0，默认 2.0" },
+        { "name": "summary", "type": "string", "required": false, "description": "页面摘要" }
+      ]
+    },
+    {
+      "name": "icenter_edit_page",
+      "description": "修改 iCenter 已有页面的标题或正文。",
+      "script": "scripts/handler.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "parameters": [
+        { "name": "url", "type": "string", "required": true, "description": "iCenter 页面 URL" },
+        { "name": "title", "type": "string", "required": false, "description": "新标题" },
+        { "name": "content", "type": "string", "required": false, "description": "新正文 HTML" }
+      ]
+    }
+  ]
+}

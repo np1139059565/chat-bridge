@@ -1,0 +1,5 @@
+{
+  "provider": "git-skill",
+  "prompt": "Git/Gerrit 代码管理技能：在本地终端执行 Git 与 Gerrit 操作，涵盖代码提交、分支管理、评审人管理、代码走查打分，以及周期述职报告生成。处理要求：若本次会话尚未阅读过本技能说明，请先用 read_skill 工具读取（skill=git-skill, file=SKILL.md），再按其规定处理；同一会话内只需读取一次。执行具体场景前，从 examples/ 目录读取对应规范文件并严格遵循。所有命令用 cmd /c 前缀执行，禁用 PowerShell 与环境变量方案。",
+  "tools": []
+}

@@ -1,0 +1,105 @@
+{
+  "tools": [
+    {
+      "name": "zxw_list_pods",
+      "description": "列出 zxwinmob 环境 ranoss 命名空间下的 Pod（含 IP 与节点），可按关键字过滤，如 closedloop。",
+      "script": "scripts/zxw_container.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["list-pods"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "keyword", "type": "string", "required": false, "description": "Pod 名过滤关键字" },
+        { "name": "namespace", "type": "string", "required": false, "description": "命名空间，默认 ranoss" }
+      ]
+    },
+    {
+      "name": "zxw_exec",
+      "description": "在 zxwinmob 容器内执行 shell 命令，自动补 -- 以兼容新版 kubectl。",
+      "script": "scripts/zxw_container.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["exec"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "pod", "type": "string", "required": true, "description": "Pod 全名，或配合 match 传关键字" },
+        { "name": "command", "type": "string", "required": true, "description": "容器内要执行的命令" },
+        { "name": "match", "type": "boolean", "required": false, "description": "为真时把 pod 当关键字现查全名" },
+        { "name": "namespace", "type": "string", "required": false, "description": "命名空间，默认 ranoss" },
+        { "name": "timeout", "type": "number", "required": false, "description": "远端执行超时秒数，默认 45" }
+      ]
+    },
+    {
+      "name": "zxw_ls",
+      "description": "列出容器工作目录（默认 /home/zxwinmob）内容。",
+      "script": "scripts/zxw_container.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["ls"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "pod", "type": "string", "required": true, "description": "Pod 全名或匹配关键字" },
+        { "name": "path", "type": "string", "required": false, "description": "要列出的容器内路径，默认工作目录" },
+        { "name": "namespace", "type": "string", "required": false, "description": "命名空间，默认 ranoss" }
+      ]
+    },
+    {
+      "name": "zxw_restart",
+      "description": "重启容器内 java 进程：杀掉后由 start.sh 守护循环用新 jar 自动拉起。",
+      "script": "scripts/zxw_container.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["restart"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "pod", "type": "string", "required": true, "description": "Pod 全名或匹配关键字" },
+        { "name": "match", "type": "boolean", "required": false, "description": "为真时把 pod 当关键字现查全名" },
+        { "name": "namespace", "type": "string", "required": false, "description": "命名空间，默认 ranoss" }
+      ]
+    },
+    {
+      "name": "zxw_push",
+      "description": "把控制器上的文件 kubectl cp 进容器工作目录。",
+      "script": "scripts/zxw_container.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["push"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "pod", "type": "string", "required": true, "description": "Pod 全名或匹配关键字" },
+        { "name": "src", "type": "string", "required": true, "description": "控制器上的源文件绝对路径" },
+        { "name": "dest_dir", "type": "string", "required": false, "description": "容器内目标目录，默认工作目录" },
+        { "name": "match", "type": "boolean", "required": false, "description": "为真时把 pod 当关键字现查全名" },
+        { "name": "namespace", "type": "string", "required": false, "description": "命名空间，默认 ranoss" }
+      ]
+    },
+    {
+      "name": "zxw_deploy_start",
+      "description": "在控制器后台启动一次 web 包部署（打 jar + 重启），立即返回 task_id。",
+      "script": "scripts/zxw_deploy.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["start"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "pod", "type": "string", "required": true, "description": "Pod 全名或匹配关键字" },
+        { "name": "zip_name", "type": "string", "required": true, "description": "控制器 remote_workdir 下的安装包文件名" },
+        { "name": "zip_host", "type": "string", "required": false, "description": "安装包所在主机别名；与 host 不同时自动经 SFTP 中转" },
+        { "name": "match", "type": "boolean", "required": false, "description": "为真时把 pod 当关键字现查全名" },
+        { "name": "namespace", "type": "string", "required": false, "description": "命名空间，默认 ranoss" }
+      ]
+    },
+    {
+      "name": "zxw_deploy_status",
+      "description": "按 task_id 查询部署任务状态（running/SUCCESS/FAILED）与日志尾部。",
+      "script": "scripts/zxw_deploy.py",
+      "interpreter": "python",
+      "arg_style": "flag",
+      "fixed_args": ["status"],
+      "parameters": [
+        { "name": "host", "type": "string", "required": true, "description": "主机别名 69/86/102 或 IP" },
+        { "name": "task_id", "type": "string", "required": true, "description": "deploy_start 返回的任务号" }
+      ]
+    }
+  ]
+}

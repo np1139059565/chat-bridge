@@ -1,0 +1,13 @@
+{
+  "user": "ubuntu",
+  "password": "UbuntU1!2@3#4$",
+  "namespace": "ranoss",
+  "container_workdir": "/home/zxwinmob",
+  "remote_workdir": "/home/ubuntu/lcy",
+  "hosts": {
+    "69": "10.227.105.69",
+    "86": "10.227.105.86",
+    "102": "10.220.50.102",
+    "192": "10.232.56.192"
+  }
+}
