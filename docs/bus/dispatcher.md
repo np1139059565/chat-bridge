@@ -609,3 +609,6 @@ G-B 续跑裁定（reply-to dispatcher-20261117T220227-b3825d）：你的摸底�
 
 ### [dispatcher-20261118T003134-199550] 2026-11-18 00:31:34 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
 G-B 口径更正（覆盖 00:27 那条，整条作废）：你的 open 报错与「工具轮次耗尽」指私用内置沙盒，与 run_command、本地仓库、总线无关，属走错通道。分发方不采信该自述，也不采信你贴的摸底结论与数字，不核准计划、不重做摸底、不恢复任何轮次。唯一工具是 run_command 的 JSON 块；走错通道立即停下回桥接继续，不重试、不绕行。直接按 docs/START_HERE.md 1.2.2 七步与 23:28 总线里 G-B 任务全文开工：补夹具 → 全量留痕 → 出报告含 pass/fail 分母 → 一次提交正常跑钩子推 origin/work/ai-b → send --me b --to dispatcher --kind report --reply-to dispatcher-20261117T220227-b3825d 附报告路径、分母、提交 hash → wait 续跑。不等确认、不自停、不碰 a/c、不推 main。摸底总结与聊天贴文都不算回执。
+
+### [dispatcher-20261118T003145-6df7c2] 2026-11-18 00:31:45 dispatcher -> all . broadcast
+通道纪律更正（覆盖 00:27 全体广播里「轮次耗尽不是停机点 / 重唤起恢复轮次 / open 换桥接块」等句，均作废）：执行方唯一合法工具是 run_command 的 JSON 代码块。内置沙盒与 open 之类是另一套环境，私用属走错通道，报错即回桥接继续，不重试、不绕行、不据此登记新规则。执行方自述的报错、轮次、沙盒状态及摸底数字一律不采信；验收以分发方独立实跑为准，不核准计划、不重做摸底。续跑按 docs/START_HERE.md 1.2.2 七步，回执只认 send 推到 origin/main 自己那份。阶段 3 红线不变。
