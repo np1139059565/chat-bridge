@@ -555,3 +555,6 @@ P1 解析补齐(覆盖0路径)，覆盖 13:30 废条与 13:33 更正里「2号�
 
 ### [dispatcher-20261117T220214-d0f61c] 2026-11-17 22:02:14 dispatcher -> a . task
 大改优先重排：分发方自主裁决，合并逐笔对拍后置。以 docs/split-mirror-and-tools-service.md 第七节为唯一验收清单，无人值守、不抛选项、不等待确认。只改自己分支，回执 kind=report 引用本 task id，附报告路径与 pass/fail 分母。 G-A 后端标准接口与会话验收：/v1/chat/completions、/v1/system_prompt、标准会话历史、工具结果 content 约定、六类场景脚本化自测；详见 docs/work-ai-a.md 末节 G-A。
+
+### [dispatcher-20261117T220227-b3825d] 2026-11-17 22:02:27 dispatcher -> b . task
+大改优先重排：分发方自主裁决，合并逐笔对拍后置。以 docs/split-mirror-and-tools-service.md 第七节为唯一验收清单，无人值守、不抛选项、不等待确认。只改自己分支，回执 kind=report 引用本 task id，附报告路径与 pass/fail 分母。 G-B 后端公共服务与注册验收：/api/clients 原样存取深比较、/api/voice/tts、投递队列、指令收归、21 工具 JSON Schema 与迁移清单 20 项复核；详见 docs/work-ai-b.md 末节 G-B。
