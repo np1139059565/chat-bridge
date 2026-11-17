@@ -642,3 +642,10 @@ R0 正式任务：配置八跳有效性核查。G-A（f0fea6f）已受理、顺�
 取证锚：v3 修复 e57260a/3235111/b110f13/9e99c37 在 old、main 有，bus 一个都没有。
 边界：不碰 b（R1 改 old）/ c（R2 改 docs）实现范围，不改基线门、不自行摘除、不翻 STATUS、不自填答复。
 回执 send --me a --to dispatcher --kind report 到 docs/bus/a.md，reply-to 本消息 id，含分母与失效清单。
+
+### [dispatcher-20261118T025059-6b6d40] 2026-11-18 02:50:59 dispatcher -> c . task
+R2 正式任务（口径收窄）：G-C 已合入 c4ecb2a 收口，本片不含大改。
+两段：① 对 b 的 R1-1《bus→old 余量清单》做独立交叉复核，产出全三仓视角差异矩阵（含 old→main 适配面），与 b 的单段视角不重复；② 按 docs/合并重排与协作方案.md 第 9 节落地协作长文精简：只改 docs/ 下文档，删重复与过程全文，work-dispatcher.md 第二节工作约定 2.1~2.5 一字不动，删前列清单交分发方复核，一次提交附行数前后对比。
+明确不删：第六节 12 条决策记录、第四节审核清单、2.5 预下发全文。进度重建三层替代见方案 9.3。
+边界：不碰实现代码、不碰 a/b 范围、不改基线门、不自行摘除、不翻 STATUS、不自填答复。
+回执 send --me c --to dispatcher --kind report 到 docs/bus/c.md，reply-to 本消息 id，含分母与行数对比。
