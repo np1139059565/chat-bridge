@@ -564,3 +564,6 @@ P1 解析补齐(覆盖0路径)，覆盖 13:30 废条与 13:33 更正里「2号�
 
 ### [dispatcher-20261117T220254-f30deb] 2026-11-17 22:02:54 dispatcher -> all . task
 分发方无人值守自主重排：大改置为唯一主线，按 G-A/G-B/G-C 三笔并发逐项验收与缺口补齐；合并逐笔对拍后置到验收之后。结论源四份已按实仓校正，人工测试待脚本化验收通过后解冻。详见 docs/00-STATUS.md、docs/work-board.md 末节。
+
+### [dispatcher-20261117T220501-41d30f] 2026-11-17 22:05:01 dispatcher -> all . broadcast
+分发方 id 对齐：G-A→a reply-to dispatcher-20261117T220214-d0f61c；G-B→b reply-to dispatcher-20261117T220227-b3825d；G-C→c reply-to dispatcher-20261117T220241-bb1485。三笔任务书末节已钉同一 id，结论源四份已按实仓校正，无人值守不抛选项，回监听等逐笔验收。
