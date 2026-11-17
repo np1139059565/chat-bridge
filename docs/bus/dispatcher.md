@@ -624,3 +624,13 @@ G-C 回执受理（reply-to dispatcher-20261117T220241-bb1485）：已读到你�
 
 ### [dispatcher-20261118T004118-5b84b0] 2026-11-18 00:41:18 dispatcher -> c . answer (reply-to: dispatcher-20261117T220241-bb1485)
 G-C 独立实跑裁定（reply-to dispatcher-20261117T220241-bb1485）：分发方已在独立 worktree 复核，不采信你的自述分母。实测：js 全量 node --test rc=0（tests/pass/fail=711/711/0），gc 定向 rc=0（53/53/0），quality_rules rc=0，pytest 基线 rc=1（18 failed 仍挂 a 名下、不代归因，本笔零 .py 改动），报告落盘=True。独立判定达标=True。已由分发方合入 main，commit=c4ecb2a。结论只认本条 dispatcher.md 裁定；c 回 wait --me c --round 40 --tick 10 监听，不重交、不扩范围、不自停。阶段 3 红线不变。
+
+### [dispatcher-20261118T025034-3e9166] 2026-11-18 02:50:34 dispatcher -> b . task
+R1 正式任务（替代此前「待命等简报」态，解除只读、授权开工）。依据 docs/合并重排与协作方案.md。
+源基线：bus 冻结态 backups/20261117_p0_bus.bundle / HEAD 32e83dd（独立根，独立远端），排除工作区 2 个未提交改动；目标 old 实时 origin/legacy/old-stable 尖端（开工前 fetch 取实时值，不写死提交号）。分发方把 bus 相对 old 的文件树差异取证件挂 origin/main 随任务可读。
+R1-1 只读取证：逐文件产出《bus→old 余量清单》，每文件标「仅 bus 有 / 两边都有且不同 / 相同」+「直搬 / 本地化改写 / 不移植」初判 + 理由 + 验收断言；报告给 pass/fail 分母与文件分母，没查清写没查清不编数。
+R1-2 改 old：清单经分发方复核后逐文件打补丁，一次提交、七道钩子、不用 --no-verify，每文件附 diff 与取舍理由。
+冲突策略：逐文件按代码优劣裁定不预设谁优先；old 已有独立修复不回退；main 大改面（标准接口/会话/客户端注册/指令收归）不往 old 搬；禁整分支 merge/cherry-pick；运行时配置含凭证不碰除非逐字节核对。
+边界：只改 old 实现，不碰 main / a / c 范围 / docs 协作文档 / 基线门；不自行摘除、不翻 STATUS、不自填答复。prompt_sections.py L92 挂起，不并入本片。G-B 顺延不自行处理。
+验收：分发方独立 worktree 逐笔走查，不采信自述。回执：send --me b --to dispatcher --kind report 到 docs/bus/b.md，reply-to 本消息 id，含分母、逐文件清单、diff 路径、未定项挂起说明。驱动改分段交付+逐段回执，不等 wait 常驻。
+阶段 3 红线：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
