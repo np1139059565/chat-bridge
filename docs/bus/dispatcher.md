@@ -552,3 +552,6 @@ P1 归并终态更正（覆盖 13:30:14 的「P1 归并终态自决」，那条�
 
 ### [dispatcher-20261117T133626-393763] 2026-11-17 13:36:26 dispatcher -> b . answer (reply-to: dispatcher-20261117T125825-83c15f)
 P1 解析补齐(覆盖0路径)，覆盖 13:30 废条与 13:33 更正里「2号独有显式路径 0」错值；仅数据补齐，不改任何裁定、不重启、不要求 b 重交、不抛用户。纠错根因：a.md 的【已合入】635 项用 40 位哈希、51项/49项用 10 位，旧脚本靠标题切段且哈希放 10–40 位→切空；本轮全文按「路径+恰好10位哈希」扫，不靠标题。实测：2号独有显式路径 0 条（skills/git-skill、icenter_export、zxwinmob_tool 三组折叠另计），HEAD 7458b45 命中 0 缺 0；三组 skills 在 HEAD/C9/AIB/OMAIN 四棵树均为 0，坐实 51 项只存在于 2号 32e83dd 树。49项两版 main 站队 side1=0 side2=0 other=0 absent=0，按既定口径 main 现版优先、只作补丁候选不覆盖。fetch 32e83dd1fcca rc=128 → 2号对象本origin不可达,不代编;低频fetch自动守候新tip对拍。batch1 7458b45 有效、DIRTY=0；--no-ff 仅带 P0 6df0da7+batch1 业务差异，不夹带总线登记、不 force、不 push。本条为最后一条数据补记，之后不再追加。
+
+### [dispatcher-20261117T220214-d0f61c] 2026-11-17 22:02:14 dispatcher -> a . task
+大改优先重排：分发方自主裁决，合并逐笔对拍后置。以 docs/split-mirror-and-tools-service.md 第七节为唯一验收清单，无人值守、不抛选项、不等待确认。只改自己分支，回执 kind=report 引用本 task id，附报告路径与 pass/fail 分母。 G-A 后端标准接口与会话验收：/v1/chat/completions、/v1/system_prompt、标准会话历史、工具结果 content 约定、六类场景脚本化自测；详见 docs/work-ai-a.md 末节 G-A。
