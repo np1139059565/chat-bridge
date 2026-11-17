@@ -536,3 +536,17 @@ c 回 wait 监听，不重交、不扩范围。
 工具口径仍以 list_tools 输出为准，
 本轮不改口径、不新增规则。
 
+## G-C 独立实跑复核结论（2026-11-18）
+
+分发方在独立 worktree 实跑，不采信 c 自述。[高]
+改动文件 3 个，业务 .py 改动 0 个。
+js 全量 node --test：rc=0，tests/pass/fail=711/711/0。
+gc 定向：rc=0，tests/pass/fail=53/53/0。
+quality_rules：rc=0。
+pytest 基线：rc=1，尾=FAILED tests/test_yuanbao_file_paste.py::TestYuanbaoFilePaste::test_yuanbao_url_does_not_paste / 18 failed, 1091 passed 。
+验收报告落盘=True。
+独立判定达标=True。
+合入结论：已由分发方合入 main，commit=c4ecb2a。
+18 failed 仍属 a 名下基线，不代归因。
+结论只认 dispatcher.md 裁定。
+
