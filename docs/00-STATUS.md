@@ -7,7 +7,7 @@
 > - 方案：文档回退 → 大改逐项验收与缺口补齐（并发）→ 合并逐笔对拍 → 验收后解冻人工测试。
 > - 本块由分发方维护；执行方只改实现，不改结论。跨机器定位只认工程名 chat-bridge + 版本号/commit，路径用工程内相对路径。
 
-> 一切进度结论以本文件为准。2026-11-17 复核，推翻此前「已做完 / 可进人工测试」。
+> 一切进度结论以本文件为准。当前状态：大改逐项脚本化验收进行中，合并逐笔对拍排在其后。
 
 ## 一、汇报铁律（写死，不可改）
 
@@ -26,18 +26,36 @@
 |---|---|---|
 | 协作文档回退 | 100% | 24/24 份已取回并随本笔提交 |
 | 汇报铁律写入 | 100% | 2/2 份（本文件、协作规则） |
-| 翻译员/工具服务剥离大改 | 0% | 0/4 阶段验收 |
-| 合并逐笔对拍 | 0% | 台账未产出（23 个缺失文件待逐笔核） |
-| 配置固化 / yuanbao / 本地工具页 | 0% | 0/3 修复 |
-| 人工测试 | 0%（冻结） | 前置验收未过 |
+| 大改规格定稿 | 100% | 338 行 / 15 条决策 / 4 阶段 |
+| 大改接口与注册实仓复核 | 100% | 9/9 关键路由与实现文件在 main 且 app.py 已注册 |
+| 参数声明迁移清单勾选 | 90% | 18/20 项（2 项为规则行与 read_file.path 状态列） |
+| 大改逐项脚本化验收 | 0% | 0/3 笔并发验收回执（G-A / G-B / G-C 已下发） |
+| 合并逐笔对拍 | 0%（排在大改验收之后） | 对拍对象 23 个文件（3 实现 + 19 测试 + tunnel.cmd） |
+| 配置刷新 / yuanbao 识别 / 独立工具配置页 | 0% | 0/3 缺口项并入 G-B / G-C 验收面 |
+| 人工测试 | 0%（冻结） | 待脚本化验收通过后解冻 |
 
-## 三、大改真实情况
+## 三、大改当前情况
 
-规格 338 行，4 阶段 1a/1b/2/3 全部未验收。生产标准接口 `clients/register`、`/v1/messages` 全仓 0 命中；本地工具配置页 0；旧链路未删。main 只有 3 个契约 js + 8 份契约文档 + 25 个审计测试，old/bus 契约 0。**只写了文档和测试，生产没动。**
+工具服务侧标准接口已在 main 并经 app.py 注册：
 
-## 四、合并真实情况
+| 能力 | 接口 / 落点 |
+|---|---|
+| 标准对话 | POST /v1/chat/completions（routes/chat_api.py、core/chat_completions.py） |
+| 标准提示词 | GET /v1/system_prompt（routes/system_prompt.py） |
+| 标准会话历史 | core/chat_completions.py 按 site_key 落盘 |
+| 语音合成 | POST /api/voice/tts（routes/voice.py） |
+| 客户端注册与配置原样保管 | POST/GET/DELETE /api/clients（routes/clients.py、core/client_registry.py） |
+| 通用投递队列 | core/delivery_queue.py |
+| 指令收归 | core/command_catalog.py、routes/command_catalog.py |
+| 参数声明 | 21 个内置工具为标准 JSON Schema，read_file.path 用 anyOf |
 
-old+bus 有、main 无的代码/配置/测试 **23 个**（3 实现 + 19 测试 + tunnel.cmd）。「丢了几个 fix 提交」没查清，不报数。
+翻译员侧：extend/lib/standard_chain_adapter.js 六段中 execute 已实装（EXECUTE_STATUS = implemented-S2-step5），其余五段为 declared-placeholder；extend/dialog/parts/ 仍承担旧建卡直调路径。
+
+当前动作：以 docs/split-mirror-and-tools-service.md 第七节为唯一验收清单，三方并发逐项脚本化复核，产出 pass/fail 分母与缺口清单；缺口补齐后再进入阶段 3 摘除裁定。
+
+## 四、合并安排
+
+合并逐笔对拍排在大改脚本化验收之后。对拍对象为 23 个文件（3 实现 + 19 测试 + tunnel.cmd），清单与逐笔结论由分发方验收后写入 docs/work-board.md 末节。
 
 ## 五、文档结构（大白话）
 

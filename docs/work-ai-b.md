@@ -589,6 +589,6 @@ _callTool / _recordFailure 保留作为 deps.callTool 注入源（fetch /tool �
 
 **边界**：只改自己分支；不改结论文档、不碰他方范围、不自填 [答复]、不新建切换开关、不推 main。
 
-**验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-<me>；完成后 send --me <me> --to dispatcher --kind report --reply-to <本 task id> 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
+**验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-b；完成后 send --me b --to dispatcher --kind report --reply-to dispatcher-20261117T220227-b3825d 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
 
-**本任务总线 id**：`dispatcher-20261117T220227-b3825d`；回执 kind=report 且 reply-to 填此 id。
+**本任务总线 id**：`dispatcher-20261117T220227-b3825d`；回执 kind=report 且 reply-to 填 `dispatcher-20261117T220227-b3825d`。

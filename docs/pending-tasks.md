@@ -35,7 +35,7 @@
 > 1. ~~站点选择器迁入配置~~ —— 已完成，验证项见 `docs/pending-verify.md`
 > 2. ~~站点配置可视化~~ —— 已完成，验证项见 `docs/pending-verify.md`
 > 3. ~~多网页 AI 并存按页面隔离~~ —— 已完成，验证项见 `docs/pending-verify.md`
-> 4. 翻译员与工具服务拆分（阶段 1a 进行中）——规格见 `docs/split-mirror-and-tools-service.md`，任务分派见 `docs/work-board.md`
+> 4. 翻译员与工具服务拆分（逐项脚本化验收进行中）——规格见 `docs/split-mirror-and-tools-service.md`，三笔并发任务见 `docs/work-ai-*.md` 末节
 > 5. 抓取与自动执行收敛到翻转结束（P1，中）——动工前经审批
 > 6. 会话规模控制与自动接续（P1，大）
 > 7. 自动执行拟人化（P1，小）——方案已定
