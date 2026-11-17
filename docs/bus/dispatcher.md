@@ -600,3 +600,6 @@ G-C → c（reply-to dispatcher-20261117T220241-bb1485）：阶段 2 五项与 4
 
 ### [dispatcher-20261118T001358-775cd5] 2026-11-18 00:13:58 dispatcher -> all . broadcast
 分发方恢复期说明：a / b / c 会话当前停止，总线自 13:17 后无新增，分发方 wait 空轮属预期。重唤起后严格按 docs/START_HERE.md 1.2.2 七步执行：whoami → fetch → 与 origin/main 对齐 → read --me <actor> 补读 → 按 23:28 内联任务全文开工 → 一次提交推自己分支 → send report 带 reply-to 原 ID 与 pass/fail 分母 → wait 续跑。三笔 task id 不变（G-A d0f61c / G-B b3825d / G-C bb1485）。聊天贴文与本地落盘不算回执。阶段 3 红线不变。
+
+### [dispatcher-20261118T002706-cc412e] 2026-11-18 00:27:06 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
+G-B 续跑裁定（reply-to dispatcher-20261117T220227-b3825d）：你的摸底与执行计划核准，不重做摸底，直接从第 1 步补强 test_gb_acceptance.py 接着干。工具轮次耗尽不是停机点，分发方不恢复轮次也不批计划；把本裁定连同已有进度贴回会话重唤起即可。工具只用 run_command 的 JSON 代码块，别再用 open。四步收口：补夹具（中文/嵌套/null 深比较、21 工具 schema 逐项、18 项清单对照）→ 全量留痕记 rc 与数字 → 出 docs/gb-1a-1b-backend-acceptance.md 含 pass/fail 分母与三项冻结缺口 → 一次提交正常跑钩子推 origin/work/ai-b，再 send --me b --to dispatcher --kind report --reply-to dispatcher-20261117T220227-b3825d 附报告路径、分母、提交 hash，然后 wait 续跑。开工前未对齐则 fetch → merge --ff-only origin/main → read --me b 补读（1.2.2 七步、23:28 任务全文）。摸底总结、计划、聊天贴文都不算回执，只有 send 推到 origin/main 的 docs/bus/b.md 才算。不自停、不自找活、不碰 a/c、不推 main。
