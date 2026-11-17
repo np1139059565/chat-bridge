@@ -6,6 +6,7 @@
  * 零反斜杠零正则，普通 indexOf 与 split；新增被测 JS 源 0。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const nodeAssert = require('node:assert/strict');
 const nodeTest = require('node:test');
 const nodeFs = require('node:fs');
@@ -23,8 +24,8 @@ const boundary = read('extend/lib/standard_chain_boundary_contract.md');
 const table = read('extend/lib/standard_chain_c14_signature_table.md');
 const matrix = read('extend/lib/standard_chain_field_matrix.md');
 const criteria = read('extend/lib/standard_chain_pending_criteria.md');
-const readiness = read('docs/b10-removal-readiness-report.md');
-const report = read('docs/c15-s2-remaining-surface-inventory.md');
+const readiness = scDoc.doc('b10');
+const report = scDoc.doc('c15');
 const executePart = read('extend/dialog/parts/06_execute.js');
 const dialogHtml = read('extend/dialog/dialog.html');
 const parsePart = read('extend/dialog/parts/05f_parse.js');

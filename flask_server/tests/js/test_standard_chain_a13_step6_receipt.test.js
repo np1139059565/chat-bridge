@@ -11,6 +11,7 @@
  * 新增被测 JS 源 0；不装配 M、不建开关、不切活链、不翻 STATUS。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 // 防重窗：require 序与 a11 / a12 / c16 家族差异化（fs 前置于 test / 路径别名单段拼）。
 const a13Fs = require('node:fs');
 const a13Test = require('node:test');
@@ -34,9 +35,9 @@ const translatorSrc = readOf('extend/lib/translator.js');
 const matrixDoc = readOf('extend/lib/standard_chain_field_matrix.md');
 const boundaryDoc = readOf('extend/lib/standard_chain_boundary_contract.md');
 const tableDoc = readOf('extend/lib/standard_chain_c14_signature_table.md');
-const c15Doc = readOf('docs/c15-s2-remaining-surface-inventory.md');
-const b10Doc = readOf('docs/b10-removal-readiness-report.md');
-const reportDoc = readOf('docs/a13-step6-receipt-inventory.md');
+const c15Doc = scDoc.doc('c15');
+const b10Doc = scDoc.doc('b10');
+const reportDoc = scDoc.doc('a13');
 const parsePart = readOf('extend/dialog/parts/05f_parse.js');
 const promptPart = readOf('extend/dialog/parts/05c_prompt.js');
 const dataPart = readOf('extend/dialog/parts/00_data.js');

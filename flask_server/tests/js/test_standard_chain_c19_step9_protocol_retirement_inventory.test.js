@@ -10,6 +10,7 @@
  * require 头部序按 A-10 与 c18 / a13 / c17 / b14 / c16 同族差异化归零；c19Test( 直接调用。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const c19Path = require('node:path');
 const c19Assert = require('node:assert/strict');
 const ContractLib = require('../../../extend/lib/standard_chain_contract.js');
@@ -25,12 +26,12 @@ function c19Has(text, needle) { return text.indexOf(needle) >= 0; }
 function c19Lines(text) { return text.split(LF); }
 function c19Count(text, needle) { return text.split(needle).length - 1; }
 function c19LineCount(text, needle) { return c19Lines(text).filter((l) => c19Has(l, needle)).length; }
-const c15Doc = c19Read('docs/c15-s2-remaining-surface-inventory.md');
+const c15Doc = scDoc.doc('c15');
 const matrixDoc = c19Read('extend/lib/standard_chain_field_matrix.md');
 const boundaryDoc = c19Read('extend/lib/standard_chain_boundary_contract.md');
 const tableDoc = c19Read('extend/lib/standard_chain_c14_signature_table.md');
-const b7Doc = c19Read('docs/b7-protocol-retirement-status.md');
-const b10Doc = c19Read('docs/b10-removal-readiness-report.md');
+const b7Doc = scDoc.doc('b7');
+const b10Doc = scDoc.doc('b10');
 const c12Doc = c19Read('extend/lib/standard_chain_replacement_map.md');
 const c10Doc = c19Read('extend/lib/standard_chain_pending_criteria.md');
 const c11Doc = c19Read('extend/lib/standard_chain_crossref_index.md');
@@ -47,7 +48,7 @@ const outboundPy = c19Read('flask_server/remote_bridge/outbound.py');
 const flowPy = c19Read('flask_server/remote_bridge/message_flow.py');
 const routerPy = c19Read('flask_server/remote_bridge/message_router.py');
 const bridgePy = c19Read('flask_server/routes/bridge.py');
-const reportDoc = c19Read('docs/c19-s2-step9-protocol-retirement-inventory.md');
+const reportDoc = scDoc.doc('c19');
 
 // 一、C-15 第二节第 9 行六列在文（本片主锚，实时自动抽出原句）。
 c19Test('C-19 C-15 第 9 行：协议字段退役六列', () => {

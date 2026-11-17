@@ -8,6 +8,7 @@
  * 新增被测 JS 源 0；无 fs 写 / shell / 网络；不装配 M、不建开关、不切活链、不翻 STATUS。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const b14Fs = require('node:fs');
 const b14Path = require('node:path');
 const b14Test = require('node:test');
@@ -22,8 +23,8 @@ function b14Rows(text, head) { return text.split(LF).filter(function (l) { retur
 const b14AdapterSrc = b14Read('extend/lib/standard_chain_adapter.js');
 const b14BoundaryDoc = b14Read('extend/lib/standard_chain_boundary_contract.md');
 const b14TableDoc = b14Read('extend/lib/standard_chain_c14_signature_table.md');
-const b14C15Doc = b14Read('docs/c15-s2-remaining-surface-inventory.md');
-const b14B10Doc = b14Read('docs/b10-removal-readiness-report.md');
+const b14C15Doc = scDoc.doc('c15');
+const b14B10Doc = scDoc.doc('b10');
 // 四文档快照至此；以下全部只读反查，不写不改不搬。
 
 b14Test.test('B14-1 返回形状恰四键 by / a / b / status', function () {

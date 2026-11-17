@@ -9,6 +9,7 @@
  * require 头部序按 A-10 与同族差异化归零。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const c17Fs = require('node:fs');
 const c17Test = require('node:test');
 const c17Path = require('node:path');
@@ -22,17 +23,17 @@ function c17Read(rel) { return c17Fs.readFileSync(c17Path.join(rootDir, rel), 'u
 function c17Has(text, needle) { return text.indexOf(needle) >= 0; }
 function c17Lines(text) { return text.split(LF); }
 function c17Count(text, needle) { return text.split(needle).length - 1; }
-const c15Doc = c17Read('docs/c15-s2-remaining-surface-inventory.md');
+const c15Doc = scDoc.doc('c15');
 const boundaryDoc = c17Read('extend/lib/standard_chain_boundary_contract.md');
 const tableDoc = c17Read('extend/lib/standard_chain_c14_signature_table.md');
-const readinessDoc = c17Read('docs/b10-removal-readiness-report.md');
+const readinessDoc = scDoc.doc('b10');
 const matrixDoc = c17Read('extend/lib/standard_chain_field_matrix.md');
 const corePy = c17Read('flask_server/core/chat_completions.py');
 const chatApiPy = c17Read('flask_server/routes/chat_api.py');
 const dataPart = c17Read('extend/dialog/parts/00_data.js');
 const sigPart = c17Read('extend/dialog/parts/05j_card_sig.js');
 const adapterSrc = c17Read('extend/lib/standard_chain_adapter.js');
-const reportDoc = c17Read('docs/c17-s2-step7-dedupe-inventory.md');
+const reportDoc = scDoc.doc('c17');
 
 // 一、C-15 第二节第 7 行六列在文（本片主锚）。
 c17Test('C-17 C-15 第 7 行：服务端配对 / 前端声明态 / 双链承担', () => {

@@ -9,6 +9,7 @@
  * 新增被测 JS 源 0；无 fs 写 / shell / 网络；不装配 M、不建开关、不切活链、不翻 STATUS。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const path = require('node:path');
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
@@ -24,8 +25,8 @@ const adapterSrc = read('extend/lib/standard_chain_adapter.js');
 const contractSrc = read('extend/lib/standard_chain_contract.js');
 const boundary = read('extend/lib/standard_chain_boundary_contract.md');
 const table = read('extend/lib/standard_chain_c14_signature_table.md');
-const c15 = read('docs/c15-s2-remaining-surface-inventory.md');
-const b10 = read('docs/b10-removal-readiness-report.md');
+const c15 = scDoc.doc('c15');
+const b10 = scDoc.doc('b10');
 const executePart = read('extend/dialog/parts/06_execute.js');
 const parsePart = read('extend/dialog/parts/05f_parse.js');
 const dataPart = read('extend/dialog/parts/00_data.js');

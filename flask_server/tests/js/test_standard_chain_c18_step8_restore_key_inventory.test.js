@@ -9,6 +9,7 @@
  * require 头部序按 A-10 与 a11 / a12 / b13 / b14 / c16 / c17 同族差异化归零。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const c18Test = require('node:test');
 const c18Assert = require('node:assert/strict');
 const c18Fs = require('node:fs');
@@ -23,18 +24,18 @@ function c18Has(text, needle) { return text.indexOf(needle) >= 0; }
 function c18Lines(text) { return text.split(LF); }
 function c18Count(text, needle) { return text.split(needle).length - 1; }
 function c18LineCount(text, needle) { return c18Lines(text).filter((l) => c18Has(l, needle)).length; }
-const c15Doc = c18Read('docs/c15-s2-remaining-surface-inventory.md');
+const c15Doc = scDoc.doc('c15');
 const boundaryDoc = c18Read('extend/lib/standard_chain_boundary_contract.md');
 const tableDoc = c18Read('extend/lib/standard_chain_c14_signature_table.md');
 const matrixDoc = c18Read('extend/lib/standard_chain_field_matrix.md');
-const readinessDoc = c18Read('docs/b10-removal-readiness-report.md');
-const c7Doc = c18Read('docs/c7-standard-chain-migration-plan.md');
-const c6Doc = c18Read('docs/c6-direct-path-inventory.md');
+const readinessDoc = scDoc.doc('b10');
+const c7Doc = scDoc.doc('c7');
+const c6Doc = scDoc.doc('c6');
 const contractSrc = c18Read('extend/lib/standard_chain_contract.js');
 const adapterSrc = c18Read('extend/lib/standard_chain_adapter.js');
 const sigPart = c18Read('extend/dialog/parts/05j_card_sig.js');
 const cardsPart = c18Read('extend/dialog/parts/05g_cards.js');
-const reportDoc = c18Read('docs/c18-s2-step8-restore-key-inventory.md');
+const reportDoc = scDoc.doc('c18');
 
 // 一、C-15 第二节第 8 行六列在文（本片主锚）。
 c18Test('C-18 C-15 第 8 行：刷新恢复键六列', () => {

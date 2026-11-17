@@ -9,6 +9,7 @@
  * require 头部序按 A-10 与同族差异化归零（fs / assert / adapter / contract / path / test）。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const b15Fs = require('node:fs');
 const b15Assert = require('node:assert/strict');
 const b15Adapter = require('../../../extend/lib/standard_chain_adapter.js');
@@ -25,8 +26,8 @@ const b15AdapterSrc = b15Read('extend/lib/standard_chain_adapter.js');
 const b15ContractSrc = b15Read('extend/lib/standard_chain_contract.js');
 const b15BoundaryDoc = b15Read('extend/lib/standard_chain_boundary_contract.md');
 const b15TableDoc = b15Read('extend/lib/standard_chain_c14_signature_table.md');
-const b15C15Doc = b15Read('docs/c15-s2-remaining-surface-inventory.md');
-const b15B10Doc = b15Read('docs/b10-removal-readiness-report.md');
+const b15C15Doc = scDoc.doc('c15');
+const b15B10Doc = scDoc.doc('b10');
 // 五文档与两 lib 快照至此；以下全部只读反查，不写不改不搬。
 
 b15Test.test('B15-1 返回形状恰三键 by / id / status', function () {

@@ -6,6 +6,7 @@
  * 零反斜杠零正则，普通 indexOf 与 split；无 fs 写 / shell / 网络；新增被测 JS 源 0。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 const c16Assert = require('node:assert/strict');
 const c16Fs = require('node:fs');
 const c16Path = require('node:path');
@@ -22,11 +23,11 @@ function c16Count(text, needle) { return text.split(needle).length - 1; }
 const matrixDoc = c16Read('extend/lib/standard_chain_field_matrix.md');
 const boundaryDoc = c16Read('extend/lib/standard_chain_boundary_contract.md');
 const tableDoc = c16Read('extend/lib/standard_chain_c14_signature_table.md');
-const readinessDoc = c16Read('docs/b10-removal-readiness-report.md');
+const readinessDoc = scDoc.doc('b10');
 const cardPart = c16Read('extend/dialog/parts/05g_cards.js');
 const sigPart = c16Read('extend/dialog/parts/05j_card_sig.js');
 const adapterSrc = c16Read('extend/lib/standard_chain_adapter.js');
-const reportDoc = c16Read('docs/c16-s2-step4-card-build-inventory.md');
+const reportDoc = scDoc.doc('c16');
 
 // 一、C-8 第二节第 4 步推演行在文，且标仍占位、依赖 B-7 否。
 c16Test('C-16 C-8 第 4 步推演行：仍占位与落点在文', () => {

@@ -10,6 +10,7 @@
  * 新增被测 JS 源 0；无 fs 写 / shell / 网络；不装配 M、不建开关、不切活链、不翻 STATUS。
  */
 'use strict';
+const scDoc = require('./_standard_chain_doc_snippets.js');
 
 // 防重窗：require 序与 a11 / a12 / a13 / b14 家族差异化（assert 最前置、单 lib、a14 前缀别名）。
 const a14Assert = require('node:assert/strict');
@@ -29,9 +30,9 @@ const rowsOf = function (t, head) { return t.split(LF).filter(function (l) { ret
 const a14AdapterSrc = readOf('extend/lib/standard_chain_adapter.js');
 const a14C9Doc = readOf('extend/lib/standard_chain_boundary_contract.md');
 const a14C14Doc = readOf('extend/lib/standard_chain_c14_signature_table.md');
-const a14C15Doc = readOf('docs/c15-s2-remaining-surface-inventory.md');
-const a14B10Doc = readOf('docs/b10-removal-readiness-report.md');
-const a14ReportDoc = readOf('docs/a14-reply-segment-inventory.md');
+const a14C15Doc = scDoc.doc('c15');
+const a14B10Doc = scDoc.doc('b10');
+const a14ReportDoc = scDoc.doc('a14');
 const a14LiveRels = [
   'extend/dialog/parts/06_execute.js',
   'extend/dialog/parts/05f_parse.js',
