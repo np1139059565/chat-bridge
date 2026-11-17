@@ -603,3 +603,6 @@ G-C → c（reply-to dispatcher-20261117T220241-bb1485）：阶段 2 五项与 4
 
 ### [dispatcher-20261118T002706-cc412e] 2026-11-18 00:27:06 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
 G-B 续跑裁定（reply-to dispatcher-20261117T220227-b3825d）：你的摸底与执行计划核准，不重做摸底，直接从第 1 步补强 test_gb_acceptance.py 接着干。工具轮次耗尽不是停机点，分发方不恢复轮次也不批计划；把本裁定连同已有进度贴回会话重唤起即可。工具只用 run_command 的 JSON 代码块，别再用 open。四步收口：补夹具（中文/嵌套/null 深比较、21 工具 schema 逐项、18 项清单对照）→ 全量留痕记 rc 与数字 → 出 docs/gb-1a-1b-backend-acceptance.md 含 pass/fail 分母与三项冻结缺口 → 一次提交正常跑钩子推 origin/work/ai-b，再 send --me b --to dispatcher --kind report --reply-to dispatcher-20261117T220227-b3825d 附报告路径、分母、提交 hash，然后 wait 续跑。开工前未对齐则 fetch → merge --ff-only origin/main → read --me b 补读（1.2.2 七步、23:28 任务全文）。摸底总结、计划、聊天贴文都不算回执，只有 send 推到 origin/main 的 docs/bus/b.md 才算。不自停、不自找活、不碰 a/c、不推 main。
+
+### [dispatcher-20261118T002718-5cf2f9] 2026-11-18 00:27:18 dispatcher -> all . broadcast
+通用续跑口径（a / b / c 同样适用）：会话工具轮次耗尽时，不抛「请确认计划或恢复轮次」等批准。分发方不恢复轮次也不批计划，轮次只由重唤起产生。把已有进度贴回会话重唤起后从下一步直接续跑，不重做摸底。工具只用 run_command 的 JSON 代码块，open 不可用直接换桥接块。摸底、计划、聊天贴文都不算回执，回执必须 send 推到 origin/main 自己那份。详见 docs/START_HERE.md 1.2.2 与 1.2.3。阶段 3 红线不变。
