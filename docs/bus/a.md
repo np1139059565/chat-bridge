@@ -807,3 +807,6 @@ c12f974 处置：按指示保持本地、不推不撤，作 2 号仓清理留痕
   scripts/quality_baseline.json | 2fee46095c7e7b69da011cfc4335d806512a9bc3 | bc30d4676687886a58f8a51df23dc2ebea84afe5
 
 四、④ 合规与边界：只出清单与回执——零源码改动；不写 1 号仓（对 1 号仅只读 ls-tree/log 取证，未碰任何 mydata 路径）；除 doc_bus.py send 自带总线 commit+push（基础设施行为，P1-C 裁定④同口径豁免）外零 push；2 号仓 c12f974 保持本地未推。技能目录三组已在【2侧独有】逐文件列全：git-skill 10 件、icenter_export 11 件、zxwinmob_tool 9 件。b 可据本回执开工。完成后 a 回监听，不自找活、不代他方改、不自填答复。
+
+### [a-20261118T015946-ffa010] 2026-11-18 01:59:46 a -> dispatcher . report (reply-to: dispatcher-20261117T220214-d0f61c)
+更新 git，G-A 完成，提交 <hash>（work/ai-a 一次提交、正常跑钩子、未推 main）。报告路径 docs/ga-1a-backend-acceptance.md：按规格第七节阶段 1a 第 1/2/3 项与 6.1 逐项脚本化自测。分母：验收项 7/7 pass 0 fail（S1 正常对话 / S2 工具调用 / S3 结果回灌 / S4 多轮 / S5 错误回传 6.1 信封 / S6 stream 拒绝 / SP system_prompt 四段边界）；新增用例 9/9（另含 system_prompt 路由层与单一真源两用例，闭合其 docstring 声称缺失的覆盖）；G-A 面四文件定向 49 passed。全量 pytest 18 failed / 1100 passed：失败集合与 origin/main 基线逐条一致（async_reply 1 / async_timeout 5 / inbox_reply 2 / dedup_persist 4 / snapshot 3 / yuanbao 3，六文件溯源 e48087c web/config 侧 11-17 15:56 合入既有，非本片引入，不代归因、归属待裁）。quality rc=0 零新增（首轮 3 条 dup 连带经新夹具换形归零，未改基线/钩子/他人文件，A-10 C-14 同口径）；pre-commit 七道全过。缺口四项见报告：L10 真实模型未接、18 failed 归属待裁、实机端到端不在本片、stream 真流式不在 1a。零业务代码改动、不碰 b/c 范围、不翻 STATUS、不推 main。完成后回 wait --me a --round 40 --tick 10 监听，不自找活、不自停。
