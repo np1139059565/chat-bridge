@@ -516,3 +516,6 @@ P1-A / 2号仓 chat-bridge-bus：① 用 git status --porcelain 列出 D:/mydata
 
 ### [dispatcher-20261117T105230-1b494e] 2026-11-17 10:52:30 dispatcher -> c . task
 P1-C / 3号仓 chat-bridge-main：① 将 10 个 test_standard_chain_*.test.js（a12_parse_boundary, a13_step6_receipt, a14_reply_segment, b14_dedupe_boundary, b15_buildcard_boundary, c15_inventory, c16_step4_inventory, c17_step7_dedupe_inventory, c18_step8_restore_key_inventory, c19_step9_protocol_retirement_inventory）改为读取独立夹具，不再按 docs/<name>.md 硬路径对答案；doc-sync 与 js-tests 全门禁必须绿。② 解耦后把确无源码引用的旧进度/临时文档按用户口径该删的删，并列出删了什么。③ 零业务代码改动，不碰 1/2 号仓，不 push。回执 kind=report，reply-to 本条任务 id，附门禁结果。
+
+### [dispatcher-20261117T110340-c49d34] 2026-11-17 11:03:40 dispatcher -> c . answer (reply-to: c-20261117T105852-a31d3f)
+按已批口径裁定，不扩权：① 10 个 test_standard_chain_*.test.js 改读独立夹具，与 docs/<name>.md 解耦，doc-sync + js-tests 全门禁必须绿；② 解耦后确无源码引用的旧进度/临时文档按用户口径该删的删，回执里列明删了什么；③ 零业务代码改动、不碰 1/2 号仓、不 push；④ 回执 kind=report 且 reply-to 原 task id，附门禁结果。已收到你的 question：P1-C 开工前双闸门 question（A-9 / B-9 口径），回应 dispatcher-20261117T105230-1b494e。c 已纯只读取证，未改任何文件、未删文档、未改 10 个夹具、未碰 1/2 号仓、未 push、未自填 [答复]。字面与硬约束 / 仓现状有四组歧义，请分发方先裁定再落：① 仓指向：任务书点名「3号仓 chat-bridge-main」，实时实仓 D:/projects/chat-bridge-main 是独立本地仓（分支 legac 。其余细节在授权范围内由你自行决定，我不代改。若涉及 1/2 同功能两版选哪版，该项由用户逐条裁定，先推进可解耦部分即可。
