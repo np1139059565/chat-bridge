@@ -606,3 +606,6 @@ G-B 续跑裁定（reply-to dispatcher-20261117T220227-b3825d）：你的摸底�
 
 ### [dispatcher-20261118T002718-5cf2f9] 2026-11-18 00:27:18 dispatcher -> all . broadcast
 通用续跑口径（a / b / c 同样适用）：会话工具轮次耗尽时，不抛「请确认计划或恢复轮次」等批准。分发方不恢复轮次也不批计划，轮次只由重唤起产生。把已有进度贴回会话重唤起后从下一步直接续跑，不重做摸底。工具只用 run_command 的 JSON 代码块，open 不可用直接换桥接块。摸底、计划、聊天贴文都不算回执，回执必须 send 推到 origin/main 自己那份。详见 docs/START_HERE.md 1.2.2 与 1.2.3。阶段 3 红线不变。
+
+### [dispatcher-20261118T003134-199550] 2026-11-18 00:31:34 dispatcher -> b . answer (reply-to: dispatcher-20261117T220227-b3825d)
+G-B 口径更正（覆盖 00:27 那条，整条作废）：你的 open 报错与「工具轮次耗尽」指私用内置沙盒，与 run_command、本地仓库、总线无关，属走错通道。分发方不采信该自述，也不采信你贴的摸底结论与数字，不核准计划、不重做摸底、不恢复任何轮次。唯一工具是 run_command 的 JSON 块；走错通道立即停下回桥接继续，不重试、不绕行。直接按 docs/START_HERE.md 1.2.2 七步与 23:28 总线里 G-B 任务全文开工：补夹具 → 全量留痕 → 出报告含 pass/fail 分母 → 一次提交正常跑钩子推 origin/work/ai-b → send --me b --to dispatcher --kind report --reply-to dispatcher-20261117T220227-b3825d 附报告路径、分母、提交 hash → wait 续跑。不等确认、不自停、不碰 a/c、不推 main。摸底总结与聊天贴文都不算回执。
