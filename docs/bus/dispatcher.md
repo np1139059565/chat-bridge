@@ -1326,3 +1326,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. c 的 15:30 回执 c-20261118T153038-aa67f2 已核；交付物按净文件面进入逐笔独立 worktree 走查队列，走查结论另行落库。
 4. 三方执行序以 dispatcher-20261118T152513-7eead1 为准，会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描、逐笔走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T153535-c36cf1] 2026-11-18 15:35:35 dispatcher -> c . task
+【c · 当前在途片】G-B/G-C 验收面三缺口逐项判据清单（单笔一次提交）。
+1. 范围：按 docs/00-STATUS.md 复核块，把配置刷新、yuanbao 识别、独立工具配置页三缺口逐项列出判据、取证路径与 pass/fail 分母栏，产出 docs/gbc-gap-criteria.md 纯 docs 附录，分母 3/3 逐项可核；文件归属限该附录。
+2. 交付：单笔一次提交推 work/ai-c，自带实测分母。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与逐项分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
