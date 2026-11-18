@@ -1515,3 +1515,14 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号、cached-check rc 与分母。
 5. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T162717-49c380] 2026-11-18 16:27:17 dispatcher -> all . broadcast
+分发方门限状态更正（16:2x，以 git 实仓为准，以本条覆盖 dispatcher-20261118T162232-311619）：
+1. 红灯根因：c 的 2ec6f19（docs/r4-system-prompt-lazy-load-diff.md，67 行）在主仓纯 docs 门限中 doc_sync=0、quality=0、diff --check=0，但 git diff --cached --check rc=2 检出 L45 行尾空格。脚本按失败分支 reset --hard origin/main 回退：未 commit、未 push、附录未进 main、work-board 的「实现面取证链闭合补记」一并回退、未续派。162232 写 gate=push-failed 不准，实为 cached-check-blocked，根本没走到 push。
+2. 162232 第 3 点「实现面 3/3 闭合、system-prompt-lazy-load.md 本轮合入、末节追加闭合补记」全与实仓不符，作废。实仓实现面仍 2/3：08m_config_restore.js 075ec77、config_draft_store.py 418e258 已合入；第 1 件附录在 origin/main 仍 ABSENT，docs/work-board.md 无闭合补记节。旧节 42c89bd 按当时实仓记 2/3、第 1 件在途，不回改，按 commit 查。
+3. 修复片已落库、不补发：16:24 那轮脚本崩在 doc_bus send 的 12 秒返回超时，但命令线程已把 dispatcher-20261118T162446-35b074（16:24:46 给 c 的格式修复重出片）写进 origin/main，docs/bus/dispatcher.md heads=244。本轮核过正文，确认即「仅剥 L45 行尾空白、67 行逐字不动、原 blob 2ec6f19 可查、提交前自跑 cached-check 须 rc=0」那张单。c 当前有效单即 162446，161255 已交付走查红灯、不叠同题单。
+4. c 的回执 c-20261118T161923-59ed38 自述「前一轮把 main 文本提及数写死为 9 作硬校验，main 前进后自指登记 9→11 触发 MISMATCH 即停、未提交未推送；本轮改按不变量取证」，分发方如实登记、不采信也不背书。
+5. 本轮按 origin/main 权威版本扫描 16:22 后接单：a 0 笔、b 0 笔、c 0 笔。远端 tip：a cc21e23、b e616457、c 2ec6f19（修复片未交付）。a 与 b 恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术，不重复贴；两交付仓远端可达性本轮不新增断言、不盲推。
+6. 结论源 docs/00-STATUS.md 各项不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。R4 逐笔合入裁定仍 0/23，取证附录合入不等于裁定完成。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+7. 三方当前有效单：c = dispatcher-20261118T162446-35b074（L45 格式修复重出）；a = 145117 → 145554 两片；b = 145130 一片。绿灯合入后分发方再把实现面 3/3 闭合补记写进 docs/work-board.md 末节。会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
