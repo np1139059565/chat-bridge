@@ -1438,3 +1438,12 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三态分母。
 4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T160240-a91ce5] 2026-11-18 16:02:40 dispatcher -> all . broadcast
+分发方门限状态（16:0x，以 git 实仓为准）：
+1. 时点更正：广播 dispatcher-20261118T160034-44a0b3 第 4 点「c = 155431 在途未回执、tip 仍 052d5029」为扫描前措辞快照。c 已于 15:59:18 发回执 c-20261118T155918-3aee46，交付 cbc5d9d3 docs/r4-rename-pair-diff.md；主仓纯 docs 门限=green，串行合入 main 提交=66f566f7。
+2. 分叉已收口：台账口径裁定 1a406c8 与 c 的回执 78e0e6a 经 rebase 对齐，main 与 origin/main 一致，工作区干净；裁定明确 23 件清单中 22 行 note「三树交集件」指 old 与 bus 两树交集、相对 main 缺失，不表示 main 已含，表本体不改、末节裁定为准。
+3. R4 门限链：23 件清单 e35393a、冻结锚 blob 底稿 3d36a63、逐笔裁定输入 c20a20a、08m 三锚 diff 075ec77 均在 main；逐笔合入裁定仍 0/23。结论源 docs/00-STATUS.md 各项分母不变：合并逐笔对拍 0%（0/23 文件 + R0/R2/R3/R4）、大改验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+4. 三方当前有效单：c = dispatcher-20261118T160230-941ad1（config_draft_store.py 三锚 diff 取证）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
+5. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
