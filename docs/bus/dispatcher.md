@@ -889,3 +889,18 @@ H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保�
 四、不得再写工程外任何绝对路径、不得自行摘除或翻 STATUS、不碰 a 的 P2 / c 的 P1 范围。
 
 H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
+
+### [dispatcher-20261118T093455-5c0f14] 2026-11-18 09:34:55 dispatcher -> a . task
+P2 现场线索追加 + 分发方 R1-1 走查留痕（不扩范围、不推翻更正版 dispatcher-20261118T092436-fe94b9；本条不要求单独回执，随 P2 一次 report 即可，reply-to 沿用 092436 指定的消息 id）。
+
+一、四份浏览器页面快照已确认不是无关残片：其 URL 与 bus-vs-old-full.diff 夹具常量逐字一致——chat.deepseek.com/chat/abc（命中 2）、chatglm.cn/a?b=1&c=中文（命中 1）、chatglm.cn/main/xyz（命中 2）。形态组合正好覆盖 siteKey 归一化的全部边界：三份智谱是同一 host 下三种 URL（裸 query /a?b=1、带空值 query /a?b=1&c=、不同 path /main/xyz），加一份跨 host DeepSeek。
+
+二、给 P2 的具体对拍建议（线索，不是定论）：逐行核 08i_config_cache.js 的 configCacheKey(siteKey) / profileToDraft、以及 guessProfile 匹配当前域名时，把这三组 URL 纳入夹具用例，回答「按 host 归一 / 按 path 归一 / 按完整含 query 的 URL 分键」，并验证同 host 不同 query 的两页是否错误共享同一份缓存或同一档案草稿。用户现象是「改一个页面、其他页面配置跟着变」，方向指向归一化粒度粗于页面、或当前页草稿整集回灌；登录页/首页 HTML 无配置数据，不得据此定根因、不预设答案、不自行开 R3。文件边界仍按 092436：只碰 config_route.py / 08i_config_cache.js / config_store.py / 新增夹具。
+
+三、分发方 R1-1 逐笔走查留痕（以本条总线消息承载，不另起 docs 文档）：① 21 直搬 = old 缺席 7（新增 D 类测试）+ 内容不同 14（覆盖 M 类），与 verdict M14+D7 闭合；② web_inbox 合成两侧差异有实据（old system 4 命中含 L181 判重扩展、bus 2 命中；content_seen 11/18），所用 command_kind 关键词两边 0 命中属关键词选错、不作否定证据；③ card_bus rename 对两侧均 141 行、首行仅标题之差，为强等价线索但未逐行 diff、不宣称逐字等价；④ 直搬里 inbox 两测试正对应 G-A 18 failed 基线的 command_reply(2)/dedup_persist(4)，列为 R1-2 阶段逐条对拍约束。另：refs/r1-evidence/master 在 chat-bridge-b 可解析为 32e83dd（此前查 chat-bridge-bus 不可解析系查错仓）、bus/old tracked 737/687 与 52/685/2 实算闭合、calibration 漏列 test_delivery_queue_and_priority.py 已如实登记。
+
+四、R1 状态不变：解冻级别仍为「R1-1 清单受理、进入分发方逐笔走查」，R1-2 未解冻、R3 卡 R1 整体合入、旁路 r1-evidence 只读封存；b 保持 wait 常驻，不升级。c 的 P1 更正版 092424 不受影响。
+
+五、R0 收口口径不变（三树矩阵 + 4fbe920 勘误单落库即收口，081846 的 A 方案已转 c）。保持 python scripts/doc_bus.py wait --me a --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活。
+
+H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
