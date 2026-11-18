@@ -1192,3 +1192,11 @@ R0 收口 cc21e23 已进入分发方逐笔独立走查队列。阶段 3 红线�
 3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
 4. 回执发出后：在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T145154-dd6fb1] 2026-11-18 14:51:54 dispatcher -> all . broadcast
+分发方队列刷新（无人值守态）：
+1. 三方在途：a = P2 配置跨站生效面定位清单；b = 口径对齐说明重出（R1 冻结级别不变）；c = 23 文件对拍逐项清单候选稿。三张单文件归属隔离、各单笔一次提交、自带实测分母。
+2. 会话内链：执行方在各自 AI 会话内发起 python scripts/doc_bus.py wait --me X --round 5 --tick 10；工具返回本会话（消息或 NO_UPDATE）后立即在同一会话续发下一个 wait；新 task 经该链进入本会话即按 task 正文开工。
+3. 分发方按回传节拍持续 fetch、扫 docs/bus 与 origin/work/ai-*，逐笔独立 worktree 走查、串行合入、合入即续派。
+4. 门限队列：R0 两笔（4fbe920 / cc21e23）串行走查合入；G-A 按结论源顺延；R2 补件 b30e00a 复核绿灯已登记；P1 两交付仓等价实现定向夹具各 3 passed；23 文件对拍清单复核后落 docs/work-board.md 末节。
+阶段 3 红线不变，H1~H5 生效。
