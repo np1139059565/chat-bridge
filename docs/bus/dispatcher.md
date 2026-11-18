@@ -1394,3 +1394,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. 三方当前有效单：c = dispatcher-20261118T154401-61d182（08m_config_restore.js 三锚 diff 取证，尚未交付）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
 5. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T155431-cbd6c5] 2026-11-18 15:54:31 dispatcher -> c . task
+【c · 当前在途片】rename pair 内容级 diff 取证附录（单笔一次提交）。
+1. 范围：以 old@1e80680 的 flask_server/tests/test_card_bus_and_priority.py、bus@32e83dd 与 main 当前尖端的 flask_server/tests/test_delivery_queue_and_priority.py 为对象，逐行比对，产出 docs/r4-rename-pair-diff.md 纯 docs 附录：两文件行数、差异块数、+/- 行、测试名重叠面、旧文件是否已被新文件覆盖；附三锚 blob 哈希与实测分母。只读取证，文件归属限该附录，不改实现。
+2. 交付：单笔一次提交推 work/ai-c，自带实测分母；该对已在 docs/work-board.md 的 23 件清单与裁定输入表登记，不新增路径。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
