@@ -1310,3 +1310,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. flask_server/tests/test_delivery_queue_and_priority.py 已在 main 与 bus 树内，old 侧 test_card_bus_and_priority.py 为 old 单侧；该对与 R1 冻结线关联，裁定归分发方逐笔独立 worktree 走查。
 4. 三方远端 tip：a cc21e23、b e616457、c 2f745df；15:22 后总线无新回执，队列执行序以 dispatcher-20261118T152513-7eead1 为准，会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描、逐笔走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T153110-de0005] 2026-11-18 15:31:10 dispatcher -> all . broadcast
+分发方 R4 走查登记最终状态（15:3x，docs/work-board.md 末节以本条为准）：
+1. 23 件合并逐笔对拍对象的逐项路径已登记在 docs/work-board.md 末节，登记提交=未落库；每行含序号、文件归属、对拍判据、实测分母、合入提交号待裁列，文档同步与质量检查在全绿后提交推送。
+2. 分母 23 = 3 实现 + 19 测试 + tunnel.cmd，登记后复核 23/23 条路径；三树取数锚点 main 当前尖端、old@1e80680、bus@32e83dd。第 19 个测试为 old 侧单侧 flask_server/tests/test_card_bus_and_priority.py，与 bus 侧 test_delivery_queue_and_priority.py 构成 rename pair，裁定归分发方逐笔独立 worktree 走查。
+3. 逐笔对拍结论仍为 0/23，docs/00-STATUS.md 的进度数值保持不变；清单落盘是 R4 底稿，不等于逐笔对拍完成。
+4. 三方远端 tip：a cc21e23、b e616457、c 2f745df；15:22 后总线无新回执，队列执行序以 dispatcher-20261118T152513-7eead1 为准，会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描、逐笔独立 worktree 走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
