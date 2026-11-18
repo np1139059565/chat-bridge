@@ -94,6 +94,16 @@ def active_lines():
     return out, pending
 
 
+def recent_tasks():
+    """Show latest dispatcher tasks, display only."""
+    text = read(os.path.join(REPO, 'docs', 'bus', 'dispatcher.md'))
+    rows = [l.strip() for l in text.splitlines() if l.startswith('### [dispatcher-')]
+    out = ['7 recent dispatcher tasks (display only, no auto DONE):']
+    for row in rows[-5:]:
+        out.append('   ' + row[:150])
+    return out
+
+
 def branch_lines():
     """Collect unmerged commits for the three agent branches."""
     out = []
@@ -131,6 +141,7 @@ def collect(state, now):
     log.extend(task_lines)
     log.append('3 unmerged branch commits:')
     log.extend(branch_lines())
+    log.extend(recent_tasks())
     log.append('4 unregistered root dirs: %s' % (root_dirs() or '(none)'))
     log.append(frozen_line(state))
     log.append('6 poll stays resident with no task; new work is sent after review.')
