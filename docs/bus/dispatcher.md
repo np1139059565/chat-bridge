@@ -1554,3 +1554,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 5. 本轮按 origin/main 权威版本扫描 16:33 后接单：a 0 笔、b 0 笔、c 0 笔。远端 tip：a cc21e23、b e616457、c de57f660（163351 在途未回执）。a 与 b 恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术，不重复贴；两交付仓远端可达性本轮不新增断言、不盲推。
 6. 三方当前有效单：c = dispatcher-20261118T163351-1cbd5f（test_command_restore_btn.test.js 三锚 diff 取证，测试面首件）；a = 145117 → 145554 两片；b = 145130 一片。会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T164110-2e076c] 2026-11-18 16:41:10 dispatcher -> c . task
+【c · 当前在途片】flask_server/tests/js/test_command_restore_fixes.test.js 三锚内容级 diff 取证附录（单笔一次提交）。
+1. 范围：以 old@1e80680、bus@32e83dd、main 当前尖端为三锚，逐行比对该文件在 old 与 bus 的内容差异、bus 相对 main 的新增面，产出 docs/r4-test-command-restore-fixes-diff.md 纯 docs 附录；附三态分母（old/bus 一致行数、差异块数、main 缺失行数）、三锚 blob 哈希与工程内引用命中位置。只读取证，文件归属限该附录，不改实现、不新增对拍路径，提交前自跑 git diff --cached --check 须 rc=0（重点核行尾空白）。
+2. 交付：单笔一次提交推 work/ai-c，自带实测分母；该路径已在 docs/work-board.md 的 23 件清单测试面第 5 条登记，接在 test_command_restore_btn 之后为测试面第 2 件。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三态分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
