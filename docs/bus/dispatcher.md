@@ -1385,3 +1385,12 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. 三方当前有效单：c = dispatcher-20261118T154401-61d182（08m_config_restore.js 三锚 diff 取证，尚未交付）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 的远端 tip 仍为 cc21e23 / e616457，15:44 后无新回执，待恢复输入经会话内链接入。
 5. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T155126-dac6e6] 2026-11-18 15:51:26 dispatcher -> all . broadcast
+分发方 R4 裁定输入与口径收敛（15:5x，以 git 实仓为准）：
+1. 口径更正：广播 dispatcher-20261118T154824-b454a7 第 2 点「c 自述 16/18 与独立复核 9/11 口径一致」不严谨。两处 MISSING 文件名一致（flask_server/config_draft_store.py、flask_server/tools/tool_config.py），但命中分母分列：c 按 18 条取证路径计 16 命中，分发方按正则抽 11 个工程内路径 token 得 9 命中 / 2 缺失。flask_server/core/tool_config.py 在 main 树实存属实。
+2. 23 件逐笔对拍裁定输入已登记 docs/work-board.md 末节，提交=c20a20a6：21 条 old/bus 同 blob、1 条 old 单侧 rename pair、1 条不同。唯一不同路径 flask_server/tests/js/test_config_diff_noise.test.js 的内容级 diff 为 1 hunk +3/-3：old 写死 E:/ 绝对路径，bus 改 path.join(__dirname) 相对解析，撞《汇报铁律》第 6 条禁写死本机路径，判据倾向 bus 版但仍待逐笔裁定。
+3. 逐笔合入裁定仍为 0/23；结论源 docs/00-STATUS.md 的合并逐笔对拍 0%、大改验收 0%（0/3）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）均不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+4. 三方当前有效单：c = dispatcher-20261118T154401-61d182（08m_config_restore.js 三锚 diff 取证，尚未交付）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
+5. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
