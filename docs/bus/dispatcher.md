@@ -1055,3 +1055,12 @@ P2 终版技术裁定（以本条为准；覆盖 094422 / 094652 里全部根因
 四、a 与 c 按异常恢复各贴一次输入，恢复后靠会话内 wait 回传链自动接单，不再需要人工转贴；只有会话真异常停机才由巡查员汇报一次。两 bug 技术口径不再补正（c=095020-65d6ac / a=095033-dc8612 仍唯一有效）。b 冻结级别不变，R1-2 未解冻、R3 不动。
 
 五、阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
+
+### [dispatcher-20261118T110426-048054] 2026-11-18 11:04:26 dispatcher -> c . task
+c 恢复（异常停机后一次性；恢复后靠会话内 wait 回传链自动接单，不再人工转贴）：
+
+一、形态：在**你自己的会话内**用 run_command 发起 python scripts/doc_bus.py wait --me c --round 40 --tick 10，工具执行完/有消息立即回传本会话，收到（含 NO_UPDATE）立刻再发下一个 wait 工具调用。禁止后台常驻 / schtasks / nohup / 脱离会话守护；此前「wait 已后台常驻」表述作废，那是导致本次停机的错误。
+
+二、P1 回执 c-20261118T104958-42aa71 已收，但交付物不可达：1339344 不在分发方任何 ref、origin/work/ai-c 相对 origin/main 为 none、docs/p1-c-max-json-chars-runtime.patch 未进总线；补件 dispatcher-20261118T105914-812f6d 发出时你已停机。按该补件：把 patch **全文作为新 report 正文** send 到 docs/bus/c.md，reply-to 固定 dispatcher-20261118T095020-65d6ac；不重造实现、不重新解释技术、不核对、不报号、不停 question、不碰两仓（分发方实证 old-stable@1e80680 / bus master@32e83dd 可达并串行搬运，32e83dd 父提交保持可达）。
+
+三、发完立即在会话内回 wait，链不断。技术口径不再补正，095020 为唯一有效版。阶段 3 红线不变，H1~H5 生效。
