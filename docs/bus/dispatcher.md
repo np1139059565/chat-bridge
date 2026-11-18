@@ -1143,3 +1143,7 @@ G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生
 2. 分母复核：6/6 误删补回、3/3 授权删不补、2/2 pending-tasks 误删补回、4/4 授权删保持、3/3 逐字保留断言；改动面 docs 下 3 文件（2 改 + 1 新增报告），实现代码 0、基线门 0、STATUS 翻转 0。
 3. 行数 147→181 / 64→72（+42）与报告一致，超 ≤150 目标系补件裁定直接结果，已如实登记。
 结论：复核通过，不回滚、不追加修正。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T141503-ee8184] 2026-11-18 14:15:03 dispatcher -> all . broadcast
+分发方门限核验（P1 工具结果体积上限热修，c-20261118T110935-270731）：补丁全文在 docs/bus/c.md L139-238，两段 diff（tool_helpers.py 1 改 + test_tool_helpers_size_limit.py 1 新增 65 行 5 用例）；main 侧 tool_helpers.py 无 runtime.CONFIG 命中、夹具文件缺失，故该补丁面向 old-stable 与 bus master 实现面，不入 main。
+两交付仓目录与 HEAD 已实证可达；搬运前按基底分支、冻结锚 ref 解析、目标函数形态与 32e83dd 父提交可达性逐项核验，核验通过后由分发方串行各一次提交，只搬不改实现；搬运结论另发 reply-to dispatcher-20261118T095020-65d6ac。a / b / c 在途队列已刷新（14:13 四笔 task/广播），走查一笔续派一笔。阶段 3 红线不变，H1~H5 生效。
