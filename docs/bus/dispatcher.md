@@ -915,3 +915,20 @@ H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保�
 三、R1 冻结边界不变、阶段 3 红线不变、STATUS 保持声明态、执行权仍绑旧链；b 保持 wait 常驻，R1-2 未解冻、R3 不动。止血热修独立成链，不混进 R1 移植清单，不动 chat-bridge-bus 冻结证据仓的根。
 
 H1~H5 生效。
+
+### [dispatcher-20261118T094410-c8f202] 2026-11-18 09:44:10 dispatcher -> c . task
+改向正式令（覆盖 092118 / 092424 的 main 目标；以本条为准，之前按 main 做的成果不回滚、但不作为交付载体）。目标：把「工具结果体积上限」修到能直接在 old + bus 跑起来。
+
+一、交付仓（写死）：D:\mydata\chat-bridge-old 分支 old-stable + D:\mydata\chat-bridge-bus 分支 master。两仓在这些文件上逐行同源，同一 patch 落两处、分别一次提交；不 force、不 rewrite，保留 bus 的 32e83dd 作为父提交可达（R1 取证锚 refs/r1-evidence/master 在 chat-bridge-b 已固定，git 对象不可变，追加 commit 不毁基线）。不碰 chat-bridge-b、不碰 refs/r1-evidence/master、不推 main。
+
+二、已证形态（开工先按实仓复核，不符登记不硬改）：old/bus 的 CONFIG_SCHEMA 已有 max_results（tool_config.py L87）与系统级资源上限分组；tools.py L297-310 已有统一出口 enforce_size_limit(...)，L314 head/tail 是提示层；08e_toolconf.js L104-106 只渲染「系统级目录与队列上限」；08k_config_blocks.js 无命中。所以不是从零造功能。
+
+三、逐跳定位断在哪一跳，再补最小改动：① 配置页里用户调的「工具结果体积上限」控件在哪个文件、键名是什么（grep 全仓，别预设）；② CONFIG_SCHEMA 里有无同键、默认值/上下界；③ POST 写盘 / GET 回读是否保留该值；④ tools.py:310 enforce_size_limit 的实参是硬编码还是从配置读——tool_helpers.py 的实现一并核。定位后只补断的那一跳，不重复造已有的 enforce_size_limit、不改其他上限项语义、不动 314 提示层。
+
+四、文件边界：只碰 tool_config.py / tools.py / tool_helpers.py / 08e_toolconf.js / 新增夹具；**不碰 08k_config_blocks.js**（与 R1 直搬清单重叠，串行裁定前禁区）、不碰 config_route.py / 08i_config_cache.js / config_store.py（a 的 P2）、不碰 def.yaml。
+
+五、验收（要能跑）：超限 / 未超限 / 边界三态夹具给 pass/fail 分母；配置页改该值后实际工具返回确实按新值截断；old 仓服务起得来、日志继续写。逐文件给 diff + 理由，两仓提交号都写进报告。
+
+六、形态：whoami --expect c → git fetch → read --me c 补读全部未读（含 094151 止损广播、本条）→ 在两仓各一次提交；回执 send --me c --to dispatcher --kind report，reply-to 用本消息 id，落到 docs/bus/c.md。**发完立即回 python scripts/doc_bus.py wait --me c --round 40 --tick 10 常驻**，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活（方案第十三节）。
+
+七、热修独立成链：不算 R1-2、不放 R3、不动阶段 3 红线、STATUS 保持声明态。b 保持冻结级别不变、不与其抢文件。H1~H5 生效，禁工程外绝对路径写文件，回执只认 docs/bus/c.md。
