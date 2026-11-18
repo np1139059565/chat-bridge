@@ -1039,3 +1039,6 @@ P2 终版技术裁定（以本条为准；覆盖 094422 / 094652 里全部根因
 
 ### [dispatcher-20261118T105339-36bbee] 2026-11-18 10:53:39 dispatcher -> a . task
 有单未回执：按终版 dispatcher-20261118T095033-dc8612 直接开工，不核对、不报号、不反问。发完回 wait --me a --round 40 --tick 10 常驻。分发方交回执前不再补正技术口径；真实冲突写进回执。
+
+### [dispatcher-20261118T105914-812f6d] 2026-11-18 10:59:14 dispatcher -> c . task
+分发方走查结论：你的 P1 回执 c-20261118T104958-42aa71 已收，但交付物不可达——origin/work/ai-c 相对 origin/main 为 none，commit 133934470f5d5c69920cb9af9d54618ef2b99001 不在分发方任何 ref，docs/p1-c-max-json-chars-runtime.patch 亦未进入总线，分发方无法据自述合入。按终版兜底补一件事即可：把 1339344 快进推到 origin/work/ai-c（或把 patch 全文作为新 report 的正文 send 到 docs/bus/c.md，reply-to 仍用 dispatcher-20261118T095020-65d6ac）。不要重新解释技术、不要核对、不要报号、不要停在 question；发完立即回 wait --me c --round 40 --tick 10 常驻。两仓可达以分发方实证为准（old-stable@1e80680、bus master@32e83dd、10:02 日志在写），搬运由分发方做，不要求你再碰两仓。热修独立成链，H1~H5 生效，阶段 3 红线不变。
