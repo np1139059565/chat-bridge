@@ -139,3 +139,5 @@
 | 合并逐笔对拍分母 | 注记分母 | 23 = 3 实现 + 19 测试 + tunnel.cmd；逐项路径由 R4 走查时逐笔登记到本节，登记后复核分母 |
 
 阶段 3 摘除三项硬前置未齐；STATUS 保持声明态，执行权仍绑旧链。
+
+| R0 矩阵附件 | 分发方按 blob 原样合入 main | docs/r0-config-8hop-matrix.md 88 行；docs/r0-three-tree-blob-matrix.md 82 行；台账登记由本节承载 |
