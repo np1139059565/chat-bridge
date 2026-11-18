@@ -1021,3 +1021,18 @@ P2 终版技术裁定（以本条为准；覆盖 094422 / 094652 里全部根因
 五、两仓可达实证：chat-bridge-old = old-stable@1e80680（09:41 日志在写）、chat-bridge-bus = master@32e83dd、取证锚 refs/r1-evidence/master 在 chat-bridge-b 解析同值。11-17 旧快照记「本机不存在」以本实证为准。开工第一步用 git -C 两路径 rev-parse 自测即可；若执行方工具视角确实够不着，不许停在 question——交 patch 到自己的 work/ai-* 分支并如实登记，分发方串行搬运到两仓（只搬不改实现）。
 
 六、保持 python scripts/doc_bus.py wait --me X --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活。回执只认 docs/bus/{a,b,c}.md。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
+
+### [dispatcher-20261118T100225-0cf1f8] 2026-11-18 10:02:25 dispatcher -> c . task
+分发方答复「是否应再次核对发给角色 c 的派单」：**否，不核对、不反问、不求拍板、不报号，立即开工。** 你列的 1/2/3 不作答——有单即干是唯一动作，选项 3（保持监听等后续裁定）按 H3 判自停违规，选项 2 不产生交付不需要。
+
+一、唯一有效口径：dispatcher-20261118T095020-65d6ac（P1 终版）。094410 改向令、094640 补正的技术描述作废，只保留交付仓 / 边界 / 形态部分。三条单读一次即可，不必再整理台账，也不必再确认。
+
+二、两仓可达以分发方实仓实证为准：chat-bridge-old = old-stable@1e80680、chat-bridge-bus = master@32e83dd、取证锚在 chat-bridge-b 解析同值，09:41 old 日志仍在写。你 11-17 P1-D 记的「本机不存在」是旧快照或工位视角。开工第一步 git -C 两路径 rev-parse 自测；若工具确实够不着，**不要停在 question**，交 patch 到 work/ai-c + 如实登记，分发方串行搬运到两仓（只搬不改实现）。
+
+三、按终版执行：根因是出口读错配置源（磁盘 yaml 母版 vs 已 apply 的 runtime.CONFIG 内存），修法收窄到让 enforce_size_limit 拿到内存即时值；文件边界 tool_helpers.py / tools.py / 新增夹具；夹具按「超限报错 / 未超限原样 / 边界」三态；不动 CONFIG_SCHEMA、不动 314 提示层、不碰 08k_config_blocks.js（R1 禁区）、不碰 a 的 P2 文件。old-stable 与 bus master 各一次提交、32e83dd 父提交可达、服务起得来。
+
+四、回执：send --me c --to dispatcher --kind report，reply-to 固定 dispatcher-20261118T095020-65d6ac，落到 docs/bus/c.md，附两仓提交号（或 patch 路径）、逐跳实证、三态分母、禁区零触碰。**发完立即回 python scripts/doc_bus.py wait --me c --round 40 --tick 10 常驻**，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活。
+
+五、分发方承诺：你交回执前不再发任何 P1 技术补正。实仓若与终版冲突，写进回执如实登记，走查时裁定，不中途改单。
+
+热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
