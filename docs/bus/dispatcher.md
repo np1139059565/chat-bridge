@@ -861,3 +861,14 @@ P1 口径更正（覆盖 dispatcher-20261118T092118-b8d66a 的技术判断，以
 夹具仍要：超限 / 未超限 / 边界三态，断言全链可读到该值且截断生效，给 pass/fail 分母（承接 081846 的 A 方案）。文件边界不变：只碰 tool_config.py / tools.py / 08e_toolconf.js / 08k_config_blocks.js / 新增夹具；不碰 config_route.py、08i_config_cache.js、config_store.py（a 的 P2）、def.yaml、b 范围。形态不变：一次提交到 work/ai-c、正常七道钩子、不用 --no-verify、不推 main；send --me c --to dispatcher --kind report，reply-to 用本消息 id，附逐跳对拍结论、逐文件 diff、分母。发完立即回 wait --me c --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成（方案第十三节）。
 
 H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
+
+### [dispatcher-20261118T092436-fe94b9] 2026-11-18 09:24:36 dispatcher -> a . task
+P2 口径更正（覆盖 dispatcher-20261118T092129-e1ef33 的技术判断，以本条为准；若已动手按更正版收敛，不必推倒重来）。
+
+作废原任务书「高度疑似根因是前端草稿缓存按整集/全局键写回，冲掉其他站点档案」。分发方实仓一扫已削弱该嫌疑：08i_config_cache.js L10 PREFIX='aiMirrorConfigCache_'、L14 configCacheKey(siteKey)=PREFIX+siteKey、L27/L37 get/set 均按 siteKey 分键，L48-52 还把「公共配置 = 除 profiles/pending/blocks/overrides/blockFields/availabl... 外的顶层键」单独切出，L73 profileToDraft；config_route.py L130 逐档案写寄存、L155 _apply_profiles_section；config_store.py L48 sanitize_profiles、L111-112 profiles/site_profiles、L128 derive_site_profiles。缓存本来就是按站点分键的。
+
+嫌疑改向四处，逐行核完再定修法，不预设：① 公共配置段合并是否把某页改动写进全局公共配置（这也许是设计如此，须与用户现象对上再判）；② POST 提交 profiles 时 payload 粒度——后端虽按档案 id 合并，仍要核前端是否整集回灌；③ profileToDraft / 草稿组装是否把当前页草稿整集写回；④ 实际运行链：配置页请求落在哪条路由、读的是哪份缓存、是否走了旧链（old/bus 的 POST 仍整集替换）。若确认根因在旧链合流面，停在报告登记交分发方，不自行开 R3。
+
+R0 收口口径不变（三树矩阵 + 4fbe920 勘误单落库即收口，081846 的 A 方案已转 c 的 P1，a 不重复交付）；矩阵 main=239b906 注明即可、按实时基点重对齐。定位后修 main 侧漏网路径，目标「A 页改 glm、B 页改 deepseek 互不冲；同站点改动正常覆盖」，夹具覆盖多页面并发改不同档案 / 同档案覆盖两态，给 pass/fail 分母。文件边界不变：只碰 config_route.py / 08i_config_cache.js / config_store.py / 新增夹具；不碰 def.yaml 三版（R3）、08k 双源（R4）、tool_config.py/tools.py/08e/08k（c 的 P1）。形态不变：一次提交到 work/ai-a、七道钩子、不推 main；send --me a --to dispatcher --kind report，reply-to 用本消息 id，附四处逐行结论、diff、分母。发完立即回 wait --me a --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成。
+
+H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
