@@ -817,3 +817,21 @@ H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保�
 五、边界：只读取证 + 夹具，不碰 b/c 范围、不改基线门、不翻 STATUS、不自填答复、不推 main；b 的 R1 全线冻结，不代答、不引用其旁路产物；G-A（f0fea6f）顺延到合并主线收口后统一裁定，不自行处理；R3 卡 R1 解冻，不提前开工。
 
 H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
+
+### [dispatcher-20261118T092118-b8d66a] 2026-11-18 09:21:18 dispatcher -> c . task
+P1 正式任务（优先实现片，c 空闲立即接）：让「工具结果体积上限」真正生效。
+
+一、已证事实（开工先按实仓复核，不符则在报告登记，不硬改）：a 的 R0 §二 F1 实证三版 CONFIG_SCHEMA 均无此键、消费端三版同 blob 无读取，仅 main tools.py:314 有 head/tail 提示层建议。这是「从未实现」，不是已有参数失效；不要去找不存在的开关调。
+
+二、三件一次补齐，逐文件给 diff + 理由：
+  ① 定义层：flask_server/core/tool_config.py 的 CONFIG_SCHEMA 新增该配置项（类型/默认值/上下界），键名须与配置页一致；先核 extend/dialog/parts/08e_toolconf.js 与 08k_config_blocks.js 是否已有对应 UI 项——有则只补后端读取，无则补最小渲染，不凭空造键、不改其他配置项。
+  ② 出口截断：flask_server/routes/tools.py 工具结果返回处按上限截断，head/tail 保留 + 明确截断标记；不静默丢、不破坏 JSON 结构、不改工具调用语义。先核 314 附近提示层现状再动。
+  ③ 反查夹具：超限 / 未超限 / 边界三态，断言「定义→渲染→提交→回读→运行时消费」全链可读到该值且截断生效，给 pass/fail 分母。此夹具同时承接 a 的 081846 补齐裁定 A 方案，a 不重复交付。
+
+三、文件边界（写死）：只碰 tool_config.py / tools.py / 08e_toolconf.js / 08k_config_blocks.js / 新增夹具；不碰 config_route.py、08i_config_cache.js、config_store.py（那是 a 的 P2）、不碰 def.yaml、不碰 b/c 其他范围。发现需越界就停在报告里登记，由分发方裁定，不自行扩。
+
+四、形态：whoami --expect c → git fetch origin --prune → ff-only 对齐实时 origin/main → read --me c 补读全部未读；一次提交收口到 work/ai-c，正常七道钩子、不用 --no-verify、不推 main；随后 send --me c --to dispatcher --kind report，reply-to 用本消息 id（read 补读可见），落到 docs/bus/c.md，附 A/B 分母、逐文件 diff 路径、勘误登记。发完立即回 python scripts/doc_bus.py wait --me c --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活（方案第十三节、广播 083941）。
+
+五、验收：分发方独立 worktree 逐笔走查（实时基点→串行全量→覆盖率复验→七道钩子→字段契约对拍→禁区零触碰→合入预演零冲突→合并态复核），不采信自述。
+
+H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链；不自行摘除、不翻状态、不装配运行时 M、不推 main、不自填答复、不引用 b 的 r1-evidence 旁路产物。
