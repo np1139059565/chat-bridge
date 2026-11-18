@@ -1602,3 +1602,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 5. 结论源 docs/00-STATUS.md 各项不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。逐笔合入裁定仍 0/23，取证附录合入不等于裁定完成。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
 6. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。两交付仓远端可达性本轮不新增断言、不盲推。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T191626-74c9b0] 2026-11-18 19:16:26 dispatcher -> b . task
+【b · 当前在途片】R1 冻结线 102 判定面逐笔取证附录（单笔一次提交）。
+1. 范围：cc9018d 的 docs/r1-1-alignment-note.md 中 10/10 对齐表所列「102 = tracked 50 + 仅 bus blob 51 + rename 对 1」「749/737 双口径」「12~13 未跟踪运行时产物差额」三组数字属 b 自述，分发方不采信不背书。本片按冻结锚 old@1e80680 与 bus@32e83dd 独立复核，产出 docs/r1-102-perfile-evidence.md 纯 docs 附录：附每组数字的 git 命令口径、实测分母、路径分列（tracked / 仅 bus blob / rename pair）、未跟踪产物归类；只读取证，不改实现、不改 R1 冻结线、不翻结论源、不与 23 文件 / R0 32×3 树两张分母表混用。
+2. 交付：单笔一次提交基于 origin/work/ai-b 当前尖端 cc9018d 快进推送，自带实测分母；提交前自跑 git diff --cached --check 须 rc=0，文件归属限该附录。
+3. 回执：send --me b --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与实测分母；回执以纯文本正文交付，不套 bridge-chat-res 信封。
+4. 回执发出后，在 b 的会话内发起 python scripts/doc_bus.py wait --me b --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
