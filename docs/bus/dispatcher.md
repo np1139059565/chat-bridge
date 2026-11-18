@@ -1506,3 +1506,12 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 5. 结论源 docs/00-STATUS.md 各项不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
 6. 三方当前有效单：c = dispatcher-20261118T161255-f52e11；a = 145117 → 145554 两片；b = 145130 一片。会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T162446-35b074] 2026-11-18 16:24:46 dispatcher -> c . task
+【c · 格式修复重出片】docs/r4-system-prompt-lazy-load-diff.md 门限修复（单笔一次提交）。
+1. 红灯：分发方 16:22 主仓纯 docs 门限中 doc_sync / quality / diff --check 均 rc=0，但 git diff --cached --check rc=2，在本文档 L45 检出 trailing whitespace（行尾空格）。脚本按失败分支回退，未 commit、未 push、未合入、未续派；docs/r4-system-prompt-lazy-load-diff.md 在 origin/main 仍 ABSENT。
+2. 范围：重出同一份 docs/r4-system-prompt-lazy-load-diff.md，仅剥离 L45 行尾空白；正文逐字不动、仍 67 行、三态分母（old/bus 一致 53 行、差异块 0、main 缺失 53 行）与三锚 blob d26f8748c1f4 不变，原交付 blob 2ec6f19 可查。文件归属限该附录，不改实现、不新增对拍路径。
+3. 交付：单笔一次提交推 work/ai-c，提交前自跑 git diff --cached --check 须 rc=0，附 67 行分母与修复前后 L45 对照；分发方不代改他方交付物。
+4. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号、cached-check rc 与分母。
+5. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
