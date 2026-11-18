@@ -951,3 +951,15 @@ H1~H5 生效。
 七、R0 收口口径不变（三树矩阵 + 4fbe920 勘误单落库即收口，081846 的 A 方案已转 c 的 P1）。形态：whoami --expect a → git fetch → read --me a 补读全部未读（含 094151、本条）→ 两仓各一次提交；send --me a --to dispatcher --kind report，reply-to 用本消息 id，落到 docs/bus/a.md。**发完立即回 wait --me a --round 40 --tick 10 常驻**，不自停、不宣告收口/完成、不自找活。
 
 八、热修独立成链：不算 R1-2、不放 R3、不动阶段 3 红线、STATUS 保持声明态；G-A（f0fea6f）顺延不自行处理；b 冻结不变、不抢文件。H1~H5 生效，回执只认 docs/bus/a.md。
+
+### [dispatcher-20261118T094640-231c10] 2026-11-18 09:46:40 dispatcher -> c . task
+P1 断跳实证补正（以本条为准，覆盖 dispatcher-20261118T094410-c8f202 里「逐跳定位」的模糊部分；交付仓、边界、形态、wait 常驻全部不变）。
+
+分发方已实查 old@1e80680，断跳钉死在最后一跳，不用再全仓摸索：
+· 设置页 extend/dialog/parts/08_settings.js:363 有「工具结果体积上限(字符)」控件；README.md:166 写明键为 limits.max_json_chars；08i_config_cache.js:56 会把 ctx.maxJsonChars 写进 cfg.limits；config_route.py:170 _config_snapshot 返回 limits —— 定义→渲染→草稿→写盘→GET 回读整条链都在。
+· 但 flask_server/routes/tools.py:310 调的是 enforce_size_limit(result, guidance)，**第三个参数 max_chars 没传**；函数定义在 flask_server/tools/tool_helpers.py:202（不是 routes/ 下，分发方上一条路径写错，以本条为准）。出口没读用户设的值，这就是「参数不生效」的根因。
+· CONFIG_SCHEMA 的 system 分组（tool_config.py:108-150）全是 max_*_files 目录保留数，本来就没有 max_json_chars；不要往 CONFIG_SCHEMA 里加键，它走的是 limits 区块，不是工具可调项。
+
+修法收窄：开工先读 tool_helpers.py:202 函数体，确认 max_chars=None 时是写死常量还是已有默认读取；只补「让出口拿到 runtime.CONFIG.limits.max_json_chars」这一跳（出口传参或函数内自读，择破坏面更小者，给理由）。不重复造 enforce_size_limit、不动 314 提示层、不改其他上限项、不动 08k_config_blocks.js（R1 禁区）。文件边界相应更精确为：tools.py / flask_server/tools/tool_helpers.py / 新增夹具；08_settings.js 与 08j_config_actions.js 只核不改。
+
+验收不变：超限/未超限/边界三态，配置页改该值后实际工具返回按新值截断，old+bus 两仓各一次提交、32e83dd 父提交可达、服务起得来。回执 reply-to 本消息 id，落到 docs/bus/c.md，发完立即回 wait --me c --round 40 --tick 10 常驻，不自停、不宣告收口。热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线。H1~H5 生效。
