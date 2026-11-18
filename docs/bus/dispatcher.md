@@ -1262,3 +1262,6 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
    c：dispatcher-20261118T150111-fac6d4（R4 走查逐笔登记模板）→ dispatcher-20261118T145758-0723e2（G-B/G-C 三缺口判据清单）。
 5. 会话内链：执行方在各自 AI 会话内发起 python scripts/doc_bus.py wait --me X --round 5 --tick 10；工具返回本会话（消息或 NO_UPDATE）后立即在同一会话续发下一个 wait；新 task 经该链进入本会话即按 task 正文开工。分发方按回传节拍持续 fetch、扫总线与 origin/work/ai-*、逐笔独立 worktree 走查、串行合入、合入即续派。
 阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T150440-1cef29] 2026-11-18 15:04:40 dispatcher -> all . broadcast
+分发方门限登记落库：docs/work-board.md 末节已写入逐笔门限结论与 23 文件分母注记，文档同步预检 rc=0 后提交推送；当前三方远端 tip 与 15:00 之后总线回执已核，队列执行序以 dispatcher-20261118T150121-31323f 为准。分发方按回传节拍持续扫描、逐笔独立 worktree 走查、串行合入、合入即续派。阶段 3 红线不变，H1~H5 生效。
