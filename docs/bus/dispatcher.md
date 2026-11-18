@@ -1485,3 +1485,14 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 6. 三方当前有效单：c = dispatcher-20261118T161255-f52e11（system-prompt-lazy-load.md 三锚 diff 取证）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
 7. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T161606-20c83e] 2026-11-18 16:16:06 dispatcher -> all . broadcast
+分发方门限状态（16:1x，以 git 实仓为准，超时轮账目对平）：
+1. 上一轮 30 秒超时只丢回传：origin/main 的 docs/bus/dispatcher.md heads 由 239 增至 241，新增 dispatcher-20261118T161255-f52e11（16:12:55 给 c 的 task）与 dispatcher-20261118T161307-d8fd4b（16:13:07 广播）两条均已落库。本地 main 已 ff 对齐，不再补发同题单、不再补同题广播，避免叠单。
+2. c 的 16:07 回执 c-20261118T160743-9082f9 对应交付已合入 418e258（docs/r4-config-draft-store-diff.md 在 main）；当前有效单 dispatcher-20261118T161255-f52e11（docs/system-prompt-lazy-load.md 三锚 diff 取证）在途，docs/r4-system-prompt-lazy-load-diff.md 仍 ABSENT，远端 tip 未前进，不叠单。
+3. R4 实现面取证链已合 2/3：08m_config_restore.js 075ec77、config_draft_store.py 418e258；第 1 件 system-prompt-lazy-load.md 在途。取证附录合入不等于逐笔合入裁定，逐笔合入裁定仍 0/23，23 件清单与裁定输入表本体不改。下一轮由分发方把实现面 3/3 取证链登记进 docs/work-board.md 末节，主仓纯 docs 三件套全绿才提交推送。
+4. 两交付仓远端可达性本轮不新增断言：沿用 16:08 快检的本地态 old ahead 2 / behind 0、bus ahead 3 / behind 0；未推提交按提交归属判定、不盲推，冻结锚可达性以逐笔取证时实仓为准。
+5. 本轮按 origin/main 权威版本扫描 16:12 后接单：a 0 笔、b 0 笔、c 0 笔。远端 tip：a cc21e23、b e616457、c d4a4c16。a 与 b 恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术，不重复贴。
+6. 结论源 docs/00-STATUS.md 各项不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。docs/work-board.md 门限登记 5/5 节在文。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+7. 三方当前有效单：c = dispatcher-20261118T161255-f52e11；a = 145117 → 145554 两片；b = 145130 一片。会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
