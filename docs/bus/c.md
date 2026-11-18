@@ -111,3 +111,13 @@ R2 承接取证与删前清单报备（reply-to dispatcher-20261118T025059-6b6d4
 - 跨文档：顶部 11-17 复核块 4 份逐字复制收敛为 1 份；阶段 3 红线重复收敛到结论源 1 处；验收模板收敛到 dispatcher 第四节 1 份。
 - migration-3way-baseline-20261117.md：方案 9.1 记只追加一行门作废覆盖说明，R2 边界记不改基线门，两处字面相抵，c 本片保持该文件原样，请裁定是否补那一行。
 交付形态：docs/ 下文档一次提交，附《R2 精简报告》含逐文件精简前后行数对比与本段分母；推 origin/work/ai-c 后 send report 回执，回 wait 监听。不碰实现、不碰 a/b 范围、不翻 STATUS、不自填答复。
+
+### [c-20261118T081416-e30ac7] 2026-11-18 08:14:16 c -> dispatcher . report (reply-to: dispatcher-20261118T025059-6b6d40)
+更新 git，R2 完成，提交 ab355d461590c49e0c481b19960cfd2676d8c1d2（work/ai-c 一次提交、正常跑七道钩子、未推 main）。reply-to dispatcher-20261118T025059-6b6d40。
+段①（交叉复核 + 全三仓矩阵）：独立复算 b 的 R1-1 源材料 docs/r1-bus-old-tree-diff.md；按同源冻结态 32e83dd tracked 树得 737/52/2/685/50/635，与 b 清单 749/52/61/636 的差归因为「工作树遍历含 12 个运行时/未跟踪件」（memory.db、日志、config/drafts、inbox.json 在 tracked 树零命中；749-737=12 与 diff 差 11 + same 差 1 闭合），5/5 项分母取到实数、0 项编数、不改写 b 结论；全三仓矩阵 3/3 组（bus→old / old→main / bus→main），old→main 适配面 5/5 目录（routes 6 / core 9 / extend/lib 0 / dialog 26 / docs 20）。报告 docs/r2-three-repo-diff-matrix.md。
+段②（协作长文精简）：按已审批方案第 9 节改写 7 份，合计 2063→734 行（-1329）。逐文件：work-dispatcher 353→147、work-board 551→121、START_HERE 277→150、00-STATUS 85→58、pending-tasks 363→64、config-isolation 256→135、quality-debt 178→59；三份 ≤150（147/121/150），全部 ≤450。报告 docs/r2-doc-slim-report.md。
+明确不删核验：work-dispatcher 第二节 2.1~2.5（含 2.3 的 2026-11-10 实测数字）、第四节审核清单、第六节 12 条决策、2.5 预下发全文，均以基版 3f8e79b 行切片逐字保留，脚本断言通过；进度重建按 9.3 三层替代（git log 真源 + 一行式任务索引 + 00-STATUS 最新分母）。
+删前清单已报备（question id c-20261118T025706-a6f668），定向裁定未回，按已审批方案落地；migration-3way-baseline-20261117.md 因方案 9.1「追加门作废覆盖说明」与 R2「不改基线门」字面相抵保持原样待裁；work-dispatcher 第五节交接说明按「现行规则 + 当前队列重写」收敛并如实登记；顶部复核块 3/3 收敛，阶段 3 红线与验收模板重复因与保留块交织登记为残留交分发方复核，不夸大完成度。
+实测分母：pre-commit 七道 7/7 Passed（正常提交、未用 --no-verify）；GC 夹具 node --test 6/6 pass 0 fail；quality_rules rc=0 零[新增]；check_doc_sync rc=0；diff --check rc=0；flask_server 全量 pytest 1091 passed / 18 failed，与分发方 G-C 独立复核基线逐项一致、挂 a 名下不代归因；本机 node v24 覆盖率口径以分发方环境复验为准。git push origin work/ai-c 快进成功。
+边界：只改 docs/ 下 10 文件（7 改写 + 2 报告 + work-ai-c.md 台账追加），实现代码改动 0、a/b 范围触碰 0、基线门改动 0、STATUS 翻转 0、main 推送 0、自填答复 0；回执只认本条 send 推到 origin/main 的 docs/bus/c.md。
+按第六步发完即停，结束监听链；阶段 3 红线不变（摘除三项硬前置未齐、STATUS 保持声明态、执行权仍绑旧链）。
