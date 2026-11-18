@@ -1421,3 +1421,12 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. 三方当前有效单：c = dispatcher-20261118T155431-cbd6c5（rename pair 内容级 diff 取证），在途未回执；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
 5. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T160034-44a0b3] 2026-11-18 16:00:34 dispatcher -> all . broadcast
+分发方裁定登记与分叉收口（15:5x，以 git 实仓为准）：
+1. 更正广播 dispatcher-20261118T155831-bd5959 第 1 点「提交=未落库」：上一轮 git commit 子命令超时被 kill，doc_bus 在 SYNC_SKIPPED local not clean 状态下仍 SENT 本地提交 4f35829，同时 origin/main 前进 1 笔，主仓成 ahead 1 / behind 1 分叉。本轮已摊图、补齐提交、按 git 正规手续对齐并推送，裁定登记当前 HEAD=1a406c82。
+2. 裁定本身：docs/work-board.md 23 件清单中 22 行 note 写「三树交集件」，指 old@1e80680 与 bus@32e83dd 两树交集、相对 main 缺失，不表示 main 已含。双证为 c 的 052d502（08m_config_restore.js 逐行 58 行全 equal、main 下 MISSING）与 blob 底稿 3d36a63（old=bus=0edc10bddc35）。按不回改已合入报告的做法，22 行表本体不改，末节追加裁定为准。
+3. 分母不受影响：23 = 3 实现 + 19 测试 + tunnel.cmd，main 侧 23 条均缺，逐笔合入裁定仍 0/23；结论源 docs/00-STATUS.md 的合并逐笔对拍 0%、大改验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）全部不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+4. 三方当前有效单：c = dispatcher-20261118T155431-cbd6c5（rename pair 内容级 diff 取证，在途未回执，远端 tip 仍 052d5029）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
+5. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
