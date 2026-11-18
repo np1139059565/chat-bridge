@@ -19,14 +19,14 @@ LOCK = os.path.join(REPO, '.git', 'dispatcher-poll.lock')
 HEALTH = os.path.join(REPO, '.git', 'dispatcher-health.txt')
 
 ACTIVE = [
-    ('a', 'R0 fixture patch', 'dispatcher-20261118T081846-cf769f'),
-    # c replies carry the ORIGINAL R2 task id; aliases are directives only.
-    ('c', 'R2 patch-back + residency restore', 'dispatcher-20261118T025059-6b6d40'),
+    ('a', 'R0 fixture patch', '20261118T081846'),
+    # c's report reply-to is the ORIGINAL R2 id; judge by report time instead.
+    ('c', 'R2 patch-back + residency restore', '20261118T082756'),
 ]
 ALLOWED = set([
     'chat-bridge-main', 'chat-bridge-old', 'chat-bridge-bus', 'chat-bridge-b',
     'backups', 'docs', 'tools', 'projects', 'tmp_jscheck', '__pycache__',
-    'dispatch-review-wt', 'review-a-r0-wt', 'review-c-r2-wt', 'r1-evidence',
+    'dispatch-review-wt', 'review-a-r0-wt', 'review-c-r2-wt', 'review-c-patch-wt', 'r1-evidence',
     '3D打印', '媒体', '硬件资料', '系统镜像', '软件',
 ])
 
@@ -64,16 +64,31 @@ def load_state():
         return {'runs': 0, 'frozen': ['b']}
 
 
+def report_ts_after(text, since):
+    """Latest agent report timestamp strictly after a ruling."""
+    best = ''
+    for line in text.splitlines():
+        if line.startswith('### [') and ' . report' in line:
+            try:
+                tag = line.split(']')[0].split('-')[1]
+            except Exception:
+                continue
+            if len(tag) == 15 and tag > since and tag > best:
+                best = tag
+    return best
+
+
 def active_lines():
-    """Render the active task chain from the bus files."""
+    """Render the active chain from bus report timestamps."""
     out = []
     pending = []
-    for who, label, tid in ACTIVE:
+    for who, label, since in ACTIVE:
         text = read(os.path.join(REPO, 'docs', 'bus', who + '.md'))
-        hit = ('reply-to: ' + tid) in text or ('reply-to ' + tid) in text
-        if not hit:
-            pending.append(tid)
-        out.append('   [%s] %s -> %s %s' % ('DONE' if hit else 'WAIT', who, label, tid))
+        stamp = report_ts_after(text, since)
+        if not stamp:
+            pending.append(label)
+        out.append('   [%s] %s -> %s since=%s %s' % (
+            'DONE' if stamp else 'WAIT', who, label, since, stamp))
         out.append('        tail: %s' % bus_tail(who)[:180])
     out.append('   pending = %d' % len(pending))
     return out, pending
@@ -111,7 +126,7 @@ def collect(state, now):
     if git('rev-parse', 'HEAD')[1] != git('rev-parse', 'origin/main')[1]:
         rc2, out2 = git('merge', '--ff-only', 'origin/main')
         log.append('  ff-only rc = %d %s' % (rc2, (out2.splitlines() or [''])[0]))
-    log.append('2 active task chain (c replies use ORIGINAL R2 id, not alias):')
+    log.append('2 active task chain (judged by report timestamp after ruling):')
     task_lines, pending = active_lines()
     log.extend(task_lines)
     log.append('3 unmerged branch commits:')
