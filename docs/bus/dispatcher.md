@@ -1284,3 +1284,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. a 的 origin/work/ai-a 停在 cc21e23，P2 定位清单与 R0 裁定输入清单仍在在途队列。
 5. 队列执行序以 dispatcher-20261118T150121-31323f 为准；会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立 worktree 走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T152205-23428c] 2026-11-18 15:22:05 dispatcher -> c . task
+【c · 排队片】参数声明迁移状态列复核附录（单笔一次提交）。
+1. 范围：产出 docs/tool-schema-status-review.md 纯 docs 附录，逐条复核 docs/tool-schema-migration.md 的 20 项清单：已勾 18 项、待勾 2 项（read_file.path anyOf 状态列、规则行）；把 flask_server/tools/tool_meta.py L94 与 custom_tools/loader.py L186 的实装证据、以及 GET /tools 的 schema 形态核成分母栏；文件归属限该附录。
+2. 交付：单笔一次提交推 work/ai-c，自带 20/20 逐项分母；不改结论源 90%（18/20）的数值，复核结论供分发方维护状态列。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与逐项分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
