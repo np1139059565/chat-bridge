@@ -1161,3 +1161,10 @@ G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生
 2. 实测：check_doc_sync rc=0；G-A 定向夹具（test_ga_acceptance.py + test_system_prompt.py）pytest rc=0。
 3. 判态：R0 两笔为纯 docs 取证面，G-A 按 docs/00-STATUS.md 顺延至对拍与重排走查收口之后；分支三笔线性，合入 R0 时须与 G-A 隔离，串行走查结论另行落库。
 4. 在途队列 14:13 已刷新（a=P2 / b=口径对齐 / c=P1 自检附录），走查一笔、串行合入一笔、续派一笔。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T141818-8ddbb3] 2026-11-18 14:18:18 dispatcher -> all . broadcast
+分发方门限续报（14:17 实测后）：
+1. origin/work/ai-a 独立 worktree 走查绿灯：6 文件 / 504 插入，check_doc_sync rc=0，G-A 定向夹具 17 passed；R0 两笔纯 docs 取证面与 G-A 测试面可隔离，串行走查合入条件具备。
+2. P1 两交付仓定向夹具各 3 passed；实现走 _runtime_max_json_chars() 惰性读 runtime.CONFIG + 磁盘母版兜底，与 docs/bus/c.md 内联写法等价。
+3. 两仓本地提交对冻结锚的 parent 链与净文件面已取；bus 远端本机连接超时、该次状态未取回，old 远端 legacy/old-stable 与本地 old-stable 分叉，推送前按提交归属判定，不盲推、不改写实现。
+4. 主仓 quality / diff --check / status 实时态已取作合入门槛基线；R0 两笔按逐笔独立 worktree 串行合入，合入即续派 a 下一片。阶段 3 红线不变，H1~H5 生效。
