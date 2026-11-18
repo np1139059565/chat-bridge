@@ -110,3 +110,37 @@ def apply_to_runtime(draft):
         return True
     except Exception:
         return False
+
+
+def _merge_site_profiles(base, draft):
+    """把该站草稿档案按 id 并进母版档案集；无有效草稿时原样返回。"""
+    block = draft.get("profiles") if isinstance(draft, dict) else None
+    if not isinstance(block, dict):
+        return base
+    try:
+        from config_store import sanitize_profiles
+        block = sanitize_profiles(block) or block
+    except Exception:
+        pass
+    base.update(block)
+    return base
+
+
+def _derive_site_profiles(profiles):
+    """派生站点映射；依赖不可用时返回空字典，不影响主流程。"""
+    try:
+        from config_store import derive_site_profiles
+        return derive_site_profiles(profiles)
+    except Exception:
+        return {}
+
+
+def site_profiles_view(site, master=None):
+    """按站档案集：母版 + 该站草稿按 id 合并（D2）；公共配置仍全局共享。"""
+    import runtime
+    src = master if isinstance(master, dict) else {}
+    base = dict(src.get("profiles") or runtime.CONFIG.get("profiles") or {})
+    base = _merge_site_profiles(base, load(site))
+    return base, _derive_site_profiles(base)
+
+

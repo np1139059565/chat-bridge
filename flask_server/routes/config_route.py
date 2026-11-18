@@ -161,7 +161,12 @@ def _apply_profiles_section(data, changed):
         changed.append("profiles")
 
 
-def _config_snapshot():
+def _site_profiles_for(site):
+    """按站档案视图：干净母版为底 + 该站草稿，避免读被 apply_to_runtime 污染的全局内存。"""
+    return draft_store.site_profiles_view(site, _master())
+
+
+def _config_snapshot(site=None):
     """构造 GET /config 的完整配置快照。"""
     host = runtime.CONFIG["flask"]["host"]
     port = runtime.CONFIG["flask"]["port"]
@@ -169,8 +174,8 @@ def _config_snapshot():
         "flask": {"host": host, "port": port, "url": "http://%s:%s" % (host, port)},
         "limits": runtime.CONFIG.get("limits", {}),
         "default_profile": runtime.CONFIG.get("default_profile", "glm"),
-        "site_profiles": runtime.CONFIG.get("site_profiles", {}),
-        "profiles": runtime.CONFIG.get("profiles", {}),
+        "site_profiles": (_site_profiles_for(site)[1] if site else runtime.CONFIG.get("site_profiles", {})),
+        "profiles": (_site_profiles_for(site)[0] if site else runtime.CONFIG.get("profiles", {})),
         "tools": runtime.CONFIG.get("tools", {}),
         # 工具配置：声明 + 当前值，设置页按类型通用渲染
         "tool_config": tool_config.all_specs(),
@@ -247,7 +252,7 @@ def config():
     if request.method == "POST":
         return _handle_config_post()
     # GET：返回完整配置快照
-    return jsonify(_config_snapshot())
+    return jsonify(_config_snapshot(_site_of()))
 
 
 @bp.route("/profiles", methods=["GET"])
@@ -257,7 +262,7 @@ def profiles_endpoint():
     内容脚本注入时经后台中转拉取（HTTPS 页直连本地服务受混合内容策略拦截）；
     只返回档案本体，不携带工具配置等无关字段，供前端覆盖出厂默认值。
     """
-    return jsonify({"profiles": runtime.CONFIG.get("profiles", {})})
+    return jsonify({"profiles": _site_profiles_for(_site_of())[0]})
 
 
 @bp.route("/config/restart-port", methods=["POST", "OPTIONS"])
