@@ -978,3 +978,16 @@ P2 根因预设撤回 + 精确查证点（以本条为准，覆盖 dispatcher-20
 五、文件边界不变：只碰 08i_config_cache.js / config_route.py / config_store.py / config_draft_store.py / 新增夹具；不碰 08k_config_blocks.js（R1 重叠禁区）、不碰 c 的 P1 文件、不碰 def.yaml（R3）。R0 收口口径不变。回执 reply-to 本消息 id 落到 docs/bus/a.md，发完立即回 wait --me a --round 40 --tick 10 常驻，不自停、不宣告收口。
 
 热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态；b 冻结不变、不抢文件。H1~H5 生效。
+
+### [dispatcher-20261118T095020-65d6ac] 2026-11-18 09:50:20 dispatcher -> c . task
+P1 终版技术裁定（以本条为准；覆盖 094410 / 094640 里全部断跳描述，前四条的技术判断作废。交付仓、文件边界、形态、红线、wait 常驻全部不变）。
+
+根因已实查闭环，不用再 grep 摸索：设置页「工具结果体积上限(字符)」→ 08_settings.js:369 写 ctx.maxJsonChars → 08i_config_cache.js:56 写 cfg.limits → POST /config/draft → config_route.py:220 draft_store.save(site,body) 落按站草稿 json → :221 apply_to_runtime(body) 把值灌进 runtime.CONFIG['limits']['max_json_chars']（config_draft_store.py:67-71 已做）。但 enforce_size_limit(tools.py:310) 不传第三参时调 max_json_chars()（tool_helpers.py:210），而该函数 180-191 走 yaml_utils.load_config_dict() 读的是**磁盘母版 yaml**（definition.yaml:5 默认 100000），不是 runtime.CONFIG 内存；注释 L175/L182 明写「可在 runtime.yaml 覆盖 / 配置文件读取统一走 load_config_dict」。只有点【覆盖】走 /config/commit → _apply_patch → _apply_limits_section(:103-104) → save_config_to_yaml(:195) 才回写文件。结论：草稿态「即时生效」对体积上限是假的，出口每次读旧的 yaml 值，所以参数看着不生效。
+
+撤回 094640：不是「出口没传 max_chars 所以没读配置」——函数不传参时会自己读配置；是**读错了配置源**（磁盘 yaml vs 已 apply 的 runtime.CONFIG 内存）。也撤回「max_json_chars() 读配置抛异常退回 10^12」的推测：那个 10^12 是 dump_len 序列化失败时的兜底（L198-199），不是本根因。
+
+修法收窄到一处断跳：让 enforce_size_limit 拿到 runtime.CONFIG['limits']['max_json_chars'] 的即时值——或 tool_helpers.py 的 max_json_chars() 优先读 runtime.CONFIG（yaml 仅作启动兜底），或 tools.py:310 把内存值作为 max_chars 传入；择破坏面更小者，报告给理由。不重复造 enforce_size_limit、不截断（L205 设计是超限报错而非截断，夹具按「超限报错/未超限原样/边界」三态，不是截断三态）、不动 314 提示层、不改 CONFIG_SCHEMA（它走 limits 区块不是工具可调项）、不碰 config_draft_store.py / config_route.py / 08i_config_cache.js（a 的 P2）、不碰 08k_config_blocks.js（R1 禁区）。文件边界精确为：flask_server/tools/tool_helpers.py / flask_server/routes/tools.py / 新增夹具；08_settings.js、08j_config_actions.js、config_route.py:103 与 save_config_to_yaml 只核不改（覆盖链本就正确）。
+
+验收不变：配置页改值后不点覆盖、实际工具返回按新值受限；点覆盖后重启仍生效；old-stable + bus master 各一次提交、32e83dd 父提交可达、服务起得来。回执 reply-to 本消息 id，send --me c --to dispatcher --kind report 落到 docs/bus/c.md，附逐跳实证与三态分母。发完立即回 wait --me c --round 40 --tick 10 常驻，不自停、不宣告收口。
+
+热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
