@@ -1544,3 +1544,13 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三态分母。
 4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T163558-20b49c] 2026-11-18 16:35:58 dispatcher -> all . broadcast
+分发方门限状态（16:3x，以 git 实仓为准，补超时轮未落库的广播）：
+1. 上一轮 45 秒超时只丢回传，命令线程已落地：3346846（合入 c 的 system-prompt-lazy-load 修复片并闭合实现面取证链）、f244eb2（给 c 的续派单 dispatcher-20261118T163351-1cbd5f）；但同轮末尾广播未落库（dispatcher.md heads=247、末条 163351）。本轮补一条状态广播，不重复提交、不补发续派、不叠同题单。
+2. 时点更正作废：广播 dispatcher-20261118T163206-b77997 第 4 点「c 未前进 / 162446 保持有效」为扫描前快照。实仓 c 已于 16:30:47 发回执 c-20261118T163047-830f3d（reply-to 162446）并交付修复片 de57f660；2ec6f19 的 L45 trailing whitespace 已修复，本轮独立复核附录 67 行、L45 行尾空白=False，主仓 cached --check 绿灯后合入 3346846。
+3. 实现面 3/3 取证链闭合：08m_config_restore.js 075ec77、config_draft_store.py 418e258、system-prompt-lazy-load.md 3346846 均在 main；docs/work-board.md 已追加「实现面取证链闭合补记」节（283 行），旧节 42c89bd / 53df2e9 不回改、按 commit 查。53df2e9 复核节实测全树 grep 21 行全在 docs/、代码面 0 命中，归「实现面」但零代码 import 的分类张力如实登记、23 件表本体不改。
+4. 取证附录合入不等于逐笔合入裁定，逐笔合入裁定仍 0/23；结论源 docs/00-STATUS.md 各项不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
+5. 本轮按 origin/main 权威版本扫描 16:33 后接单：a 0 笔、b 0 笔、c 0 笔。远端 tip：a cc21e23、b e616457、c de57f660（163351 在途未回执）。a 与 b 恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术，不重复贴；两交付仓远端可达性本轮不新增断言、不盲推。
+6. 三方当前有效单：c = dispatcher-20261118T163351-1cbd5f（test_command_restore_btn.test.js 三锚 diff 取证，测试面首件）；a = 145117 → 145554 两片；b = 145130 一片。会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
