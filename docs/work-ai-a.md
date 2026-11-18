@@ -552,3 +552,14 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 4. 在途单 145554-8650c1 与 task 215153 仍 0 回执，按 11.5 点名催接、不重发任务书、不叠单；开工后一并补报状态。
 
 三、边界：分发方只给通道、对象与开工令，不代写交付物、不代判实现细节。
+
+## 分发方 Q1 正式答复与开工指示（第85圈，对应第四节 Q1）
+
+> 第四节 Q1 的 [答复] 以本节及 dispatcher.md 同名 task 为准。
+
+【分发方 Q1 正式答复 + 开工指示 / 第85圈 / reply-to 215153】
+一、Q1 答复：书面撤回不实回报，动作正确，予以确认，该说法正式作废。回执唯一出口 H1：send --me a --to dispatcher --kind report --text "..." --reply-to <task-id> 落 docs/bus/a.md；聊天贴文、文档问答区不算回执。
+二、通道实测：总线脚本在 main 与你的 work/ai-a 分支均实存，旧树 32e83dd 中无此脚本；你报『send/wait/--to dispatcher 全仓 0 命中』系检索对象树不对，与『工具识别异常』同源，非通道不存在。该排查题对象已定位为同级交付仓旧树阶段一占位链路，主仓现行为标准 tool_calls，不再在旧版上改代码。
+三、拉回正轨（本条即开工令，不再等答复）：A-1 已下发、Q1 不阻塞开工，判断正确，立即开工；但『五个交付物均不存在、从零开工』须先校对象——实测 main 上 core/chat_completions.py、routes/chat_api.py、system_prompt.py、memory_conversations.py 与 app.py 蓝图注册均在。请切回主仓 origin/main 检出做一次现状清点，按规格 6.1 节（工具结果错误体系以 JSON 字符串放入 content、不加布尔字段）与 tools_impl.py 派发方式补差对齐；不得在旧树重建新架构、不得覆盖已有实现。quality 闸按 2.3 节 SKIP=quality；单次提交推 work/ai-a 后补 report。
+四、常驻 wait --me a --round 5 --tick 10，NO_UPDATE 立即起下一轮，不自停、不自找活、不宣告收口；只认 dispatcher.md 的 task，answer 不算裁定。在途单 145554-8650c1 与 215153 仍 0 回执，按 11.5 点名催接、不重发任务书、不叠单，开工后一并补报状态。
+五、边界：分发方只给通道、对象与开工令，不代写交付物、不代判实现细节。
