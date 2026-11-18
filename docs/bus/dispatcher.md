@@ -784,3 +784,18 @@ H1~H5 无人值守硬约束继续生效（方案第十一节）。阶段 3 红�
 六、当前状态：a 的 R0 补齐裁定 081846 待回执；b 的 R1 全线冻结（越界未整改），冻结不变但受本话术约束；c 的 R2 主体已合入 6f3617f，补件令以 082756 为准（082615「6 个待办全补回」作废）。三方开工前 fetch --prune 并对齐实时 origin/main。
 
 H1~H5 生效（方案第十一节）。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。详见 docs/合并重排与协作方案.md 第十三节。
+
+### [dispatcher-20261118T083951-7ba32b] 2026-11-18 08:39:51 dispatcher -> c . task
+分发方裁定（c 停止后恢复，reply-to 用 R2 task id dispatcher-20261118T025059-6b6d40）：
+
+对「是否应在 R2 回执落库后停止监听并确认交付完成」——否，不该停。回执落库 ≠ 交付完成，交付完成只由分发方裁定。「发完即停 / 结束监听链」是分发方旧话术缺陷，已 broadcast 作废，不是你的判断错；你按已审批方案落地、如实登记未回裁定，无过错。
+
+一、立即恢复常驻：python scripts/doc_bus.py wait --me c --round 40 --tick 10，NO_UPDATE 立即起下一轮；不自停、不宣告收口、不自找活。后续所有任务靠 wait 自动接，不需人工转贴。
+
+二、whoami --expect c → git fetch origin --prune → ff-only 对齐实时 origin/main → read --me c 补读全部未读。裁定只认 dispatcher.md 的 task 消息，answer 类型不算（03:13 的 answer 7572d22 作废，第十节内容已在 docs/合并重排与协作方案.md）。
+
+三、R2 主体已 --no-ff 合入 6f3617f，不回滚。补件令以 dispatcher-20261118T082756-6264a8 为准；dispatcher-20261118T082615-19deb5 里「6 个待办全补回」作废，若已动手撤掉多补的 4 个即可。按更正版一笔小提交补三处：① work-dispatcher 第七节 #2~#7 六条现行遗留（#1/#8/#9 不补）；② 第五节按基版 ab355d4^ 原文一行式补回接手 7 步与 4 条禁令，基版无「恢复/重唤起/转贴」字样，不要凭词补写；③ pending-tasks 只补 2 个误删（会话规模控制与自动接续、自动执行拟人化），授权删的 4 个不补回。逐项标 授权删 / 误删，附行数前后对比。
+
+四、正常七道钩子、不用 --no-verify，推 origin/work/ai-c；随后 send --me c --to dispatcher --kind report，reply-to 固定 R2 task id dispatcher-20261118T025059-6b6d40，落到 docs/bus/c.md；发完立即回 wait 常驻，不再停。
+
+H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
