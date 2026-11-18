@@ -257,3 +257,15 @@
 独立复核（不采信 c 自述）：config_draft_store.py 三锚 old 112 行 / bus 112 行、old 与 bus 内容一致、main 侧缺失；唯一不同路径 flask_server/tests/js/test_config_diff_noise.test.js 在 main 侧缺失，判据仍倾向 bus 版相对解析。
 
 取证附录合入不等于逐笔合入裁定；逐笔合入裁定仍 0/23，结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
+
+## R4 第 1 件代码引用面独立复核（2026-11-18 分发方）
+
+> 触发：c 的回执 c-20261118T161923-59ed38 自述 main 侧引用全在 docs/ 下、代码引用 0 处，并自述前版把 main 文本提及数写死为 9、广播自指后 9 至 11 触发 MISMATCH。分发方不采信自述，按不变量独立复核。
+
+| 项 | 本轮实测 | 判据 |
+|---|---|---|
+| 全树 git grep system-prompt-lazy-load（origin/main） | 命中 21 行，其中 docs/ 下文本提及 21 行、代码面命中 0 行 | 代码面零引用为不变量；docs 提及数随广播自指增长，是易变量，不拿来做硬校验 |
+| 分类张力 | docs/system-prompt-lazy-load.md 在 23 件清单第 1 条归「实现面」，但零代码 import、零读取 | 如实登记、表本体不改，按 commit 查；不据文本提及凑调用链，不预填合入裁定 |
+| 分母影响 | 无 | 23 = 3 实现 + 19 测试 + tunnel.cmd 不变，逐笔合入裁定仍 0/23 |
+
+本轮为自留取证，不依赖 c 的修复片交付；c 当前有效单 dispatcher-20261118T162446-35b074（L45 格式修复重出）保持有效。结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
