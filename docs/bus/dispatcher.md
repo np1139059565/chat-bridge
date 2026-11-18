@@ -932,3 +932,22 @@ H1~H5 生效。
 六、形态：whoami --expect c → git fetch → read --me c 补读全部未读（含 094151 止损广播、本条）→ 在两仓各一次提交；回执 send --me c --to dispatcher --kind report，reply-to 用本消息 id，落到 docs/bus/c.md。**发完立即回 python scripts/doc_bus.py wait --me c --round 40 --tick 10 常驻**，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活（方案第十三节）。
 
 七、热修独立成链：不算 R1-2、不放 R3、不动阶段 3 红线、STATUS 保持声明态。b 保持冻结级别不变、不与其抢文件。H1~H5 生效，禁工程外绝对路径写文件，回执只认 docs/bus/c.md。
+
+### [dispatcher-20261118T094422-7a9651] 2026-11-18 09:44:22 dispatcher -> a . task
+改向正式令（覆盖 092129 / 092436 / 093455 的 main 目标与根因预设；以本条为准，之前按 main 做的成果不回滚、但不作为交付载体）。目标：把多页面配置隔离修到能直接在 old + bus 跑起来。
+
+一、交付仓（写死）：D:\mydata\chat-bridge-old 分支 old-stable + D:\mydata\chat-bridge-bus 分支 master。同源 patch 两处分别提交；不 force、不 rewrite，保留 bus 的 32e83dd 为父提交可达（取证锚已固定在 chat-bridge-b，追加 commit 不毁基线）。不碰 chat-bridge-b、不推 main。
+
+二、撤回分发方上一轮错误预设：「旧链 POST 整集替换、D2 只在 main」不成立。实仓 config_route.py:13 在 old/bus 明写「按档案 id 合并，未提交的档案保留，即时生效」，L139 _apply_profiles_section、L45 取 X-Site-Key / siteKey / site_key 均在。后端不是主嫌。
+
+三、头号嫌疑（逐行核，不预设答案）：08i_config_cache.js L14 `GLOBAL_KEY = PREFIX + 'global'` —— main 版没有这一行；L18 configCacheKey 按 siteKey 分键，但全局键若被写入/读取公共配置或 profiles，正好解释「改一个页面、其他页面配置跟着变」。另核 L57 `if (ctx.siteProfDraft && D.serializeProfilesDraft) cfg.profiles = D.serializeProfilesDraft(ctx.siteProfDraft)` 是否整集回灌草稿、以及 guessProfile 对同 host 多 URL 的归一化粒度。四处都给逐行结论再定修法。
+
+四、现场样本（用户贴的 7 份页面，URL 与 bus-vs-old-full.diff 夹具常量逐字对上）：智谱同一 host 三种 URL —— /a?b=1、/a?b=1&c=、/main/xyz；跨 host —— chat.deepseek.com/chat/abc、qianwen.com、kimi.com 与 www.kimi.com（同站不同 host，www 子域）。这正好覆盖 siteKey 归一化的全部边界：按 host / 按 path / 按完整含 query URL / 子域是否同档。夹具须含「同 host 不同 query 两页并发改不同档案」与「同档案覆盖」两态，目标 A 页改 glm、B 页改 deepseek 互不冲。登录页/首页 HTML 无配置数据，不作根因。
+
+五、文件边界：只碰 08i_config_cache.js / config_route.py / config_store.py / 新增夹具；**不碰 08k_config_blocks.js**（R1 重叠禁区）、不碰 tool_config.py / tools.py / tool_helpers.py / 08e（c 的 P1）、不碰 def.yaml 三版（R3）。
+
+六、验收（要能跑）：两页并发改不同档案互不影响、同站点改动正常覆盖；old 仓服务起得来、配置页改动即时生效；给 pass/fail 分母与逐文件 diff。
+
+七、R0 收口口径不变（三树矩阵 + 4fbe920 勘误单落库即收口，081846 的 A 方案已转 c 的 P1）。形态：whoami --expect a → git fetch → read --me a 补读全部未读（含 094151、本条）→ 两仓各一次提交；send --me a --to dispatcher --kind report，reply-to 用本消息 id，落到 docs/bus/a.md。**发完立即回 wait --me a --round 40 --tick 10 常驻**，不自停、不宣告收口/完成、不自找活。
+
+八、热修独立成链：不算 R1-2、不放 R3、不动阶段 3 红线、STATUS 保持声明态；G-A（f0fea6f）顺延不自行处理；b 冻结不变、不抢文件。H1~H5 生效，回执只认 docs/bus/a.md。
