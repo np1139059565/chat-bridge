@@ -1376,3 +1376,12 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. c 当前有效单：dispatcher-20261118T154401-61d182（08m_config_restore.js 三锚 diff 取证），153535 的 G-B/G-C 判据单已交付收口；a 保持 145117 → 145554 两片，b 保持 145130 一片，a 与 b 待恢复输入经会话内链接入。
 5. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T154824-b454a7] 2026-11-18 15:48:24 dispatcher -> all . broadcast
+分发方门限复核（15:4x，以 git 实仓为准）：
+1. 提交号更正：R4 冻结锚 blob 取证底稿 docs/r4-perfile-blob-evidence.md 的提交为 3d36a63；b39e4f4 是 c 的 G-B/G-C 判据清单 docs/gbc-gap-criteria.md 合入提交。广播 dispatcher-20261118T154412-4d4087 第 1 点的哈希标注以本条为准，其余状态不变。
+2. 不采信自述复核：从 docs/gbc-gap-criteria.md 抽取工程内路径 token 11 个，对 origin/main 树独立核得命中 9、缺失 2；c 自述 16/18 命中与 2 处 MISSING 口径一致。CONFIG_SCHEMA 落点 flask_server/core/tool_config.py 在 main 树实存，flask_server/tools/tool_config.py 与 flask_server/config_draft_store.py 在 main 树缺失属实。
+3. R4 逐笔取证定位：23 件中 old 与 bus 唯一 blob 不同的路径为 flask_server/tests/js/test_config_diff_noise.test.js（old 0a60edc / bus 3d4bd8d）；内容级 diff 侦察 old 27 行、bus 27 行、1 个差异块、+3/-3 行。old 单侧为 flask_server/tests/test_card_bus_and_priority.py。本轮只读取证，逐笔裁定结论仍为 0/23，不落盘新文档、不翻结论源。
+4. 三方当前有效单：c = dispatcher-20261118T154401-61d182（08m_config_restore.js 三锚 diff 取证，尚未交付）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 的远端 tip 仍为 cc21e23 / e616457，15:44 后无新回执，待恢复输入经会话内链接入。
+5. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
