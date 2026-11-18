@@ -281,3 +281,14 @@
 | 3 | flask_server/config_draft_store.py | docs/r4-config-draft-store-diff.md | 418e258 | 已合入 |
 
 实现面 3/3 取证链闭合；2ec6f19 的 L45 trailing whitespace 已由 c 的 de57f660 重出修复，分发方 cached --check 绿灯后合入。取证附录合入不等于逐笔合入裁定，逐笔合入裁定仍 0/23，结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
+
+## 逐笔裁定对账（第79圈，分发方）
+
+> 本小节为逐笔裁定留痕，不改写上文原有 0/23 分母行；不虚报 23/23。
+
+- 已逐笔合入 main 的本批件（共 13）：c 的 a269c07→c17c913（r4-test-command-unified-list-diff.md，76 行纯文档）；b 的 35ef42e→bab0788（r1-1-calibration.md + docs/r1-evidence/ 下 10 份重出物）、190e906→2dd9930（r1-102-perfile-evidence.md）。均为工程内独立 detached worktree cherry-pick + 单文件校验 + ff-only 推 + worktree remove/prune 留痕，非整分支合。
+- 判 SAME_SKIP（内容已在 main、提交历史不逐笔合）：c 10 篇附录 + tool-schema-status-review.md（两版 49 行统一 diff 零输出）；b 的 dab8af0/7c0379f（dispatcher_poll.py 最终 blob main=ai-b=ed3af05b，带入提交 56db54c）、cc9018d、0dca8b9/bab77ae 中 00-STATUS.md 与 pending-verify.md。此前『2 笔实现代码须运行验证后方可合』口径撤回：提交未合 ≠ 内容未合，不重复合入。
+- 清单文本对号：13 件中按文件名命中 23 件清单 0 件；其余为逐笔取证附录，不强塞分母。
+- 重叠/非交付物不按交付物合：b 33 笔历史总线消息同步、11 个 main 已有重叠文件（含 docs/bus/* 与 work-board.md），分发方持续写总线导致与分支旧快照 DIFF，由分发方版本重放覆盖，不挂『冲突待解』。
+- 读数假象更正：未关 core.quotePath 时把两个中文名文档八进制路径误判 BOTH_ABSENT，实际 main/ai-b 均实存；关掉后复验见本圈读数。
+- 仍未启动（真空缺，不预填、不虚报）：a 的 P2 三缺口（配置刷新 / yuanbao 识别 / 独立工具配置页）、大改逐项脚本化验收、人工测试冻结。三条 task 215153/215414/215426 与 a 的 145554-8650c1 仍 0 回执，按 11.5 点名催接、不重发、不叠单。
