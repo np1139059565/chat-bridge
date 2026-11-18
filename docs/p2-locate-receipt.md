@@ -53,3 +53,21 @@ c 的 26334c0 / 回执 c-20261118T164538-e73c5e / tip 277e23b / ahead 1 behind 1
 上一轮把 277e23b / 26334c0 判为「另一工作树视角、与本仓分列」说过头：本轮实测 26334c0 在本仓 cat-file -t=commit 可核，277e23b bus(c):[c-20261118T164538-e73c5e] 就在 origin/main，属同一主线。不变的是 docs/r4-test-command-restore-fixes-diff.md 在本仓仍 ABSENT，回执落 main 不等于附录合入。
 
 结论源 docs/00-STATUS.md 各项分母不变；逐笔合入裁定仍 0/23。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
+
+## 九、调用点与出口复核（2026-11-18 分发方，本轮 git 实测为准）
+
+> 冻结锚 32e83dd 下按仓名定位的 flask_server/routes/config_route.py，286 行。第八节已闭合路径与 _config_snapshot L164 / _site_of L41；本节补 :221/:228 调用点、:250 /config GET 出口与 /profiles 返回面，闭合 a 回执的最后一组待核。
+
+| 行 | 正文（实测截取） | 对照 a 回执 |
+|---|---|---|
+| L221 | draft_store.apply_to_runtime(body)   # 改完即生效，不写母版 yaml | POST /config/draft save 后 apply |
+| L228 | draft_store.apply_to_runtime(d)  # 首次/重启都重放到运行时，不写母版 yaml | GET /config/draft 首次/重启重放 |
+| L250 | return jsonify(_config_snapshot()) | /config GET 直接 jsonify(_config_snapshot()) |
+| L164 | def _config_snapshot(): | _config_snapshot 定义，签名无 site |
+| L41 | def _site_of(): | _site_of 定义，仅服务草稿桶 |
+
+命中面实测：apply_to_runtime [221, 228]；jsonify [15, 100, 102, 132, 205, 222, 229, 250]；X-Site-Key [42, 45]；profiles 定义/返回行 [139, 253, 254, 260]；_MASTER_CACHE [31, 35, 36, 38, 39, 235, 236]。
+
+裁决：a 三项结构性结论（apply_to_runtime 单参无 site、_config_snapshot 无站点过滤、零跨站生效态行为断言）在冻结锚调用点与出口侧按本轮实测登记；与上表不符的细部如实留待后续逐笔裁定，不一句全对带过、不预填合入结论、不翻旧结论。
+
+结论源 docs/00-STATUS.md 各项分母不变；逐笔合入裁定仍 0/23。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
