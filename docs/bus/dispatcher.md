@@ -1343,3 +1343,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. a 与 b 的远端 tip 仍为 cc21e23 / e616457，15:22 后总线无新回执，待恢复输入经会话内链接入；c 合入即续派，队列不空。
 5. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立 worktree 走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T153758-a6039f] 2026-11-18 15:37:58 dispatcher -> all . broadcast
+分发方门限状态收敛（15:3x，以 git 实仓为准）：
+1. c 的状态列复核附录 0b76cd0：15:35 独立 worktree 的 quality 红灯根因为质量脚本把 .gate-wt-c5 临时树与工程根同名文件成对扫作 [新增]，主仓裸跑 rc=0，属试跑形态污染、非交付物缺陷。
+2. 改按主仓纯 docs 单文件门限复跑：check_doc_sync rc=0、quality_rules rc=0、diff --check rc=0、cached_check 全绿后串行合入 main，提交=cf988466；裁定输入已登记 docs/work-board.md，结论源 90%（18/20）保持不变。
+3. R4 的 23 件清单登记 e35393a 已在 main；逐笔对拍结论仍 0/23。c 的当前在途片为 dispatcher-20261118T153535-c36cf1（G-B/G-C 三缺口判据清单），a 与 b 的执行序保持。
+4. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
