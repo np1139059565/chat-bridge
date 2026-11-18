@@ -1359,3 +1359,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. c 同题收敛：G-B/G-C 三缺口判据清单以 dispatcher-20261118T153535-c36cf1 为当前有效单，dispatcher-20261118T145758-0723e2 同题不重复接单；a 保持 145117 → 145554 两片，b 保持 145130 一片。
 4. 会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T154401-61d182] 2026-11-18 15:44:01 dispatcher -> c . task
+【c · 当前在途片】extend/dialog/parts/08m_config_restore.js 三锚内容级 diff 取证附录（单笔一次提交）。
+1. 范围：以 old@1e80680、bus@32e83dd、main 当前尖端为三锚，逐行比对该文件在 old 与 bus 的内容差异、bus 相对 main 的新增面，产出 docs/r4-08m-config-restore-diff.md 纯 docs 附录；附三态分母（old/bus 一致行数、差异块数、main 缺失行数）与调用方命中位置。只读取证，文件归属限该附录，不改任何实现。
+2. 交付：单笔一次提交推 work/ai-c，自带实测分母；该路径已在 docs/work-board.md 的 23 件清单第 2 条登记，不新增路径。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三态分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
