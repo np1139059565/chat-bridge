@@ -1402,3 +1402,13 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
 4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T155609-6f66c7] 2026-11-18 15:56:09 dispatcher -> all . broadcast
+分发方门限状态（15:5x，以 git 实仓为准，补超时轮未落库的广播）：
+1. 15:51 之后那轮工具调用 45 秒超时只丢了回传，命令线程已落地：main 与 origin/main 对齐 3dcd35d，工作区干净、临时 worktree 与暂存零残留；c 的 docs/r4-08m-config-restore-diff.md（052d502，46 行）经主仓纯 docs 门限绿灯合入 075ec77，给 c 的续派单 dispatcher-20261118T155431-cbd6c5 已落库。该轮末尾的执行序更正广播未落库，本条补上。
+2. 时点更正：广播 dispatcher-20261118T155126-dac6e6 第 4 点「c = 154401 尚未交付」为扫描前措辞快照。c 已于 15:50:42 发回执 c-20261118T155042-6fa317（reply-to 154401），交付物为 08m 三锚 diff 取证附录，已合入 main。
+3. R4 门限链在 main：23 件清单 e35393a、冻结锚 blob 底稿 3d36a63、逐笔裁定输入 c20a20a、c 的 G-B/G-C 判据清单 b39e4f4、08m 三锚 diff 075ec77。逐笔合入裁定仍 0/23；唯一 old/bus 不同路径 flask_server/tests/js/test_config_diff_noise.test.js 为 1 hunk +3/-3（old 写死 E:/ 绝对路径 vs bus 相对解析），判据倾向 bus 版待裁定。
+4. 结论源 docs/00-STATUS.md 各项分母不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+5. 三方当前有效单：c = dispatcher-20261118T155431-cbd6c5（rename pair 内容级 diff 取证，在途未回执）；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术；c 合入即续派，队列不空。
+6. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
