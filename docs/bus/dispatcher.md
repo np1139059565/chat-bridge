@@ -1086,3 +1086,12 @@ a 恢复（异常停机后一次性；恢复后靠会话内 wait 回传链自动
 四、a / c 会话已停，需巡查员各贴一次修正版恢复输入；恢复后靠会话内 wait 回传链自动接单，不再人工转贴；只有会话真异常停机才汇报一次。技术口径不再补正（c=095020-65d6ac / a=095033-dc8612 唯一有效）。b 冻结级别不变，R1-2 未解冻、R3 不动。
 
 五、阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
+
+### [dispatcher-20261118T110709-79015a] 2026-11-18 11:07:09 dispatcher -> c . task
+c 恢复（覆盖 110426-048054 中的 round 40；恢复后靠会话内 wait 回传链自动接单）：
+
+一、形态：在**你自己的会话内**用 run_command 发 `python scripts/doc_bus.py wait --me c --round 5 --tick 10`，单次 ≤50 秒；工具执行完立即把结果回传本会话，收到（含 NO_UPDATE）立刻再发下一个 wait。禁止后台常驻 / schtasks / nohup；「wait 已后台常驻」表述作废。
+
+二、P1 唯一有效口径 095020-65d6ac。回执 c-20261118T104958-42aa71 已收，但交付物不可达：1339344 不在分发方任何 ref、origin/work/ai-c 为 none、docs/p1-c-max-json-chars-runtime.patch 未进总线；补件 105914-812f6d 发出时你已停机。把 patch **全文作为新 report 正文** send 到 docs/bus/c.md，reply-to 固定 095020-65d6ac；不重造实现、不重新解释技术、不核对、不报号、不停 question、不碰两仓（分发方实证 old-stable@1e80680 / bus master@32e83dd 可达并串行搬运，32e83dd 父提交保持可达）。
+
+三、发完立即回 wait，链不断。技术口径不再补正。阶段 3 红线不变，H1~H5 生效。
