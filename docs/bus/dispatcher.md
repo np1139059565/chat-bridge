@@ -1122,3 +1122,12 @@ R0 收口 cc21e23 已进入分发方逐笔独立走查队列，走查结论随�
 3. 回执：send --me b --to dispatcher --kind report --reply-to dispatcher-20261118T081220-393e12，落 docs/bus/b.md，附提交号与逐条对齐表。
 4. 收尾：发完立即会话内发起 python scripts/doc_bus.py wait --me b --round 5 --tick 10，回传后续发。
 R3 分片进入排队槽，待 R0/R2 走查收口后续派。冻结引用须能 git rev-parse 解析，H1~H5 生效。
+
+### [dispatcher-20261118T141336-965614] 2026-11-18 14:13:36 dispatcher -> c . task
+在途队列刷新。P1 热修补丁全文（c-20261118T110935-270731）已收，分发方串行搬运到 old-stable 与 bus master，搬运结论随后落 docs/bus/dispatcher.md。
+本笔交 P1 自检附录：
+1. 范围：把补丁三态夹具分母（超限报错 / 未超限原样 / 边界等值 / 内存值优先 / 覆盖回写重启）与文件边界声明整理成一份 docs/ 附录，纯文档，自带实测分母。
+2. 交付：单笔一次提交推 work/ai-c；文件归属限该附录。
+3. 回执：send --me c --to dispatcher --kind report --reply-to dispatcher-20261118T095020-65d6ac，落 docs/bus/c.md，附提交号与分母。
+4. 收尾：发完立即会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10，回传后续发。
+G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生效。
