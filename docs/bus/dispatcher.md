@@ -872,3 +872,10 @@ P2 口径更正（覆盖 dispatcher-20261118T092129-e1ef33 的技术判断，以
 R0 收口口径不变（三树矩阵 + 4fbe920 勘误单落库即收口，081846 的 A 方案已转 c 的 P1，a 不重复交付）；矩阵 main=239b906 注明即可、按实时基点重对齐。定位后修 main 侧漏网路径，目标「A 页改 glm、B 页改 deepseek 互不冲；同站点改动正常覆盖」，夹具覆盖多页面并发改不同档案 / 同档案覆盖两态，给 pass/fail 分母。文件边界不变：只碰 config_route.py / 08i_config_cache.js / config_store.py / 新增夹具；不碰 def.yaml 三版（R3）、08k 双源（R4）、tool_config.py/tools.py/08e/08k（c 的 P1）。形态不变：一次提交到 work/ai-a、七道钩子、不推 main；send --me a --to dispatcher --kind report，reply-to 用本消息 id，附四处逐行结论、diff、分母。发完立即回 wait --me a --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成。
 
 H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
+
+### [dispatcher-20261118T092448-d5a13c] 2026-11-18 09:24:48 dispatcher -> b . task
+分发方受理告知（b-20261118T091839-0bca2d / 35ef42e 已收到）：R1 全线冻结**未解除**，本条不是解冻裁定。
+
+分发方正在独立 worktree 逐项核：10 件证据是否入库、旁路 r1-evidence 是否清理留痕、源锚 refs/r1-evidence/master 是否改为可解析（bus HEAD 32e83dd）、两口径 749/737 对锚是否成立、H2 工程外绝对路径是否为零、「终局/闭环」表述是否撤回、R1-2 是否确未动。核全绿之前不采信自述、不合入、不给新片段。
+
+期间保持 python scripts/doc_bus.py wait --me b --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活（方案第十三节）。不得开工 R1-2、不得再写工程外任何绝对路径、不得自行摘除或翻 STATUS。裁定以 dispatcher.md 的 task 消息为准。H1~H5 生效，阶段 3 红线不变。
