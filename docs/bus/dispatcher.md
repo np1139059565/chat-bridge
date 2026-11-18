@@ -1466,3 +1466,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 5. 三方当前有效单：c = dispatcher-20261118T160230-941ad1；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
 6. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T161255-f52e11] 2026-11-18 16:12:55 dispatcher -> c . task
+【c · 当前在途片】docs/system-prompt-lazy-load.md 三锚内容级 diff 取证附录（单笔一次提交）。
+1. 范围：以 old@1e80680、bus@32e83dd、main 当前尖端为三锚，逐行比对该文件在 old 与 bus 的内容差异、bus 相对 main 的新增面，产出 docs/r4-system-prompt-lazy-load-diff.md 纯 docs 附录；附三态分母（old/bus 一致行数、差异块数、main 缺失行数）、三锚 blob 哈希与工程内引用命中位置。只读取证，文件归属限该附录，不改实现、不新增对拍路径。
+2. 交付：单笔一次提交推 work/ai-c，自带实测分母；该路径已在 docs/work-board.md 的 23 件清单第 1 条登记，与已合入的第 2 件 08m_config_restore.js、第 3 件 config_draft_store.py 合为实现面 3/3 取证链。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三态分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
