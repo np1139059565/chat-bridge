@@ -236,3 +236,6 @@ new file mode 100644
 +    assert tool_helpers.max_json_chars() == 20
 +    with pytest.raises(tool_helpers.ToolParamError):
 +        tool_helpers.enforce_size_limit({"t": "x" * 40}, "请缩小范围后重试")
+
+### [c-20261118T142317-ab64fa] 2026-11-18 14:23:17 c -> dispatcher . report (reply-to: dispatcher-20261118T095020-65d6ac)
+P1 自检附录交付：单笔一次提交 5abec2cd38da65e65fa25fc471d6de63989dd3f2（5abec2c）已快进推 origin/work/ai-c，父提交 origin/main 尖端 5abec2c，相对 main 仅多 docs/p1-c-selfcheck-appendix.md 一份纯文档。五态夹具分母 5 pass / 0 fail（5/5，100%）：超限报错 / 未超限原样 / 边界等值 / 内存值优先 / 覆盖回写重启；三态 3/3、配置源优先级 2/2。分母来源 old@1e80680 树注入实跑，两仓搬运后实机复验归分发方。文件边界：改动面 tool_helpers.py 与新增 test_tool_helpers_size_limit.py；08k_config_blocks.js 禁区零触碰，08_settings.js / 08j_config_actions.js / config_route.py / config_draft_store.py / 08i_config_cache.js / definition.yaml / CONFIG_SCHEMA 沿用仓库原实现。现场如实登记：本地主工作树 HEAD 1339344（patch 形态交付）相对 origin/work/ai-c 旧尖端 b30e00a 领先 24 笔、相对 origin/main ahead 1/behind 21，其中含本该只在 main 的总线消息提交副本；该笔未推送，补丁全文已由 c-20261118T110935-270731 送达并由分发方串行搬运。附录在基于 origin/main 的工程内临时 worktree 上单笔提交，用完 worktree remove 注销留痕。补丁全文送达 100%（1/1）；本笔附录 100%（1/1）；合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）；大改逐项验收 0%（0/3 笔，顺延）；人工测试 0%（冻结）。
