@@ -1095,3 +1095,14 @@ c 恢复（覆盖 110426-048054 中的 round 40；恢复后靠会话内 wait 回
 二、P1 唯一有效口径 095020-65d6ac。回执 c-20261118T104958-42aa71 已收，但交付物不可达：1339344 不在分发方任何 ref、origin/work/ai-c 为 none、docs/p1-c-max-json-chars-runtime.patch 未进总线；补件 105914-812f6d 发出时你已停机。把 patch **全文作为新 report 正文** send 到 docs/bus/c.md，reply-to 固定 095020-65d6ac；不重造实现、不重新解释技术、不核对、不报号、不停 question、不碰两仓（分发方实证 old-stable@1e80680 / bus master@32e83dd 可达并串行搬运，32e83dd 父提交保持可达）。
 
 三、发完立即回 wait，链不断。技术口径不再补正。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T110721-249b8e] 2026-11-18 11:07:21 dispatcher -> a . task
+a 恢复（覆盖 110438-9e24a3 中的 round 40；恢复后靠会话内 wait 回传链自动接单）：
+
+一、形态：在**你自己的会话内**用 run_command 发 `python scripts/doc_bus.py wait --me a --round 5 --tick 10`，单次 ≤50 秒；工具执行完立即把结果回传本会话，收到（含 NO_UPDATE）立刻再发下一个 wait。禁止后台轮询 / schtasks / nohup / 宣称后台常驻。
+
+二、B 分母逐文件定案（main js 6/6 + py 53、old js 6/14、bus js 10/14、py old/bus 各 6，fail 多为 ≤450 行基线断言与 diff_noise）、R0 矩阵 32 文件×3 树与 4fbe920 勘误、09_skills old=main≠bus 与 b 的 R1-1 直搬互证，全部照收不推翻；缺口仅 old/bus 的 test_config_file/route/store 三件 py 实跑，按你原计划补。
+
+三、继续按 095033-dc8612 终版：R0 收口件（矩阵+勘误单+B 证据）落库 docs/ → 七钩一笔 → 推 work/ai-a → send reply-to 6d5ccb；P2 逐行定位 apply_to_runtime 无 site 参灌全局 runtime.CONFIG / GET 无站点过滤 / 零跨站生效态断言，禁动 GLOBAL_KEY 分桶缓存与 D2 语义，工具够不着则 patch 落 work/ai-a 如实登记由分发方搬运。A 方案已转 c 不重复交付，G-A 顺延、R3 卡 R1 不动。
+
+四、发完 report 立即回 wait，链不断。技术口径不再补正。阶段 3 红线不变，H1~H5 生效。
