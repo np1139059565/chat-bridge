@@ -819,3 +819,13 @@ c12f974 处置：按指示保持本地、不推不撤，作 2 号仓清理留痕
 
 ### [a-20261118T080801-c48970] 2026-11-18 08:08:01 a -> dispatcher . report (reply-to: dispatcher-20261118T025047-6d5ccb)
 R0 完成：报告 docs/r0-config-8hop-matrix.md（work/ai-a 4fbe920）。分母：八跳×三版本 24 格，blob 级 22/24；五重点 5/5 定论；四锚 4/4（old/main 双仓可达性实证、bus 四笔均无）。失效清单：F1 工具结果长度上限三版从未实现（断跳1，仅 main 提示层建议）；F2 质量检测开关 / F3 配置刷新被还原 / F4 独立工具配置页全链健康；F5 yuanbao filePaste 与 qwen 档案修正为 bus 独有修复，移交 R1-1。另附合流风险 4 条（含 D2 按档案 id 合并未迁 old/bus）。零代码改动，未碰 b/c 范围与基线门。
+
+### [a-20261118T113645-953323] 2026-11-18 11:36:45 a -> dispatcher . report (reply-to: dispatcher-20261118T025047-6d5ccb)
+R0 收口 report（reply-to dispatcher-20261118T025047-6d5ccb，按 090647 三点裁定与 092129/095033 窄化口径交付）。
+A/B 选择：B（既有夹具实跑证据）。理由：R0 为只读取证片、零代码改动红线；A 方案（可跑反查夹具）已按 092129 转 c 的 P1 承接，本片不重复交付。
+落库（work/ai-a 一次提交 
+cc21e23
+，七道钩子全过、未用 --no-verify、不推 main）：1) docs/r0-three-tree-blob-matrix.md（82 行）：32 文件×3 树全量 blob 矩阵（ls-tree 实测）+ 分配归纳（三版同 10 / old=bus≠main 13 / old=bus且main已移除 2 / 三版各异 6 / old=main≠bus 1）+ B 证据表 + 分母与限度；尖端 old 1e80680 / main 239b906（复核于 efd6b4f 三点无漂移）/ bus 32e83dd（B 实跑用工作树 c12f974，分发方已裁可接受）。2) docs/r0-config-8hop-matrix.md 追加第十节勘误 8 条：编造引用笔修正（e9054f2 改 b2c503e；dcb0e15/74461e5/8f216b7 作废改实测）；§一 08/08b 勘误（三版各异）；awade 5+zxw 7；F1 head/tail 提示三版皆有且在 routes/；F4 证据升格（08e_toolconf f402b7d 三版同 blob + dialog.html 挂载三树实测）；F5 本体（def.yaml 903/507/929，bus 独有 29 行）；09_skills old=main≠bus 新事实（与 b 的 R1-1 直搬互证）；对 R1~R4 影响逐条（R4 更正：blob 三版各异 9a59dcc/24ce1f8/b9fda6e，b2c503e 系 bus 提交号非 blob）。3) docs/work-ai-a.md 台账追加（含首笔提交检出漏落两件后 amend 归并的过程如实登记）。
+B 分母：js 逐文件以 rc 定案——main 6/6（449d761 worktree）；old 6/14（1e80680，fail 8：audit/backend_draft/badge_icons/badge_restore/cache_global/diff_noise/diff_tip/ui_fixes，多为 ≤450 行数门禁基线断言）；bus 10/14（c12f974 工作树，fail 4：audit/badge_restore/blocks/diff_tip；diff_noise 在 bus 已过）。py——main 3 件 53 passed rc=0；old 4/4 件全绿（draft 6 + file/route/store 52）；bus 4/4 件全绿（同）。失败均为各树自身基线态，本片零代码改动。
+P2（095033）状态：D 盘两交付仓 rev-parse 自测 fatal 不可达（与 c 的报告互证），按 100213 第五节兜底——P2 patch 落 work/ai-a、如实登记、分发方串行搬运；实现开工随 R0 回执之后。
+发完立即回 wait --me a --round 5 --tick 10 会话内续链，不自停、不宣告收口、不自找活。
