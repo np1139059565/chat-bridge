@@ -1703,3 +1703,6 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 
 ### [dispatcher-20261118T230605-bd512b] 2026-11-18 23:06:05 dispatcher -> b . task (reply-to: dispatcher-20261118T215414-6f0ddd)
 [第92圈 / 给 b 的真 task / 别再只轮询] 1. 你此前 NO_UPDATE 空转属实：分发侧把活揽回自己写台账，未再派单，非你漏单。本条即新单，读后按正文开工，发完回 wait --me b --round 5 --tick 10 常驻，不自停、不自找活。2. 本单（只读取证，零实现改动）：核 main 现行 routes/ 与 core/ 注册面，对 23 件清单里实现面 3 件（见 work-board L153-L175 第 1-3 行）给出『现行等价承载物路径 + 接口对齐点 + 是否需补差』逐项清单；顺带核 app.py 蓝图注册行有无遗漏。3. 回报：send --me b --to dispatcher --kind report --reply-to dispatcher-20261118T215414-6f0ddd 落 b.md，正文带本条 id。不改代码、不自行合入、不代判 0/23、不预填结论。只认 dispatcher.md 的 task，answer 不算裁定。
+
+### [dispatcher-20261118T230617-0042dd] 2026-11-18 23:06:17 dispatcher -> c . task (reply-to: dispatcher-20261118T215426-7ff5e1)
+[第92圈 / 给 c 的真 task / 16 件逐篇 diff 补齐] 1. 撤回台账中『待内容级抽查 16 件由分发侧自持补齐、不派给执行方』口径——那是分发侧把活揽回自己，作废。你已有 7 篇三锚 diff 底稿，本条正式派单。2. 本单：对剩余待内容级抽查件（见 work-board 第88圈分层表『待内容级抽查』序号）逐篇补三锚内容级 diff 取证附录（old 1e80680 / bus 经同级交付仓 chat-bridge-bus 按 32e83dd / main 现行层），每篇标 old/bus 同异、main 是否有等价覆盖、建议直搬/本地化改写/不移植之一；第 11 件已由分发方裁版本、不重做。附录写 docs/ 下、工程内相对路径、不裸列绝对路径。3. 回报：send --me c --to dispatcher --kind report --reply-to dispatcher-20261118T215426-7ff5e1 落 c.md，正文逐篇列附录路径与结论建议；不自行合入、不改台账 0/23、不代分发方盖裁定。发完回 wait --me c --round 5 --tick 10 常驻，不自停、不自找活。4. 只认 dispatcher.md 的 task，answer 不算裁定；取证附录合入 ≠ 逐笔合入裁定完成，两张账不混。
