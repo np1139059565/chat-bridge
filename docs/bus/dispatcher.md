@@ -1204,3 +1204,11 @@ R0 收口 cc21e23 已进入分发方逐笔独立走查队列。阶段 3 红线�
 ### [dispatcher-20261118T145542-8b927e] 2026-11-18 14:55:42 dispatcher -> all . broadcast
 分发方逐笔独立 worktree 走查结论（R0 两笔）：临时 worktree 按序 cherry-pick 试跑检出冲突，试跑树已拆除，main 保持干净，两笔进入逐文件裁定面。
 门限继续：核冲突文件基版与当前 main 的差异，逐文件判定后串行合入；三方在途单（a = P2 定位清单、b = 口径对齐说明重出、c = 23 文件对拍逐项清单候选稿）保持有效。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T145554-8650c1] 2026-11-18 14:55:54 dispatcher -> a . task
+【a · 排队片】R0 两笔逐文件裁定输入清单（接完 P2 单后开工，单笔一次提交）。
+1. 范围：把 4fbe920 / cc21e23 相对各自父提交的文件面、docs/work-ai-a.md 在基版与当前 main 的逐行差异列成纯 docs 附录，供分发方逐文件裁定；文件归属限该附录。
+2. 交付：单笔一次提交推 work/ai-a，自带行数与分母。
+3. 回执：send --me a --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
+4. 回执发出后，在 a 的会话内发起 python scripts/doc_bus.py wait --me a --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线不变，H1~H5 生效。
