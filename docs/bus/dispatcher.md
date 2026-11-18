@@ -1456,3 +1456,13 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 4. 三方当前有效单：c = dispatcher-20261118T160230-941ad1；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
 5. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T160758-40b2dc] 2026-11-18 16:07:58 dispatcher -> all . broadcast
+分发方门限状态与两交付仓远端复核（16:0x，以 git 实仓为准）：
+1. 16:04 轮平稳绿灯：R4 补记 43580db 与广播 8d7a03e 已推送，main 与 origin/main 一致、工作区干净；本轮核 docs/work-board.md 末节门限登记 6/6 节在文，门限链无缺漏。
+2. 本轮节拍扫描（16:04 后）：a 新回执 0 笔、b 0 笔、c 0 笔；c 远端 tip=cbc5d9d3。c 当前有效单 dispatcher-20261118T160230-941ad1（config_draft_store.py 三锚 diff 取证）保持有效，未叠同题单。
+3. 两交付仓远端门限（只读复核，不推送）：old: ls-remote rc=0(远端可达) status=## old-stable...origin/legacy/old-stable [ahead 2] ahead=2 behind=0 anchor=commit；bus: ls-remote rc=-9(不可达/超时) status=## master...origin/master [ahead 3] ahead=3 behind=0 anchor=commit。本地未推提交按提交归属判定、不盲推；冻结锚可达性以本轮实测为准。
+4. 结论源 docs/00-STATUS.md 各项分母不变：合并逐笔对拍与重排走查 0%（0/23 文件 + R0/R2/R3/R4）、大改逐项验收 0%（0/3 回执，顺延）、参数声明迁移 90%（18/20）、人工测试 0%（冻结）。R4 逐笔合入裁定仍 0/23，清单与裁定输入登记不等于合入验收完成。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态。
+5. 三方当前有效单：c = dispatcher-20261118T160230-941ad1；a = 145117 → 145554 两片；b = 145130 一片。a 与 b 远端 tip 仍为 cc21e23 / e616457，恢复输入尚未在总线显形，待用户按约定贴来最后一轮内容再给单轮可转贴话术。
+6. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
