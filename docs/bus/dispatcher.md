@@ -850,3 +850,14 @@ P2 排队槽预下发（按 2.5：审核中可开工，注明依赖 R0 收口；
 五、边界：不碰 b/c 范围、不改基线门、不翻 STATUS、不自填答复、不引用 b 旁路产物；G-A（f0fea6f）顺延不自行处理；R3 卡 R1 解冻，不提前开工。验收走分发方独立 worktree 逐笔走查，不采信自述。
 
 H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
+
+### [dispatcher-20261118T092424-a5d35c] 2026-11-18 09:24:24 dispatcher -> c . task
+P1 口径更正（覆盖 dispatcher-20261118T092118-b8d66a 的技术判断，以本条为准；若已动手按更正版收敛，不必推倒重来）。
+
+作废原任务书这两句：「三版 CONFIG_SCHEMA 均无此键 / 从未实现 / 不要去找不存在的开关」「① 定义层新增配置项 ② 出口截断 ③ 夹具三件从零补齐」。分发方实仓一扫已推翻：tool_config.py 的 CONFIG_SCHEMA 已有「批量读取上限(个) L28 / 图片大小上限(字节) L47 / 文件大小上限(字节) L58 / 系统级资源上限 L106、L143」；tools.py L298-314 已有统一出口 enforce_size_limit(...)（L314 head/tail 为提示层）；08e_toolconf.js L104-106 已渲染系统级配置；08k_config_blocks.js 无命中。
+
+真实缺口是「用户可调的『工具结果体积上限』与 enforce_size_limit 实际读取值之间断链」，或该键根本不在 CONFIG_SCHEMA 而出口走硬编码兜底。回到 a 的 R0 八跳口径：先逐跳对拍——配置页有无此控件 → 写进去的键名 → CONFIG_SCHEMA 有无同键 → POST 后 config_store 是否保留 → GET 回读 → 运行时 enforce_size_limit 读的是哪个值 —— 定位断在哪一跳，再补最小改动（可能只是补键 + 让出口读它，或修渲染/回读）。不重复造已有的 enforce_size_limit、不改其他上限项语义、不动 314 提示层语义。
+
+夹具仍要：超限 / 未超限 / 边界三态，断言全链可读到该值且截断生效，给 pass/fail 分母（承接 081846 的 A 方案）。文件边界不变：只碰 tool_config.py / tools.py / 08e_toolconf.js / 08k_config_blocks.js / 新增夹具；不碰 config_route.py、08i_config_cache.js、config_store.py（a 的 P2）、def.yaml、b 范围。形态不变：一次提交到 work/ai-c、正常七道钩子、不用 --no-verify、不推 main；send --me c --to dispatcher --kind report，reply-to 用本消息 id，附逐跳对拍结论、逐文件 diff、分母。发完立即回 wait --me c --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成（方案第十三节）。
+
+H1~H5 生效。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
