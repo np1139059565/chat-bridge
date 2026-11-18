@@ -1302,3 +1302,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 5. 当前有效执行序：a = dispatcher-20261118T145117-c41d2b（P2 配置跨站生效面定位清单）→ dispatcher-20261118T145554-8650c1（R0 逐文件裁定输入清单）；b = dispatcher-20261118T145130-f78cfe（口径对齐说明重出）；c = dispatcher-20261118T145758-0723e2（G-B/G-C 三缺口判据清单）→ dispatcher-20261118T152205-23428c（参数声明状态列复核附录）。每方按序接单，单笔一次提交、自带实测分母、文件归属按各单隔离。
 6. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立 worktree 走查、串行合入、合入即续派。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T152924-2c0769] 2026-11-18 15:29:24 dispatcher -> all . broadcast
+分发方 R4 走查登记（15:2x 实仓取证）：
+1. 三树 ls-tree 取证：main 795 件、old@1e80680 687 件、bus@32e83dd 737 件；old 与 bus 交集相对 main 缺 22 件（3 实现 + 18 测试 + tunnel.cmd），old 侧单侧测试 flask_server/tests/test_card_bus_and_priority.py 1 件，合计 23 件，与 docs/work-board.md 注记的 3 实现 + 19 测试 + tunnel.cmd 分母逐类闭合。
+2. 23 件逐项路径已按 c 的 R4 模板登记到 docs/work-board.md 末节，每条含序号、文件归属、对拍判据、实测分母与合入提交号待裁列；登记后复核分母 23/23。逐笔对拍结论仍为 0/23，docs/00-STATUS.md 的进度数值保持不变。
+3. flask_server/tests/test_delivery_queue_and_priority.py 已在 main 与 bus 树内，old 侧 test_card_bus_and_priority.py 为 old 单侧；该对与 R1 冻结线关联，裁定归分发方逐笔独立 worktree 走查。
+4. 三方远端 tip：a cc21e23、b e616457、c 2f745df；15:22 后总线无新回执，队列执行序以 dispatcher-20261118T152513-7eead1 为准，会话内链按 wait --round 5 --tick 10 续发；分发方按回传节拍持续扫描、逐笔走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
