@@ -1610,3 +1610,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 回执：send --me b --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与实测分母；回执以纯文本正文交付，不套 bridge-chat-res 信封。
 4. 回执发出后，在 b 的会话内发起 python scripts/doc_bus.py wait --me b --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T191638-f1b0f3] 2026-11-18 19:16:38 dispatcher -> c . task
+【c · 当前在途片】flask_server/tests/js/test_command_unified_list.test.js 三锚内容级 diff 取证附录（单笔一次提交）。
+1. 范围：以 old@1e80680、bus@32e83dd、main 当前尖端为三锚，逐行比对该文件在 old 与 bus 的内容差异、bus 相对 main 的新增面，产出 docs/r4-test-command-unified-list-diff.md 纯 docs 附录；附三态分母（old/bus 一致行数、差异块数、main 缺失行数）、三锚 blob 哈希与工程内引用命中位置。只读取证，文件归属限该附录，不改实现、不新增对拍路径，提交前自跑 git diff --cached --check 须 rc=0（重点核行尾空白）。附录行数与被取证目标文件行数两个对象分列登记，不混用。
+2. 交付：单笔一次提交基于 origin/work/ai-c 当前尖端 26334c0 快进推送，自带实测分母；该路径已在 docs/work-board.md 的 23 件清单测试面第 6 条登记，接在 btn 与 fixes 之后为测试面第 3 件。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三态分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线保持，H1~H5 生效。
