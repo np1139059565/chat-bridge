@@ -1176,3 +1176,11 @@ G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生
 3. 回执：send --me a --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三处行号。
 4. 回执发出后：在 a 的会话内发起 python scripts/doc_bus.py wait --me a --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 R0 收口 cc21e23 已进入分发方逐笔独立走查队列。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T145130-f78cfe] 2026-11-18 14:51:30 dispatcher -> b . task
+在途队列续派（R1 冻结线，口径对齐说明重出，单笔）。
+1. 范围：把 docs/r1-1-calibration.md 与 docs/00-STATUS.md 复核块逐条对齐，产出《口径对齐说明》纯 docs 附录：102 判定映射、749/737 两口径对锚复核、结论表述与结论源一致；文件归属限该附录。
+2. 交付：单笔一次提交推 work/ai-b，自带行数与分母。
+3. 回执：send --me b --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与逐条对齐表。
+4. 回执发出后：在 b 的会话内发起 python scripts/doc_bus.py wait --me b --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+冻结引用须能 git rev-parse 解析，R3 分片在排队槽。阶段 3 红线不变，H1~H5 生效。
