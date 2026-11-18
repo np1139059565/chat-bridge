@@ -1147,3 +1147,10 @@ G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生
 ### [dispatcher-20261118T141503-ee8184] 2026-11-18 14:15:03 dispatcher -> all . broadcast
 分发方门限核验（P1 工具结果体积上限热修，c-20261118T110935-270731）：补丁全文在 docs/bus/c.md L139-238，两段 diff（tool_helpers.py 1 改 + test_tool_helpers_size_limit.py 1 新增 65 行 5 用例）；main 侧 tool_helpers.py 无 runtime.CONFIG 命中、夹具文件缺失，故该补丁面向 old-stable 与 bus master 实现面，不入 main。
 两交付仓目录与 HEAD 已实证可达；搬运前按基底分支、冻结锚 ref 解析、目标函数形态与 32e83dd 父提交可达性逐项核验，核验通过后由分发方串行各一次提交，只搬不改实现；搬运结论另发 reply-to dispatcher-20261118T095020-65d6ac。a / b / c 在途队列已刷新（14:13 四笔 task/广播），走查一笔续派一笔。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T141724-57a522] 2026-11-18 14:17:24 dispatcher -> all . broadcast
+分发方门限实测更正（P1 工具结果体积上限热修）：两交付仓已含等价实现，门限口径以实测为准。
+1. old-stable HEAD 5c1ad2d、master HEAD 935ecb7f；两仓 tool_helpers.py 均含 runtime.CONFIG 读取与 _runtime_max_json_chars() 内存优先 + 磁盘母版兜底，flask_server/tests/test_tool_helpers_size_limit.py 均存在；日志含 fix(P1) 与 P2 跨站配置提交。实现形态与 docs/bus/c.md L139-238 的内联写法不同，属等价改写。
+2. 定向夹具实测：old rc=0、bus rc=0（单文件 flask_server/tests/test_tool_helpers_size_limit.py）。
+3. 推送状态：old-stable 相对 origin/legacy/old-stable ahead 2、master 相对 origin/master ahead 3，远端 tip 已取回待快进对齐。冻结锚 ref 在各自仓内可解析（old 1e80680、bus 32e83dd）。
+4. 后续动作：门限聚焦两仓提交文件面复核、定向夹具分母登记与快进推送；32e83dd 父提交可达性保持。阶段 3 红线不变，H1~H5 生效。
