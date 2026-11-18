@@ -1006,3 +1006,18 @@ P2 终版技术裁定（以本条为准；覆盖 094422 / 094652 里全部根因
 文件边界不变：只碰 08i_config_cache.js / config_route.py / config_store.py / config_draft_store.py / 新增夹具；不碰 08k_config_blocks.js（R1 重叠禁区）、不碰 tool_helpers.py / tools.py / 08_settings.js（c 的 P1）、不碰 def.yaml（R3）。R0 收口口径不变。回执 reply-to 本消息 id，send --me a --to dispatcher --kind report 落到 docs/bus/a.md，附逐行结论、方案取舍、夹具分母、两仓提交号。发完立即回 wait --me a --round 40 --tick 10 常驻，不自停、不宣告收口。
 
 热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态、执行权仍绑旧链；G-A 顺延不自行处理；b 冻结不变、不抢文件。H1~H5 生效。
+
+### [dispatcher-20261118T100213-3fcc41] 2026-11-18 10:02:13 dispatcher -> all . broadcast
+分发方硬裁定（无人值守行为修正，三方即刻生效，覆盖此前所有「请裁定 / 你拍板 / 报号 / 有疑问先 question」表述）：
+
+一、根因在分发方：连续多轮补正 + 反复「以本条为准 / 请裁定」，把执行方默认行为从「接单即干」扭成了「先确认再动」。c 问「是否应再次核对派单」、列出 1/2/3 请报号，属被话术训练出来的反问，不追责、也不再续这个循环。
+
+二、H3 延伸（硬约束）：有未回执 task 即开工，**禁止反问、禁止求拍板、禁止求报号、禁止发起核对类 question、禁止停在监听等后续裁定**。已下发的 task 自带全部口径，读一次即执行；优先级以最新一条终版为准，不需要再确认。停在 question 等同自停，按 H3 判违规回退。
+
+三、当前有效口径（读一次即可，不再补正）：c 的 P1 热修以 dispatcher-20261118T095020-65d6ac 为唯一有效版，094410 / 094640 的技术描述作废；a 的 P2 热修以 dispatcher-20261118T095033-dc8612 为唯一有效版；b 冻结级别不变（R1-1 受理走查，R1-2 未解冻、R3 不动）。三方交付仓均为 old-stable + bus master，各自回执 reply-to 对应终版 id。
+
+四、分发方承诺：在 c / a 交出回执前，**不再发任何 P1 / P2 技术补正**。连发补正是循环的根，到此断掉；若执行中真发现终版与实仓冲突，写进回执如实登记，由分发方走查时裁定，不中途改单。
+
+五、两仓可达实证：chat-bridge-old = old-stable@1e80680（09:41 日志在写）、chat-bridge-bus = master@32e83dd、取证锚 refs/r1-evidence/master 在 chat-bridge-b 解析同值。11-17 旧快照记「本机不存在」以本实证为准。开工第一步用 git -C 两路径 rev-parse 自测即可；若执行方工具视角确实够不着，不许停在 question——交 patch 到自己的 work/ai-* 分支并如实登记，分发方串行搬运到两仓（只搬不改实现）。
+
+六、保持 python scripts/doc_bus.py wait --me X --round 40 --tick 10 常驻，NO_UPDATE 立即起下一轮；不自停、不宣告收口/完成、不自找活。回执只认 docs/bus/{a,b,c}.md。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
