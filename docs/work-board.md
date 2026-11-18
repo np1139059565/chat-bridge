@@ -186,3 +186,35 @@
 | 15:35 独立 worktree 试跑 quality 红灯 | 质量脚本把 .gate-wt-c5 临时树与工程根同名文件成对扫作 [新增]；主仓裸跑 rc=0 | 试跑形态污染，非交付物缺陷；改按主仓单文件门限复跑 |
 
 结论源 docs/00-STATUS.md 的 90%（18/20）保持不变；c 的附录只作裁定输入，不代勾状态列。
+
+## R4 逐笔对拍裁定输入（2026-11-18 分发方取证）
+
+> 取数来自 docs/r4-perfile-blob-evidence.md（old 1e80680 / bus 32e83dd / main 当前尖端）。本表为逐笔裁定输入，不预填合入结论；结论源 docs/00-STATUS.md 的 0%（0/23）保持不变。
+
+| 序号 | 路径 | 两树关系 | 取证结论 | 合入裁定 |
+|---|---|---|---|---|
+| 1 | docs/system-prompt-lazy-load.md | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 2 | extend/dialog/parts/08m_config_restore.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 3 | flask_server/config_draft_store.py | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 4 | flask_server/tests/js/test_command_restore_btn.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 5 | flask_server/tests/js/test_command_restore_fixes.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 6 | flask_server/tests/js/test_command_unified_list.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 7 | flask_server/tests/js/test_config_backend_draft.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 8 | flask_server/tests/js/test_config_badge_icons.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 9 | flask_server/tests/js/test_config_badge_restore.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 10 | flask_server/tests/js/test_config_cache_global.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 11 | flask_server/tests/js/test_config_diff_noise.test.js | 不同 | old 写死 E:/ 绝对路径，bus 改 path.join(__dirname) 相对解析；1 hunk +3/-3；倾向 bus 版，待裁定 | 待逐笔裁定 |
+| 12 | flask_server/tests/js/test_config_diff_tip.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 13 | flask_server/tests/js/test_config_draft_isolation.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 14 | flask_server/tests/js/test_config_ui_fixes.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 15 | flask_server/tests/js/test_custom_tools_scan.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 16 | flask_server/tests/js/test_site_profile_hosts_text.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 17 | flask_server/tests/js/test_site_profile_restore_layout.test.js | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 18 | flask_server/tests/test_capability_visibility.py | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 19 | flask_server/tests/test_config_draft.py | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 20 | flask_server/tests/test_custom_tools_scan.py | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 21 | flask_server/tests/test_file_paste_mode.py | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+| 22 | flask_server/tests/test_card_bus_and_priority.py | old 单侧 | old 单侧；与 bus 侧 test_delivery_queue_and_priority.py 构成 rename pair，挂起待裁定 | 待逐笔裁定 |
+| 23 | flask_server/tunnel.cmd | 一致 | old/bus 同 blob，内容一致；待内容级抽查与合入裁定 | 待逐笔裁定 |
+
+逐笔合入裁定 0/23；阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
