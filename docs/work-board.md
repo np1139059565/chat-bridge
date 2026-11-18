@@ -141,3 +141,5 @@
 阶段 3 摘除三项硬前置未齐；STATUS 保持声明态，执行权仍绑旧链。
 
 | R0 矩阵附件 | 分发方按 blob 原样合入 main | docs/r0-config-8hop-matrix.md 88 行；docs/r0-three-tree-blob-matrix.md 82 行；台账登记由本节承载 |
+
+| c 的 R4 登记模板 2f745df | 逐笔独立 worktree 走查绿灯，串行合入 main | docs/r4-register-template.md 登记列定义；23 文件逐项路径由 R4 走查时按实仓登记 |
