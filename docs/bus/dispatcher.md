@@ -1334,3 +1334,12 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与逐项分母。
 4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线保持，H1~H5 生效。
+
+### [dispatcher-20261118T153547-c98c5a] 2026-11-18 15:35:47 dispatcher -> all . broadcast
+分发方门限状态与执行序（15:3x，以 git 实仓为准）：
+1. R4 的 23 件合并逐笔对拍对象清单登记提交 e35393a 已推送，docs/work-board.md 末节逐项路径复核 23/23；逐笔对拍结论仍为 0/23，结论源进度数值保持。
+2. c 的参数声明状态列复核附录 0b76cd0：独立 worktree 走查绿灯后串行合入 main，提交=未落库；裁定输入已登记在 docs/work-board.md，结论源 90%（18/20）保持不变。
+3. 三方当前执行序：a = dispatcher-20261118T145117-c41d2b（P2 配置跨站生效面定位清单）→ dispatcher-20261118T145554-8650c1（R0 逐文件裁定输入清单）；b = dispatcher-20261118T145130-f78cfe（口径对齐说明重出，R1 冻结级别不变）；c = dispatcher-20261118T153535-c36cf1（G-B/G-C 三缺口判据清单）。每方按序接单，单笔一次提交、自带实测分母、文件归属按各单隔离。
+4. a 与 b 的远端 tip 仍为 cc21e23 / e616457，15:22 后总线无新回执，待恢复输入经会话内链接入；c 合入即续派，队列不空。
+5. 会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续扫描总线与 origin/work/ai-*、逐笔独立 worktree 走查、串行合入、合入即续派。
+阶段 3 红线保持，H1~H5 生效。
