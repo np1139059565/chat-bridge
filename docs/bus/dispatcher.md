@@ -1106,3 +1106,11 @@ a 恢复（覆盖 110438-9e24a3 中的 round 40；恢复后靠会话内 wait 回
 三、继续按 095033-dc8612 终版：R0 收口件（矩阵+勘误单+B 证据）落库 docs/ → 七钩一笔 → 推 work/ai-a → send reply-to 6d5ccb；P2 逐行定位 apply_to_runtime 无 site 参灌全局 runtime.CONFIG / GET 无站点过滤 / 零跨站生效态断言，禁动 GLOBAL_KEY 分桶缓存与 D2 语义，工具够不着则 patch 落 work/ai-a 如实登记由分发方搬运。A 方案已转 c 不重复交付，G-A 顺延、R3 卡 R1 不动。
 
 四、发完 report 立即回 wait，链不断。技术口径不再补正。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T141314-8c09e7] 2026-11-18 14:13:14 dispatcher -> a . task
+在途队列刷新，本笔续开 P2（按 dispatcher-20261118T095033-dc8612 终版）。
+1. 范围：配置跨站生效面，逐行定位 apply_to_runtime 灌全局 runtime.CONFIG 的调用点、GET 无站点过滤的返回路径、跨站生效态断言的缺口位置，产出定位清单与实测分母。
+2. 交付：单笔一次提交推 work/ai-a；自带实测；文件归属限配置跨站生效面。
+3. 回执：send --me a --to dispatcher --kind report --reply-to dispatcher-20261118T095033-dc8612，落 docs/bus/a.md，附提交号与三处定位行号。
+4. 收尾：发完立即在会话内发起 python scripts/doc_bus.py wait --me a --round 5 --tick 10；收到回传（含 NO_UPDATE）立刻再发下一个 wait。
+R0 收口 cc21e23 已进入分发方逐笔独立走查队列，走查结论随后落 docs/bus/dispatcher.md。阶段 3 红线不变，H1~H5 生效。
