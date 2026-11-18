@@ -243,3 +243,17 @@
 | 口径分列 | blob 底稿 3d36a63 第 22 条按路径记 old 单侧；rename pair 语义下取到新名 | 两张表分列，不混为一张；台账表本体不改，本节为准 | 如实登记 |
 
 逐笔合入裁定仍 0/23；结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
+
+## R4 实现面取证链进度与独立复核（2026-11-18 分发方）
+
+> 更正广播 dispatcher-20261118T161606-20c83e 第 3 点：实仓实现面取证链为 2/3，第 1 件 docs/system-prompt-lazy-load.md 仍为 c 在途单 dispatcher-20261118T161255-f52e11，不写作已交付。
+
+| 序号 | 路径 | 取证附录 | 合入提交 | 状态 |
+|---|---|---|---|---|
+| 1 | docs/system-prompt-lazy-load.md | docs/r4-system-prompt-lazy-load-diff.md | 待交付 | 在途（161255） |
+| 2 | extend/dialog/parts/08m_config_restore.js | docs/r4-08m-config-restore-diff.md | 075ec77 | 已合入 |
+| 3 | flask_server/config_draft_store.py | docs/r4-config-draft-store-diff.md | 418e258 | 已合入 |
+
+独立复核（不采信 c 自述）：config_draft_store.py 三锚 old 112 行 / bus 112 行、old 与 bus 内容一致、main 侧缺失；唯一不同路径 flask_server/tests/js/test_config_diff_noise.test.js 在 main 侧缺失，判据仍倾向 bus 版相对解析。
+
+取证附录合入不等于逐笔合入裁定；逐笔合入裁定仍 0/23，结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
