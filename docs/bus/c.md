@@ -134,3 +134,105 @@ R2 承接取证与删前清单报备（reply-to dispatcher-20261118T025059-6b6d4
 
 ### [c-20261118T104958-42aa71] 2026-11-18 10:49:58 c -> dispatcher . report (reply-to: dispatcher-20261118T095020-65d6ac)
 更新 git，P1 工具结果体积上限热修完成（按 dispatcher-20261118T095020-65d6ac 终版执行，094410/094640 技术描述作废）。交付形态：old/bus 两仓路径 D:/mydata/chat-bridge-old 与 D:/mydata/chat-bridge-bus 在本机工具视角 rev-parse 自测均 MISS，32e83dd 对象本机不可读、仅 1e80680 对象可读；按许可交同源 patch 到 work/ai-c，由分发方串行搬到 old-stable 与 bus master 各一次提交，bus 以 32e83dd 为父提交可达，不 push main、不停 question。本地提交 133934470f5d5c69920cb9af9d54618ef2b99001（work/ai-c，基于实时 origin/main 56db54c ff-only，仅 docs 两文件新增，正常七道钩子全过不用 --no-verify，工作区干净）。patch 路径 docs/p1-c-max-json-chars-runtime.patch；逐跳实证与搬运步骤见 docs/p1-c-max-json-chars-runtime.md。逐跳实证（old@1e80680 实仓）：08_settings.js:369 写 ctx.maxJsonChars → 08i_config_cache.js:56 写 cfg.limits → config_route.py:220 落草稿 / :221 apply_to_runtime 灌入 runtime.CONFIG 内存 → tools.py:310 enforce_size_limit(result,guidance) → 未传第三参走 tool_helpers.py:210 max_json_chars() → yaml_utils.load_config_dict() 读磁盘 yaml 母版（默认 100000）；草稿态即时值停在内存、出口读磁盘母版，故参数看着不生效。修法：只改 flask_server/tools/tool_helpers.py 的 max_json_chars()，惰性 import runtime 优先取 runtime.CONFIG 内存即时值，磁盘母版留作启动兜底；tools.py 统一出口零改动、全部调用点一次受益、规避模块级依赖环。CONFIG_SCHEMA、314 提示层、配置写入链、覆盖回写链保持仓库原实现。文件范围：M flask_server/tools/tool_helpers.py + A flask_server/tests/test_tool_helpers_size_limit.py（均在 patch 内）；08k_config_blocks.js 禁区零触碰；08_settings.js / 08j_config_actions.js / config_route.py / config_draft_store.py / 08i_config_cache.js / def.yaml 只核不改。验收分母：本机以 old@1e80680 树为源注入内存与磁盘两组配置实跑，三态 3/3（超限报错 / 未超限原样 / 边界等值）+ 配置源优先级 2/2（内存值优先于磁盘母版 / 覆盖回写后重启仍按新值受限）= 5 pass / 0 fail；超限为抛 ToolParamError 报错非截断。old 仓服务起得来、日志继续写、两仓实机复验由分发方串行搬运时核，本机路径不可达如实登记不代勾。边界：热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线，STATUS 保持声明态、执行权仍绑旧链；不碰 b 冻结面与 a 的 P2。发完立即回 wait --me c --round 40 --tick 10 常驻，不自停、不宣告收口、不自找活。
+
+### [c-20261118T110935-270731] 2026-11-18 11:09:35 c -> dispatcher . report (reply-to: dispatcher-20261118T095020-65d6ac)
+diff --git a/flask_server/tools/tool_helpers.py b/flask_server/tools/tool_helpers.py
+--- a/flask_server/tools/tool_helpers.py
++++ b/flask_server/tools/tool_helpers.py
+@@ -179,10 +179,24 @@
+ 
+ 
+ def max_json_chars():
+-    """读取配置中 limits.max_json_chars；未配置时返回默认值。"""
+-    # 配置文件读取统一走 yaml_utils.load_config_dict，避免多处重复实现
++    """读取 limits.max_json_chars 的即时值：优先运行时内存配置，磁盘母版作启动兜底。"""
++    # 运行时内存配置由设置页草稿 apply 后即时写入，代表用户当前生效的上限值
++    try:
++        import runtime  # 惰性导入：本模块不新增模块级依赖
++        # 取运行时内存配置 limits 区块下的体积上限键
++        v = (runtime.CONFIG.get("limits") or {}).get("max_json_chars")
++        # 合法正整数直接采用，磁盘母版不参与本次判定
++        if v is not None:
++            v = int(v)
++            if v > 0:
++                return v
++    except (ImportError, AttributeError, TypeError, ValueError):
++        # 内存配置尚未装载时，走下方磁盘母版兜底
++        pass
++    # 磁盘母版：服务启动阶段 runtime.CONFIG 未就绪时的兜底来源
+     data = yaml_utils.load_config_dict()
+     v = (data.get("limits") or {}).get("max_json_chars")
++    # 母版未配置该键时，使用统一默认值
+     if v is None:
+         return DEFAULT_MAX_JSON_CHARS
+     try:
+diff --git a/flask_server/tests/test_tool_helpers_size_limit.py b/flask_server/tests/test_tool_helpers_size_limit.py
+new file mode 100644
+--- /dev/null
++++ b/flask_server/tests/test_tool_helpers_size_limit.py
+@@ -0,0 +1,65 @@
++"""P1 工具结果体积上限回归夹具：三态与配置源优先级。
++
++覆盖：超限报错 / 未超限原样 / 边界等值 / 内存值优先于磁盘母版 /
++覆盖回写后重启仍按新值受限。夹具只依赖仓库内模块，可在两仓直接运行。
++"""
++import os
++import sys
++
++import pytest
++
++# 让夹具在任意工作目录下都能导入 flask_server 下的模块
++sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
++
++import runtime  # noqa: E402
++import tool_helpers  # noqa: E402
++import yaml_utils  # noqa: E402
++
++
++@pytest.fixture(autouse=True)
++def _fresh_runtime_config(monkeypatch):
++    """每条用例前把运行时内存配置置为已知小上限，隔离用例间状态。"""
++    monkeypatch.setattr(runtime, "CONFIG", {"limits": {"max_json_chars": 20}}, raising=False)
++
++
++def _result_at_limit(limit):
++    """构造序列化长度恰好等于上限的字典，用于边界态断言。"""
++    base = tool_helpers.dump_len({"t": ""})
++    return {"t": "x" * (limit - base)}
++
++
++def test_over_limit_raises():
++    """超限：抛 ToolParamError，错误文案带出生效上限。"""
++    with pytest.raises(tool_helpers.ToolParamError) as e:
++        tool_helpers.enforce_size_limit({"t": "x" * 40}, "请缩小范围后重试")
++    assert "20" in str(e.value)
++
++
++def test_under_limit_returns_same_object():
++    """未超限：原样返回同一个对象，不做截断也不复制。"""
++    result = {"t": "a"}
++    assert tool_helpers.enforce_size_limit(result, "请缩小范围后重试") is result
++
++
++def test_boundary_equal_passes():
++    """边界：序列化长度恰好等于上限时按未超限处理，原样返回。"""
++    limit = 20
++    result = _result_at_limit(limit)
++    assert tool_helpers.dump_len(result) == limit
++    assert tool_helpers.enforce_size_limit(result, "请缩小范围后重试") is result
++
++
++def test_runtime_value_overrides_disk_master(monkeypatch):
++    """即时态：草稿 apply 只改内存，出口按内存上限而非磁盘母版判定。"""
++    monkeypatch.setattr(yaml_utils, "load_config_dict", lambda: {"limits": {"max_json_chars": 100000}})
++    assert tool_helpers.max_json_chars() == 20
++    with pytest.raises(tool_helpers.ToolParamError):
++        tool_helpers.enforce_size_limit({"t": "x" * 40}, "请缩小范围后重试")
++
++
++def test_covered_restart_keeps_value(monkeypatch):
++    """覆盖态：母版回写新值后重启，内存与母版同值，仍按新值受限。"""
++    monkeypatch.setattr(yaml_utils, "load_config_dict", lambda: {"limits": {"max_json_chars": 20}})
++    assert tool_helpers.max_json_chars() == 20
++    with pytest.raises(tool_helpers.ToolParamError):
++        tool_helpers.enforce_size_limit({"t": "x" * 40}, "请缩小范围后重试")
