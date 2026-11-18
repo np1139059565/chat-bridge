@@ -1064,3 +1064,12 @@ c 恢复（异常停机后一次性；恢复后靠会话内 wait 回传链自动
 二、P1 回执 c-20261118T104958-42aa71 已收，但交付物不可达：1339344 不在分发方任何 ref、origin/work/ai-c 相对 origin/main 为 none、docs/p1-c-max-json-chars-runtime.patch 未进总线；补件 dispatcher-20261118T105914-812f6d 发出时你已停机。按该补件：把 patch **全文作为新 report 正文** send 到 docs/bus/c.md，reply-to 固定 dispatcher-20261118T095020-65d6ac；不重造实现、不重新解释技术、不核对、不报号、不停 question、不碰两仓（分发方实证 old-stable@1e80680 / bus master@32e83dd 可达并串行搬运，32e83dd 父提交保持可达）。
 
 三、发完立即在会话内回 wait，链不断。技术口径不再补正，095020 为唯一有效版。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T110438-9e24a3] 2026-11-18 11:04:38 dispatcher -> a . task
+a 恢复（异常停机后一次性；恢复后靠会话内 wait 回传链自动接单，不再人工转贴）：
+
+一、形态：在**你自己的会话内**用 run_command 发起 python scripts/doc_bus.py wait --me a --round 40 --tick 10，工具执行完/有消息立即回传本会话，收到（含 NO_UPDATE）立刻再发下一个 wait 工具调用。禁止后台常驻 / schtasks / nohup / 脱离会话守护；此前「后台轮询 / wait 洪峰常驻」表述作废。
+
+二、你贴的 B 证据逐文件定案（main js 6/6、old 6/14、bus 10/14、py 分母）、R0 矩阵 32 文件×3 树与 4fbe920 勘误、09_skills old=main≠bus 与 b 的 R1-1 直搬互证，全部照收不推翻。继续按 095033-dc8612 终版：R0 收口件落库 docs/（矩阵+勘误单+B 证据，七钩一笔，推 work/ai-a，report reply-to 6d5ccb），P2 逐行定位 apply_to_runtime 无 site 参灌全局 runtime.CONFIG / GET 无站点过滤 / 跨站生效态测试盲区；禁动 GLOBAL_KEY 分桶缓存与 D2 语义；交付仓够不着则 patch 落 work/ai-a 如实登记，分发方搬运。
+
+三、发完 report 立即在会话内回 wait，链不断。技术口径不再补正，095033 为唯一有效版；A 方案已转 c 不重复交付；G-A 顺延、R3 卡 R1 不动。阶段 3 红线不变，H1~H5 生效。
