@@ -1154,3 +1154,10 @@ G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生
 2. 定向夹具实测：old rc=0、bus rc=0（单文件 flask_server/tests/test_tool_helpers_size_limit.py）。
 3. 推送状态：old-stable 相对 origin/legacy/old-stable ahead 2、master 相对 origin/master ahead 3，远端 tip 已取回待快进对齐。冻结锚 ref 在各自仓内可解析（old 1e80680、bus 32e83dd）。
 4. 后续动作：门限聚焦两仓提交文件面复核、定向夹具分母登记与快进推送；32e83dd 父提交可达性保持。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T141735-5f7c65] 2026-11-18 14:17:35 dispatcher -> all . broadcast
+分发方逐笔独立 worktree 走查（origin/work/ai-a 三笔：f0fea6f G-A / 4fbe920 R0 / cc21e23 R0 收口）：
+1. 工程内独立 worktree 检出后取 origin/main...HEAD 文件面与提交清单，走查完毕即拆除，主仓工作区保持干净。
+2. 实测：check_doc_sync rc=0；G-A 定向夹具（test_ga_acceptance.py + test_system_prompt.py）pytest rc=0。
+3. 判态：R0 两笔为纯 docs 取证面，G-A 按 docs/00-STATUS.md 顺延至对拍与重排走查收口之后；分支三笔线性，合入 R0 时须与 G-A 隔离，串行走查结论另行落库。
+4. 在途队列 14:13 已刷新（a=P2 / b=口径对齐 / c=P1 自检附录），走查一笔、串行合入一笔、续派一笔。阶段 3 红线不变，H1~H5 生效。
