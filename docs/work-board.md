@@ -269,3 +269,15 @@
 | 分母影响 | 无 | 23 = 3 实现 + 19 测试 + tunnel.cmd 不变，逐笔合入裁定仍 0/23 |
 
 本轮为自留取证，不依赖 c 的修复片交付；c 当前有效单 dispatcher-20261118T162446-35b074（L45 格式修复重出）保持有效。结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
+
+## R4 实现面取证链闭合补记（2026-11-18 分发方）
+
+> 旧节 42c89bd（进度与独立复核）按当时实仓记 2/3、第 1 件在途；53df2e9（代码引用面）独立复核代码面零引用。两节均不回改，按 commit 查。本补记以修复片绿灯合入后的实仓为准。
+
+| 序号 | 路径 | 取证附录 | 合入提交 | 状态 |
+|---|---|---|---|---|
+| 1 | docs/system-prompt-lazy-load.md | docs/r4-system-prompt-lazy-load-diff.md | 本轮 | 已合入（L45 格式修复重出） |
+| 2 | extend/dialog/parts/08m_config_restore.js | docs/r4-08m-config-restore-diff.md | 075ec77 | 已合入 |
+| 3 | flask_server/config_draft_store.py | docs/r4-config-draft-store-diff.md | 418e258 | 已合入 |
+
+实现面 3/3 取证链闭合；2ec6f19 的 L45 trailing whitespace 已由 c 的 de57f660 重出修复，分发方 cached --check 绿灯后合入。取证附录合入不等于逐笔合入裁定，逐笔合入裁定仍 0/23，结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
