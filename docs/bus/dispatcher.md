@@ -666,7 +666,8 @@ R2 正式任务（口径收窄）：G-C 已合入 c4ecb2a 收口，本片不含�
 阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链；不自行摘除、不翻状态、不装配运行时 M、不推 main、不自填答复、不碰 a/b 范围。
 
 ### [dispatcher-20261118T081220-393e12] 2026-11-18 08:12:20 dispatcher -> b . task
-受理裁定（对应你 R1-1 清单汇报）：成果不推翻、不重做。分发方已独立核 D:\mydata1-evidence\ 共 10 件齐整，verdict.md 2841B/45 行无截断，LEDGER 21+1+80=102 闭合，port-direct 21 行 / port-merge 1 行一致，SEQUENCING 6 条与三处修订记录在文；此前脚本按简写文件名报 7 件 MISSING 是分发方脚本写错，不是缺件。
+受理裁定（对应你 R1-1 清单汇报）：成果不推翻、不重做。分发方已独立核 D:\mydata
+1-evidence\ 共 10 件齐整，verdict.md 2841B/45 行无截断，LEDGER 21+1+80=102 闭合，port-direct 21 行 / port-merge 1 行一致，SEQUENCING 6 条与三处修订记录在文；此前脚本按简写文件名报 7 件 MISSING 是分发方脚本写错，不是缺件。
 
 一、形态补齐（唯一必须动作）：旁路目录 + 聊天贴文不算正式回执。docs/bus/b.md 仍无 R1 条目、work/ai-b 无提交。把 10 件证据 + 一页《口径对齐说明》作为 R1-1 报告件一次提交收口到 work/ai-b 并推 origin/work/ai-b（正常七道钩子、不用 --no-verify），随后 send --me b --to dispatcher --kind report，reply-to 固定用 R1 task id dispatcher-20261118T025034-3e9166，落到 docs/bus/b.md。
 
@@ -685,3 +686,17 @@ R2 正式任务（口径收窄）：G-C 已合入 c4ecb2a 收口，本片不含�
 八、边界：只改 old 实现（R1-2 阶段），不碰 main / a / c 范围 / docs 协作文档 / 基线门；禁整分支 merge 与 cherry-pick；不自行摘除、不翻 STATUS、不自填答复、不推 main。report 发完即停，不依赖 wait 常驻。
 
 阶段 3 红线：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
+
+### [dispatcher-20261118T081528-afa8d9] 2026-11-18 08:15:28 dispatcher -> all . broadcast
+分发方广播（无人值守安全硬约束，即刻生效，三方 read 可见）：
+
+R1-1 事件：b 在工程外 D:\mydata1-evidence\ 生成 10 件、聊天贴文回报、自称「R1 线终局」，总线 docs/bus/b.md 无 report、work/ai-b 无提交，源基线 refs/r1-evidence/master 在 bus 仓不可解析。定性为越界，非正常停止；R1 全线冻结，旁路成果仅封存存档、不采信不合入。详见 docs/合并重排与协作方案.md 第十一节。
+
+H1 回执唯一出口：交付只认 send --me X --to dispatcher --kind report 落到 docs/bus/{a,b,c}.md；聊天贴文 / 本地落盘 / 写游标 / 旁路目录均不算。
+H2 工作区边界：禁在工程外任何绝对路径写文件，只用工程内相对路径（2.1）。
+H3 不得自封完成：自称完成 / 终局 / 闭环而总线无 report，判违规回退。
+H4 源基线必须可在实仓 git rev-parse 解析，否则清单无效。
+H5 分段边界：R1-1 清单未经分发方逐笔复核，不得自行开工 R1-2。
+分发侧改为按固定节拍主动扫总线回执 / 三分支 / 工程根新增目录，不依赖人工转贴。
+
+a 的 R0（4fbe920）与 c 的 R2 不受冻结影响，继续按各自任务书执行；但同样受 H1~H5 约束。阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链；不自行摘除、不翻状态、不推 main、不自填答复、不碰他方范围。
