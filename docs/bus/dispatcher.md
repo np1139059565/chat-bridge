@@ -963,3 +963,18 @@ P1 断跳实证补正（以本条为准，覆盖 dispatcher-20261118T094410-c8f2
 修法收窄：开工先读 tool_helpers.py:202 函数体，确认 max_chars=None 时是写死常量还是已有默认读取；只补「让出口拿到 runtime.CONFIG.limits.max_json_chars」这一跳（出口传参或函数内自读，择破坏面更小者，给理由）。不重复造 enforce_size_limit、不动 314 提示层、不改其他上限项、不动 08k_config_blocks.js（R1 禁区）。文件边界相应更精确为：tools.py / flask_server/tools/tool_helpers.py / 新增夹具；08_settings.js 与 08j_config_actions.js 只核不改。
 
 验收不变：超限/未超限/边界三态，配置页改该值后实际工具返回按新值截断，old+bus 两仓各一次提交、32e83dd 父提交可达、服务起得来。回执 reply-to 本消息 id，落到 docs/bus/c.md，发完立即回 wait --me c --round 40 --tick 10 常驻，不自停、不宣告收口。热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线。H1~H5 生效。
+
+### [dispatcher-20261118T094652-647166] 2026-11-18 09:46:52 dispatcher -> a . task
+P2 根因预设撤回 + 精确查证点（以本条为准，覆盖 dispatcher-20261118T094422-7a9651 第三、四段里「GLOBAL_KEY 头号嫌疑」；交付仓、边界、现场样本、形态、wait 常驻全部不变）。
+
+一、撤回：GLOBAL_KEY 不是串改根因。08i_config_cache.js:11-14 注释实证，全局单份母版是为修「旧版按站点分桶 → 刷新初期 siteKey 为空、改动落进 *_unknown-site → applySite 读到另一桶 → 刷新丢改动、yuanbao 显示 glm」而**有意设计**；GLOBAL_KEY 实际只在 L76 configCachePurgeLegacy 里用于排除旧桶。configCacheGet/Set 用的是 MEM[sk] 分键。**不要改这个设计，改了会复活旧 bug。** D2 后端按 id 合并（config_route.py:139-161）也已在旧链，不再作为主嫌。
+
+二、真正该逐行核的三处：① L39-44 configDraftSave 把整份草稿 POST 到 /config/draft；② L46-60 configCacheSet 把 cfg.limits / cfg.tools / cfg.tool_config / cfg.system_config / cfg.profiles 整份写进 MEM[sk] 并延时 120ms 整体落盘；③ L57 `cfg.profiles = D.serializeProfilesDraft(ctx.siteProfDraft)` 整集回灌。核心问题：多页面是否共享同一份草稿、A 页提交时是否把 B 页未提交内容一起带上/冲掉。
+
+三、落盘粒度线索（分发方实查）：old 仓同时有 flask_server/config/drafts/chatglm.cn.json 与 yuanbao.tencent.com.json（按站点名分文件），但前端注释说「只有一份母版」，两处口径需对上——核 config_draft_store.py 与 /config/draft 路由按什么键分文件、GET 回传时按哪个 siteKey 取。这是「改一页、其他页跟着变」最可能的分叉点，不预设答案。
+
+四、现场样本仍有效（7 份页面 URL 与 diff 夹具常量逐字对上）：智谱同 host 三 URL /a?b=1、/a?b=1&c=、/main/xyz；跨 host chat.deepseek.com/chat/abc、qianwen.com、kimi.com 与 www.kimi.com。夹具须含「同 host 不同 query 两页并发改不同档案」与「同档案覆盖」两态。
+
+五、文件边界不变：只碰 08i_config_cache.js / config_route.py / config_store.py / config_draft_store.py / 新增夹具；不碰 08k_config_blocks.js（R1 重叠禁区）、不碰 c 的 P1 文件、不碰 def.yaml（R3）。R0 收口口径不变。回执 reply-to 本消息 id 落到 docs/bus/a.md，发完立即回 wait --me a --round 40 --tick 10 常驻，不自停、不宣告收口。
+
+热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态；b 冻结不变、不抢文件。H1~H5 生效。
