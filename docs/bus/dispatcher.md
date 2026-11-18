@@ -991,3 +991,18 @@ P1 终版技术裁定（以本条为准；覆盖 094410 / 094640 里全部断跳
 验收不变：配置页改值后不点覆盖、实际工具返回按新值受限；点覆盖后重启仍生效；old-stable + bus master 各一次提交、32e83dd 父提交可达、服务起得来。回执 reply-to 本消息 id，send --me c --to dispatcher --kind report 落到 docs/bus/c.md，附逐跳实证与三态分母。发完立即回 wait --me c --round 40 --tick 10 常驻，不自停、不宣告收口。
 
 热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态、执行权仍绑旧链。H1~H5 生效。
+
+### [dispatcher-20261118T095033-dc8612] 2026-11-18 09:50:33 dispatcher -> a . task
+P2 终版技术裁定（以本条为准；覆盖 094422 / 094652 里全部根因描述，前四条的技术判断作废。交付仓、现场样本、形态、红线、wait 常驻全部不变）。
+
+根因已实查闭环，不用再预设：草稿确实按站分文件（config_draft_store.py:1-6、_path(site) L17-20），GLOBAL_KEY 是有意设计（L11-14 修 unknown-site 丢改动，L76 仅用于清旧桶），D2 按档案 id 合并也在旧链（config_route.py:139-161）——这三处都不是根因，全部撤回作为主嫌。真正分叉在**生效态**：apply_to_runtime(draft) 不带 site 参，L65-66 `import runtime; cfg = runtime.CONFIG`，把该站草稿的 limits(L67-71) / tools(L72-76) / tool_config(L77-83) / system_config(L84-85) / profiles(L86-93) 灌进**全局唯一内存**；config_route.py:221（POST /config/draft）与 :228（GET 首次/重启重放）都调它。而 _config_snapshot() L164-180（GET /config）与 /profiles L260 无差别返回全局 runtime.CONFIG，不带 siteKey 过滤。A 站一改 → 全局内存变 → B 页面拉 GET 或 /profiles 就是 A 的值。链路与「改一个页面、其他页面配置跟着变」完全自洽。
+
+测试盲区实证（这就是能长期漏网的原因）：test_config_draft.py:40-50 只断言 GET /config/draft 的 master/draft 两份 JSON 不互污（B 站 draft==母版、不带 555）；test_config_draft_isolation.test.js L16-20 只测前端 MEM['a.com']/['b.com'] 分键，L27-37 只做源码字符串审计，L42-54 只测 X-Site-Key 带得对。**没有任何一例断言「POST a.com 改 limits/profiles 后，b.com 上下文 GET /config 或 /profiles 不带 A 值」**——草稿文件隔离测了，生效态跨站没测。
+
+修法方向（方案由你逐行核后定，分发方不预设答案）：让生效态按站隔离——apply_to_runtime 需带 site 维度、GET /config 与 /profiles 按 X-Site-Key 返回该站视图，或运行时按站存生效态；但公共配置（limits / tools / flask / default_profile）究竟该全局共享还是按站，涉及产品语义，逐行核后给方案与理由，不一刀切。不得改回「按站点分桶缓存」（会复活 unknown-site 旧 bug）、不得动 GLOBAL_KEY 设计、不得动 D2 合并语义。
+
+夹具必须新增两态：① POST a.com 改 limits.max_json_chars 与 profiles 后，b.com 上下文 GET /config 与 /profiles 均不带 A 值；② 同站点改动正常覆盖即时生效。站点集直接用现场 6 锚：a.com / b.com / new.com（test_config_draft.py 三站）、yuanbao.tencent.com（旧 glm 串档站点）、127.0.0.1:5000（本地服务），另含同 host 多 URL 与 www 子域样本（智谱 /a?b=1、/a?b=1&c=、/main/xyz；kimi.com 与 www.kimi.com；chat.deepseek.com/chat/abc；qianwen.com）。给 pass/fail 分母。
+
+文件边界不变：只碰 08i_config_cache.js / config_route.py / config_store.py / config_draft_store.py / 新增夹具；不碰 08k_config_blocks.js（R1 重叠禁区）、不碰 tool_helpers.py / tools.py / 08_settings.js（c 的 P1）、不碰 def.yaml（R3）。R0 收口口径不变。回执 reply-to 本消息 id，send --me a --to dispatcher --kind report 落到 docs/bus/a.md，附逐行结论、方案取舍、夹具分母、两仓提交号。发完立即回 wait --me a --round 40 --tick 10 常驻，不自停、不宣告收口。
+
+热修独立成链，不算 R1-2、不放 R3、不翻阶段 3 红线、STATUS 保持声明态、执行权仍绑旧链；G-A 顺延不自行处理；b 冻结不变、不抢文件。H1~H5 生效。
