@@ -19,9 +19,9 @@ LOCK = os.path.join(REPO, '.git', 'dispatcher-poll.lock')
 HEALTH = os.path.join(REPO, '.git', 'dispatcher-health.txt')
 
 ACTIVE = [
-    ('a', 'R0 fixture patch', '20261118T081846'),
-    # c's report reply-to is the ORIGINAL R2 id; judge by report time instead.
-    ('c', 'R2 patch-back + residency restore', '20261118T082756'),
+    # Current hotfix chain, both delivered to old-stable + bus master.
+    ('c', 'P1 hotfix result-size-limit', 'dispatcher-20261118T095020-65d6ac', '20261118T095020'),
+    ('a', 'P2 hotfix config-isolation', 'dispatcher-20261118T095033-dc8612', '20261118T095033'),
 ]
 ALLOWED = set([
     'chat-bridge-main', 'chat-bridge-old', 'chat-bridge-bus', 'chat-bridge-b',
@@ -79,18 +79,22 @@ def report_ts_after(text, since):
 
 
 def active_lines():
-    """Render the active chain from bus report timestamps."""
+    """Hotfix chain: DONE if reply-to hits terminal id OR a newer report exists."""
     out = []
     pending = []
-    for who, label, since in ACTIVE:
+    for who, label, tid, since in ACTIVE:
         text = read(os.path.join(REPO, 'docs', 'bus', who + '.md'))
+        hit = ('reply-to: ' + tid) in text or ('reply-to ' + tid) in text
         stamp = report_ts_after(text, since)
-        if not stamp:
+        done = hit or bool(stamp)
+        if not done:
             pending.append(label)
-        out.append('   [%s] %s -> %s since=%s %s' % (
-            'DONE' if stamp else 'WAIT', who, label, since, stamp))
+        out.append('   [%s] %s -> %s (terminal=%s)' % (
+            'DONE' if done else 'WAIT', who, label, tid))
+        out.append('        since=%s newer=%s reply_to_hit=%s' % (since, stamp or '-', hit))
         out.append('        tail: %s' % bus_tail(who)[:180])
     out.append('   pending = %d' % len(pending))
+    out.append('   note: b frozen (R1-1 review only); a report also carries R0 closure')
     return out, pending
 
 
@@ -136,7 +140,7 @@ def collect(state, now):
     if git('rev-parse', 'HEAD')[1] != git('rev-parse', 'origin/main')[1]:
         rc2, out2 = git('merge', '--ff-only', 'origin/main')
         log.append('  ff-only rc = %d %s' % (rc2, (out2.splitlines() or [''])[0]))
-    log.append('2 active task chain (judged by report timestamp after ruling):')
+    log.append('2 active hotfix chain (terminal ids; DONE by reply-to hit or newer report):')
     task_lines, pending = active_lines()
     log.extend(task_lines)
     log.append('3 unmerged branch commits:')
