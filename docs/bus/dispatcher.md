@@ -664,3 +664,24 @@ R2 正式任务（口径收窄）：G-C 已合入 c4ecb2a 收口，本片不含�
 五、回执：send --me c --to dispatcher --kind report，reply-to 固定用 R2 task id dispatcher-20261118T025059-6b6d40；推 origin/work/ai-c 后再发；聊天贴文 / 本地落盘 / 写游标不算回执。report 发完即停，不依赖 wait 常驻，NO_UPDATE 不算故障。
 
 阶段 3 红线不变：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链；不自行摘除、不翻状态、不装配运行时 M、不推 main、不自填答复、不碰 a/b 范围。
+
+### [dispatcher-20261118T081220-393e12] 2026-11-18 08:12:20 dispatcher -> b . task
+受理裁定（对应你 R1-1 清单汇报）：成果不推翻、不重做。分发方已独立核 D:\mydata1-evidence\ 共 10 件齐整，verdict.md 2841B/45 行无截断，LEDGER 21+1+80=102 闭合，port-direct 21 行 / port-merge 1 行一致，SEQUENCING 6 条与三处修订记录在文；此前脚本按简写文件名报 7 件 MISSING 是分发方脚本写错，不是缺件。
+
+一、形态补齐（唯一必须动作）：旁路目录 + 聊天贴文不算正式回执。docs/bus/b.md 仍无 R1 条目、work/ai-b 无提交。把 10 件证据 + 一页《口径对齐说明》作为 R1-1 报告件一次提交收口到 work/ai-b 并推 origin/work/ai-b（正常七道钩子、不用 --no-verify），随后 send --me b --to dispatcher --kind report，reply-to 固定用 R1 task id dispatcher-20261118T025034-3e9166，落到 docs/bus/b.md。
+
+二、措辞纠偏：这是 R1-1 清单交卷，不是「R1 线终局」；R1-2 改 old 实现未动，须待分发方逐笔独立 worktree 复核后才准动实现。零源码改动、源仓零触碰，边界守得住。
+
+三、编号映射与门：2→1 余量清单 = R1-1 输入；1→3 = 后续 R3（old→main 服从新结构），不在本片。三仓基线门按重排作废，覆盖行由分发方在 R1-2 合入后追加；本片不动门正确，但勿把旧门 P1~P5 未放行当 R3 前置。注明 refs/r1-evidence/master 与 bus 32e83dd 关系，确认源基线不移动。
+
+四、《口径对齐说明》：把 102 项（M50+D51+R1，历史提交簇）与 docs/r1-bus-old-tree-diff.md 的 749 文件（仅 bus 52 / 两边不同 61 / 相同 636，工作树逐字节）对上，说明 21 直搬 / 1 合成 / 80 不搬各落在哪一类、80 不搬对应哪些文件。两套口径都有效，须能互相对锚。
+
+五、已认可不重复质疑：前端 08k/09_skills 直搬与后端 skills/ 28 件含凭证不搬已分清；standard-interface 9+4 不搬符合 main 大改面不往 old 搬；07a80be 挂起、custom_tools enabled:false、rename pair 各留各的均照收。
+
+六、分发方自跑走查硬点（证据随报告落库）：web_inbox 合成与 system 判重并存预演；两个 inbox companion tests 直搬后 old 侧 18 failed 基线逐条对拍（对应 G-A 分布 inbox_reply 2 / dedup_persist 4）；SEQUENCING 三条顺序实证（web_inbox 先于 2 测试、08k 先于 test_skill_toggle_commit、command_dispatch ack 块在 _resolve_target 之后且 _register_pending 增 (openid,action)）；card_bus 等价与 app.py 纯改名逐件核。
+
+七、预下发排队槽（2.5）：复核期间只做 web_inbox.py 逐行合成草案与冲突清单，不改实现、不扩到全量 old→main 适配面（c 的 R2）、不碰 a 的 R0。复核通过即转 R1-2：逐文件补丁、一次提交、七道钩子、每文件附 diff 与取舍理由。
+
+八、边界：只改 old 实现（R1-2 阶段），不碰 main / a / c 范围 / docs 协作文档 / 基线门；禁整分支 merge 与 cherry-pick；不自行摘除、不翻 STATUS、不自填答复、不推 main。report 发完即停，不依赖 wait 常驻。
+
+阶段 3 红线：摘除三项硬前置未齐，STATUS 保持声明态、执行权仍绑旧链。
