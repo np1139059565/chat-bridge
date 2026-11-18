@@ -169,10 +169,20 @@ POST 请求体示例：
 
 ---
 
-## 四、外部卡片（/api/cards）
+## 四、通用投递队列（/api/cards）
 
-外部卡片采用「发送即结束」：登记即返回，不阻塞、不等待回填，因此不存在超时失败。
-任务进展由网页 AI 通过 `push_message` 主动推送给发起方。
+本接口是通用投递队列：一端登记载荷即返回，另一端轮询取走并回执「已展示」，按 id 去重。
+队列不解释载荷语义，任意两端均可对接；接口路径与请求、响应字段保持 `/api/cards` 系列不变。
+
+典型链路：
+
+| 链路 | 用途 |
+|---|---|
+| AI → 翻译员 → 投递队列 → 调试扩展 | AI 指挥页面调试工具 |
+| 推送通道 → 投递队列 → 翻译员 → 网页 AI | 手机消息进入网页 AI |
+
+登记采用「发送即结束」：不阻塞、不等待回填，因此不存在超时失败。
+投递回执之外的进展由接收端通过独立通道主动推送。
 
 ### POST /api/cards
 
@@ -676,3 +686,162 @@ BotID / Secret，支持主动推送、图片、文件与群聊。
 ### GET/PUT/DELETE /rules/<name>
 
 按名字读取、更新或删除某条规则。
+---
+
+## 十一、客户端注册（/api/clients）
+
+客户端（翻译员或标准 API 客户端）把私有配置寄存在工具服务。服务端原样保管、原样下发，不解释字段、不校验结构、不清洗内容。
+
+### POST /api/clients
+
+注册或覆盖登记。请求：
+
+```json
+{
+  "site_key": "glm",
+  "custom_config": {
+    "语言包": { "输入框": "#search-input-box textarea", "备注": "" },
+    "别名": ["甲", "乙"],
+    "空值": null,
+    "特殊": "引号\" 换行\n 反斜杠\\"
+  },
+  "commands": []
+}
+```
+
+- `site_key`：客户端标识，非空字符串；重复注册时整条覆盖，不追加。
+- `custom_config`：任意嵌套的 JSON 值；字段名、结构、值原样保留。
+- `commands`：可执行指令声明，沿用 `.\docs\extensions.md` 第四节的 `commands` 格式；本阶段仅登记，不执行、不校验。
+
+成功：`{ "success": true, "site_key": "glm" }`。
+
+### GET /api/clients?site_key=glm
+
+取回注册信息。成功返回 `{ success, site_key, custom_config, commands }`，其中 `custom_config` 与存入时逐字段一致。
+
+未注册：HTTP 404，`{ "success": false, "error": "客户端未注册：glm" }`。
+
+### DELETE /api/clients?site_key=glm
+
+注销登记。返回 `{ "success": true, "site_key": "glm", "removed": true|false }`；标识不存在时 `removed=false`，不报错。
+
+### 落盘
+
+注册信息写入 `.\flask_server\data\client_registry.json`（JSON 格式，运行时数据目录，不入库）。每次操作重新读盘，服务重启后内容不变。
+
+---
+
+## 十二、指令清单（/api/commands）
+
+指令定义统一收归服务端后的查询出口。只返回定义，不改执行通道；与 `GET /api/commands/pending`（执行侧取件接口）互不相同。
+
+### GET /api/commands
+
+返回三个来源合并后的清单：`{ "success": true, "commands": [...] }`。每项字段：
+
+| 字段 | 说明 |
+|---|---|
+| `name` | 指令名 |
+| `source` | 来源，固定为 `builtin` / `custom` / `client` |
+| `desc` | 说明 |
+| `site_key` | 仅 `client` 来源带，标注归属客户端 |
+
+- `builtin`：读内置指令表 `BUILTIN`，不另复制一份。
+- `custom`：读已上线 skill 声明的指令（`list_external_commands()`）。
+- `client`：读客户端注册信息里的 `commands` 声明；同名指令各自成条，靠 `site_key` 区分。
+
+单一来源读取失败按空来源处理，接口仍返回其余来源。
+
+### GET /api/commands/help
+
+返回按来源分组的帮助文本：`{ "success": true, "help": "..." }`。分组标题为「内置指令 / 自定义指令 / 客户端指令」，与清单取自同一次读取，内容一致；某来源为空时不产生空分组。
+
+## 十三、网页语音合成（/api/voice）
+
+网页前端按需合成语音的独立入口。与「九」中 `/api/web/voice-ensure` 的分工：
+`voice-ensure` 面向消息镜像（音色写死默认值、带缓存复用，同文本命中即复用旧文件）；
+本组接口面向按需合成（音色可透传、每次独立出片、失败如实上报），
+供前端「朗读这段话」之类的按钮直接调用。产物落在与 `GET /api/web/audio/<name>`
+相同的音频目录，回收策略一致（旧音频超量自动清理）。
+
+### POST /api/voice/tts
+
+把文本合成为语音。请求：`{ text, voice? }`。`text` 必填（空串或全空白视为缺参）；
+`voice` 选填，缺省走引擎默认音色。
+
+- 成功：`{ success: true, file, url, voice }`。`url` 即 `GET /api/web/audio/<file>`，
+  前端直接用它播放；文件名由服务端按时间戳 + 随机串生成，连点不互撞。
+- 参数问题：HTTP 400 + `{ success: false, error: "text_required" }`。
+- 合成失败：HTTP 500 + `{ success: false, error: "tts_failed", reason }`
+  （reason 为底层原因）；语音依赖不可用时返回 `{ error: "tts_unavailable" }`。
+  两种失败都不影响服务其余功能。
+
+### GET /api/voice/voices
+
+列出可用音色，供前端音色选择器使用。查询参数 `engine`（可选，透传给音色模块）。
+数据源与 `GET /api/bridge/voices` 相同，路由独立互不影响。
+
+- 成功：`{ success: true, voices: [...] }`。
+- 失败：HTTP 500 + `{ success: false, error: "voices_failed", reason }`。
+
+---
+
+## 十四、标准对话接口（/v1/chat/completions）
+
+任务 A-1（阶段一）的 OpenAI 风格对话入口：客户端发标准 messages / tools，
+服务端完成校验、历史合并、（占位）生成与工具执行后返回标准 choices 结构。
+路由见 `flask_server/routes/chat_api.py`；消息规范化、占位生成、工具执行
+与会话存储的内部实现见 `flask_server/core/chat_completions.py`。
+
+### POST /v1/chat/completions
+
+请求体（JSON 对象）字段：
+
+- `messages`（数组，必填）：OpenAI 风格消息序列。role 允许 system / user /
+  assistant / tool；content 为字符串或 null（assistant 带 tool_calls 时
+  可为 null）；assistant 可带 tool_calls；tool 消息带 tool_call_id / name。
+- `tools`（数组，可选）：OpenAI 风格工具声明（JSON Schema）；缺省视为空。
+- `site_key`（字符串，可选）：会话标识，仅允许字母、数字、下划线、连字符，
+  长度 1-64；缺省由服务端生成并在响应中返回。
+- `model`（字符串，可选）：透传字段；缺省 "chat-bridge-placeholder"。
+- `stream`（布尔，可选）：传 true 时明确拒绝（HTTP 400，
+  code=stream_not_supported），不静默降级。
+
+行为要点：
+
+- 服务端按「内置 -> 自定义 -> 未知」顺序复用现有工具管线执行 tool_calls，
+  结果信封整体 JSON 化为 tool 角色 content（含 success / error / errorType /
+  origin / hint），工具失败不产生 HTTP 5xx；
+- 会话历史按 site_key 落盘（flask_server/data/chat_sessions/，运行时产物
+  不入库）；多轮延续以服务端已存历史为权威合并：前缀一致只追加新增、重发
+  已存内容幂等去重、真分叉以请求重建；
+- 阶段一未接入真实模型：assistant 轮由服务端占位生成器按可解释规则产生
+  （识别「工具名({...})」显式参数表达、防同一工具重放），阶段 2 接入
+  翻译员后仅替换生成器。
+
+响应（HTTP 200）：标准 choices 结构 + usage 粗估（字符数 // 4）+ 扩展字段
+site_key 与 messages（本轮合并后的完整消息序列，含 tool 结果，供客户端
+断言与续接）。
+
+错误（HTTP 400）：{ "error": { "message", "type": "invalid_request_error",
+"code"? } }；覆盖：请求体非 JSON 对象、messages 缺失或格式非法、role 非法、
+tools 非数组、site_key 非法、stream=true。
+
+## 十五、标准提示词（/v1/system_prompt）
+
+### GET /v1/system_prompt
+
+返回标准 System Prompt 全文与分段标记（任务 A-2，数据层 flask_server/core/system_prompt.py）。
+
+- 四段固定顺序：【身份】→【规则】→【技能】→【调用前先查参数】；
+- 规则段只列规则名与读取优先级，正文由 AI 按需调用 read_rule 读取；
+- 技能段复用 GET /prompt_sections 口径，仅含已上线技能；
+- system_prompt 为完整文本（含分段标记）；sections 记录各段标记与字符数，不重复携带正文；
+- 无需鉴权（服务仅监听 127.0.0.1）。
+
+```json
+{
+  "system_prompt": "【身份】\n...\n\n【规则】\n- xxx（读取优先级：高）\n\n【技能】\n技能清单：\n- demo（工具：read_file）\n\n【调用前先查参数】\n...",
+  "sections": [ { "mark": "【身份】", "chars": 76 }, { "mark": "【规则】", "chars": 21 } ]
+}
+```

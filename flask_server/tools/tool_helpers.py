@@ -177,9 +177,28 @@ def require(p, *names):
 from app_limits import DEFAULT_MAX_JSON_CHARS
 
 
+def _runtime_max_json_chars():
+    """读取运行时内存里的即时上限；无有效值返回 None。"""
+    # 设置页改值走 /config/draft -> apply_to_runtime，只灌进 runtime.CONFIG 内存。
+    # 惰性 import 规避模块级依赖环；异常时静默回退到磁盘母版。
+    try:
+        import runtime
+        cfg = getattr(runtime, "CONFIG", None) or {}
+        raw = (cfg.get("limits") or {}).get("max_json_chars")
+        if raw is not None:
+            val = int(raw)
+            if val > 0:
+                return val
+    except Exception:
+        pass
+    return None
+
+
 def max_json_chars():
-    """读取配置中 limits.max_json_chars；未配置时返回默认值。"""
-    # 配置文件读取统一走 yaml_utils.load_config_dict，避免多处重复实现
+    """读取 limits.max_json_chars；内存即时值优先，磁盘母版作启动兜底。"""
+    hit = _runtime_max_json_chars()
+    if hit is not None:
+        return hit
     data = yaml_utils.load_config_dict()
     v = (data.get("limits") or {}).get("max_json_chars")
     if v is None:

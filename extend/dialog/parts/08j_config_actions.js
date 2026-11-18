@@ -416,15 +416,12 @@
   };
 
   /** 区块卡片头徽标：一致 / 离线静默，仅存在未覆盖写入时亮。 */
-
   D.renderBlockBadge = function (ctx, id) {
     if (!ctx || !ctx.configBlockDirty || !ctx.configBlockDirty[id]) return null;
     const list = (ctx.configDiffItems || []).filter(function (it) { return it.block === id; });
     const tip = list.map(function (it) { return D.diffTipLine ? D.diffTipLine(it) : it.label; }).join(String.fromCharCode(10));
     return h('button', { class: 'sp-diff-badge', title: tip + String.fromCharCode(10) + String.fromCharCode(10) + '点击批量还原该区块的未覆盖改动', 'data-warn-icon': '1', onClick: () => D.restoreBlockDiff(ctx, id) }, list.length + ' 项未覆盖（悬浮看具体项）');
   };
-
-
   /** 站点配置块专属徽标：只数 configDiff 里的字段差异。 */
   D.renderSiteProfileBadge = function (ctx) {
     if (!ctx || !ctx.configBackend || ctx.configOffline) return null;

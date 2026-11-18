@@ -1,9 +1,9 @@
 'use strict';
 global.window = { AIMirrorDialog: { methods: {}, log: function () {} } };
 global.Vue = { h: function () { return { tag: 'x' }; } };
-var base = 'E:/projects/chat-bridge-main/extend/dialog/parts/';
-require(base + '08i_config_cache.js');
-require(base + '08j_config_actions.js');
+var path=require('path');var P=function(f){return path.join(__dirname,'..','..','..','extend','dialog','parts',f);};
+require(P('08i_config_cache.js'));
+require(P('08j_config_actions.js'));
 var D = window.AIMirrorDialog;
 var assert = require('assert');
 var backend = {
