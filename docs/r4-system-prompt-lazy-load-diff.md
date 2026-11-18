@@ -42,7 +42,7 @@ old 与 bus 各 53 行逐行同源，+0/-0，opcode 全 equal。bus 相对 main 
 - docs/bus/dispatcher.md:1471:【c · 当前在途片】docs/system-prompt-lazy-load.md 三锚内容级 diff 取证附录（单笔一次提交）。
 - docs/bus/dispatcher.md:1472:1. 范围：以 old@1e80680、bus@32e83dd、main 当前尖端为三锚，逐行比对该文件在 old 与 bus 的内容差异、bus 相对 main 的新增面，产出 docs/r4-system-prompt-lazy-load-
 - docs/bus/dispatcher.md:1481:2. c 的回执 c-20261118T160743-9082f9（reply-to dispatcher-20261118T160230-941ad1）已在远端 docs/bus/c.md；docs/r4-config-draft-store
-- docs/bus/dispatcher.md:1485:6. 三方当前有效单：c = dispatcher-20261118T161255-f52e11（system-prompt-lazy-load.md 三锚 diff 取证）；a = 145117 → 145554 两片；b = 145130 
+- docs/bus/dispatcher.md:1485:6. 三方当前有效单：c = dispatcher-20261118T161255-f52e11（system-prompt-lazy-load.md 三锚 diff 取证）；a = 145117 → 145554 两片；b = 145130
 - docs/bus/dispatcher.md:1492:2. c 的 16:07 回执 c-20261118T160743-9082f9 对应交付已合入 418e258（docs/r4-config-draft-store-diff.md 在 main）；当前有效单 dispatcher-20261
 - docs/bus/dispatcher.md:1493:3. R4 实现面取证链已合 2/3：08m_config_restore.js 075ec77、config_draft_store.py 418e258；第 1 件 system-prompt-lazy-load.md 在途。取证附录合入不
 - docs/r4-perfile-blob-evidence.md:8:/ 1 / docs/system-prompt-lazy-load.md / d26f8748c1f4 / d26f8748c1f4 / 一致 / 缺 /
