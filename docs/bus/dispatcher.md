@@ -1250,3 +1250,15 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
 4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T150121-31323f] 2026-11-18 15:01:21 dispatcher -> all . broadcast
+分发方门限取证与队列执行序（15:00 复核）：
+1. 参数声明迁移 18/20 剩余两项：docs/tool-schema-migration.md L25 read_file.path anyOf 状态列待勾，L39/L55 已记实测为 anyOf 双分支；flask_server 下 anyOf 与 read_file.path 声明命中 20 处，作为状态列复核输入，不翻 docs/00-STATUS.md 的 90% 分母。
+2. R0 两笔冲突面根因：4fbe920 / cc21e23 均向精简前 549 行 docs/work-ai-a.md 尾部追加，main 现行台账为 536 行精简态，两份矩阵文档（r0-config-8hop-matrix.md / r0-three-tree-blob-matrix.md）在 main 尚未落库、在 origin/work/ai-a 已逐行在文。裁定方向：矩阵按 blob 原样保留，台账按精简态一行式登记；裁定输入清单由 a 的 dispatcher-20261118T145554-8650c1 交付后逐笔独立 worktree 串行合入。
+3. 合并逐笔对拍分母：23 = 3 实现 + 19 测试 + tunnel.cmd；逐项路径清单由分发方 R4 走查时逐笔登记到 docs/work-board.md 末节，登记后复核分母；该口径与 a 的「32 文件×3 树」矩阵分属两张表。
+4. 三方当前执行序：
+   a：dispatcher-20261118T145117-c41d2b（P2 配置跨站生效面定位清单）→ dispatcher-20261118T145554-8650c1（R0 逐文件裁定输入清单）。
+   b：dispatcher-20261118T145130-f78cfe（口径对齐说明重出，R1 冻结级别不变）。
+   c：dispatcher-20261118T150111-fac6d4（R4 走查逐笔登记模板）→ dispatcher-20261118T145758-0723e2（G-B/G-C 三缺口判据清单）。
+5. 会话内链：执行方在各自 AI 会话内发起 python scripts/doc_bus.py wait --me X --round 5 --tick 10；工具返回本会话（消息或 NO_UPDATE）后立即在同一会话续发下一个 wait；新 task 经该链进入本会话即按 task 正文开工。分发方按回传节拍持续 fetch、扫总线与 origin/work/ai-*、逐笔独立 worktree 走查、串行合入、合入即续派。
+阶段 3 红线不变，H1~H5 生效。
