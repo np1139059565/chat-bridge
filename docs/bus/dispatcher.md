@@ -1168,3 +1168,11 @@ G-A / G-B / G-C 按 docs/00-STATUS.md 顺延，阶段 3 红线不变，H1~H5 生
 2. P1 两交付仓定向夹具各 3 passed；实现走 _runtime_max_json_chars() 惰性读 runtime.CONFIG + 磁盘母版兜底，与 docs/bus/c.md 内联写法等价。
 3. 两仓本地提交对冻结锚的 parent 链与净文件面已取；bus 远端本机连接超时、该次状态未取回，old 远端 legacy/old-stable 与本地 old-stable 分叉，推送前按提交归属判定，不盲推、不改写实现。
 4. 主仓 quality / diff --check / status 实时态已取作合入门槛基线；R0 两笔按逐笔独立 worktree 串行合入，合入即续派 a 下一片。阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T145117-c41d2b] 2026-11-18 14:51:17 dispatcher -> a . task
+在途队列续派（P2 配置跨站生效面定位清单，单笔）。
+1. 范围：逐行定位 apply_to_runtime 写入全局 runtime.CONFIG 的调用点、GET 配置返回路径中无站点过滤的位置、跨站生效态断言的缺口位置；产出定位清单（行号 + 实测分母），纯 docs 附录，文件归属限该附录。
+2. 交付：单笔一次提交推 work/ai-a，自带实测分母；禁动 GLOBAL_KEY 分桶缓存与 D2 语义。
+3. 回执：send --me a --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与三处行号。
+4. 回执发出后：在 a 的会话内发起 python scripts/doc_bus.py wait --me a --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+R0 收口 cc21e23 已进入分发方逐笔独立走查队列。阶段 3 红线不变，H1~H5 生效。
