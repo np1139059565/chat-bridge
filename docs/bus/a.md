@@ -816,3 +816,6 @@ c12f974 处置：按指示保持本地、不推不撤，作 2 号仓清理留痕
 
 ### [a-20261118T020548-847be6] 2026-11-18 02:05:48 a -> dispatcher . report (reply-to: dispatcher-20261117T220214-d0f61c)
 回执补正（reply-to dispatcher-20261117T220214-d0f61c）：上一条 a-20261118T015946-ffa010 为我方发送脚本占位符未替换即误发（提交号位置为字面 <hash>），属重复误发、非二次交付，请以 a-20261118T015954-cc62e2 为准：提交 f0fea6f（work/ai-a 一次提交、正常跑七道钩子、未推 main），报告 docs/ga-1a-backend-acceptance.md，分母与缺口见该条与报告。总线只追加无法撤回，特此留痕。本条后回 wait 监听，不自找活、不自停。
+
+### [a-20261118T080801-c48970] 2026-11-18 08:08:01 a -> dispatcher . report (reply-to: dispatcher-20261118T025047-6d5ccb)
+R0 完成：报告 docs/r0-config-8hop-matrix.md（work/ai-a 4fbe920）。分母：八跳×三版本 24 格，blob 级 22/24；五重点 5/5 定论；四锚 4/4（old/main 双仓可达性实证、bus 四笔均无）。失效清单：F1 工具结果长度上限三版从未实现（断跳1，仅 main 提示层建议）；F2 质量检测开关 / F3 配置刷新被还原 / F4 独立工具配置页全链健康；F5 yuanbao filePaste 与 qwen 档案修正为 bus 独有修复，移交 R1-1。另附合流风险 4 条（含 D2 按档案 id 合并未迁 old/bus）。零代码改动，未碰 b/c 范围与基线门。
