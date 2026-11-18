@@ -1212,3 +1212,10 @@ R0 收口 cc21e23 已进入分发方逐笔独立走查队列。阶段 3 红线�
 3. 回执：send --me a --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
 4. 回执发出后，在 a 的会话内发起 python scripts/doc_bus.py wait --me a --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
 阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T145734-a735a7] 2026-11-18 14:57:34 dispatcher -> all . broadcast
+分发方逐笔独立 worktree 门限结论（c 的 P1 自检附录 05fa5b5）：绿灯合入。
+1. 相对父提交 5740645 的真实文件面为 1 份纯文档 docs/p1-c-selfcheck-appendix.md（38 行）；五态夹具分母 5/5、三态 3/3、配置源优先级 2/2 与 c-20261118T142916-c541fe 更正回执一致。
+2. 临时 worktree 按序 cherry-pick 通过，check_doc_sync rc=0、quality_rules rc=0，试跑树已拆除；主仓已串行合入并推送 origin/main。
+3. 门限继续：R0 两笔（4fbe920 / cc21e23）冲突面在 docs/work-ai-a.md，按逐文件裁定推进；P1 两交付仓等价实现定向夹具各 3 passed 已登记。
+阶段 3 红线不变，H1~H5 生效。
