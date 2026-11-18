@@ -72,3 +72,17 @@ e57260a / 3235111 / b110f13 / 9e99c37：old 与 main 双仓 merge-base --is-ance
 - 分母：八跳 × 三版本 24 单元格，blob 级取证 22/24（08j 行级差、08k 的 main 后续演化两格为模式级：分叉提交已钉、未逐行比对）；五重点 5/5 定论；四锚 4/4 提交图实证 + bus 平行对照 4/4。
 - 限度：① main 08i 135 行未逐行审（D3 全量缓存的浏览器侧存储位置未定位，00_data.js 无 localStorage 标记）；② old 12 个 awade 系禁用工具为区段级定性（样例 awade_control / awade_extract_ts 已核，未全列 12 名）；③ bus 仓无 runtime.yaml（任务书「运行时配置含凭证不碰」不受影响）。
 - 挂起：prompt_sections.py L92（任务书原挂起，不并入）；G-B 顺延不自行处理。本片零代码改动，不碰 b/c 范围、基线门、STATUS。
+---
+
+## 十、修订记录（v2 勘误，2026-11-18）
+
+> 按 dispatcher-20261118T090647-d0d99a 第三点裁定登记；原正文保留不改，矩阵机器可读清单与 B 证据见附件 docs/r0-three-tree-blob-matrix.md。
+
+1. 编造引用笔修正：e9054f2（原 §一 08k 行）不存在，修正为 b2c503e（bus 独立根首提交自带 08k）；dcb0e15 / 74461e5 / 8f216b7（原 §六）均不存在，修正为实测事实（js 测试集对比 + py 平行创建笔 370fbab 与 9c5709c）。
+2. 原 §一「08 系设置页 old=bus≠main」对 08_settings / 08b_settings 不成立：两者三版各异（old 7ebf9ab/c9b72ed、main 62ac229/599abfa、bus a8c5c32/f4f2c17）。08h / 08j / 08k 同为三版各异；08i / 08l / 08f / 08g 维持 old=bus≠main。
+3. 事实修正：原「12 个 awade 系工具」实为 awade 族 5 + zxw 族 7（§七全名清单不变）；原 F1「仅 main tools.py:314 提示层建议」实为三版皆有（routes/tools.py old/bus L313、main L314），且路径在 routes/ 非 core/。
+4. F4 证据升格：08e_toolconf.js 三版同 blob（f402b7d）；dialog.html 挂载实测（git show 全文 Select-String 命中 08e_toolconf）：old 1 处、main 1 处、bus 1 处。独立工具配置页定义→回读→渲染全链三版同构，无失效结论不变，证据由推定升格为三树实测。
+5. F5 本体确认：bus def.yaml 独有 29 行（yuanbao filePaste: false + qwen 全档案），old 903 / main 507 / bus 929 行三版三态。
+6. 09_skills 新事实：old=main（1a6cef1）≠ bus（f23b83d），与 b 的 R1-1 直搬清单互证，old↔bus 前端分叉面 +1。
+7. 对合流风险影响：R1（双缓存与 POST 语义）后端链结论不变，前端面 old↔bus 分叉由 08i 扩至含 08/08b/08h/08j 差异，合流适配面扩大但方向不变；R2（布尔严格解析）不变；R3（def.yaml 三态合并）分母更新为 903/507/929；R4（08k）blob 层三版各异 old 9a59dcc / main 24ce1f8 / bus b9fda6e，bus 侧 b2c503e 为携带 08k 的 bus 独立提交号（非 blob 哈希）。
+8. 测试集修正：原「isolation / badge_restore 为 bus 侧 js 测试」表述有误，old 与 bus js 配置测试同集 14 件；py 侧 old/bus 各 4 件、main 3 件（无 draft）。

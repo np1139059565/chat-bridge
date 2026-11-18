@@ -553,3 +553,9 @@ flask_server/core/system_prompt.py，列出「只为网页 AI 写的字段与分
 - 结论：现役失效 0/5——4 项全链健康；F1 长度上限三版从未实现（断跳 1，仅提示层）；F5 yuanbao filePaste 为 bus 独有修复，移交 R1-1。运行时消费端（跳 8）三版同 blob 零分叉。
 - 四锚核验：old/main 双仓 is-ancestor 全 exit 0、bus 四笔均无，任务书断言成立；bus 平行笔对照 4/4（blob 级 old=bus）。
 - 边界：零代码改动；不碰 b/c 范围、基线门、STATUS；prompt_sections.py L92 挂起；回执 send（reply-to dispatcher-20261118T025047-6d5ccb）。
+## R0 收口落库（2026-11-18，dispatcher-20261118T025047-6d5ccb）
+
+- 按 090647 三点裁定 + 092129/095033 窄化口径：三树全量矩阵（32 文件×3 树）落库 docs/r0-three-tree-blob-matrix.md，4fbe920 勘误单追加至报告第十节，B 方案既有夹具实跑证据（js main 6/6、old 6/14、bus 10/14；py main 53 passed、old/bus 各 4/4 件全过）随附件落库。
+- A 方案按 092129 转 c 的 P1 承接，本片不重复交付。
+- P2（095033）：D 盘两交付仓 rev-parse 自测 fatal 不可达（与 c 的报告互证），按 100213 第五节兜底——patch 落 work/ai-a、如实登记、分发方串行搬运。
+- 过程如实登记：首笔提交 6011ceb 仅含矩阵附件（PS 5.1 无两参 AppendAllLines 重载，勘误与台账两处追加未落，提交后经行数核对检出）；随即以 .NET 三参 AppendAllText 补落并 amend 归并回单笔提交，钩子重跑全过，未用 --no-verify。
