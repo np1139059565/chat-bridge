@@ -143,3 +143,35 @@
 | R0 矩阵附件 | 分发方按 blob 原样合入 main | docs/r0-config-8hop-matrix.md 88 行；docs/r0-three-tree-blob-matrix.md 82 行；台账登记由本节承载 |
 
 | c 的 R4 登记模板 2f745df | 逐笔独立 worktree 走查绿灯，串行合入 main | docs/r4-register-template.md 登记列定义；23 文件逐项路径由 R4 走查时按实仓登记 |
+
+## R4 合并逐笔对拍对象清单（2026-11-18 实仓登记）
+
+取数锚点：main 为 origin/main 当前尖端，old 为 1e80680，bus 为 32e83dd；路径取自 git ls-tree -r --name-only。分母 23 = 3 实现 + 19 测试 + tunnel.cmd。
+
+| 序号 | 路径 | 文件归属 | 对拍判据 | 实测分母 | 合入提交号 |
+|---|---|---|---|---|---|
+| 1 | docs/system-prompt-lazy-load.md | 实现面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 2 | extend/dialog/parts/08m_config_restore.js | 实现面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 3 | flask_server/config_draft_store.py | 实现面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 4 | flask_server/tests/js/test_command_restore_btn.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 5 | flask_server/tests/js/test_command_restore_fixes.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 6 | flask_server/tests/js/test_command_unified_list.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 7 | flask_server/tests/js/test_config_backend_draft.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 8 | flask_server/tests/js/test_config_badge_icons.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 9 | flask_server/tests/js/test_config_badge_restore.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 10 | flask_server/tests/js/test_config_cache_global.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 11 | flask_server/tests/js/test_config_diff_noise.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 12 | flask_server/tests/js/test_config_diff_tip.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 13 | flask_server/tests/js/test_config_draft_isolation.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 14 | flask_server/tests/js/test_config_ui_fixes.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 15 | flask_server/tests/js/test_custom_tools_scan.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 16 | flask_server/tests/js/test_site_profile_hosts_text.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 17 | flask_server/tests/js/test_site_profile_restore_layout.test.js | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 18 | flask_server/tests/test_capability_visibility.py | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 19 | flask_server/tests/test_config_draft.py | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 20 | flask_server/tests/test_custom_tools_scan.py | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 21 | flask_server/tests/test_file_paste_mode.py | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+| 22 | flask_server/tests/test_card_bus_and_priority.py | 测试面 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（old 侧单侧，rename pair 关联项） | 待逐笔裁定 |
+| 23 | flask_server/tunnel.cmd | 隧道脚本 | 三树 blob 比对 + 内容级 diff + 提交图可达性 | 1/1 路径在冻结锚可解析（三树交集件） | 待逐笔裁定 |
+
+登记后复核分母：23/23 条路径。逐笔对拍结论 0/23 待裁定；结论源 docs/00-STATUS.md 进度数值保持。
