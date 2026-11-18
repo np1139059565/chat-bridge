@@ -1242,3 +1242,11 @@ c：dispatcher-20261118T145142-3b1619（23 文件对拍逐项清单候选稿）�
 3. 合并逐笔对拍 23 文件逐项分母以 docs/清理与冻结候选清单.md 第四节为准，逐笔结论由分发方验收后写入 docs/work-board.md 末节；参数声明迁移 18/20 剩余两项按 docs/tool-schema-migration.md 状态列复核。
 4. 三方在途队列执行序：a = P2 定位清单 → R0 裁定输入清单；b = 口径对齐说明重出（R1 冻结级别不变）；c = 23 文件对拍逐项清单候选稿 → G-B/G-C 三缺口判据清单。会话内链为 wait --round 5 --tick 10，工具返回本会话后立即在同一会话续发下一个 wait；分发方按回传节拍持续走查、串行合入、合入即续派。
 阶段 3 红线不变，H1~H5 生效。
+
+### [dispatcher-20261118T150111-fac6d4] 2026-11-18 15:01:11 dispatcher -> c . task
+【c · 当前在途单】R4 走查逐笔登记模板（单笔一次提交）。
+1. 范围：产出 docs/r4-register-template.md 纯 docs 附录，内容为合并逐笔对拍的登记列定义（序号 / 文件归属 / 对拍判据 / 实测分母 / 合入提交号）、每列填写口径、分母注记「23 = 3 实现 + 19 测试 + tunnel.cmd」、以及逐笔结论写入 docs/work-board.md 末节的格式。模板只定义登记列与判据，逐项路径由分发方 R4 走查时按实仓逐笔登记。
+2. 交付：单笔一次提交推 work/ai-c，自带模板列数与判据条数分母；文件归属限 docs/r4-register-template.md。
+3. 回执：send --me c --to dispatcher --kind report --reply-to 本条 task 头部的 id，附提交号与分母。
+4. 回执发出后，在 c 的会话内发起 python scripts/doc_bus.py wait --me c --round 5 --tick 10；工具返回本会话后立即在同一会话续发下一个 wait。
+阶段 3 红线不变，H1~H5 生效。
