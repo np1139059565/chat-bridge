@@ -231,3 +231,15 @@
 | 分母影响 | 无。23 = 3 实现 + 19 测试 + tunnel.cmd，main 侧 23 条均缺；逐笔合入裁定仍 0/23 |
 
 阶段 3 摘除三项硬前置未齐；STATUS 保持声明态，执行权仍绑旧链。
+
+## R4 逐笔裁定输入补记（rename pair 与不同路径）（2026-11-18 分发方）
+
+> 依据 c 的回执 c-20261118T155918-3aee46（附录 cbc5d9d，已合入 66f566f）与分发方 15:48 内容级 diff 侦察。本表为逐笔裁定输入，不预填合入结论，23 件表本体不改。
+
+| 笔 | 取证 | 判据 | 裁定 |
+|---|---|---|---|
+| 第 19 条 rename pair | old 旧名 test_card_bus_and_priority.py 141 行 blob c1b309accc44；bus 与 main 新名 test_delivery_queue_and_priority.py 141 行 blob fdbfb9acb944；一致 128 行、12 差异块 +13/-13 全为术语中性化替换；12/12 测试名重叠；bus 与 main 逐行同源；旧名在 bus 与 main 均 MISSING | 旧文件已由新名以 rename 加中性化改写形式覆盖，main 已含新名 | 取证齐，逐笔合入裁定待 R4 统一收口，不单独翻 0/23 |
+| old 与 bus 唯一不同路径 flask_server/tests/js/test_config_diff_noise.test.js | old 0a60edc 写死 E:/ 绝对路径，bus 3d4bd8d 改 path.join(__dirname) 相对解析；1 hunk +3/-3 | 撞《汇报铁律》第 6 条禁写死本机路径，判据倾向 bus 版 | 取证齐，待 R4 逐笔裁定 |
+| 口径分列 | blob 底稿 3d36a63 第 22 条按路径记 old 单侧；rename pair 语义下取到新名 | 两张表分列，不混为一张；台账表本体不改，本节为准 | 如实登记 |
+
+逐笔合入裁定仍 0/23；结论源 docs/00-STATUS.md 各项分母不变。阶段 3 摘除三项硬前置未齐，STATUS 保持声明态，执行权仍绑旧链。
