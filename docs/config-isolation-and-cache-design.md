@@ -70,47 +70,6 @@
 
 **V11 · 文档门禁**：`doc-sync` 会扫 `docs/` 下全部 Markdown 的路径引用，且当前 HEAD 已自带 2 项运行时配置路径未收录的欠账（上一轮提交实测）。新文档措辞避免新增带目录前缀的运行时配置路径串；提交时按既有归因豁免处理，不要为过闸去改无关文档。
 
-## 四、建议方向（v2，已作废，仅保留推理历史）
-
-> **作废说明（2026-11-09）**：本节「三层模型 + 服务端单调 revision」已被第八节方案 v3 取代。
-> v3 不再引入时间戳 / 版本号 / 时钟，改由「刷新并排标差异 + 【还原】/【覆盖】人工确认」解决冲突。
-
-1. **分三层**，不再让草稿与权威同台比时间戳：
-   - 服务端基线（权威）：带服务端 `revision`，刷新时拉取；
-   - 本地草稿（编辑态）：按站点分键存 `chrome.storage.local`，带 `mtime`，仅用于展示与「有未覆盖修改」提示；
-   - 运行时档案（内容脚本）：只认后端 `/profiles`，不读浏览器缓存。
-2. **两个动作分开**：自动拉取用「新覆盖旧」；用户点按钮是「提交草稿 + base_revision 冲突检测」，冲突显式化，失败保留草稿。
-3. **版本用服务端单调 revision**，时间戳退为展示/审计字段，避免客户端时钟决定胜负。
-4. **缓存白名单**：只缓存入库的定义分区（站点档案、体积上限、默认档案），运行时配置（含凭证、端口、工具开关）与派生字段不进缓存。
-5. **时间戳粒度**：先做整集/档案级 envelope，字段级 LWW 列为可选增强并单列成本。
-6. **按 URL 隔离**用 `guessProfile` 的实际结果选渲染目标，保留「管理全部站点」入口，URL 未到时给明确 fallback。
-
-## 五、待决问题（v2，已作废，仅保留推理历史）
-
-> **作废说明（2026-11-09）**：Q1–Q6 已收敛为第八节的「N1 + D1–D4」；
-> Q2′（版本粒度）与 Q3′（时钟来源）随 v3 取消版本机制而整体消失。
-
-| # | 问题 |
-|---|---|
-| Q1 | 【覆盖】遇服务端已有更新：拒绝并提示(409) / 强制覆盖 / 弹差异让用户选？ |
-| Q2 | 版本判据：整集 `revision` / 每档案 `rev` / 每字段时间戳？ |
-| Q3 | 时钟来源：浏览器 `Date.now()` 还是服务端盖戳？「所有配置项加时间戳」是否可改为「配置集带版本 + 审计时间」？ |
-| Q4 | 「公共配置」白名单具体含哪些键？工具上下线、端口、体积上限算不算？运行时配置明确排除？ |
-| Q5 | 按 URL 只显示当前站点后，未登记站点显示什么？新增/编辑其他站点的入口放哪？ |
-| Q6 | 草稿要不要影响内容脚本预览（试运行已支持）？UI 上「未覆盖」状态如何呈现？ |
-
-## 六、改动面预估（若按原提案直接实施，仅供排期）
-
-- 前端：`08g_site_profiles.js`（渲染过滤 / 草稿缓存读写 / 覆盖按钮 / 冲突提示）、`08h_profile_fields.js`（版本字段隐藏只读）、`08b_settings.js`（按钮挂载）、`00_data.js`（新增 state）、`01_backend.js`（loadConfig 版本比对与 URL 接收）、`00b_lifecycle.js` + `05c_prompt.js`（host 回传）、`content/00_state.js`（applyProfiles 类型白名单，若版本字段进档案）。
-- 后端：`routes/config_route.py`（GET 带 revision、POST 带 base_version / 冲突检测 / 由整集替换改字段合并）、`core/config_store.py`（sanitize 放行、写盘盖戳）、`core/config_file.py` + `yaml_utils`（双文件写入边界）。
-- 测试：新增 `test_config_cache_merge.test.js`、`test_config_revision.py`（并发覆盖、时钟回拨、刷新保留草稿、类型规整）。
-- 文档：`architecture.md`、`api-reference.md`（新字段/冲突响应）、`development-guide.md`，以及本文转「实施方案」后的结论归档。
-
-## 七、与既有待办的关系
-
-- 推进顺序第 2 项「站点配置可视化」已落地（08g/08h），本提案是其延伸；第 3 项「多网页 AI 并存按页面隔离」是网页端配套，两者共用「按站点分键」口径，建议合并排期，避免两套 siteKey 规则。
-- 历史事故「千问站点档案缺失被按 GLM 解析」说明**未登记站点的兜底行为**必须在按 URL 隔离时显式处理，不能静默沿用兜底档案。
-
 ## 八、方案 v3：差异可视化 + 人工确认（定稿）
 
 > 2026-11-09 用户拍板，取代第四 / 五节的 v2 版本号思路：不用时间戳、不用 revision、不用时钟。
@@ -141,30 +100,11 @@
 - 改了没覆盖：试运行可用当前编辑值，但内容脚本仍只认后端 /profiles；UI 挂「有未覆盖修改，运行仍用服务端版本」牌子；覆盖时若有项被跳过也要明示。
 - 后端拉取失败（服务未启动 / 断网）：不比对、不标色，只显示本地缓存 + 离线提示，沿用 loadConfig 现有 fallback；不可把领不到复印件当成全部不一致。
 
-### 8.4 冲突是否解决（对照第三节）
-
-| 旧项 | 结果 | 说明 |
-|---|---|---|
-| V1 刷新不丢 vs 新覆盖旧矛盾 | 关闭 | 刷新两边都不动，不再自动裁决 |
-| V3 时间戳被 sanitize 丢弃 | 关闭 | 不加时间戳；后端放行 / applyProfiles 白名单 / 字段元表排除 / 序列化排除四处连锁改动全部取消 |
-| V5 客户端时钟不可信 | 关闭 | 无时钟 |
-| V9 版本粒度与存储形状 | 大幅简化 | 无需版本表、无基准快照 |
-| V2 整集覆盖冲掉他人修改 | 关闭 | D2 已定按档案 id 合并；这是「分开提示」能真正生效的前提 |
-| V4 凭证进缓存 | 由漏洞转为已接受风险 | D3 全存，留痕如上 |
-| Q1–Q6 | 全部有答案 | Q2 / Q3 随版本机制取消；Q1 由 N1 + D2 覆盖；Q4 由 D3 定案 |
-| V6 / V8 / V10 / V11 | 原样残留，见 8.6 | 与本方案无关 |
-
 ### 8.5 覆盖弹窗分两栏（D2 的 UI 口径）
 
 - 公共配置栏：「将覆盖所有页面的公共设置：…（逐项列出）。其它电脑、其它页面都会受影响。」
 - 站点配置栏：「只把【当前站点 X】的档案写回后端；其它站点不受影响；其它电脑上同一个页面会被覆盖。」
 - 两栏分开列，不混写；点确认后才发请求。站点配置只带当前档案 id，不带整集。
-
-### 8.6 不阻塞的残留（沿用第三节，不属本方案新增）
-
-- 按页面分缓存的五个边角：URL 纸条异步未到时的 fallback、未登记站点仍兜底 glm 要显示实际生效档案并标「未登记」、只显示适配页后保留「管理全部站点」入口、多域名归一口径与 guessProfile 对齐、SPA 切站按页分键。
-- 缓存 key 建议用档案 id（与 convKey / guessProfile 口径一致），而非 URL 字面量。
-- V10（勿拆 _siteProfLoaded 保护：刷新只更新服务端快照、不覆盖草稿）、V11（文档门禁欠账）不变。
 
 ### 8.7 改动面（定稿，对比第六节 v2 大幅收窄）
 
@@ -188,69 +128,8 @@
 
 `renderConfigBadge(ctx, section)` 只数该段公共键（tools / general）；站点配置块自己挂 `renderSiteProfileBadge`；其余区块挂 `renderBlockBadge(ctx, id)`。一致 / 离线一律静默，只有存在差异才亮。
 
-### 9.4 三起故障复盘
-
-| 故障 | 根因 | 修复 |
-|---|---|---|
-| 改「网页 AI 站点配置」却在「工具」头提示 | 局部卡片头读了全局 `configDiffCount`（含站点档案与所有区块） | 徽标按段 / 按区块归属，站点块补挂专属徽标 |
-| 远程桥接 / 企业微信输入框改了不变色、无提示 | 拦截层只在「点保存发 POST」时登记 pending，`onInput` 仅改内存 state；保存按钮拿到 draft 响应仍 toast「已保存并重启」 | 输入态 baseline 追踪 + 草稿态文案 + settle |
-| 折叠卡片头显示「与服务端一致」 | 一致时也渲染绿标，零信息量且重复顶部状态栏 | 一致 / 离线静默，仅差异亮警示 |
-
 ### 9.5 已知边界（非本轮引入）
 
 - 【覆盖】回放是多次请求、非原子事务；中途失败停在已写入位置，不自动回滚。两台同时覆盖仍后写胜。
 - 投递策略下拉、语音引擎选择、指令参数编辑为 `onChange` 即发保存（会登记 pending），但**未做逐控件标色**；审计测试 `test_config_audit.test.js` 会打印全仓未接追踪的 `onInput` 清单，供后续逐项复核。
 - 风控自动恢复开关、连接地址缓存两个 `chrome.storage` 直写项，以及 System Prompt 展示区、历史会话，均不属配置母版，不进追踪链路。
-
-### 9.6 全量输入追踪与同类故障排查
-
-- **串号根因**：`renderConfigBadge` 曾读全局 `configDiffCount`（含站点档案与所有区块）却挂在「工具」卡片头，改站点配置时工具头报「与服务端有 19 项差异」。现按段计数（tools / general），站点配置块挂 `renderSiteProfileBadge`，其余区块按 `renderBlockBadge(ctx, id)` 归属；审计测试硬断言局部徽标段内不得出现全局计数。
-- **输入框无反应根因**：草稿拦截只在「点保存发 POST」时登记 `pending`，`onInput` 仅改内存 state；保存方法拿到 draft 响应仍 toast「已保存并重启」。现 `08l_config_field_tracking.js` 在 `renderSettings` 安装 `focusin / pointerdown / input / change` 统一监听：首次交互记 baseline，输入当下写 `data-diff="1"` 并计入 `configBlockDirty`，各受管区块由 `data-cfg-block` 容器圈定。瞬态表单（技能目录、新建规则、自动延迟、端口草稿、验证码、指令参数编辑）用 `data-cfg-skip` 显式排除；工具内部配置 `.tc-row`、run_command 语言 `.lang-checks`、站点新增/加字段表单已有各自链路，同样排除。
-- **审计清单**：`test_config_audit.test.js` 会打印全仓未接追踪的 `onInput` 行号，逐项复核归属；未接的多为瞬态表单或已由公共配置链路覆盖的控件，不属于漏追踪。
-
-### 9.7 工具内部配置被吞（严重回归）
-
-**现象**：展开 `read_file` 后只剩参数表与 usage 示例，工具配置里的「上传文件最大数量」输入框、「是否以文件上传」复选框整片消失。
-
-**根因**：`configPublic` 是顶层浅拷贝，`out.tool_config` 与 `cache.tool_config` 指向同一个 spec 数组；`configPublicToBody` 把 spec 数组扁平化成 `{tool:{key:value}}` 时借该引用原地改写，缓存里的 `tool_config` 从数组变成对象。`renderToolConfig` 对对象调 `.map` 抛错，Vue 中断 `tree-detail` 后续渲染，看起来像「配置被吞掉」。`system_config` 同理。
-
-**三层修复**：① `configPublic` 对对象值做 `JSON.parse(JSON.stringify(v))` 深拷贝，提交体再也不会回写缓存；② `configLoadAndDiff` 用 `backend.tool_config` / `backend.system_config` 的声明结构自愈历史缓存，只把本地同名 key 的 `value` 合并回去，用户已改的值不丢；③ `renderToolConfig` / `renderSystemConfig` 对畸形输入不抛错，回退到服务端 spec 渲染。回归用例见 `test_toolconf_swallow.test.js`（污染前后、自愈、兜底、system_config 四条）。
-
-**边界**：`GET /config` 的 `tool_config` 是「声明 + 当前值」，声明结构始终以服务端为准；本地草稿只覆盖 `value`。这与 D3 全存口径不冲突——缓存存的是完整 spec，不是扁平化提交体。
-
-**用户侧操作**：重载扩展即可，无需手工清 `chrome.storage.local`——`configLoadAndDiff` 每次刷新都会用服务端 spec 声明重建结构，本地已改的 `value` 按 key 合并保留。自愈同时覆盖两种历史污染形态：spec 数组被扁平成 `{tool:{key:value}}`，以及 `system_config` 被扁平成 `{key:value}` 对象；后者只认数组时资源上限值会静默退回默认，属同类故障，已一并修。
-
-截图里那句「与服务端有 19 项差异」来自未重载的旧版全局徽标，本轮提交后按段徽标只会在对应区块显示「N 项未覆盖」。
-
-**同类故障反查（本轮补）**：① 全仓不得再有不带 `section` 的 `renderConfigBadge(ctx)` 调用；② 局部渲染文件（`08b_settings.js` / `08_settings.js` / `08g_site_profiles.js`）源码内不得出现 `configDiffCount`；③ 审计用例本身曾因把文件末尾追加的 `renderSiteProfileBadge` 当切片终点，误把状态栏算进函数体、误报「含全局计数」——已改为按函数体结束标记精确切片。三条均写入 `test_config_audit.test.js` 断言，防止同类边界问题再溜过去。
-
-**审计用例自身故障**：`test_config_audit.test.js` 曾因把 `split` 的分隔符转义写成真实换行，整文件加载期即 SyntaxError，`node --test` 只报一个顶层失败、看不到任何子用例，把业务红灯全盖住。已改为 `split(String.fromCharCode(10))`，并在提交前先跑 `node --check` 单文件语法校验；同类「测试文件自己先炸」不得再掩盖业务失败。
-
-**端到端实检（本轮）**：`test_toolconf_swallow.test.js` 追加三条真实渲染用例——直接调 `renderUnifiedToolRow` 展开 `read_file`，断言参数表、「上传文件最大数量」整数输入框、「是否以文件上传」复选框、usage 全在且不抛错；再走一次 `configPublicToBody`（即点【覆盖】时构造提交体的原 bug 触发路径）后重新展开，两个控件仍完整；最后模拟历史污染缓存经 `configLoadAndDiff` 自愈后展开，控件回来且本地已改的 `value` 保留。结论：工具内部配置被吞已修复，重载扩展后可见。
-
-### 9.8 逐项确认浮层、数目准确性与 hosts 乱码（本轮）
-
-**用户反馈**：① 覆盖确认两栏只写「端口、工具上下线…等」，不列具体哪些配置将被覆盖，且 inline 挂在 `settings-body` 顶部占大量空间；② 黄色徽标数目不准确、缺悬浮明细，`hosts` 输入框显示 `[object Object]` 乱码。
-
-**根因**：
-- `available_tools` / `site_profiles` 是后端派生只读字段（`sorted(TOOLS.keys())`、`derive_site_profiles`），却被 `configPublic` 计入公共差异，截图里「公共差异：available_tools」纯属伪差异，也是数目虚高的来源。
-- 顶部 `configDiffCount` 由站点字段 + 公共差异 + pending + 输入态四路分别累加，各徽标又各算各的，没有单一数据源，必然对不上。
-- `hosts` 草稿值被写成数组 / 对象，字段渲染直接 `String(val)` 得到 `[object Object]`；差异比对两边值形态不一致，把整份档案每个字段都判成差异，「15 项未覆盖」由此撑出来。
-
-**修复**：
-1. `configPublic` / `configPublicToBody` 剔除 `available_tools`、`site_profiles` 派生字段。
-2. `recomputeConfigDiff` 生成单一明细数组 `configDiffItems`（每条含 `block / section / label / detail`），顶部计数、各徽标数字、确认框列表、悬浮 `title` 全部由它派生；站点字段比对前先过 `configValueToText` 归一，形态一致不再误判。
-3. `configValueToText` 统一处理 null / 字符串 / 数字 / 数组（按行连接）/ 对象（取 `hosts` 或 `value`，否则 JSON），并覆盖 `configFieldToText`；`08g` 字段渲染全部改用它，`[object Object]` 绝迹。
-4. 顶部状态栏压成一行（计数带 `title` 明细 +【显示全部站点】+【查看差异 / 覆盖】），不再铺开「公共差异：xxx」徽标。
-5. `renderConfigConfirmBar` 改为 `position: fixed` 浮层（`.sp-modal-mask` / `.sp-modal`），不占设置页布局；按 block 分组**逐项列出**将被覆盖的配置名与影响说明，标题写明「以下 N 项将被写入」。
-6. 三个徽标（`renderConfigBadge` / `renderSiteProfileBadge` / `renderBlockBadge`）均带 `title`，鼠标悬浮显示具体字段名。
-
-**回归用例**：`test_config_diff_items.test.js`（派生字段剔除、单一明细同源、浮层逐项、一行状态栏、悬浮 title、hosts 文本化、站点渲染无乱码），`test_config_audit.test.js` 追加浮层与渲染兜底断言。
-
-**同类故障反查（本轮补）**：`configValueToText` 原先只定义在 `08j`，而 `test_site_profiles.test.js` 只加载 `08g` 不加载 `08j`，渲染字段时 `D.configValueToText is not a function` 直接抛错——又一起「测试文件加载顺序暴露隐式依赖」。现 `08g` 自带 `toText` 同实现并暴露到 `D`，`08j` 改为「缺失才兜底」；审计断言禁止 `08g` 渲染层再出现 `D.configValueToText(val)` 或直接 `String(val)`。
-
-**旧用例同步**：`test_public_config_ui.test.js` / `test_config_blocks.test.js` 里四条断言原先手动设 `configDiffCount`、`configPublicDiff`、`configBlockDirty` 再断言徽标数字；单一明细源上线后实现只认 `configDiffItems`，已全部改为显式构造明细项再断言。测试跟着实现走，不再留「设了旧字段却没人读」的假覆盖。
-
-**D3 全存口径旧用例同步**：`test_config_cache.test.js` 原先断言 `configPublic` 保留 `available_tools: ['x']`（D3「GET /config 全量字段都进缓存」旧口径）。9.8 把 `available_tools` / `site_profiles` 定为后端派生只读字段、从公共比对与提交体剔除后，该断言改为显式校验二者与内部字段 `pending` / `blockFields` 均不在 `pub` / `body` 里，其余顶层键仍保留。
-
-**行数约束**：9.8 给 `08g` 加自包含 `toText` 后该文件一度 457 行，触发仓库卫生「单文件 ≤450 行」门禁。已把辅助压成 7 行链式实现（行为不变，仍自包含、不依赖加载顺序），回落到 450 行以内；`test_site_profiles` 与 `test_config_diff_items` 复验全绿。

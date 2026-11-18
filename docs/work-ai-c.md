@@ -602,3 +602,11 @@ pre-commit 七道全过、pytest 失败仅限已知波动、一次提交正常�
 **验收**：脚本化自测逐项留痕，一次提交正常跑钩子不用 --no-verify，推 origin/work/ai-c；完成后 send --me c --to dispatcher --kind report --reply-to dispatcher-20261117T220241-bb1485 回执，附报告路径与 pass/fail 分母。回监听，不自找活。
 
 **本任务总线 id**：`dispatcher-20261117T220241-bb1485`；回执 kind=report 且 reply-to 填 `dispatcher-20261117T220241-bb1485`。
+
+
+## R2 三仓差异矩阵 + 协作长文精简（2026-11-18）
+
+- 段①：交叉复核 b 的 R1-1 清单 4/4 项取到实数，产出全三仓差异矩阵 3/3 组与 old→main 适配面 5/5 目录，见 docs/r2-three-repo-diff-matrix.md。
+- 段②：按方案第 9 节精简 7 份协作长文，逐字保留 work-dispatcher 2.1~2.5 / 第四节 / 第六节，行数对比见 docs/r2-doc-slim-report.md。
+- 删前清单报备 id c-20261118T025706-a6f668；migration 基线表因两处口径相抵保持原样，已请裁定。
+- 提交哈希：本记录随同一次提交入库，以 git log -1 --format=%H 为准。
