@@ -179,3 +179,104 @@
 - R3（old→main 适配）依赖 R1 合入，由最先空闲方承接。
 - 执行方只推自己分支，回执用 send 写自己那份 bus 文件，reply-to 原任务 id。
 - 历史逐笔验收结论按 commit 短号回 git log 查，不在本文重复存储。
+
+## 八、无人值守运行约定
+
+本章为分发方自留门限的运行约定；任务下发、验收结论、合入 main 的裁定仍以 docs/bus/dispatcher.md 为准。
+
+### 8.1 续链口令
+
+空铃，按第 5 步续发 [高]。`fetch rc=0`、main tip 仍 `277e23b`（自身回执），`NO_UPDATE`、0/1 笔新 task；不自停、不自找活、不宣告收口。
+
+第 5 步指第五节交接说明第 5 项：检查各 `work/ai-*` 分支是否有新提交待审。
+
+### 8.2 运行口径
+
+- 分发方进入无人值守：仅在 AI 角色停止时接收现场汇报；其余时间不请示、不自停、不自找活、不宣告收口。
+- 链靠回传接着，不是后台自醒；收工给一句明确停止指令；有新派单进链即按 task 正文开工。
+- 现场 [高]：主工作树 ahead 1 / behind 100，`origin/work/ai-c` = `26334c0`，无残留 worktree。
+- 11 个链接解析服务返回全部失败；站点集属 a 的 P2 配置跨站现场样本范围，与 c 本笔交付无关，不据此推断任何页面事实 [不知道]。
+
+### 8.3 现场状态登记
+
+| 事项 | 进度 | 分母 |
+|---|---|---|
+| test_command_restore_fixes 三锚 diff 附录 | 100% | 1/1 份（`26334c0` 已推，回执 `c-20261118T164538-e73c5e`） |
+| wait 回传 | 100% | 1/1 条 NO_UPDATE，0/1 笔新 task |
+| c 侧内容级 diff 底稿 | 100% | 6/6 笔（实现面 3 件 + rename pair + 测试面 2 件） |
+| 合并逐笔对拍结论 | 0% | 0/23 笔（裁定归分发方） |
+| 参数声明迁移（结论源，未改） | 90% | 18/20 项 |
+| 三缺口 / 大改验收 / 人工测试 | 0% | 0/3 项、0/3 笔（顺延）、冻结 |
+
+c 当前无未回执单；分发方绿灯合入与「合入即续派」属其自留门限，不自开测试面第 3 件、不自开唯一 old/bus 不同路径 `test_config_diff_noise.test.js` 的逐笔裁定，不改台账、不代判。取证附录合入 ≠ 逐笔合入裁定完成，两张账不混。
+
+### 8.4 分发顺序（自定，按门限排）
+
+| 序 | 动作 | 承接 | 范围与验收 | 禁区 |
+|---|---|---|---|---|
+| 1 | 续链：转贴 8.6 文本，把 a / c 拉回第 5 步轮转 | 分发方转贴，a / c 执行 | 回执写各自 bus 文件，reply-to 原 task id | 不自开新单、不代判 |
+| 2 | 23 笔合并逐笔对拍裁定 | 分发方自留 | 逐笔结论写入 docs/work-board.md 末节；独立 worktree 串行核 | 不占执行方槽、不写业务代码 |
+| 3 | P2 定位件落 docs/ 只读取证附录 | 分发方自留 | 三项语义结论 + 三项附带发现登记；行号以本检出为准 | 不改代码、不 push main、不翻阶段红线 |
+| 4 | 验收合入：a 的 R0、c 的 P1 热修补丁逐条核 | 分发方 | 按第四节清单实测，通过合并 main 并推送 | 不采信自述、不合并半成品 |
+| 5 | 合入即续派：R3 分片给最先空闲方 | 空闲执行方 | R1 合入后开工 | 未合入前不预下发依赖单 |
+| 6 | G-A / G-B / G-C 三笔大改验收 | 分发方 | 0/3 回执逐笔实测 | 顺延期间不宣告收口 |
+| 7 | 阶段 3 摘除三项硬前置裁定 | 分发方 | 硬前置齐备后转 | 前置不齐不开 |
+| 8 | 解冻人工测试 | 分发方 | 脚本化验收通过后 | 未通过前保持冻结 |
+
+b 维持 R1 冻结，转口径对齐说明与 R3 分片；a / c 回执进链前不派新单。
+
+### 8.5 P2 逐行定位回执登记（只读取证附录）
+
+交付形态定为落 docs/ 只读取证附录，零写入；不走 patch、不进 `work/ai-*`。源仓为 bus 工作区 flask_server（工程内相对写法，按各工作区根解析）。
+
+**一、apply_to_runtime 无 site 参灌全局**
+- 定义：`flask_server/config_draft_store.py:60` `def apply_to_runtime(draft)`，单参、无 site 维度。
+- 写入链（按本检出正文）：`import runtime` → `cfg = runtime.CONFIG`（全局单例）→ limits.max_json_chars（isdigit 且 >0）→ tools.*.enabled（限 runtime.TOOLS 已注册者）→ tool_config 按键 update → system_config 整块替换 → profiles 合并 + derive_site_profiles → default_profile → skip 集合外受管区块兜底整写 → `memory_switch.invalidate()`。
+- 调用点：`flask_server/config_route.py:221`（POST /config/draft，save 后 apply）、`:228`（GET /config/draft 首次/重启重放）。site 只进磁盘草稿桶，不进生效态。
+- 结论：磁盘草稿按 site 分桶、生效态仅一份全局 runtime.CONFIG；A 站改 → 全局变 → B 站 GET /config、/profiles 读到 A 的值；B 站 GET /config/draft 再重放 B 旧草稿覆盖 → 最终态 = 最后触碰页面的草稿。与「改一个页面、其他页面配置跟着变」自洽。
+
+**二、GET 无站点过滤**
+- `_config_snapshot`：`flask_server/config_route.py:164` 定义，签名无 site、不读 X-Site-Key；返回 flask/limits/default_profile/site_profiles/profiles/tools/tool_config/system_config/available_tools，全取全局 runtime.CONFIG。
+- 出口：`:250` /config GET 直接 `jsonify(_config_snapshot())`；/profiles 端点全局返回 profiles（内容脚本经后台中转同样吃到全局）；`_master()`（:36-39）母版快照同取全局。
+- `_site_of()`（X-Site-Key 头 → query siteKey/site_key → body site_key → 兜底 unknown-site）只服务草稿桶路由，未进任何返回视图——站点隔离只存在于磁盘草稿层。
+
+**三、跨站生效态测试盲区**
+- `flask_server/tests/test_config_draft.py:84`、`:87` 两处 apply_to_runtime 断言均为源码字符串静态断言（接线存在性）；未见「A 站 POST 后 B 站 GET 互不串」的跨站生效态行为断言。与 dispatcher.md L1073『零跨站生效态断言』互证。测试全文复核 + 实跑分母留终版，本机未起服务实跑、不代勾。
+
+**附带发现（登记不改，超 P2 范围）**
+1. 母版缓存漂移：`_MASTER_CACHE` 仅 /config/commit 失效；POST /config（_apply_patch 回写 yaml）不清缓存 → 之后 GET /config/draft 回传旧 master，直到 commit 或重启。
+2. 静默失败：apply_to_runtime 异常吞掉后 return False，:221/:228 调用点均不检查返回值 → 草稿落盘成功但生效失败时无告警。
+3. profiles 双语义：草稿态 profiles 直灌全局且只增不删（无 profiles_remove 通道），与【覆盖】路径 D2『按 id 合并 + 显式删除』不同源，属跨站污染面一部分。
+
+**仓库身份核对（分发方裁决）**
+- config_route.py 行号与 bus master 引用逐行吻合（:164 / :220 / :221 / :228、/profiles 全局返回），血缘相符。
+- config_draft_store.py 本检出 apply_to_runtime 在 L60（分发方引 L65-93 区段，约 5 行漂移），且本检出正文未见 GLOBAL_KEY 常量（分发方 L998 称其为有意设计 L11-14/L76）→ 本检出疑与分发方所核非同一提交。取证附录落库前核 git HEAD 与 32e83dd 血缘后重对行号；三项语义结论为结构性成立，不受行号漂移影响。
+
+**红线**：GLOBAL_KEY 分桶缓存、D2 合并语义、unknown-site 兜底均未触碰；不 push main、不停 question、不翻阶段红线。
+
+### 8.6 续链转贴文本
+
+以下两段按角色转贴，回执写各自 bus 文件、reply-to 原 task id。
+
+**给 a**
+
+空铃，按第 5 步续发 [高]。`fetch rc=0`、main tip 仍 `277e23b`（自身回执），`NO_UPDATE`、0/1 笔新 task；不自停、不自找活、不宣告收口。
+
+R0 交付件在 `work/ai-a` 待分发方自留验收，七道钩子全过、未合入 main；验收结论出来前停在 wait，不自开 R3 分片、不代判、不改台账。b 维持 R1 冻结转口径对齐说明与 R3 分片。现场 [高]：主工作树 ahead 1 / behind 100，无残留 worktree。链靠回传接着，不是后台自醒；要收工给一句明确停止指令，有新派单进链即按 task 正文开工。
+
+**给 c**
+
+空铃，按第 5 步续发 [高]。`fetch rc=0`、main tip 仍 `277e23b`（自身回执），`NO_UPDATE`、0/1 笔新 task；不自停、不自找活、不宣告收口。
+
+| 事项 | 进度 | 分母 |
+|---|---|---|
+| test_command_restore_fixes 三锚 diff 附录 | 100% | 1/1 份（`26334c0` 已推，回执 `c-20261118T164538-e73c5e`） |
+| 本轮 wait 回传 | 100% | 1/1 条 NO_UPDATE，0/1 笔新 task |
+| c 侧内容级 diff 底稿 | 100% | 6/6 笔（实现面 3 件 + rename pair + 测试面 2 件） |
+| 合并逐笔对拍结论 | 0% | 0/23 笔（裁定归分发方） |
+| 参数声明迁移（结论源，未改） | 90% | 18/20 项 |
+| 三缺口 / 大改验收 / 人工测试 | 0% | 0/3 项、0/3 笔（顺延）、冻结 |
+
+c 当前无未回执单；分发方绿灯合入与「合入即续派」属其自留门限，不自开测试面第 3 件、不自开唯一 old/bus 不同路径 `test_config_diff_noise.test.js` 的逐笔裁定，不改台账、不代判。取证附录合入 ≠ 逐笔合入裁定完成，两张账不混。上一轮随附的 11 个链接解析服务全部失败，站点集属 a 的 P2 配置跨站现场样本范围，与 c 本笔交付无关，不据此推断任何页面事实 [不知道]。
+
+现场 [高]：主工作树 ahead 1 / behind 100，`origin/work/ai-c` = `26334c0`，无残留 worktree。链靠回传接着，不是后台自醒；要收工给一句明确停止指令，有新派单进链即按 task 正文开工。
